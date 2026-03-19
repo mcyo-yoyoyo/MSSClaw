@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise AI Copilot Workspace</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* 基础与滚动条样式优化 */
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .scroll-hidden::-webkit-scrollbar { display: none; }
+        
+        /* 动画与交互效果 */
+        .animate-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        .slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        
+        .toast-enter { animation: toastSlideIn 0.3s ease-out forwards; }
+        @keyframes toastSlideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        
+        /* 代码高亮模拟 */
+        .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+        .citation-badge { vertical-align: super; font-size: 0.6em; background: #d1fae5; color: #059669; padding: 1px 4px; border-radius: 4px; margin-left: 2px; cursor: pointer; }
+        .citation-badge:hover { background: #059669; color: white; }
+    </style>
+</head>
+<body class="h-screen w-full bg-slate-50 flex overflow-hidden text-slate-800">
+
+    <!-- 全局 Toast 提示容器 -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2"></div>
+
+    <!-- 左侧：工作群组与对话流 (复原的第一部分及新增功能) -->
+    <div class="w-[45%] h-full flex flex-col bg-white border-r border-slate-200 z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+        
+        <!-- 群聊 Header (包含新增功能：点击放大镜添加成员) -->
+        <div class="h-16 border-b border-slate-100 flex items-center justify-between px-5 bg-white shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="flex -space-x-2">
+                    <img class="w-8 h-8 rounded-full border-2 border-white" src="https://i.pravatar.cc/100?img=3" alt="User">
+                    <img class="w-8 h-8 rounded-full border-2 border-white" src="https://i.pravatar.cc/100?img=4" alt="User">
+                    <div class="w-8 h-8 rounded-full border-2 border-white bg-indigo-100 flex items-center justify-center text-indigo-600 text-xs font-bold">+3</div>
+                </div>
+                <div>
+                    <h2 class="text-sm font-bold flex items-center gap-2">Q3 欧洲区大盘作战室 <span class="px-1.5 py-0.5 bg-red-50 text-red-500 rounded text-[10px]">高优</span></h2>
+                    <p class="text-[11px] text-slate-400">系统AI助手已就绪 · 5位专家在线</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3 text-slate-400">
+                <!-- 新增交互：群成员检索与添加 -->
+                <button onclick="toggleAddMemberModal()" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 hover:text-indigo-600 transition group relative" title="检索并添加专家">
+                    <i class="fa-solid fa-magnifying-glass-plus text-lg"></i>
+                </button>
+                <button class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 transition"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+        </div>
+
+        <!-- 对话流容器 -->
+        <div class="flex-1 overflow-y-auto p-5 space-y-6" id="chat-container">
+            <!-- 初始欢迎消息 -->
+            <div class="flex gap-4">
+                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shrink-0"><i class="fa-solid fa-robot text-sm"></i></div>
+                <div class="bg-slate-50 border border-slate-100 rounded-2xl rounded-tl-none p-4 max-w-[85%]">
+                    <p class="text-sm text-slate-700 leading-relaxed mb-3">早上好，指挥官。昨夜欧洲区 3C 智能终端销量出现波动，系统已生成最新洞察，是否需要现在分析？</p>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="simulateUserQuery('帮我诊断 Q3 智能手机销量异动原因', 'marketing')" class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 text-xs rounded-lg hover:border-indigo-300 hover:text-indigo-600 transition shadow-sm"><i class="fa-solid fa-chart-line mr-1"></i> 诊断 Q3 销量异动</button>
+                        <button onclick="simulateUserQuery('查询拉美合规准入及手表业务 OKR 进度', 'rag')" class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 text-xs rounded-lg hover:border-emerald-300 hover:text-emerald-600 transition shadow-sm"><i class="fa-solid fa-book mr-1"></i> 查阅合规与 OKR 知识库</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 输入区 (包含新增功能：Workflow 与 Knowledge Base) -->
+        <div class="p-4 bg-white border-t border-slate-100 shrink-0">
+            <!-- 插件工具栏 -->
+            <div class="flex items-center gap-2 mb-2 relative">
+                <!-- 知识库配置入口 -->
+                <button onclick="toggleDropdown('kb-dropdown')" class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 text-slate-500 hover:text-indigo-600 border border-slate-200 rounded text-xs font-medium transition">
+                    <i class="fa-solid fa-database"></i> <span>默认知识库</span> <i class="fa-solid fa-chevron-down text-[9px] ml-1"></i>
+                </button>
+                <!-- Workflow 工作流入口 -->
+                <button onclick="toggleDropdown('wf-dropdown')" class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 text-slate-500 hover:text-indigo-600 border border-slate-200 rounded text-xs font-medium transition">
+                    <i class="fa-solid fa-sitemap"></i> <span>加载工作流 SOP</span> <i class="fa-solid fa-chevron-down text-[9px] ml-1"></i>
+                </button>
+
+                <!-- 知识库下拉面板 -->
+                <div id="kb-dropdown" class="hidden absolute top-8 left-0 w-64 bg-white border border-slate-200 shadow-xl rounded-xl z-20 p-2 animate-in slide-up">
+                    <div class="text-[10px] font-bold text-slate-400 uppercase mb-2 px-2 pt-1">挂载数据源引擎</div>
+                    <label class="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer">
+                        <input type="checkbox" checked class="accent-indigo-600">
+                        <span class="text-xs font-medium text-slate-700 flex-1">SAP ERP (财务与销量)</span>
+                        <i class="fa-solid fa-link text-emerald-500 text-[10px]"></i>
+                    </label>
+                    <label class="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer">
+                        <input type="checkbox" checked class="accent-indigo-600">
+                        <span class="text-xs font-medium text-slate-700 flex-1">Milvus 向量库 (文档中心)</span>
+                        <i class="fa-solid fa-link text-emerald-500 text-[10px]"></i>
+                    </label>
+                    <label class="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer opacity-50">
+                        <input type="checkbox" class="accent-indigo-600">
+                        <span class="text-xs font-medium text-slate-700 flex-1">外部舆情监控网络</span>
+                        <i class="fa-solid fa-link-slash text-slate-300 text-[10px]"></i>
+                    </label>
+                </div>
+
+                <!-- Workflow 下拉面板 -->
+                <div id="wf-dropdown" class="hidden absolute top-8 left-28 w-56 bg-white border border-slate-200 shadow-xl rounded-xl z-20 p-2 animate-in slide-up">
+                    <div class="text-[10px] font-bold text-slate-400 uppercase mb-2 px-2 pt-1">标准 SOP 编排</div>
+                    <div class="p-2 hover:bg-indigo-50 rounded-lg cursor-pointer group transition" onclick="selectWorkflow('深度营销归因流', 'marketing')">
+                        <div class="text-xs font-bold text-slate-700 group-hover:text-indigo-700">深度营销归因流</div>
+                        <div class="text-[10px] text-slate-400 mt-0.5">多模态归因 -> 策略生成 -> 审批</div>
+                    </div>
+                    <div class="p-2 hover:bg-emerald-50 rounded-lg cursor-pointer group transition" onclick="selectWorkflow('合规知识审查流', 'rag')">
+                        <div class="text-xs font-bold text-slate-700 group-hover:text-emerald-700">合规知识审查流</div>
+                        <div class="text-[10px] text-slate-400 mt-0.5">意图识别 -> RAG增强 -> 引证校验</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="relative flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-xl p-2 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
+                <button class="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-indigo-500 transition shrink-0"><i class="fa-solid fa-paperclip"></i></button>
+                <textarea id="chat-input" rows="1" placeholder="输入指令，或@专家，支持自然语言提问..." class="w-full bg-transparent border-none focus:ring-0 resize-none text-sm py-1.5 max-h-32 scroll-hidden" oninput="this.style.height = '';this.style.height = this.scrollHeight + 'px'"></textarea>
+                <button onclick="submitManualQuery()" class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white hover:bg-indigo-700 transition shadow-md shrink-0"><i class="fa-solid fa-arrow-up"></i></button>
+            </div>
+            <div class="text-center mt-2"><span class="text-[10px] text-slate-400">AI 生成内容可能存在误差，高危决策请人工复核。</span></div>
+        </div>
+    </div>
+
+    <!-- 右侧：沙盒渲染与可视化区 (融合第二部分及顶部增强操作) -->
+    <div class="w-[55%] h-full flex flex-col relative bg-[#f8fafc]">
+        <!-- 动态点缀背景 -->
+        <div class="absolute inset-0 pointer-events-none" style="background-image: radial-gradient(#e2e8f0 1px, transparent 1px); background-size: 20px 20px; opacity: 0.5;"></div>
+
+        <!-- 沙盒工具栏 (新增：推送联合作战 & 导出) -->
+        <div class="h-16 flex items-center justify-between px-6 bg-white/80 backdrop-blur-md border-b border-slate-200 shrink-0 z-10 relative">
+            <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+                <button id="sb-preview" onclick="toggleSandboxTab('preview')" class="px-4 py-1.5 text-xs font-bold rounded-md bg-white shadow-sm text-indigo-600 transition-all"><i class="fa-solid fa-display mr-1"></i> Preview</button>
+                <button id="sb-code" onclick="toggleSandboxTab('code')" class="px-4 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition-all"><i class="fa-solid fa-code mr-1"></i> Code</button>
+                <button id="sb-logic" onclick="toggleSandboxTab('logic')" class="px-4 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition-all flex items-center gap-1.5"><i class="fa-solid fa-microchip mr-1"></i> Logic <span class="px-1.5 py-0.5 bg-indigo-100 text-indigo-600 rounded text-[9px]">CoT</span></button>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <!-- 导出结果下拉组件 -->
+                <div class="relative group">
+                    <button class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 text-xs font-medium rounded-lg hover:bg-slate-50 transition shadow-sm flex items-center gap-1.5">
+                        <i class="fa-solid fa-download text-slate-400"></i> 导出结果 <i class="fa-solid fa-angle-down text-[10px]"></i>
+                    </button>
+                    <!-- 下拉菜单 -->
+                    <div class="absolute right-0 mt-1 w-36 bg-white border border-slate-200 shadow-lg rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20 overflow-hidden">
+                        <button onclick="exportResult('pdf')" class="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"><i class="fa-regular fa-file-pdf text-red-500"></i> 导出为 PDF</button>
+                        <button onclick="exportResult('png')" class="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"><i class="fa-regular fa-image text-blue-500"></i> 保存为长图</button>
+                        <button onclick="exportResult('csv')" class="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 border-t border-slate-100 flex items-center gap-2"><i class="fa-solid fa-table-cells text-green-500"></i> 导出底层数据</button>
+                    </div>
+                </div>
+                
+                <!-- 推送联合作战按钮 -->
+                <button onclick="pushToJointOps()" class="px-4 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition shadow-md shadow-indigo-200 flex items-center gap-1.5 active:scale-95">
+                    <i class="fa-solid fa-paper-plane"></i> 推送联合作战
+                </button>
+                <button onclick="resetSandbox()" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 transition" title="清空沙盒"><i class="fa-solid fa-rotate-right"></i></button>
+            </div>
+        </div>
+
+        <!-- 内容渲染区 (容器) -->
+        <div class="flex-1 overflow-hidden relative z-0">
+            <!-- 占位状态 -->
+            <div id="canvas-empty" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
+                <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4"><i class="fa-solid fa-layer-group text-2xl text-slate-300"></i></div>
+                <p class="text-sm font-medium">沙盒空闲中</p>
+                <p class="text-xs mt-1">在左侧发起数据分析或查询任务以生成智能工件</p>
+            </div>
+
+            <!-- Preview 视图 -->
+            <div id="canvas-preview" class="hidden absolute inset-0 overflow-y-auto p-6 scroll-hidden">
+                <div id="render-area" class="w-full max-w-5xl mx-auto pb-10"></div>
+            </div>
+
+            <!-- Code 视图 -->
+            <div id="canvas-code" class="hidden absolute inset-0 bg-[#0f172a] overflow-y-auto p-6 scroll-hidden text-slate-300 mono text-[13px] leading-relaxed">
+                <div class="max-w-5xl mx-auto space-y-4">
+                    <div class="flex items-center gap-2 mb-6 border-b border-slate-800 pb-3">
+                        <div class="flex gap-1.5 mr-4"><div class="w-3 h-3 rounded-full bg-rose-500"></div><div class="w-3 h-3 rounded-full bg-amber-500"></div><div class="w-3 h-3 rounded-full bg-emerald-500"></div></div>
+                        <div class="flex-1 flex items-center gap-4">
+                            <div class="flex items-center gap-2 text-[10px] text-slate-400 font-sans uppercase tracking-wider">Mounted APIs <div id="code-apis" class="flex gap-2"></div></div>
+                            <div class="h-4 w-[1px] bg-slate-700"></div>
+                            <div class="flex items-center gap-2 text-[10px] text-slate-400 font-sans uppercase tracking-wider">Sources <div id="code-sources" class="flex gap-2"></div></div>
+                        </div>
+                    </div>
+                    <pre id="code-content" class="whitespace-pre-wrap"></pre>
+                </div>
+            </div>
+
+            <!-- Logic (思维链) 视图 -->
+            <div id="canvas-logic" class="hidden absolute inset-0 overflow-y-auto p-8 scroll-hidden">
+                <div class="max-w-3xl mx-auto">
+                    <div class="mb-8 flex items-center justify-between">
+                        <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2"><i class="fa-solid fa-network-wired text-indigo-500"></i> Agent 逻辑执行图</h3>
+                        <div class="px-3 py-1 bg-white border border-slate-200 rounded-full text-xs font-bold text-slate-600 shadow-sm flex items-center gap-2">
+                            总耗时 <span class="text-indigo-600 font-mono" id="total-time">0.00s</span>
+                        </div>
+                    </div>
+                    <div id="cot-container" class="space-y-6 relative before:content-[''] before:absolute before:top-4 before:bottom-4 before:left-[118px] before:w-[2px] before:bg-slate-200">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗：添加群成员 (放大镜交互) -->
+    <div id="add-member-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center animate-in">
+        <div class="bg-white w-[400px] rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col">
+            <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 class="font-bold text-sm text-slate-800">邀请专家加入作战室</h3>
+                <button onclick="toggleAddMemberModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-4 border-b border-slate-100">
+                <div class="relative relative flex items-center bg-slate-100 rounded-lg p-2 focus-within:ring-2 focus-within:ring-indigo-100">
+                    <i class="fa-solid fa-search text-slate-400 ml-2 mr-2"></i>
+                    <input type="text" placeholder="按姓名、部门或技能检索..." class="bg-transparent border-none focus:ring-0 text-sm w-full outline-none">
+                </div>
+            </div>
+            <div class="p-2 max-h-60 overflow-y-auto scroll-hidden">
+                <div class="text-[10px] font-bold text-slate-400 px-2 pt-2 mb-1">系统智能推荐</div>
+                <div class="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg cursor-pointer">
+                    <div class="flex items-center gap-3">
+                        <img src="https://i.pravatar.cc/100?img=11" class="w-8 h-8 rounded-full">
+                        <div>
+                            <div class="text-sm font-bold text-slate-700">Sarah Chen</div>
+                            <div class="text-[10px] text-slate-500">供应链与库存管理总监</div>
+                        </div>
+                    </div>
+                    <button class="px-3 py-1 bg-indigo-50 text-indigo-600 text-xs font-bold rounded hover:bg-indigo-100">邀请</button>
+                </div>
+                <div class="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg cursor-pointer">
+                    <div class="flex items-center gap-3">
+                        <img src="https://i.pravatar.cc/100?img=12" class="w-8 h-8 rounded-full">
+                        <div>
+                            <div class="text-sm font-bold text-slate-700">Marcus Wright</div>
+                            <div class="text-[10px] text-slate-500">欧洲区合规与法务专家</div>
+                        </div>
+                    </div>
+                    <button class="px-3 py-1 bg-indigo-50 text-indigo-600 text-xs font-bold rounded hover:bg-indigo-100">邀请</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗：推送联合作战同步画面 -->
+    <div id="sync-overlay" class="fixed inset-0 bg-indigo-900/90 backdrop-blur-md z-[100] hidden flex-col items-center justify-center text-white transition-opacity">
+        <div class="relative flex items-center justify-center mb-6">
+            <div class="absolute w-32 h-32 border-4 border-indigo-500/30 rounded-full animate-ping"></div>
+            <div class="w-16 h-16 bg-white rounded-full flex items-center justify-center text-indigo-600 shadow-[0_0_40px_rgba(99,102,241,0.8)] z-10">
+                <i class="fa-solid fa-tower-broadcast text-2xl"></i>
+            </div>
+        </div>
+        <h2 class="text-2xl font-bold mb-2 tracking-wider">正在上大屏...</h2>
+        <p class="text-indigo-200 text-sm">正在将分析视图与实时数据切片同步至慕尼黑指挥中心</p>
+        <div class="w-64 h-1 bg-indigo-800 rounded-full mt-6 overflow-hidden">
+            <div class="h-full bg-white rounded-full w-0 transition-all duration-1500 ease-out" id="sync-progress"></div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 第一部分及新增交互控制逻辑 (前端 UI / UX)
+        // ==========================================
+        let chartInstance = null; // 全局图表实例声明
+
+        // 模拟用户发送对话并触发沙盒渲染
+        function simulateUserQuery(text, type) {
+            const chatBox = document.getElementById('chat-container');
+            // 添加用户消息
+            const userHtml = `
+                <div class="flex gap-4 justify-end animate-in">
+                    <div class="bg-indigo-600 text-white rounded-2xl rounded-tr-none p-4 max-w-[85%] shadow-sm">
+                        <p class="text-sm leading-relaxed">${text}</p>
+                    </div>
+                    <img class="w-8 h-8 rounded-full shrink-0" src="https://i.pravatar.cc/100?img=3" alt="User">
+                </div>
+            `;
+            chatBox.insertAdjacentHTML('beforeend', userHtml);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            // 模拟加载
+            setTimeout(() => {
+                const aiHtml = `
+                    <div class="flex gap-4 animate-in">
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shrink-0 shadow-sm"><i class="fa-solid fa-robot text-sm"></i></div>
+                        <div class="bg-slate-50 border border-slate-100 rounded-2xl rounded-tl-none p-4 max-w-[85%] flex items-center gap-3 cursor-pointer hover:border-indigo-300 transition" onclick="toggleSandboxTab('preview')">
+                            <div class="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600"><i class="fa-solid ${type==='marketing'?'fa-chart-pie':'fa-layer-group'} text-lg"></i></div>
+                            <div>
+                                <p class="text-sm font-bold text-slate-700">已生成: ${type==='marketing'?'Q3 业务异动诊断报告':'知识聚合与合规速览'}</p>
+                                <p class="text-[10px] text-slate-400 mt-0.5">资产已在右侧沙盒渲染，点击查看详情或源码。</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                chatBox.insertAdjacentHTML('beforeend', aiHtml);
+                chatBox.scrollTop = chatBox.scrollHeight;
+                
+                // 调用第二部分核心逻辑渲染右侧
+                renderSandboxArtifact(type, text);
+            }, 600);
+        }
+
+        // 处理手动输入框提交
+        function submitManualQuery() {
+            const input = document.getElementById('chat-input');
+            const val = input.value.trim();
+            if(!val) return;
+            input.value = '';
+            input.style.height = 'auto';
+            // 简单路由，含'诊断'/'销量'走marketing，否则走rag
+            const type = (val.includes('诊断') || val.includes('销量')) ? 'marketing' : 'rag';
+            simulateUserQuery(val, type);
+        }
+
+        // 下拉菜单基础控制
+        function toggleDropdown(id) {
+            const el = document.getElementById(id);
+            // 互斥关闭
+            if(id === 'kb-dropdown') document.getElementById('wf-dropdown').classList.add('hidden');
+            if(id === 'wf-dropdown') document.getElementById('kb-dropdown').classList.add('hidden');
+            el.classList.toggle('hidden');
+        }
+        // 点击外部关闭下拉
+        document.addEventListener('click', (e) => {
+            if(!e.target.closest('#kb-dropdown') && !e.target.closest('[onclick="toggleDropdown(\'kb-dropdown\')"]')) {
+                document.getElementById('kb-dropdown').classList.add('hidden');
+            }
+            if(!e.target.closest('#wf-dropdown') && !e.target.closest('[onclick="toggleDropdown(\'wf-dropdown\')"]')) {
+                document.getElementById('wf-dropdown').classList.add('hidden');
+            }
+        });
+
+        // 选中工作流
+        function selectWorkflow(name, type) {
+            document.getElementById('chat-input').value = `[执行工作流: ${name}] 请基于当前上下文环境执行。`;
+            toggleDropdown('wf-dropdown');
+            submitManualQuery();
+        }
+
+        // 放大镜：添加成员弹窗
+        function toggleAddMemberModal() {
+            const modal = document.getElementById('add-member-modal');
+            modal.classList.toggle('hidden');
+        }
+
+        // 导出结果功能
+        function exportResult(format) {
+            if(document.getElementById('canvas-empty').classList.contains('hidden') === false) {
+                showToast('沙盒为空，无法导出', 'error'); return;
+            }
+            showToast(`正在生成 ${format.toUpperCase()} 资产...`, 'info');
+            setTimeout(() => { showToast(`导出成功，文件已保存至本地。`, 'success'); }, 1500);
+        }
+
+        // 推送联合作战功能 (全局大屏同步)
+        function pushToJointOps() {
+            if(document.getElementById('canvas-empty').classList.contains('hidden') === false) {
+                showToast('请先生成分析视图后再推送', 'error'); return;
+            }
+            const overlay = document.getElementById('sync-overlay');
+            const progress = document.getElementById('sync-progress');
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+            
+            setTimeout(() => { progress.style.width = '100%'; }, 100);
+            
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+                overlay.classList.remove('flex');
+                progress.style.width = '0%';
+                showToast('视图已成功同步至慕尼黑大屏和协同系统', 'success');
+            }, 1800);
+        }
+
+        // Toast 提示工具
+        function showToast(msg, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const color = type === 'success' ? 'bg-green-600' : (type === 'error' ? 'bg-red-500' : 'bg-indigo-600');
+            const icon = type === 'success' ? 'fa-check-circle' : (type === 'error' ? 'fa-triangle-exclamation' : 'fa-info-circle');
+            
+            const toast = document.createElement('div');
+            toast.className = `flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-white text-sm font-medium ${color} toast-enter`;
+            toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${msg}</span>`;
+            
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                toast.style.transition = 'all 0.3s ease-in';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // ==========================================
+        // 第二部分：右侧沙盒渲染逻辑 (严格保留的原代码)
+        // ==========================================
+        function resetSandbox() {
+            document.getElementById('canvas-empty').classList.remove('hidden');
+            document.getElementById('canvas-preview').classList.add('hidden');
+            document.getElementById('canvas-code').classList.add('hidden');
+            document.getElementById('canvas-logic').classList.add('hidden');
+            if (chartInstance) chartInstance.destroy();
+            toggleSandboxTab('preview');
+        }
+
+        function toggleSandboxTab(tab) {
+            if(!document.getElementById('canvas-empty').classList.contains('hidden') && tab !== 'preview') return;
+            
+            ['preview', 'code', 'logic'].forEach(t => {
+                document.getElementById('canvas-'+t).classList.toggle('hidden', t !== tab);
+                const btn = document.getElementById('sb-'+t);
+                if (t === tab) btn.className = `px-4 py-1.5 text-xs font-bold rounded-md bg-white shadow-sm text-indigo-600 transition-all`;
+                else btn.className = `px-4 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition-all ${t==='logic'?'flex items-center gap-1.5':''}`;
+            });
+        }
+
+        function renderSandboxArtifact(type, query) {
+            document.getElementById('canvas-empty').classList.add('hidden');
+            document.getElementById('canvas-preview').classList.remove('hidden');
+            const renderArea = document.getElementById('render-area');
+
+            if (type === 'marketing') renderMarketingBoard(renderArea);
+            else renderKnowledgeCard(renderArea, query);
+
+            generateCodeAndMeta(type);
+            generateLogicFlow(type);
+            toggleSandboxTab('preview');
+        }
+
+        // 行业标准：营销洞察看板 (DOM Inject)
+        function renderMarketingBoard(area) {
+            area.innerHTML = `
+                <div class="space-y-5 animate-in fade-in">
+                    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600"><i class="fa-solid fa-chart-line"></i></div>
+                            <div>
+                                <h3 class="font-bold text-slate-800 text-sm">3C 智能终端 - Q3 业务异动诊断报告</h3>
+                                <p class="text-[10px] text-slate-400">数据源: SAP ERP(EU) + Salesforce | 模型: SHAP 归因树</p>
+                            </div>
+                        </div>
+                        <span class="px-2 py-1 bg-green-50 text-green-600 border border-green-200 text-[10px] font-bold rounded-md flex items-center gap-1"><i class="fa-solid fa-shield-check"></i> 数据审计通过</span>
+                    </div>
+
+                    <div class="grid grid-cols-4 gap-4">
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+                            <div class="absolute right-0 top-0 w-12 h-12 bg-red-50 rounded-bl-full -z-0"></div>
+                            <p class="text-[10px] text-slate-500 font-bold uppercase z-10 relative">旗舰智能手机 销量</p>
+                            <p class="text-xl font-bold text-slate-800 mt-1 z-10 relative">142,500 <span class="text-xs font-normal text-slate-500">台</span></p>
+                            <div class="flex items-center gap-1 mt-2 text-red-500 text-[11px] font-bold"><i class="fa-solid fa-arrow-trend-down"></i> -12.4% MoM</div>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                            <p class="text-[10px] text-slate-500 font-bold uppercase">均单客单价 (AOV)</p>
+                            <p class="text-xl font-bold text-slate-800 mt-1">€899.00</p>
+                            <div class="flex items-center gap-1 mt-2 text-slate-400 text-[11px] font-bold"><i class="fa-solid fa-minus"></i> 0.0% MoM</div>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+                            <div class="absolute right-0 top-0 w-12 h-12 bg-amber-50 rounded-bl-full -z-0"></div>
+                            <p class="text-[10px] text-slate-500 font-bold uppercase z-10 relative">渠道库存周转天数</p>
+                            <p class="text-xl font-bold text-slate-800 mt-1 z-10 relative">48.5 <span class="text-xs font-normal text-slate-500">天</span></p>
+                            <div class="flex items-center gap-1 mt-2 text-amber-500 text-[11px] font-bold"><i class="fa-solid fa-triangle-exclamation"></i> 预警超标</div>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+                            <div class="absolute right-0 top-0 w-12 h-12 bg-green-50 rounded-bl-full -z-0"></div>
+                            <p class="text-[10px] text-slate-500 font-bold uppercase z-10 relative">拉新成本 (CAC)</p>
+                            <p class="text-xl font-bold text-slate-800 mt-1 z-10 relative">€45.2</p>
+                            <div class="flex items-center gap-1 mt-2 text-green-500 text-[11px] font-bold"><i class="fa-solid fa-arrow-trend-down"></i> 优化 5.2%</div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-5 gap-4">
+                        <div class="col-span-3 bg-white p-5 rounded-xl border border-slate-200 shadow-sm h-[260px] flex flex-col">
+                            <h5 class="text-[11px] font-bold text-slate-700 mb-4 flex items-center gap-2"><i class="fa-solid fa-chart-area text-indigo-500"></i> SHAP Value 销量异动归因分析</h5>
+                            <div class="flex-grow relative w-full h-full"><canvas id="marketingChart"></canvas></div>
+                        </div>
+                        <div class="col-span-2 bg-slate-900 rounded-xl p-5 text-white shadow-lg flex flex-col h-[260px]">
+                            <h5 class="text-[11px] font-bold text-indigo-300 uppercase mb-4 tracking-wider flex justify-between">
+                                <span>Root Cause 自动诊断</span><i class="fa-solid fa-stethoscope"></i>
+                            </h5>
+                            <div class="space-y-3 overflow-y-auto scroll-hidden flex-grow pr-1">
+                                <div class="p-3 bg-white/10 rounded-lg border border-white/5 border-l-4 border-l-red-500">
+                                    <p class="text-[11px] font-bold text-red-300 mb-1">主因 1：竞品激进定价策略 (贡献度 65%)</p>
+                                    <p class="text-[10px] text-slate-300 leading-relaxed">竞品 Fruit 品牌在 8 月初下调入门级机型价格 15%，抢占了德法区 22% 中端换机份额。</p>
+                                </div>
+                                <div class="p-3 bg-white/10 rounded-lg border border-white/5 border-l-4 border-l-amber-500">
+                                    <p class="text-[11px] font-bold text-amber-300 mb-1">主因 2：渠道营销物料错配 (贡献度 20%)</p>
+                                    <p class="text-[10px] text-slate-300 leading-relaxed">线下门店（MediaMarkt）主推物料仍为上一代降噪耳机，未能形成连带销售。</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+                        <div class="flex justify-between items-center mb-3">
+                            <h5 class="text-xs font-bold text-indigo-800 flex items-center gap-2"><i class="fa-solid fa-bolt text-amber-500"></i> 策略引擎生成：Next Best Action (NBA)</h5>
+                            <button class="px-3 py-1 bg-indigo-600 text-white text-[10px] font-bold rounded shadow-sm hover:bg-indigo-700 transition">一键下发至 CRM</button>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="flex-1 bg-white border border-indigo-200 p-3 rounded-lg">
+                                <span class="text-[11px] font-bold text-slate-700 block mb-1">发放精准购机券 [高优]</span>
+                                <p class="text-[10px] text-slate-500">调用 CRM 对欧洲区持旧机 >2 年的高价值用户定向下发 €50 补贴短信。</p>
+                            </div>
+                            <div class="flex-1 bg-white border border-indigo-200 p-3 rounded-lg">
+                                <span class="text-[11px] font-bold text-slate-700 block mb-1">更新渠道捆绑策略 [中优]</span>
+                                <p class="text-[10px] text-slate-500">生成“买手机半价购TWS耳机”渠道促销规则并同步 ERP 价格引擎。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            setTimeout(() => {
+                if(chartInstance) chartInstance.destroy();
+                chartInstance = new Chart(document.getElementById('marketingChart').getContext('2d'), {
+                    type: 'bar',
+                    data: { labels: ['7月', '8月', '9月', '预测10月'], datasets: [{ label: '实际销量', data: [52000, 48000, 42500, null], backgroundColor: '#6366f1', borderRadius: 4 }, { label: '基线预测', data: [50000, 51000, 52000, 53000], type: 'line', borderColor: '#94a3b8', borderDash: [5, 5], tension: 0.3 }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } }, scales: { y: { beginAtZero: true, ticks: { font: { size: 10 } } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } }
+                });
+            }, 50);
+        }
+
+        // 行业标准：RAG 知识服务卡片 (DOM Inject)
+        function renderKnowledgeCard(area, query) {
+            area.innerHTML = `
+                <div class="space-y-5 max-w-4xl mx-auto animate-in fade-in pt-4">
+                    <div class="flex items-center gap-6 p-3 bg-white border border-slate-200 rounded-xl shadow-sm text-[11px]">
+                        <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div><span class="text-slate-500 font-bold">Milvus Vector DB 连通</span></div>
+                        <div class="h-4 w-[1px] bg-slate-200"></div>
+                        <div class="flex items-center gap-2 text-slate-600"><i class="fa-solid fa-bolt text-amber-500"></i> RAG 重排耗时: <b>385ms</b></div>
+                        <div class="h-4 w-[1px] bg-slate-200"></div>
+                        <div class="flex items-center gap-2 text-slate-600"><i class="fa-solid fa-file-shield text-slate-400"></i> 引用参考源: <b>3 份密级文档</b></div>
+                    </div>
+
+                    <div class="bg-white rounded-xl border border-emerald-100 shadow-md overflow-hidden">
+                        <div class="bg-emerald-50/50 border-b border-emerald-100 p-4">
+                            <h2 class="text-sm font-bold text-emerald-900 flex items-center gap-2"><i class="fa-solid fa-brain text-emerald-500"></i> AI 聚合摘要</h2>
+                        </div>
+                        <div class="p-6 space-y-4">
+                            <div class="text-[13px] text-slate-700 leading-relaxed">
+                                <p class="mb-3">基于企业知识库最新同步的数据（截止昨日），关于您的查询核心结论如下：</p>
+                                <ul class="space-y-2 list-disc list-inside marker:text-emerald-500">
+                                    <li><b>拉美合规准入：</b>新款降噪耳机在拉美的核心阻碍是缺乏巴西 ANATEL 最新的电池热稳定认证，而不仅是 RoHS<span class="citation-badge" title="源：拉美市场Q3合规准入指南.pdf">1</span>。</li>
+                                    <li><b>手表 OKR 延期风险：</b>可穿戴部门的 KR2 ("续航提升至15天") 进度滞后，当前良率未达标<span class="citation-badge" title="源：2025_Wearable_OKR_Review.xlsx">2</span>。</li>
+                                    <li><b>客诉处理 SOP：</b>面对“设备过热”，一线需引导用户关闭高性能模式，并下发 OTA 固件 1.4.2。未缓解才走换新流程<span class="citation-badge" title="源：全球客户服务SOP手册.pdf">3</span>。</li>
+                                </ul>
+                            </div>
+                            
+                            <div class="mt-6 pt-5 border-t border-slate-100">
+                                <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">知识溯源文献 (Citations)</h4>
+                                <div class="grid grid-cols-3 gap-3">
+                                    <div class="flex items-start gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg hover:border-emerald-400 transition cursor-pointer">
+                                        <div class="w-5 h-5 bg-red-100 text-red-500 rounded flex items-center justify-center shrink-0 mt-0.5"><i class="fa-solid fa-file-pdf text-[10px]"></i></div>
+                                        <div><p class="text-[10px] font-bold text-slate-700 line-clamp-1">拉美合规准入.pdf</p><p class="text-[9px] text-emerald-500">Score: 0.92</p></div>
+                                    </div>
+                                    <div class="flex items-start gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg hover:border-emerald-400 transition cursor-pointer">
+                                        <div class="w-5 h-5 bg-green-100 text-green-600 rounded flex items-center justify-center shrink-0 mt-0.5"><i class="fa-solid fa-file-excel text-[10px]"></i></div>
+                                        <div><p class="text-[10px] font-bold text-slate-700 line-clamp-1">OKR_Review_Sep.xlsx</p><p class="text-[9px] text-emerald-500">Score: 0.88</p></div>
+                                    </div>
+                                    <div class="flex items-start gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg hover:border-emerald-400 transition cursor-pointer">
+                                        <div class="w-5 h-5 bg-blue-100 text-blue-500 rounded flex items-center justify-center shrink-0 mt-0.5"><i class="fa-solid fa-file-word text-[10px]"></i></div>
+                                        <div><p class="text-[10px] font-bold text-slate-700 line-clamp-1">客服SOP手册_v4.docx</p><p class="text-[9px] text-emerald-500">Score: 0.85</p></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 代码与元数据生成
+        function generateCodeAndMeta(type) {
+            const apiContainer = document.getElementById('code-apis');
+            const sourceContainer = document.getElementById('code-sources');
+            const content = document.getElementById('code-content');
+            
+            if (type === 'marketing') {
+                apiContainer.innerHTML = `
+                    <span class="px-2 py-1 bg-blue-900/40 text-blue-400 border border-blue-800 rounded text-[9px]"><i class="fa-brands fa-salesforce"></i> Salesforce_REST_v5</span>
+                    <span class="px-2 py-1 bg-purple-900/40 text-purple-400 border border-purple-800 rounded text-[9px]"><i class="fa-solid fa-server"></i> SAP_S4HANA_OData</span>
+                `;
+                sourceContainer.innerHTML = `<span class="px-2 py-1 bg-slate-800 text-slate-300 border border-slate-700 rounded text-[9px] mono">fact_eu_sales_q3</span>`;
+                content.innerText = `import pandas as pd
+from openclaw.tools import SAP_Connector, Salesforce_API
+from openclaw.ml import SHAPAnalyzer, NBAGenerator
+
+def execute_marketing_analysis(query: str):
+    # 1. Fetch ERP & CRM data for 3C electronics via authenticated SSO
+    sales_df = SAP_Connector.query("SELECT * FROM fact_eu_sales_q3 WHERE category='Smartphone'")
+    campaign_df = Salesforce_API.get_campaign_roas(region='EU', quarter='Q3')
+    
+    # 2. Merge & Cleanse (Auto PII removal)
+    dataset = pd.merge(sales_df, campaign_df, on='sku_id')
+    dataset = dataset.drop(columns=['customer_phone', 'exact_address'])
+    
+    # 3. Root Cause Analysis via SHAP
+    analyzer = SHAPAnalyzer(target_metric='profit_margin')
+    attribution_scores = analyzer.explain_variance(dataset)
+    
+    # 4. Generate NBA (Next Best Action) using Shield-LLM
+    nba_strategy = NBAGenerator.create_campaign(
+        insights=attribution_scores.top_k(2),
+        budget_limit=500000,
+        channel='SMS_CRM'
+    )
+    
+    return { "kpi_metrics": dataset.describe(), "root_cause": attribution_scores, "nba": nba_strategy }`;
+            } else {
+                apiContainer.innerHTML = `
+                    <span class="px-2 py-1 bg-emerald-900/40 text-emerald-400 border border-emerald-800 rounded text-[9px]"><i class="fa-solid fa-database"></i> Milvus_gRPC</span>
+                    <span class="px-2 py-1 bg-orange-900/40 text-orange-400 border border-orange-800 rounded text-[9px]"><i class="fa-solid fa-microchip"></i> Shield-LLM-70B</span>
+                `;
+                sourceContainer.innerHTML = `<span class="px-2 py-1 bg-slate-800 text-slate-300 border border-slate-700 rounded text-[9px] mono">3c_enterprise_knowledge_v2</span>`;
+                content.innerText = `from openclaw.rag import RAGPipeline
+from openclaw.retrievers import DenseRetriever, CrossEncoderReranker
+from openclaw.llm import ShieldLLM
+
+def execute_knowledge_retrieval(user_query: str):
+    # 1. Initialize RAG components tailored for internal Enterprise Docs
+    retriever = DenseRetriever(vector_db="milvus", collection="3c_enterprise_knowledge")
+    reranker = CrossEncoderReranker(model="bge-reranker-large")
+    llm = ShieldLLM(model="Shield-70B-Chat", temperature=0.1)
+    
+    pipeline = RAGPipeline(retriever=retriever, reranker=reranker, llm=llm)
+    
+    # 2. Semantic Search with Metadata Filtering (RBAC applied)
+    filters = {"domain": ["compliance", "management", "sop"], "clearance_level": "<= L3"}
+    docs = pipeline.retrieve(user_query, top_k=15, filters=filters)
+    
+    # 3. Rerank and Generate Answer with Citation Tracking
+    top_docs = reranker.rank(user_query, docs, top_n=3)
+    response = pipeline.generate_with_citations(
+        query=user_query,
+        context=top_docs,
+        prompt_template="ENTERPRISE_QA_STRICT_NO_HALLUCINATION"
+    )
+    
+    return response.format_json()`;
+            }
+        }
+
+        // 思维链与 Skill DAG 视图
+        function generateLogicFlow(type) {
+            const container = document.getElementById('cot-container');
+            const color = type === 'marketing' ? 'indigo' : 'emerald';
+            
+            let steps = [];
+            if (type === 'marketing') {
+                document.getElementById('total-time').innerText = '4.28s';
+                steps = [
+                    { skill: 'Intent_Parser', time: '120ms', label: '多模态意图识别', detail: `解析群聊上下文。提取实体: Domain=<code>[3C/智能机]</code>, Geo=<code>[EU]</code>, Action=<code>[归因分析]</code>。` },
+                    { skill: 'SQL_Generator', time: '850ms', label: '自动路由与取数', detail: `挂载当前账户 <b>SSO 凭证</b>，通过 OData 接口向 SAP 财务库与 Salesforce 并发拉取 Q3 明细表。` },
+                    { skill: 'Data_Sanitizer', time: '45ms', label: '隐私合规脱敏', detail: `触发数据护栏拦截，动态屏蔽 PII 信息（手机号加盐哈希），确保满足欧盟 GDPR 要求。` },
+                    { skill: 'Python_Sandbox', time: '2.1s', label: '执行归因算法容器', detail: `在隔离的 Node.js/Python 沙盒内挂载 <code>SHAPAnalyzer</code> 执行归因计算，输出量化特征权重。` },
+                    { skill: 'Report_Renderer', time: '350ms', label: '大屏与策略生成', detail: `渲染可视化看板，并调度 Shield-LLM 基于当前库存与预算边界，推演出下一发（NBA）补贴建议。` }
+                ];
+            } else {
+                document.getElementById('total-time').innerText = '1.84s';
+                steps = [
+                    { skill: 'Query_Rewriter', time: '180ms', label: '提问重写与对齐', detail: `将非标口语映射为 3C 规范术语。例: "果牌手机" -> "竞品 Fruit_iPhone"，"TWS" -> "真无线耳机"。` },
+                    { skill: 'Vector_Search', time: '420ms', label: 'Milvus 高维检索', detail: `结合当前用户 L3 数据权限权限，在 1.2TB 知识库中执行余弦相似度计算，Top-K 召回 15 个文档块。` },
+                    { skill: 'Cross_Encoder', time: '360ms', label: 'Rerank 语义重排', detail: `基于上下文深度语义二次打分，剔除噪声，精准保留 Top-3 核心参考源（如SOP、合规手册）。` },
+                    { skill: 'Knowledge_Synthesizer', time: '820ms', label: '抗幻觉摘要生成', detail: `启动 <code>ENTERPRISE_QA_STRICT</code> 模板，强制大模型仅根据召回的 3 份文献回答，并注入溯源锚点。` }
+                ];
+            }
+
+            container.innerHTML = steps.map(s => `
+                <div class="cot-node flex gap-5 group relative z-10">
+                    <div class="pt-1 w-28 shrink-0 text-right">
+                        <span class="inline-block px-2 py-1 bg-${color}-50 text-${color}-600 border border-${color}-200 rounded text-[10px] font-mono font-bold">${s.skill}</span>
+                        <div class="text-[10px] text-slate-400 mt-1 font-mono"><i class="fa-regular fa-clock"></i> ${s.time}</div>
+                    </div>
+                    <div class="w-4 h-4 mt-2 rounded-full border-2 border-white bg-${color}-400 shadow-sm shrink-0 z-10"></div>
+                    <div class="bg-white border border-slate-200 rounded-lg p-3 shadow-sm flex-grow group-hover:border-${color}-300 transition-colors">
+                        <h6 class="text-[12px] font-bold text-slate-800 mb-1">${s.label}</h6>
+                        <p class="text-[11px] text-slate-500 leading-relaxed">${s.detail}</p>
+                    </div>
+                </div>
+            `).join('');
+        }
+    </script>
+</body>
+</html>
