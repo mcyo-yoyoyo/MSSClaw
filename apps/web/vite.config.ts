@@ -4,14 +4,15 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '../..');
+const prototypeHtml = path.resolve(projectRoot, 'docs/legacy-prototype/index.html');
 
-/** 默认 dev：托管项目根目录 index.html 高保真原型（npm run dev:prototype） */
+/** 默认 dev：托管旧版静态设计稿（npm run dev:prototype） */
 export default defineConfig({
   root: projectRoot,
   publicDir: false,
   server: {
     port: 5173,
-    open: '/index.html',
+    open: '/docs/legacy-prototype/index.html',
     fs: {
       allow: [projectRoot],
     },
@@ -23,10 +24,10 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: path.resolve(projectRoot, 'dist'),
+    outDir: path.resolve(projectRoot, 'dist-prototype'),
     emptyOutDir: true,
     rollupOptions: {
-      input: path.resolve(projectRoot, 'index.html'),
+      input: prototypeHtml,
     },
   },
 });

@@ -6,9 +6,17 @@
 
 - 地址：https://mcyo-yoyoyo.github.io/MSSClaw/
 - 演示账号：`mcyo@company.com` / `mssclaw`（系统管理员）
-- 说明：GitHub Pages 为前端本地演示模式，数据保存在浏览器 localStorage
+- 说明：与本地 `npm run dev` 同一套 React 应用（GitHub Actions 构建 `apps/web`）
 
-> 首次推送后，请到仓库 **Settings → Pages → Build and deployment**，Source 选择 **GitHub Actions**。Actions 跑通后即可访问。
+### 重要：Pages 必须用 GitHub Actions
+
+仓库根目录旧版静态 `index.html` 已移至 `docs/legacy-prototype/`，**不要**再把 Pages 设成 “Deploy from a branch / root”，否则会看到老页面。
+
+请确认：
+
+1. 仓库 **Settings → Pages → Build and deployment → Source** = **GitHub Actions**
+2. **Actions** 里 `Deploy GitHub Pages` 工作流为绿色成功
+3. 浏览器强刷或无痕打开演示地址
 
 ## 快速启动（React 前端 · 默认）
 
@@ -24,17 +32,11 @@ npm run dev
 
 ## 可选：静态 HTML 原型
 
-
-
 ```powershell
-
 npm run dev:prototype
-
 ```
 
-
-
-访问 `http://localhost:5173/index.html`（根目录 `index.html` 高保真设计稿，只读 spec）。
+访问 `http://localhost:5173/docs/legacy-prototype/index.html`（已迁至 `docs/legacy-prototype/`，只读设计稿）。
 
 
 
@@ -94,7 +96,7 @@ React 在 DEV 模式下通过 Vite 代理 `/api → localhost:3000`。API 在线
 
 MSSClaw/
 
-├── index.html             # 静态设计稿 spec（dev:prototype）
+├── docs/legacy-prototype/ # 静态设计稿 spec（旧版单页）
 
 ├── apps/
 
@@ -122,7 +124,7 @@ MSSClaw/
 
 | `npm run dev` | **React 前端（:5173，默认）** |
 
-| `npm run dev:prototype` | 静态 HTML 原型（:5173/index.html） |
+| `npm run dev:prototype` | 静态 HTML 原型（docs/legacy-prototype） |
 
 | `npm run dev:react` | 同 `dev`（别名） |
 
