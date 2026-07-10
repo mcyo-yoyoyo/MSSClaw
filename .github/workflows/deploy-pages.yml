@@ -30,10 +30,16 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Build web
+      - name: Build React web (same as npm run build / npm run dev)
         env:
           GITHUB_PAGES: 'true'
-        run: npm run build
+        run: npm run build --workspace @mss-claw/web
+
+      - name: Verify React entry
+        run: |
+          test -f apps/web/dist/index.html
+          grep -q 'assets/' apps/web/dist/index.html
+          ! grep -q 'cdn.tailwindcss.com' apps/web/dist/index.html
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
