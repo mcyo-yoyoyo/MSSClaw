@@ -1,0 +1,21 @@
+{
+  "name": "mss-claw-platform",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @mss-claw/web",
+    "dev:prototype": "npm run dev:prototype --workspace @mss-claw/web",
+    "dev:react": "npm run dev:react --workspace @mss-claw/web",
+    "dev:api": "npm run start:dev --workspace @mss-claw/api",
+    "build": "npm run build --workspace @mss-claw/web",
+    "build:prototype": "npm run build:prototype --workspace @mss-claw/web",
+    "build:react": "npm run build:react --workspace @mss-claw/web",
+    "build:api": "npm run build --workspace @mss-claw/api",
+    "preview": "npm run preview --workspace @mss-claw/web",
+    "preview:react": "npm run preview:react --workspace @mss-claw/web",
+    "smoke": "npm run smoke --workspace @mss-claw/web"
+  }
+}
