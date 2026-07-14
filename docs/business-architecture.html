@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MSS智枢 · 能力架构全景与投资规划</title>
+  <style>
+    :root {
+      --bg: #fafafa;
+      --card: #fff;
+      --text: #18181b;
+      --muted: #71717a;
+      --line: #e4e4e7;
+      --accent: #18181b;
+      --ok: #166534;
+      --ok-bg: #f0fdf4;
+      --warn: #a16207;
+      --warn-bg: #fefce8;
+      --soft: #f4f4f5;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "PingFang SC", "Microsoft YaHei", -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    .page {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 32px 20px 64px;
+    }
+    h1 { font-size: 28px; margin: 0 0 8px; letter-spacing: 0.02em; }
+    h2 {
+      font-size: 16px;
+      margin: 36px 0 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+    }
+    .sub { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+    .tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+    .tag {
+      font-size: 12px;
+      padding: 4px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--card);
+      color: var(--muted);
+    }
+    .tag.dark { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .callout {
+      background: var(--soft);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 14px;
+      margin-bottom: 28px;
+    }
+    .layers { display: flex; flex-direction: column; gap: 10px; }
+    .layer {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px 16px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: start;
+    }
+    .layer h3 { margin: 0 0 4px; font-size: 15px; }
+    .layer p { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: var(--soft);
+      color: var(--text);
+    }
+    .badge {
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+    .ok { background: var(--ok-bg); color: var(--ok); }
+    .warn { background: var(--warn-bg); color: var(--warn); }
+    .neutral { background: var(--soft); color: var(--muted); }
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 8px;
+    }
+    .step {
+      text-align: center;
+      min-width: 88px;
+    }
+    .step b {
+      display: inline-block;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-size: 11px;
+      line-height: 22px;
+      margin-bottom: 6px;
+    }
+    .step span { display: block; font-size: 12px; }
+    .arrow { color: var(--muted); font-size: 14px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th { background: var(--soft); font-weight: 600; font-size: 12px; color: var(--muted); }
+    tr:last-child td { border-bottom: none; }
+    .grid3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    @media (max-width: 800px) {
+      .grid3 { grid-template-columns: 1fr; }
+      .layer { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .card h3 { margin: 0 0 8px; font-size: 14px; }
+    .card .phase {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .card p { margin: 0; font-size: 13px; color: var(--muted); }
+    .foot {
+      margin-top: 36px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    @media print {
+      body { background: #fff; }
+      .page { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>MSS智枢 · 能力架构全景与投资规划</h1>
+    <p class="sub">企业内部 AI 员工操作系统（工作台）— 供业务沟通与阶段投资对齐 · 非对外销售材料</p>
+    <div class="tags">
+      <span class="tag dark">对内业务平台</span>
+      <span class="tag">营销服场景优先</span>
+      <span class="tag">投资分阶段推进</span>
+    </div>
+
+    <div class="callout">
+      <strong>给业务领导的一句话：</strong>
+      员工用一句话说目标，平台匹配数字员工与能力，在任务中心完成计划确认与交付；
+      能力沉淀为 Agent/Skill，知识可检索溯源，多租户与权限支撑组织落地。
+    </div>
+
+    <h2>一、四层能力架构</h2>
+    <div class="layers">
+      <div class="layer">
+        <div>
+          <h3>L1 业务工作台</h3>
+          <p>员工每天真正进入的入口</p>
+          <div class="chips">
+            <span class="chip">智能助理</span>
+            <span class="chip">任务中心</span>
+            <span class="chip">WarRoom 作战室</span>
+          </div>
+        </div>
+        <span class="badge ok">已可用 · 试点主路径</span>
+      </div>
+      <div class="layer">
+        <div>
+          <h3>L2 数字员工与业务线</h3>
+          <p>按事业部匹配相关 Agent</p>
+          <div class="chips">
+            <span class="chip">GTM / MKT</span>
+            <span class="chip">电商 / 零售</span>
+            <span class="chip">服务 / 渠道 / HR</span>
+          </div>
+        </div>
+        <span class="badge warn">已可用 · 场景待打穿</span>
+      </div>
+      <div class="layer">
+        <div>
+          <h3>L3 能力资产中心</h3>
+          <p>组织级可复用能力沉淀</p>
+          <div class="chips">
+            <span class="chip">Agent / Skill / Tool</span>
+            <span class="chip">知识库 RAG</span>
+            <span class="chip">Prompt / Memory / Workflow</span>
+          </div>
+        </div>
+        <span class="badge warn">UI 齐全 · 深度不均</span>
+      </div>
+      <div class="layer">
+        <div>
+          <h3>L4 治理与底座</h3>
+          <p>对企业 IT / 安审可交代的部分</p>
+          <div class="chips">
+            <span class="chip">登录与成员角色</span>
+            <span class="chip">多租户</span>
+            <span class="chip">Runtime / API / LLM</span>
+          </div>
+        </div>
+        <span class="badge neutral">演示级 → 生产级待投入</span>
+      </div>
+    </div>
+
+    <h2>二、作业闭环（怎么用）</h2>
+    <div class="flow">
+      <div class="step"><b>1</b><span>说目标</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><b>2</b><span>匹配数字员工</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><b>3</b><span>确认计划</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><b>4</b><span>执行对话</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><b>5</b><span>交付物进会</span></div>
+    </div>
+    <p class="sub">关键步骤保留人审，避免「全自动替代」带来的责任悬空。</p>
+
+    <h2>三、模块成熟度（投资对话）</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>层次</th>
+          <th>能力模块</th>
+          <th>业务价值</th>
+          <th>成熟度</th>
+          <th>下阶段投入重点</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>工作台</td><td>智能助理</td><td>降低使用门槛</td><td>可用</td><td>嵌入例会节奏</td>
+        </tr>
+        <tr>
+          <td>工作台</td><td>任务中心 / WarRoom</td><td>可协作、可交付</td><td>可用</td><td>交付物采纳与轻嵌入</td>
+        </tr>
+        <tr>
+          <td>业务线</td><td>GTM～HR 数字员工</td><td>场景匹配</td><td>内容侧可用</td><td>锁定 1 个金牌场景打穿</td>
+        </tr>
+        <tr>
+          <td>资产</td><td>Agent / Skill</td><td>能力复用</td><td>可用</td><td>绑定真数据与流程</td>
+        </tr>
+        <tr>
+          <td>资产</td><td>知识库 RAG</td><td>可溯源问答</td><td>试点</td><td>官方语料与权限分区</td>
+        </tr>
+        <tr>
+          <td>资产</td><td>Workflow / 自动化</td><td>例行任务</td><td>雏形</td><td>随场景需求再开</td>
+        </tr>
+        <tr>
+          <td>治理</td><td>登录 / RBAC / 租户</td><td>可管可控</td><td>演示～有限生产</td><td>审计与安审达标</td>
+        </tr>
+        <tr>
+          <td>底座</td><td>Runtime / API / LLM</td><td>可执行可扩展</td><td>骨架+Mock</td><td>生产 Runtime 与观测</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>四、三阶段投资规划</h2>
+    <div class="grid3">
+      <div class="card">
+        <div class="phase">P0 · 4–8 周</div>
+        <h3>阶段 1｜主路径打穿</h3>
+        <p>收窄入口；1 个主办业务方场景；周活 + 交付物进例会。投入重心：业务运营 + 主路径，不堆新模块。</p>
+      </div>
+      <div class="card">
+        <div class="phase">P1 · 1–2 季度</div>
+        <h3>阶段 2｜可控扩展</h3>
+        <p>轻嵌入企微/邮件/共享盘；准真数据；角色真实生效；复制到第 2 事业部/代表处。</p>
+      </div>
+      <div class="card">
+        <div class="phase">P2 · 按安审与扩点</div>
+        <h3>阶段 3｜平台加固</h3>
+        <p>生产 Runtime、审计隔离、Workflow 编排、多场景水平扩展——此时再强化「OS」叙事。</p>
+      </div>
+    </div>
+
+    <h2>五、扩点 / 预算前的三张「门票」</h2>
+    <table>
+      <thead>
+        <tr><th>门票</th><th>含义</th><th>未达到时</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>主办业务方署名</td>
+          <td>有部门认领工序</td>
+          <td>先找试点业务方，再谈平台扩面</td>
+        </tr>
+        <tr>
+          <td>交付物被例会采纳</td>
+          <td>产出进入真实作业</td>
+          <td>停新模块，先把一个交付件跑进会</td>
+        </tr>
+        <tr>
+          <td>第二条复制路径</td>
+          <td>可复制，非一次性剧本</td>
+          <td>未复制前不按「全 MSS OS」立项</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="foot">
+      口径提醒：平台感是结果不是起点。对业务宜表述为「可试点的 AI 作业工作台 + 能力资产沉淀」；
+      「生产级治理 / 完整企业 OS」随阶段兑现后再升级说法。<br />
+      文件路径：docs/business-architecture.html · 可直接浏览器打开或打印
+    </p>
+  </div>
+</body>
+</html>
