@@ -3,6 +3,7 @@ import {
   DEFAULT_LLM_CONFIG,
   DEFAULT_LLM_MODELS,
   isLlmConfigComplete,
+  normalizeLlmModelId,
   resolveModelMeta,
   type CustomLlmModel,
   type LlmConfig,
@@ -25,26 +26,16 @@ function loadCustomModels(): CustomLlmModel[] {
   }
 }
 
-function migrateLegacyModel(model: string): string {
-  const legacy: Record<string, string> = {
-    'gpt-4o': 'GLM-5.1',
-    'gpt-4o-mini': 'GLM-5.1',
-    'gpt-4-turbo': 'GLM-5.1',
-    'deepseek-chat': 'DeepSeek-V4',
-    'deepseek-reasoner': 'DeepSeek-V4',
-    'qwen-plus': 'Qwen-3.7',
-    'qwen-max': 'Qwen-3.7',
-    'qwen-turbo': 'Qwen-3.7',
-  };
-  return legacy[model] ?? model;
-}
-
 function loadConfig(): LlmConfig {
   const customModels = loadCustomModels();
   const rawModel = localStorage.getItem(`${LS_PREFIX}model`) || DEFAULT_LLM_CONFIG.model;
-  const model = migrateLegacyModel(rawModel);
+  const model = normalizeLlmModelId(rawModel);
   const meta = resolveModelMeta({ model, customModels });
   const storedUrl = localStorage.getItem(`${LS_PREFIX}base_url`);
+  // 若本地还存着旧展示名，写回官方 API id，避免下次再传错
+  if (model !== rawModel) {
+    localStorage.setItem(`${LS_PREFIX}model`, model);
+  }
   return {
     model,
     baseUrl: storedUrl || meta.baseUrl || DEFAULT_LLM_CONFIG.baseUrl,
@@ -99,15 +90,16 @@ export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
       return;
     }
     const { config } = get();
-    const meta = resolveModelMeta({ model: modelId, customModels: config.customModels });
+    const id = normalizeLlmModelId(modelId);
+    const meta = resolveModelMeta({ model: id, customModels: config.customModels });
     get().saveConfig({
-      model: modelId,
+      model: id,
       baseUrl: meta.baseUrl || config.baseUrl,
     });
   },
 
   addCustomModel: (model) => {
-    const id = model.id.trim();
+    const id = normalizeLlmModelId(model.id.trim());
     if (!id) return;
     const { config } = get();
     const nextList = [

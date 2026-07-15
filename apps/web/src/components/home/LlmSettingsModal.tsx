@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import { testLlmConnection } from '@/api/llmClient';
 import {
   DEFAULT_LLM_MODELS,
+  normalizeLlmModelId,
   resolveModelMeta,
   type CustomLlmModel,
 } from '@/domain/llmConfig';
@@ -43,14 +44,15 @@ export function LlmSettingsModal({ open, onClose }: LlmSettingsModalProps) {
   const meta = resolveModelMeta({ model: modelId, customModels: config.customModels });
 
   const handleSelectPreset = (id: string) => {
-    setModelId(id);
-    const next = resolveModelMeta({ model: id, customModels: config.customModels });
+    const nextId = normalizeLlmModelId(id);
+    setModelId(nextId);
+    const next = resolveModelMeta({ model: nextId, customModels: config.customModels });
     if (next.baseUrl) setBaseUrl(next.baseUrl);
   };
 
   const handleSave = () => {
     saveConfig({
-      model: modelId,
+      model: normalizeLlmModelId(modelId),
       baseUrl: baseUrl.trim(),
       apiKey: apiKey.trim(),
     });
@@ -58,9 +60,9 @@ export function LlmSettingsModal({ open, onClose }: LlmSettingsModalProps) {
   };
 
   const handleAddCustom = () => {
-    const id = customDraft.id.trim();
+    const id = normalizeLlmModelId(customDraft.id);
     if (!id) {
-      setTestResult('请填写模型 ID');
+      setTestResult('请填写模型 ID（须与厂商 API 文档一致）');
       return;
     }
     addCustomModel({
@@ -79,7 +81,7 @@ export function LlmSettingsModal({ open, onClose }: LlmSettingsModalProps) {
     setTesting(true);
     setTestResult('正在测试连接…');
     const result = await testLlmConnection({
-      model: modelId,
+      model: normalizeLlmModelId(modelId),
       baseUrl: baseUrl.trim(),
       apiKey: apiKey.trim(),
     });
@@ -99,7 +101,7 @@ export function LlmSettingsModal({ open, onClose }: LlmSettingsModalProps) {
 
         <div className="space-y-3 p-5 text-left">
           <p className="text-[12px] text-[#86868b]">
-            选用默认国产模型，或自定义添加 OpenAI 兼容模型。保存 API Key 后用于 Plan / 流式回复；未配置时走本地 Mock。
+            预设模型 ID 与厂商 API 一致。也可自定义添加任意 OpenAI 兼容模型。保存 API Key 后用于 Plan / 流式回复；未配置时走本地 Mock。
           </p>
 
           <div>
@@ -120,14 +122,17 @@ export function LlmSettingsModal({ open, onClose }: LlmSettingsModalProps) {
                   type="button"
                   onClick={() => handleSelectPreset(m.id)}
                   className={cn(
-                    'rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition',
+                    'rounded-lg border px-2.5 py-1.5 text-left text-[11px] font-semibold transition',
                     modelId === m.id
                       ? 'border-zinc-900 bg-zinc-900 text-white'
                       : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300',
                   )}
                 >
-                  {m.label}
-                  <span className="ml-1 font-normal opacity-70">{m.providerName}</span>
+                  <span>
+                    {m.label}
+                    <span className="ml-1 font-normal opacity-70">{m.providerName}</span>
+                  </span>
+                  <span className="mt-0.5 block font-mono text-[9px] font-normal opacity-60">{m.id}</span>
                 </button>
               ))}
               {config.customModels.map((m) => (
@@ -166,7 +171,7 @@ export function LlmSettingsModal({ open, onClose }: LlmSettingsModalProps) {
               ))}
             </div>
             <p className="mt-1.5 text-[10px] text-zinc-400">
-              当前：{meta.providerName} · {meta.label}
+              当前：{meta.providerName} · {meta.label} · API model=`{meta.id}`
             </p>
           </div>
 
@@ -177,7 +182,7 @@ export function LlmSettingsModal({ open, onClose }: LlmSettingsModalProps) {
                 value={customDraft.id}
                 onChange={(e) => setCustomDraft((d) => ({ ...d, id: e.target.value }))}
                 className="w-full rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[12px]"
-                placeholder="模型 ID，如 glm-4-plus"
+                placeholder="模型 ID（API 名），如 deepseek-v4-flash"
               />
               <input
                 value={customDraft.label}

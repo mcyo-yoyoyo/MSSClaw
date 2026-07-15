@@ -1,4 +1,4 @@
-import { isLlmConfigComplete, type LlmConfig } from '@/domain/llmConfig';
+import { isLlmConfigComplete, normalizeLlmModelId, type LlmConfig } from '@/domain/llmConfig';
 import { useLlmConfigStore } from '@/stores/llmConfigStore';
 import type { ActionType } from '@/domain/plan';
 import type { ExecutionStep } from '@/domain/chat';
@@ -35,7 +35,7 @@ async function chatCompletion(
       Authorization: `Bearer ${config.apiKey.trim()}`,
     },
     body: JSON.stringify({
-      model: config.model.trim(),
+      model: normalizeLlmModelId(config.model),
       messages,
       max_tokens: options?.maxTokens ?? 512,
       temperature: options?.temperature ?? 0.3,
@@ -67,7 +67,7 @@ export async function* streamChatCompletion(
       Authorization: `Bearer ${config.apiKey.trim()}`,
     },
     body: JSON.stringify({
-      model: config.model.trim(),
+      model: normalizeLlmModelId(config.model),
       messages,
       max_tokens: options?.maxTokens ?? 1200,
       temperature: options?.temperature ?? 0.5,
@@ -283,7 +283,7 @@ export async function testLlmConnection(
 ): Promise<LlmTestResult> {
   const apiKey = config.apiKey.trim();
   const baseUrl = normalizeBaseUrl(config.baseUrl);
-  const model = config.model.trim();
+  const model = normalizeLlmModelId(config.model);
 
   if (!apiKey) return { ok: false, message: '请先填写 API Key' };
   if (!baseUrl) return { ok: false, message: '请先填写 Base URL' };
