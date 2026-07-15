@@ -132,8 +132,10 @@ export function SharedComposer({
         return;
       }
     }
-    const { axis, category, regionId } = useHomeStore.getState();
-    onChange(axis === 'region' ? getHomeRegionSuggestion(regionId) : getHomeSuggestion(category));
+    const { expertAxis, category, regionId } = useHomeStore.getState();
+    onChange(
+      expertAxis === 'region' ? getHomeRegionSuggestion(regionId) : getHomeSuggestion(category),
+    );
     notify('已填入智能建议');
     textareaRef.current?.focus();
   };
@@ -148,8 +150,8 @@ export function SharedComposer({
   };
 
   const defaultPlaceholder = landing
-    ? '描述你想完成的事，@ 选 Agent，/ 调 Skill — 智枢帮你搞定'
-    : '继续对话… @ Agent · / Skill · Enter 发送';
+    ? '描述你想完成的事… @ 选专家，/ 调技能'
+    : '继续对话… @ 专家 · / 技能 · Enter 发送';
 
   const slashMenu = slashOpen ? (
     <HomeSlashMenu

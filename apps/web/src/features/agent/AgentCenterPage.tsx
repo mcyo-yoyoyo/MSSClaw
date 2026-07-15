@@ -51,7 +51,7 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
           subtitle="定义营销服 Agent · 挂载 Skill · 发布至团队调用"
           tip={
             <>
-              点击「配置」可设置 Persona、绑定 Skill 并发布；「调用」进入任务中心对话；已发布专家会出现在智能助理推荐区。
+              点击「配置」可设置 Persona、绑定 Skill 并发布；「调用」进入任务中心对话；已发布专家会出现在工作台推荐区。
             </>
           }
           actions={

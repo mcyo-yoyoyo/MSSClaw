@@ -44,7 +44,11 @@ export function openPortalCard(card: PortalMapCard, handlers: PortalNavHandlers)
   const intent = useNavigationIntentStore.getState();
 
   if (action.type === 'external') {
-    window.open(action.url, '_blank', 'noopener,noreferrer');
+    const win = window.open(action.url, '_blank', 'noopener,noreferrer');
+    if (!win) {
+      toast('浏览器拦截了弹窗，请允许本站弹窗后重试');
+      return;
+    }
     toast(`已打开：${card.title}`);
     return;
   }

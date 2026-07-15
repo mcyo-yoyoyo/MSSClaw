@@ -425,8 +425,9 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
       ecommerce: ['ecommerce'],
       retail: ['retail'],
       service: ['service'],
-      channel: ['channel', 'finance'],
+      channel: ['channel'],
       hr: ['hr'],
+      finance: ['finance'],
       quality: ['quality'],
     };
     return kbDocs.filter((d) => {
@@ -440,11 +441,12 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
       }
       if (kbRegionFilter !== 'all') {
         const regionLabels: Record<string, string[]> = {
-          mea: ['中东', 'mea', 'MEA'],
-          europe: ['欧洲', 'EU', 'europe'],
-          russia: ['俄罗斯', 'russia'],
+          china: ['中国', 'china', 'CN'],
           apac: ['亚太', 'apac', 'APAC'],
+          mea: ['中东', 'mea', 'MEA'],
           latam: ['拉美', 'latam', 'LATAM', 'MX'],
+          europe: ['欧洲', 'EU', 'europe'],
+          eurasia: ['欧亚', 'eurasia', '俄罗斯', 'russia'],
         };
         const keys = regionLabels[kbRegionFilter] ?? [];
         const blob = `${d.title} ${d.desc} ${d.tags.join(' ')}`;

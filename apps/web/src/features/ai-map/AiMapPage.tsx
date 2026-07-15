@@ -105,6 +105,8 @@ export function AiMapPage({ onInvokeAgent, onInvokeSkill, onAskKbDocument }: AiM
   const [efficiencyFilter, setEfficiencyFilter] = useState<EfficiencyFilter>('all');
   const pendingCaseId = useNavigationIntentStore((s) => s.pendingCaseId);
   const consumeCaseId = useNavigationIntentStore((s) => s.consumeCaseId);
+  const pendingScenarioId = useNavigationIntentStore((s) => s.pendingScenarioId);
+  const consumeScenarioId = useNavigationIntentStore((s) => s.consumeScenarioId);
 
   const affiliation = useMemo(
     () => ({
@@ -201,6 +203,25 @@ export function AiMapPage({ onInvokeAgent, onInvokeSkill, onAskKbDocument }: AiM
     if (card) setNarrativeCard(card);
   }, [pendingCaseId, allBundlesForCoverage, bundles, consumeCaseId, showToast]);
 
+  // 发现页场景入口：直接聚焦对应样板间场景
+  useEffect(() => {
+    if (!pendingScenarioId) return;
+    const id = consumeScenarioId();
+    if (!id) return;
+    const pool = allBundlesForCoverage.length ? allBundlesForCoverage : bundles;
+    const hit = pool.find((b) => b.id === id);
+    if (!hit) {
+      showToast(`未找到场景：${id}`);
+      setListFilter('all');
+      setLeftTab('scenarios');
+      return;
+    }
+    setListFilter('all');
+    setLeftTab('scenarios');
+    setSelectedId(hit.id);
+    showToast(`已定位场景：${hit.label}`);
+  }, [pendingScenarioId, allBundlesForCoverage, bundles, consumeScenarioId, showToast]);
+
   const selected: ScenarioBundle | null = bundles.find((b) => b.id === selectedId) ?? null;
 
   const narrativeCards = useMemo(() => {
@@ -232,11 +253,11 @@ export function AiMapPage({ onInvokeAgent, onInvokeSkill, onAskKbDocument }: AiM
     <div className="center-surface center-page scroll-hidden flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-4 py-4 md:px-6">
         <CenterPageHeader
-          title="案例"
-          subtitle="AI 样板间 · 场景案例与能力组合沉淀"
+          title="场景库"
+          subtitle="样板间 · 可复制业务场景与能力组合"
           tip={
             <>
-              左侧选业务场景 → 先看场景叙事与「一键打样」→ 再按需展开能力组合（Agent / Tool / 知识）。首页「场景导航」是橱窗速览，这里是完整资产包。
+              左侧选业务场景 → 先看场景叙事与「一键打样」→ 再按需展开能力组合。首页「AI广场」是橱窗，这里是完整场景库。
             </>
           }
           actions={
@@ -254,7 +275,7 @@ export function AiMapPage({ onInvokeAgent, onInvokeSkill, onAskKbDocument }: AiM
                 }}
                 className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03]"
               >
-                回场景导航（橱窗）
+                回AI广场（橱窗）
               </button>
             </>
           }
@@ -362,6 +383,16 @@ export function AiMapPage({ onInvokeAgent, onInvokeSkill, onAskKbDocument }: AiM
                           >
                             {b.desc}
                           </span>
+                          <span
+                            className={cn(
+                              'mt-1 flex flex-wrap gap-1.5 text-[9px]',
+                              selectedId === b.id ? 'text-white/50' : 'text-zinc-400',
+                            )}
+                          >
+                            <span>专家 {b.agents.length}</span>
+                            <span>工具 {b.tools.length}</span>
+                            <span>案例 {b.cases.length}</span>
+                          </span>
                         </span>
                       </button>
                     ))
@@ -371,7 +402,7 @@ export function AiMapPage({ onInvokeAgent, onInvokeSkill, onAskKbDocument }: AiM
             ) : (
               <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
                 <div>
-                  <p className="mb-1.5 text-[10px] font-semibold tracking-wide text-zinc-400">机关职能</p>
+                  <p className="mb-1.5 text-[10px] font-semibold tracking-wide text-zinc-400">NP</p>
                   <div className="space-y-1">
                     {coverage
                       .filter((r) => r.axis === 'dept')
@@ -381,7 +412,7 @@ export function AiMapPage({ onInvokeAgent, onInvokeSkill, onAskKbDocument }: AiM
                   </div>
                 </div>
                 <div>
-                  <p className="mb-1.5 text-[10px] font-semibold tracking-wide text-zinc-400">一线区域</p>
+                  <p className="mb-1.5 text-[10px] font-semibold tracking-wide text-zinc-400">区域</p>
                   <div className="space-y-1">
                     {coverage
                       .filter((r) => r.axis === 'region')

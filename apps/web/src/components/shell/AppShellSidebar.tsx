@@ -87,9 +87,9 @@ export function AppShellSidebar() {
             <i className="fa-solid fa-chevron-down nav-section-chevron" />
           </button>
           <div className="nav-section-body">
-            <button type="button" onClick={openSettings} className="wb-nav-item" title="偏好设置">
+            <button type="button" onClick={openSettings} className="wb-nav-item" title="快捷">
               <i className="fa-solid fa-gear w-5 text-center text-[15px]" />
-              <span className="nav-label">偏好设置</span>
+              <span className="nav-label">快捷</span>
             </button>
             {itemsBySection.system.map((item) => (
               <button

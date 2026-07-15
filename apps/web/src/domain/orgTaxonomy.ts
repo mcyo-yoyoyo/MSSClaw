@@ -2,14 +2,14 @@
  * MSS 组织与门户内容模型（步骤 0 数据字典）
  *
  * 组织双轴：
- * - 机关职能（HQ Dept）：GTM / MKT / 电商 / 零售 / 服务 / 渠道 / HR / 质量与运营
- * - 一线区域（Region）：中东非 / 欧洲 / 俄罗斯 / 亚太 / 拉美
+ * - NP（HQ Dept）：GTM / MKT / 电商 / 零售 / 服务 / 渠道 / HR / 财经 / 质量与运营
+ * - 区域（Region）：中国 / 亚太 / 中东非 / 拉美 / 欧洲 / 欧亚
  *
  * 区域与租户解耦：区域仅为标签/筛选轴，不单独成租户。
  * 外部工具一期以「登记深链 + 元数据」为主。
  */
 
-/** 机关职能 */
+/** NP（原机关职能） */
 export type DeptId =
   | 'gtm'
   | 'mkt'
@@ -18,10 +18,11 @@ export type DeptId =
   | 'service'
   | 'channel'
   | 'hr'
+  | 'finance'
   | 'quality';
 
-/** 一线五大区域 */
-export type RegionId = 'mea' | 'europe' | 'russia' | 'apac' | 'latam';
+/** 一线区域 */
+export type RegionId = 'china' | 'apac' | 'mea' | 'latam' | 'europe' | 'eurasia';
 
 /** 首页/门户筛选轴 */
 export type OrgAxis = 'dept' | 'region';
@@ -79,15 +80,17 @@ export const HQ_DEPTS: { id: DeptId; label: string; short?: string }[] = [
   { id: 'service', label: '服务' },
   { id: 'channel', label: '渠道' },
   { id: 'hr', label: 'HR' },
+  { id: 'finance', label: '财经' },
   { id: 'quality', label: '质量与运营' },
 ];
 
 export const REGIONS: { id: RegionId; label: string }[] = [
-  { id: 'mea', label: '中东非' },
-  { id: 'europe', label: '欧洲' },
-  { id: 'russia', label: '俄罗斯' },
+  { id: 'china', label: '中国' },
   { id: 'apac', label: '亚太' },
+  { id: 'mea', label: '中东非' },
   { id: 'latam', label: '拉美' },
+  { id: 'europe', label: '欧洲' },
+  { id: 'eurasia', label: '欧亚' },
 ];
 
 export const PORTAL_ASSET_TYPE_LABELS: Record<PortalAssetType, string> = {

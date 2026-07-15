@@ -39,13 +39,13 @@ interface AppViewRouterProps {
 }
 
 const VIEW_LABELS: Partial<Record<AppView, string>> = {
-  task: '任务中心',
+  task: '任务',
   'ai-map': '案例',
   agents: '专家',
   'agent-studio': '专家',
   skills: '技能',
-  kb: '知识库',
-  cases: '案例库',
+  kb: '知识',
+  cases: '案例',
   automation: '自动化',
   workflow: 'Workflow 画布',
   tools: '工具',

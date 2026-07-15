@@ -26,16 +26,16 @@ export interface AppCommandMarketplace {
 }
 
 const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
-  { id: 'goto-home', label: '打开智能助理', icon: 'fa-comment-dots', view: 'home', run: () => h.goto('home') },
+  { id: 'goto-home', label: '打开首页', icon: 'fa-house', view: 'home', run: () => h.goto('home') },
   {
     id: 'goto-ai-map',
     label: '打开案例',
     icon: 'fa-map',
-    keywords: 'portal map 门户 场景 案例',
+    keywords: 'portal map 门户 场景 案例 样板 场景库',
     view: 'ai-map',
     run: () => h.goto('ai-map'),
   },
-  { id: 'goto-task', label: '打开任务中心', icon: 'fa-list-check', view: 'task', run: () => h.goto('task') },
+  { id: 'goto-task', label: '打开任务', icon: 'fa-list-check', view: 'task', run: () => h.goto('task') },
   { id: 'goto-agents', label: '打开专家', icon: 'fa-robot', view: 'agents', run: () => h.goto('agents') },
   {
     id: 'goto-agent-studio',
@@ -49,12 +49,12 @@ const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
   { id: 'goto-tools', label: '打开工具', icon: 'fa-plug', keywords: 'connector tool', view: 'tools', run: () => h.goto('tools') },
   { id: 'goto-prompts', label: '打开提示词', icon: 'fa-file-code', view: 'prompts', run: () => h.goto('prompts') },
   { id: 'goto-memory', label: '打开记忆', icon: 'fa-brain', view: 'memory', run: () => h.goto('memory') },
-  { id: 'goto-kb', label: '打开知识库', icon: 'fa-book-open', view: 'kb', run: () => h.goto('kb') },
+  { id: 'goto-kb', label: '打开知识', icon: 'fa-book-open', view: 'kb', run: () => h.goto('kb') },
   {
     id: 'goto-cases',
     label: '打开案例（样板间）',
     icon: 'fa-map',
-    keywords: 'case 案例 洞察 培训 样板',
+    keywords: 'case 案例 洞察 培训 样板 场景库',
     view: 'ai-map',
     run: () => h.goto('ai-map'),
   },
@@ -96,7 +96,7 @@ const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
   { id: 'new-session', label: '新建任务', icon: 'fa-plus', view: 'task', run: () => h.newTask() },
   { id: 'export', label: '导出交付物', icon: 'fa-file-export', run: () => h.exportArtifact() },
   { id: 'push', label: '推送到作战室', icon: 'fa-paper-plane', run: () => h.pushToGroup() },
-  { id: 'settings', label: '打开设置抽屉', icon: 'fa-gear', run: () => h.openSettings() },
+  { id: 'settings', label: '打开快捷', icon: 'fa-gear', keywords: '设置 偏好 settings', run: () => h.openSettings() },
 ];
 
 export function buildAppCommands(

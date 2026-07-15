@@ -212,7 +212,7 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
         </>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-[#86868b]">
-          <p>从智能助理发起对话，或展开左侧会话列表新建</p>
+          <p>从工作台发起对话，或展开左侧会话列表新建</p>
           <div className="flex flex-wrap items-center justify-center gap-2">
             <button
               type="button"
@@ -222,7 +222,7 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
               }}
               className="rounded-lg bg-zinc-900 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-zinc-800"
             >
-              回智能助理
+              回工作台
             </button>
             {taskListCollapsed ? (
               <button

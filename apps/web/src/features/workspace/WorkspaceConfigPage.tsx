@@ -59,7 +59,7 @@ export function WorkspaceConfigPage() {
             onClick={() => setAppView('home')}
             className="apple-btn-secondary mt-6 rounded-lg px-4 py-2 text-[12px] font-semibold"
           >
-            返回智能助理
+            返回工作台
           </button>
         </div>
       </div>
@@ -208,7 +208,7 @@ export function WorkspaceConfigPage() {
           </h3>
           <div className="grid gap-3 md:grid-cols-2">
             <div className="apple-card p-4">
-              <p className="mb-2 text-[12px] font-semibold text-zinc-800">机关部门</p>
+              <p className="mb-2 text-[12px] font-semibold text-zinc-800">NP</p>
               <div className="flex flex-wrap gap-1.5">
                 {HQ_DEPTS.map((d) => (
                   <span
@@ -224,7 +224,7 @@ export function WorkspaceConfigPage() {
               </p>
             </div>
             <div className="apple-card p-4">
-              <p className="mb-2 text-[12px] font-semibold text-zinc-800">一线区域</p>
+              <p className="mb-2 text-[12px] font-semibold text-zinc-800">区域</p>
               <div className="flex flex-wrap gap-1.5">
                 {REGIONS.map((r) => (
                   <span

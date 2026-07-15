@@ -20,12 +20,12 @@ export interface NavPresentationMeta {
 }
 
 export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
-  { id: 'home', label: '智能助理', subtitle: '输入即开始 · 工作台深入执行', icon: 'fa-comment-dots', section: 'workspace' },
-  { id: 'task', label: '任务中心', subtitle: '当前会话 · 计划确认 · 交付物', icon: 'fa-list-check', section: 'workspace' },
+  { id: 'home', label: '首页', subtitle: 'AI助手开工 · AI广场找场景与工具', icon: 'fa-house', section: 'workspace' },
+  { id: 'task', label: '任务', subtitle: '当前会话 · 计划确认 · 交付物', icon: 'fa-list-check', section: 'workspace' },
   {
     id: 'ai-map',
     label: '案例',
-    subtitle: 'AI 样板间 · 场景案例与能力组合沉淀',
+    subtitle: '样板间 · 可复制业务场景包',
     icon: 'fa-map',
     section: 'platform',
   },
@@ -42,7 +42,7 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   { id: 'tools', label: '工具', subtitle: '连接器 · 外部 API', icon: 'fa-plug', section: 'platform' },
   { id: 'prompts', label: '提示词', subtitle: '版本 · 审批 · 生命周期', icon: 'fa-file-code', section: 'platform' },
   { id: 'memory', label: '记忆', subtitle: 'Agent 长期记忆 · Reflection', icon: 'fa-brain', section: 'platform' },
-  { id: 'kb', label: '知识库', subtitle: '企业文档 · RAG · 溯源', icon: 'fa-book-open', section: 'platform' },
+  { id: 'kb', label: '知识', subtitle: '企业文档 · RAG · 溯源', icon: 'fa-book-open', section: 'platform' },
   {
     id: 'cases',
     label: '案例库',
@@ -87,12 +87,12 @@ export const NAV_PRESET_LABELS: Record<NavPresetId, { title: string; description
   },
   customer: {
     title: '客户演示',
-    description: '智能助理 + 场景地图 + 任务 + Agent + 知识库，便于对外讲解核心价值',
+    description: '首页 + 案例 + 任务 + 专家 + 知识，便于对外讲解核心价值',
   },
   standard: {
     title: '标准能力',
     description:
-      '智能助理 · 任务中心 · 场景地图（样板间）· Agent/Skill/Tool · 知识库 · 自动化；系统菜单默认隐藏',
+      '首页 · 任务 · 案例（样板间）· 专家/技能/工具 · 知识 · 自动化；系统菜单默认隐藏',
   },
   custom: {
     title: '自定义',

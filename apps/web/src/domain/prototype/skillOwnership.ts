@@ -30,7 +30,7 @@ export const SKILL_OWNERSHIP: Record<
   'skill-rag': { ownerDeptIds: ['service', 'quality'], ownerRegionId: null },
   'skill-rerank': { ownerDeptIds: ['service'], ownerRegionId: null },
   'skill-retail-coach': { ownerDeptIds: ['retail'], ownerRegionId: 'apac' },
-  'skill-complaint-sop': { ownerDeptIds: ['service'], ownerRegionId: 'russia' },
+  'skill-complaint-sop': { ownerDeptIds: ['service'], ownerRegionId: 'eurasia' },
   'skill-wecom': { ownerDeptIds: ['hr', 'service'], ownerRegionId: null },
 };
 

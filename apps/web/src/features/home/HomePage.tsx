@@ -12,11 +12,15 @@ import {
   getVisibleHomeRegions,
 } from '@/domain/rolePerspective';
 import { canViewAsset } from '@/domain/assetVisibility';
+import {
+  AGENT_ROLE_BY_ID,
+  AGENT_ROLE_CATEGORIES,
+  type AgentRoleId,
+} from '@/domain/agentRoles';
 import { HomeCommandBox } from '@/components/home/HomeCommandBox';
 import { HomeScenePortal } from '@/components/home/HomeScenePortal';
-import { MssZhishuMark } from '@/components/brand/MssZhishuMark';
 import { AgentAvatar } from '@/components/brand/AgentAvatar';
-import { useHomeStore } from '@/stores/homeStore';
+import { useHomeStore, type ExpertBrowseAxis } from '@/stores/homeStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useSessionStore } from '@/stores/sessionStore';
 
@@ -27,9 +31,21 @@ interface HomePageProps {
   onAskKbDocument?: (doc: PrototypeKbDocument) => void;
 }
 
-const ASSISTANT_SUBTITLE =
-  '集成多位数字员工，7*24小时随时待命，帮你实现个人提效，助力MSS实现组织提效！';
-const PORTAL_SUBTITLE = '橱窗速览 · AI 工具分类直达 · 前沿洞察与培训赋能 · 完整样板间见案例';
+/** AI助手 Tab：对齐场景库的高频意图 */
+const INTENT_PROMPTS = [
+  '帮我分析本周竞品价格异动',
+  '聚类本周电渠差评并给出改进建议',
+  '生成门店培训话术并翻译成西语',
+] as const;
+
+const ASK_SUBTITLE = '说出来就干活 · 输入需求，智枢帮你调度专家与技能';
+const DISCOVER_SUBTITLE = '按业务场景找工具与样板 · 精选内容在下方';
+
+const EXPERT_AXIS_TABS: { id: ExpertBrowseAxis; label: string }[] = [
+  { id: 'agent', label: 'Agent' },
+  { id: 'dept', label: 'NP' },
+  { id: 'region', label: '区域' },
+];
 
 export function HomePage({
   onSubmitTask,
@@ -39,17 +55,20 @@ export function HomePage({
   const {
     homeMode,
     setHomeMode,
-    axis,
+    expertAxis,
+    agentRoleId,
     category,
     regionId,
-    setAxis,
+    setExpertAxis,
+    setAgentRoleId,
     setCategory,
     setRegionId,
+    setDraftText,
     applyUserOrgDefaults,
   } = useHomeStore();
   const agents = useMarketplaceStore((s) => s.agents);
   const user = useSessionStore((s) => s.user);
-  const [orgBrowseOpen, setOrgBrowseOpen] = useState(false);
+  const [orgBrowseOpen, setOrgBrowseOpen] = useState(true);
 
   const affiliation = useMemo(
     () => ({
@@ -86,19 +105,23 @@ export function HomePage({
   }, [visibleDepts, category, setCategory]);
 
   useEffect(() => {
-    // 仅修正非法 regionId，不切换 axis（避免全球管理员被拉回一线区域）
     if (!visibleRegions.includes(regionId) && visibleRegions[0]) {
       useHomeStore.setState({ regionId: visibleRegions[0] });
     }
   }, [visibleRegions, regionId]);
 
   const featuredAgents = useMemo(() => {
-    const ids =
-      axis === 'region'
-        ? (HOME_REGION_AGENTS[regionId] ?? [])
-        : (HOME_BIZ_AGENTS[category] ?? []);
     const byId = new Map(agents.filter((a) => a.published).map((a) => [a.id, a]));
-    return ids
+    const ids: string[] =
+      expertAxis === 'agent'
+        ? Object.entries(AGENT_ROLE_BY_ID)
+            .filter(([, role]) => role === agentRoleId)
+            .map(([id]) => id)
+        : expertAxis === 'region'
+          ? (HOME_REGION_AGENTS[regionId] ?? [])
+          : (HOME_BIZ_AGENTS[category] ?? []);
+
+    const list = ids
       .map((id) => byId.get(id))
       .filter((a): a is PrototypeAgentSeed => Boolean(a))
       .filter((a) =>
@@ -108,41 +131,39 @@ export function HomePage({
           affiliation,
           role: user?.platformRole,
         }),
-      )
-      .slice(0, 3);
-  }, [agents, axis, category, regionId, user, affiliation]);
+      );
+
+    return expertAxis === 'agent' ? list : list.slice(0, 3);
+  }, [agents, expertAxis, agentRoleId, category, regionId, user, affiliation]);
 
   const emptyHint =
-    axis === 'region' ? '该区域暂无相关 Agent' : '该业务线暂无相关 Agent';
+    expertAxis === 'agent'
+      ? '该角色暂无相关专家'
+      : expertAxis === 'region'
+        ? '该区域暂无相关专家'
+        : '该业务线暂无相关专家';
 
   const deptChips = HOME_CATEGORIES.filter((c) => visibleDepts.includes(c.id));
   const regionChips = REGIONS.filter((r) => visibleRegions.includes(r.id));
-  const orgContextLabel =
-    axis === 'region'
-      ? (REGIONS.find((r) => r.id === regionId)?.label ?? regionId)
-      : (HOME_CATEGORIES.find((c) => c.id === category)?.label ?? category);
 
   return (
     <div className="home-surface flex min-h-0 flex-1 flex-col overflow-y-auto scroll-hidden">
-      <div className="mx-auto flex w-full max-w-[880px] flex-1 flex-col px-5 py-4 md:px-6 md:py-5">
+      <div className="mx-auto flex w-full max-w-[960px] flex-1 flex-col px-5 py-4 md:px-6 md:py-5">
         <header className="mb-3 text-center">
-          <div className="home-hero-mark mb-2">
-            <MssZhishuMark size={48} />
-          </div>
           <h1 className="home-slogan-art">
-            <span className="home-slogan-gradient">MSS智枢，就是好用！</span>
+            <span className="home-slogan-gradient">MSS AI提效作战平台：智枢，就是好用！</span>
           </h1>
           <p className="mx-auto mt-2 max-w-xl text-[12px] leading-relaxed text-zinc-500">
-            {homeMode === 'assistant' ? ASSISTANT_SUBTITLE : PORTAL_SUBTITLE}
+            {homeMode === 'assistant' ? ASK_SUBTITLE : DISCOVER_SUBTITLE}
           </p>
         </header>
 
-        <div className="mb-3 flex justify-center">
+        <div className="mb-4 flex justify-center">
           <div className="inline-flex gap-1 rounded-full bg-zinc-100/90 p-1">
             {(
               [
-                { id: 'assistant' as const, label: '智能助理', icon: 'fa-comment-dots' },
-                { id: 'portal' as const, label: '场景导航', icon: 'fa-map' },
+                { id: 'assistant' as const, label: 'AI助手', icon: 'fa-comment-dots' },
+                { id: 'portal' as const, label: 'AI广场', icon: 'fa-compass' },
               ] as const
             ).map((tab) => (
               <button
@@ -150,7 +171,7 @@ export function HomePage({
                 type="button"
                 onClick={() => setHomeMode(tab.id)}
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[12px] font-semibold transition',
+                  'inline-flex items-center gap-1.5 rounded-full px-5 py-1.5 text-[12px] font-semibold transition',
                   homeMode === tab.id
                     ? 'bg-white text-zinc-900 shadow-sm'
                     : 'text-zinc-500 hover:text-zinc-700',
@@ -171,18 +192,28 @@ export function HomePage({
               }
             />
 
-            <section className="mt-5">
+            <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+              {INTENT_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => setDraftText(prompt)}
+                  className="rounded-full border border-zinc-200/90 bg-white px-3 py-1 text-[11px] font-medium text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-900"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+
+            <section className="mt-8">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-[12px] font-semibold text-zinc-800">
-                  相关 Agent
-                  <span className="ml-1.5 font-normal text-zinc-400">· {orgContextLabel}</span>
-                </h2>
+                <h2 className="text-[12px] font-semibold text-zinc-800">推荐专家</h2>
                 <button
                   type="button"
                   onClick={() => setOrgBrowseOpen((v) => !v)}
-                  className="rounded-lg px-2 py-1 text-[11px] font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800"
+                  className="rounded-lg px-2 py-1 text-[11px] font-medium text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700"
                 >
-                  {orgBrowseOpen ? '收起筛选' : '按组织浏览'}
+                  {orgBrowseOpen ? '收起' : '筛选'}
                   <i
                     className={cn(
                       'fa-solid fa-chevron-down ml-1 text-[9px] transition',
@@ -193,21 +224,16 @@ export function HomePage({
               </div>
 
               {orgBrowseOpen ? (
-                <div className="mb-3 space-y-2 rounded-xl border border-zinc-200/80 bg-zinc-50/80 p-2.5">
+                <div className="mb-3 space-y-2 rounded-xl border border-zinc-200/60 bg-zinc-50/60 p-2.5">
                   <div className="flex justify-center gap-1 rounded-full bg-zinc-100/80 p-1">
-                    {(
-                      [
-                        { id: 'dept' as const, label: '机关职能' },
-                        { id: 'region' as const, label: '一线区域' },
-                      ] as const
-                    ).map((tab) => (
+                    {EXPERT_AXIS_TABS.map((tab) => (
                       <button
                         key={tab.id}
                         type="button"
-                        onClick={() => setAxis(tab.id)}
+                        onClick={() => setExpertAxis(tab.id)}
                         className={cn(
                           'rounded-full px-3.5 py-1 text-[12px] font-medium transition',
-                          axis === tab.id
+                          expertAxis === tab.id
                             ? 'bg-white text-zinc-900 shadow-sm'
                             : 'text-zinc-500 hover:text-zinc-700',
                         )}
@@ -217,41 +243,66 @@ export function HomePage({
                     ))}
                   </div>
                   <div className="flex flex-wrap justify-center gap-1.5">
-                    {(axis === 'dept' ? deptChips : regionChips).map((item) => {
-                      const id = item.id;
-                      const active = axis === 'dept' ? category === id : regionId === id;
-                      return (
-                        <button
-                          key={id}
-                          type="button"
-                          onClick={() =>
-                            axis === 'dept'
-                              ? setCategory(id as typeof category)
-                              : setRegionId(id as typeof regionId)
-                          }
-                          className={cn(
-                            'subcat-chip px-3 py-1 text-[11px] font-medium',
-                            active && 'subcat-chip-active',
-                          )}
-                        >
-                          {item.label}
-                        </button>
-                      );
-                    })}
+                    {expertAxis === 'agent'
+                      ? AGENT_ROLE_CATEGORIES.map((role) => {
+                          const active = agentRoleId === role.id;
+                          return (
+                            <button
+                              key={role.id}
+                              type="button"
+                              title={role.blurb}
+                              onClick={() => setAgentRoleId(role.id as AgentRoleId)}
+                              className={cn(
+                                'subcat-chip inline-flex items-center gap-1 px-3 py-1 text-[11px] font-medium',
+                                active && 'subcat-chip-active',
+                              )}
+                            >
+                              <i className={cn('fa-solid text-[9px]', role.icon)} />
+                              {role.label}
+                            </button>
+                          );
+                        })
+                      : (expertAxis === 'dept' ? deptChips : regionChips).map((item) => {
+                          const id = item.id;
+                          const active =
+                            expertAxis === 'dept' ? category === id : regionId === id;
+                          return (
+                            <button
+                              key={id}
+                              type="button"
+                              onClick={() =>
+                                expertAxis === 'dept'
+                                  ? setCategory(id as typeof category)
+                                  : setRegionId(id as typeof regionId)
+                              }
+                              className={cn(
+                                'subcat-chip px-3 py-1 text-[11px] font-medium',
+                                active && 'subcat-chip-active',
+                              )}
+                            >
+                              {item.label}
+                            </button>
+                          );
+                        })}
                   </div>
                 </div>
               ) : null}
 
               {featuredAgents.length === 0 ? (
-                <p className="py-6 text-center text-[12px] text-zinc-400">{emptyHint}</p>
+                <p className="py-4 text-center text-[12px] text-zinc-400">{emptyHint}</p>
               ) : (
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div
+                  className={cn(
+                    'grid grid-cols-1 gap-2',
+                    featuredAgents.length >= 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2',
+                  )}
+                >
                   {featuredAgents.map((agent) => (
                     <button
                       key={agent.id}
                       type="button"
                       onClick={() => onInvokeAgent(agent)}
-                      className="flex items-start gap-2.5 rounded-xl border border-zinc-200/80 bg-white p-2.5 text-left transition hover:border-zinc-300 hover:shadow-sm"
+                      className="flex items-start gap-2.5 rounded-xl border border-zinc-200/70 bg-white/80 p-2.5 text-left transition hover:border-zinc-300"
                     >
                       <AgentAvatar agentId={agent.id} size={32} title={agent.name} />
                       <div className="min-w-0 flex-1">

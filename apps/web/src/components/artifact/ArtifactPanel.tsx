@@ -43,6 +43,28 @@ function renderSimpleMarkdown(md: string): string {
     .replace(/\n\n/g, '<br/><br/>');
 }
 
+/** 交付物 HTML 预览：避免 sandbox="" 导致空白页 */
+function HtmlDeliverableFrame({ title, html }: { title: string; html: string }) {
+  const src = useMemo(() => {
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    return URL.createObjectURL(blob);
+  }, [html]);
+
+  useEffect(() => {
+    return () => URL.revokeObjectURL(src);
+  }, [src]);
+
+  return (
+    <iframe
+      title={title}
+      src={src}
+      // 同源 blob + 允许样式；不开放脚本，避免 XSS
+      sandbox="allow-same-origin"
+      className="h-[min(70vh,560px)] w-full rounded-xl border border-zinc-200 bg-white"
+    />
+  );
+}
+
 function DeliverablePreviewView({
   item,
   kbArtifact,
@@ -67,14 +89,7 @@ function DeliverablePreviewView({
   }
 
   if (item.kind === 'html' && item.html) {
-    return (
-      <iframe
-        title={item.title}
-        srcDoc={item.html}
-        sandbox=""
-        className="h-[min(70vh,560px)] w-full rounded-xl border border-zinc-200 bg-white"
-      />
-    );
+    return <HtmlDeliverableFrame title={item.title} html={item.html} />;
   }
 
   if (item.kind === 'pdf' && item.pdfPages) {

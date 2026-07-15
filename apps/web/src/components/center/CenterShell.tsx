@@ -161,7 +161,7 @@ export function LearningCallout({
 
 export function StatCardGrid({ items }: { items: [string, string | number][] }) {
   return (
-    <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+    <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
       {items.map(([label, val]) => (
         <div key={label} className="apple-card p-3">
           <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">{label}</p>

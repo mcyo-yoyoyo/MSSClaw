@@ -87,7 +87,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
           subtitle="能力资产 · 按职能/区域上架共享 · 团队调用"
           tip={
             <>
-              Skill 可按机关职能与一线区域归属上架。筛「我构建的 / 外部工具」快速定位自建与外链能力；输入{' '}
+              Skill 可按 NP 与区域归属上架。筛「我构建的 / 外部工具」快速定位自建与外链能力；输入{' '}
               <code className="rounded bg-black/[0.04] px-1">/skill名</code> 在任务中心调用。
             </>
           }

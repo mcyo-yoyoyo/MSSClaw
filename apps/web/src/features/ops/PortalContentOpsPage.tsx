@@ -14,6 +14,7 @@ import {
   ModalActions,
 } from '@/components/center/CenterFormFields';
 import { OwnershipFormFields } from '@/components/center/OrgAssetFilters';
+import { EngagementActions, formatEngagementLine } from '@/components/content/EngagementActions';
 import { isSystemAdmin } from '@/domain/currentUser';
 import {
   ASSET_VISIBILITY_LABELS,
@@ -24,12 +25,23 @@ import {
   type RegionId,
 } from '@/domain/orgTaxonomy';
 import {
+  heatScore,
+  RANK_MODE_OPTIONS,
+  sortByRankMode,
+  type RankMode,
+} from '@/domain/contentEngagement';
+import {
   PORTAL_CONTENT_TYPE_LABELS,
   type PortalContentItem,
 } from '@/domain/prototype/portalContent';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { usePortalContentStore } from '@/stores/portalContentStore';
+import {
+  ensureEngagementSeeds,
+  forceQueueDemoSeeds,
+  useContentEngagementStore,
+} from '@/stores/contentEngagementStore';
 
 type EditorTarget = string | 'new' | null;
 
@@ -60,9 +72,13 @@ export function PortalContentOpsPage() {
   const resetToSeeds = usePortalContentStore((s) => s.resetToSeeds);
   const showToast = usePortalContentStore((s) => s.showToast);
   const setAppView = useAppViewStore((s) => s.setAppView);
+  const engagementOf = useContentEngagementStore((s) => s.get);
+  const engagementById = useContentEngagementStore((s) => s.byId);
+  const optimizationQueue = useContentEngagementStore((s) => s.optimizationQueue);
 
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | PortalContentItem['type']>('all');
+  const [rankMode, setRankMode] = useState<RankMode>('trending');
   const [editorTarget, setEditorTarget] = useState<EditorTarget>(null);
   const [form, setForm] = useState<PortalContentItem>(emptyItem());
   const consumePortalType = useNavigationIntentStore((s) => s.consumePortalType);
@@ -72,29 +88,74 @@ export function PortalContentOpsPage() {
     if (t) setTypeFilter(t);
   }, [consumePortalType]);
 
+  const opsItems = useMemo(
+    () => items.filter((i) => i.type === 'news' || i.type === 'training'),
+    [items],
+  );
+
+  useEffect(() => {
+    const ids = opsItems.map((i) => i.id);
+    ensureEngagementSeeds(ids);
+    if (ids.length >= 2) forceQueueDemoSeeds(ids);
+  }, [opsItems]);
+
   const list = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return items.filter((item) => {
-      // 门户运营仅维护前沿洞察 / 培训赋能；案例归场景案例
-      if (item.type !== 'news' && item.type !== 'training') return false;
+    const filtered = opsItems.filter((item) => {
       if (typeFilter !== 'all' && item.type !== typeFilter) return false;
       if (!q) return true;
       return `${item.title} ${item.desc} ${item.publisher ?? ''} ${(item.scenarioTags ?? []).join(' ')}`
         .toLowerCase()
         .includes(q);
     });
-  }, [items, search, typeFilter]);
+    return sortByRankMode(filtered, rankMode, engagementOf);
+  }, [opsItems, search, typeFilter, rankMode, engagementOf, engagementById]);
+
+  const pendingOptimize = useMemo(() => {
+    void engagementById;
+    const queue = optimizationQueue();
+    const titleOf = new Map(opsItems.map((i) => [i.id, i.title]));
+    return queue
+      .filter((e) => titleOf.has(e.id))
+      .map((e) => ({ ...e, title: titleOf.get(e.id) ?? e.id }));
+  }, [optimizationQueue, opsItems, engagementById]);
+
+  const leaderboard = useMemo(() => {
+    return sortByRankMode(opsItems, 'trending', engagementOf)
+      .slice(0, 5)
+      .map((item, idx) => {
+        const e = engagementOf(item.id);
+        return {
+          rank: idx + 1,
+          id: item.id,
+          title: item.title,
+          type: item.type,
+          heat: Math.round(heatScore(e)),
+          line: formatEngagementLine(e),
+        };
+      });
+  }, [opsItems, engagementOf, engagementById]);
 
   const stats = useMemo(() => {
-    const opsItems = items.filter((i) => i.type === 'news' || i.type === 'training');
     const pub = opsItems.filter((i) => i.published !== false).length;
+    let likes = 0;
+    let downloads = 0;
+    let uses = 0;
+    for (const item of opsItems) {
+      const e = engagementOf(item.id);
+      likes += e.likes;
+      downloads += e.downloads;
+      uses += e.uses;
+    }
     return [
       ['内容总数', opsItems.length],
       ['已上架', pub],
-      ['前沿洞察', opsItems.filter((i) => i.type === 'news').length],
-      ['培训赋能', opsItems.filter((i) => i.type === 'training').length],
+      ['累计点赞', likes],
+      ['累计下载', downloads],
+      ['近窗调用', uses],
+      ['待优化', pendingOptimize.length],
     ] as [string, string | number][];
-  }, [items]);
+  }, [opsItems, engagementOf, engagementById, pendingOptimize.length]);
 
   if (!isSystemAdmin()) {
     return (
@@ -110,7 +171,7 @@ export function PortalContentOpsPage() {
             onClick={() => setAppView('home')}
             className="apple-btn-secondary mt-6 rounded-lg px-4 py-2 text-[12px] font-semibold"
           >
-            返回智能助理
+            返回工作台
           </button>
         </div>
       </div>
@@ -157,10 +218,10 @@ export function PortalContentOpsPage() {
       <div className="mx-auto max-w-6xl">
         <CenterPageHeader
           title="门户运营"
-          subtitle="维护首页前沿洞察与培训赋能 · 上架审核（案例归案例样板间）"
+          subtitle="维护首页前沿洞察与培训赋能 · 排行牵引 · 上架审核"
           tip={
             <>
-              门户运营维护「前沿洞察 / 培训赋能」；「案例」在案例样板间展示。新建或编辑后自动写入本地，API 在线时同步服务端。
+              统一热度 / 赞踩 / 下载指标驱动发现默认序；点踩占比过高的内容进入「待优化」队列。
             </>
           }
           actions={
@@ -197,24 +258,102 @@ export function PortalContentOpsPage() {
 
         <StatCardGrid items={stats} />
 
-        <div className="mb-4 flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            onClick={() => setTypeFilter('all')}
-            className={cn('filter-chip px-2.5 py-1 text-[11px] font-medium', typeFilter === 'all' && 'active')}
-          >
-            全部
-          </button>
-          {TYPE_OPTIONS.map((t) => (
+        <div className="mb-4 grid gap-3 lg:grid-cols-2">
+          <div className="apple-card p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-[12px] font-semibold text-zinc-800">热度排行 TOP5</h3>
+              <span className="text-[10px] text-zinc-400">热度 = 调用×0.7 + 赞×0.3</span>
+            </div>
+            <ol className="space-y-2">
+              {leaderboard.map((row) => (
+                <li key={row.id} className="flex items-start gap-2 text-[11px]">
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-zinc-900 text-[10px] font-semibold text-white">
+                    {row.rank}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-zinc-800">{row.title}</p>
+                    <p className="text-[10px] text-zinc-400">
+                      {PORTAL_CONTENT_TYPE_LABELS[row.type]} · {row.line}
+                    </p>
+                  </div>
+                </li>
+              ))}
+              {!leaderboard.length ? (
+                <p className="text-[11px] text-zinc-400">暂无排行数据</p>
+              ) : null}
+            </ol>
+          </div>
+
+          <div className="apple-card p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-[12px] font-semibold text-zinc-800">待优化队列</h3>
+              <span className="text-[10px] text-zinc-400">踩占比 ≥30% 且样本 ≥5</span>
+            </div>
+            <ul className="space-y-2">
+              {pendingOptimize.map((row) => (
+                <li
+                  key={row.id}
+                  className="flex items-center justify-between gap-2 rounded-lg bg-amber-50/80 px-2.5 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-[11px] font-medium text-zinc-800">{row.title}</p>
+                    <p className="text-[10px] text-zinc-500">
+                      赞 {row.likes} · 踩 {row.dislikes} · 建议复审或下架
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openEditor(row.id)}
+                    className="shrink-0 rounded-lg border border-amber-200 bg-white px-2.5 py-1 text-[10px] font-medium text-amber-800 hover:bg-amber-50"
+                  >
+                    处理
+                  </button>
+                </li>
+              ))}
+              {!pendingOptimize.length ? (
+                <p className="text-[11px] text-zinc-400">暂无待优化内容</p>
+              ) : null}
+            </ul>
+          </div>
+        </div>
+
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <div className="flex gap-0.5 rounded-full bg-zinc-100/90 p-0.5">
+            {RANK_MODE_OPTIONS.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setRankMode(m.id)}
+                className={cn(
+                  'rounded-full px-2.5 py-1 text-[10px] font-medium transition',
+                  rankMode === m.id
+                    ? 'bg-white text-zinc-900 shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-600',
+                )}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
             <button
-              key={t}
               type="button"
-              onClick={() => setTypeFilter(t)}
-              className={cn('filter-chip px-2.5 py-1 text-[11px] font-medium', typeFilter === t && 'active')}
+              onClick={() => setTypeFilter('all')}
+              className={cn('filter-chip px-2.5 py-1 text-[11px] font-medium', typeFilter === 'all' && 'active')}
             >
-              {PORTAL_CONTENT_TYPE_LABELS[t]}
+              全部
             </button>
-          ))}
+            {TYPE_OPTIONS.map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTypeFilter(t)}
+                className={cn('filter-chip px-2.5 py-1 text-[11px] font-medium', typeFilter === t && 'active')}
+              >
+                {PORTAL_CONTENT_TYPE_LABELS[t]}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -250,6 +389,9 @@ export function PortalContentOpsPage() {
                   {' · '}
                   {item.publishedAt}
                 </p>
+                <div className="mt-2">
+                  <EngagementActions contentId={item.id} />
+                </div>
               </div>
               <div className="flex shrink-0 gap-2">
                 <button
