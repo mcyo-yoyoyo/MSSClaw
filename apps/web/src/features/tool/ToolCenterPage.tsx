@@ -93,11 +93,6 @@ export function ToolCenterPage() {
               各 NP 与区域可将内外部工具登记上架。可见性：全员 / 本组织（有区域则同区域）/ 仅发布方。欧洲账号默认看不到拉美「本组织」工具，但可看到全员公开工具。
             </>
           }
-          tip={
-            <>
-              各机关职能与一线区域可将内外部工具登记上架。可见性：全员 / 本组织（有区域则同区域）/ 仅发布方。欧洲账号默认看不到拉美「本组织」工具，但可看到全员公开工具。
-            </>
-          }
           actions={
             <>
               <CenterSearchInput value={toolSearch} onChange={setToolSearch} placeholder="搜索 Tool…" />
