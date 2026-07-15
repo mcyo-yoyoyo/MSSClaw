@@ -67,7 +67,7 @@ export function SettingsDrawerBody({ onClose }: SettingsDrawerBodyProps) {
 
   const indexedKb = kbDocs.filter((d) => d.indexed).length;
 
-  const goTo = (view: 'kb' | 'skills') => {
+  const goTo = (view: 'kb' | 'skills' | 'presentation') => {
     setAppView(view);
     onClose();
   };
@@ -86,7 +86,7 @@ export function SettingsDrawerBody({ onClose }: SettingsDrawerBodyProps) {
 
   const handleInvite = (e: React.FormEvent) => {
     e.preventDefault();
-    inviteMember(inviteEmail, inviteRole);
+    inviteMember({ email: inviteEmail, role: inviteRole, activateNow: true });
     setInviteEmail('');
   };
 
@@ -107,6 +107,19 @@ export function SettingsDrawerBody({ onClose }: SettingsDrawerBodyProps) {
 
   return (
     <div className="space-y-4 pb-2">
+      <SettingsCard title="展示与导航">
+        <p className="mb-3 text-[12px] leading-relaxed text-[#86868b]">
+          配置侧栏可见菜单（标准能力默认隐藏系统菜单）
+        </p>
+        <button
+          type="button"
+          onClick={() => goTo('presentation')}
+          className="flow-link-btn w-full py-2.5 text-[12px] font-semibold"
+        >
+          打开展示配置
+        </button>
+      </SettingsCard>
+
       <SettingsCard title="工作区成员">
         {members.slice(0, 6).map((m) => (
           <MemberRow

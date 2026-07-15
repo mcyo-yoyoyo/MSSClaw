@@ -11,7 +11,8 @@ import {
 import { isSystemAdmin } from '@/domain/currentUser';
 import { WORKSPACE_CONFIG_VIEW } from '@/domain/workspaceConfig';
 
-const LS_KEY = 'mssclaw_nav_presentation';
+/** v2：默认改为「标准能力」，系统菜单不再强制开启 */
+const LS_KEY = 'mssclaw_nav_presentation_v2';
 
 interface PersistedNavPresentation {
   preset: NavPresetId;
@@ -22,10 +23,14 @@ function fullEnabled(): Record<AppView, boolean> {
   return Object.fromEntries(APP_VIEWS.map((v) => [v, true])) as Record<AppView, boolean>;
 }
 
+function standardEnabled(): Record<AppView, boolean> {
+  return { ...NAV_PRESET_ENABLED.standard };
+}
+
 function loadPersisted(): PersistedNavPresentation {
   try {
     const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return { preset: 'full', enabled: fullEnabled() };
+    if (!raw) return { preset: 'standard', enabled: standardEnabled() };
     const parsed = JSON.parse(raw) as Partial<PersistedNavPresentation>;
     const enabled = fullEnabled();
     if (parsed.enabled && typeof parsed.enabled === 'object') {
@@ -33,15 +38,16 @@ function loadPersisted(): PersistedNavPresentation {
         if (typeof parsed.enabled![v] === 'boolean') enabled[v] = parsed.enabled![v];
       });
     }
-    enabled[PRESENTATION_CONFIG_VIEW] = true;
-    enabled[WORKSPACE_CONFIG_VIEW] = isSystemAdmin();
     const preset =
-      parsed.preset === 'customer' || parsed.preset === 'standard' || parsed.preset === 'custom'
+      parsed.preset === 'customer' ||
+      parsed.preset === 'standard' ||
+      parsed.preset === 'custom' ||
+      parsed.preset === 'full'
         ? parsed.preset
-        : 'full';
+        : 'standard';
     return { preset, enabled };
   } catch {
-    return { preset: 'full', enabled: fullEnabled() };
+    return { preset: 'standard', enabled: standardEnabled() };
   }
 }
 
@@ -50,11 +56,7 @@ function persist(state: PersistedNavPresentation) {
     LS_KEY,
     JSON.stringify({
       preset: state.preset,
-      enabled: {
-        ...state.enabled,
-        [PRESENTATION_CONFIG_VIEW]: true,
-        [WORKSPACE_CONFIG_VIEW]: isSystemAdmin(),
-      },
+      enabled: state.enabled,
     }),
   );
 }
@@ -77,46 +79,41 @@ export const useNavPresentationStore = create<NavPresentationState>((set, get) =
     ...initial,
 
     isViewEnabled: (view) => {
-      if (view === PRESENTATION_CONFIG_VIEW) return true;
-      if (view === WORKSPACE_CONFIG_VIEW) return isSystemAdmin();
-      return get().enabled[view] !== false;
+      if (get().enabled[view] === false) return false;
+      // 租户配置 / 门户运营仍需系统管理员
+      if (view === WORKSPACE_CONFIG_VIEW || view === 'portal-ops') return isSystemAdmin();
+      return true;
     },
 
     getFallbackView: (requested) => {
-      const { enabled } = get();
-      if (
-        requested &&
-        requested !== PRESENTATION_CONFIG_VIEW &&
-        requested !== WORKSPACE_CONFIG_VIEW &&
-        enabled[requested] !== false
-      ) {
-        return requested;
-      }
+      const { isViewEnabled } = get();
+      if (requested && isViewEnabled(requested)) return requested;
       for (const view of NAV_FALLBACK_ORDER) {
-        if (view === WORKSPACE_CONFIG_VIEW && !isSystemAdmin()) continue;
-        if (enabled[view] !== false) return view;
+        if (isViewEnabled(view)) return view;
       }
-      return PRESENTATION_CONFIG_VIEW;
+      return 'home';
     },
 
     applyPreset: (preset) => {
-      const enabled = {
-        ...NAV_PRESET_ENABLED[preset],
-        [PRESENTATION_CONFIG_VIEW]: true,
-        [WORKSPACE_CONFIG_VIEW]: isSystemAdmin(),
-      };
+      const enabled = { ...NAV_PRESET_ENABLED[preset] };
+      // 完整产品 / 客户演示：管理员仍可进租户配置与门户运营
+      if (preset === 'full' || preset === 'customer') {
+        enabled[PRESENTATION_CONFIG_VIEW] = true;
+        enabled[WORKSPACE_CONFIG_VIEW] = isSystemAdmin();
+        enabled['portal-ops'] = isSystemAdmin();
+      }
       const next = { preset, enabled };
       persist(next);
       set(next);
     },
 
     setViewEnabled: (view, on) => {
-      if (view === PRESENTATION_CONFIG_VIEW || view === WORKSPACE_CONFIG_VIEW) return;
+      if (view === PRESENTATION_CONFIG_VIEW && !on) {
+        // 展示配置可关，但完整产品下建议保留入口；允许自定义关闭
+      }
       const enabled = {
         ...get().enabled,
         [view]: on,
-        [PRESENTATION_CONFIG_VIEW]: true,
-        [WORKSPACE_CONFIG_VIEW]: isSystemAdmin(),
       };
       const next = { preset: 'custom' as NavPresetId, enabled };
       persist(next);
@@ -143,8 +140,6 @@ export const useNavPresentationStore = create<NavPresentationState>((set, get) =
             if (typeof parsed.enabled![v] === 'boolean') enabled[v] = parsed.enabled![v];
           });
         }
-        enabled[PRESENTATION_CONFIG_VIEW] = true;
-        enabled[WORKSPACE_CONFIG_VIEW] = isSystemAdmin();
         const preset =
           parsed.preset === 'customer' ||
           parsed.preset === 'standard' ||

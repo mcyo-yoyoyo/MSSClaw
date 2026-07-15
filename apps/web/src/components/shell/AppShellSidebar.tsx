@@ -39,7 +39,9 @@ export function AppShellSidebar() {
       if (isViewEnabled(item.id)) acc[item.section].push(item);
     });
 
-    NAV_PRESENTATION_META.filter((m) => !sidebarIds.has(m.id) && isViewEnabled(m.id)).forEach((meta) => {
+    NAV_PRESENTATION_META.filter(
+      (m) => !sidebarIds.has(m.id) && isViewEnabled(m.id) && !m.hiddenFromSidebar,
+    ).forEach((meta) => {
       acc[meta.section].push({
         id: meta.id,
         label: meta.label,
@@ -85,9 +87,9 @@ export function AppShellSidebar() {
             <i className="fa-solid fa-chevron-down nav-section-chevron" />
           </button>
           <div className="nav-section-body">
-            <button type="button" onClick={openSettings} className="wb-nav-item" title="系统设置">
+            <button type="button" onClick={openSettings} className="wb-nav-item" title="偏好设置">
               <i className="fa-solid fa-gear w-5 text-center text-[15px]" />
-              <span className="nav-label">系统设置</span>
+              <span className="nav-label">偏好设置</span>
             </button>
             {itemsBySection.system.map((item) => (
               <button

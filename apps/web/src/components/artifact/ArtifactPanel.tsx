@@ -1,7 +1,11 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { KnowledgeCard } from '@/components/artifact/KnowledgeCard';
 import { MarketingBoard } from '@/components/artifact/MarketingBoard';
-import { buildDeliverables } from '@/domain/deliverables';
+import {
+  buildDeliverablePreviews,
+  downloadDeliverable,
+  type DeliverablePreview,
+} from '@/domain/deliverables';
 import type { KbArtifact } from '@/domain/kbSearch';
 import { cn } from '@/lib/utils';
 
@@ -9,6 +13,9 @@ interface ArtifactPanelProps {
   ready: boolean;
   type: 'marketing' | 'knowledge' | null;
   query?: string;
+  agentName?: string;
+  skills?: string[];
+  agentReply?: string;
   kbArtifact?: KbArtifact | null;
   collapsed: boolean;
   onToggleCollapse: () => void;
@@ -19,10 +26,147 @@ interface ArtifactPanelProps {
   onRunExample?: (type: 'marketing' | 'knowledge' | 'warroom') => void;
 }
 
+function renderSimpleMarkdown(md: string): string {
+  return md
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/^### (.*)$/gm, '<h3 class="mt-3 mb-1 text-[13px] font-semibold text-zinc-900">$1</h3>')
+    .replace(/^## (.*)$/gm, '<h2 class="mt-4 mb-1.5 text-[15px] font-semibold text-zinc-900">$1</h2>')
+    .replace(/^# (.*)$/gm, '<h1 class="mb-2 text-[17px] font-bold text-zinc-900">$1</h1>')
+    .replace(/^> (.*)$/gm, '<p class="my-2 rounded-lg bg-zinc-100 px-3 py-2 text-[12px] text-zinc-600">$1</p>')
+    .replace(/^\- (.*)$/gm, '<li class="ml-4 list-disc text-[12px] leading-relaxed text-zinc-700">$1</li>')
+    .replace(/^\d+\. (.*)$/gm, '<li class="ml-4 list-decimal text-[12px] leading-relaxed text-zinc-700">$1</li>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/^---$/gm, '<hr class="my-3 border-zinc-200"/>')
+    .replace(/\n\n/g, '<br/><br/>');
+}
+
+function DeliverablePreviewView({
+  item,
+  kbArtifact,
+  onCitationClick,
+}: {
+  item: DeliverablePreview;
+  kbArtifact?: KbArtifact | null;
+  onCitationClick?: (docId: string, citationIndex: number, snippet: string) => void;
+}) {
+  if (item.kind === 'board') return <MarketingBoard />;
+  if (item.kind === 'knowledge') {
+    return <KnowledgeCard artifact={kbArtifact} onCitationClick={onCitationClick} />;
+  }
+
+  if (item.kind === 'markdown' && item.markdown) {
+    return (
+      <div
+        className="rounded-xl border border-zinc-200/80 bg-white p-4"
+        dangerouslySetInnerHTML={{ __html: renderSimpleMarkdown(item.markdown) }}
+      />
+    );
+  }
+
+  if (item.kind === 'html' && item.html) {
+    return (
+      <iframe
+        title={item.title}
+        srcDoc={item.html}
+        sandbox=""
+        className="h-[min(70vh,560px)] w-full rounded-xl border border-zinc-200 bg-white"
+      />
+    );
+  }
+
+  if (item.kind === 'pdf' && item.pdfPages) {
+    return (
+      <div className="space-y-3 rounded-xl bg-[#f3f3f5] p-3">
+        {item.pdfPages.map((page, i) => (
+          <article
+            key={i}
+            className="mx-auto min-h-[200px] max-w-lg rounded-sm bg-white px-8 py-7 shadow-sm ring-1 ring-black/5"
+          >
+            <div className="mb-3 flex items-center justify-between border-b border-zinc-100 pb-2">
+              <h3 className="text-[13px] font-semibold text-zinc-900">{page.heading}</h3>
+              <span className="text-[10px] text-zinc-400">
+                {i + 1} / {item.pdfPages!.length}
+              </span>
+            </div>
+            <p className="whitespace-pre-wrap text-[12px] leading-7 text-zinc-700">{page.body}</p>
+          </article>
+        ))}
+      </div>
+    );
+  }
+
+  if (item.kind === 'ppt' && item.slides) {
+    return (
+      <div className="space-y-3">
+        {item.slides.map((slide, i) => (
+          <div
+            key={i}
+            className="aspect-[16/9] overflow-hidden rounded-xl border border-zinc-200 bg-gradient-to-br from-zinc-900 to-zinc-700 p-6 text-white shadow-sm"
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/50">
+              Slide {i + 1}
+            </p>
+            <h3 className="mt-2 text-[18px] font-semibold">{slide.title}</h3>
+            <ul className="mt-4 space-y-2 text-[13px] text-white/85">
+              {slide.bullets.map((b) => (
+                <li key={b} className="flex gap-2">
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                  <span>{b}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (item.kind === 'xlsx' && item.table) {
+    return (
+      <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
+        <table className="w-full min-w-[360px] text-left text-[12px]">
+          <thead className="border-b border-zinc-200 bg-zinc-50 text-[10px] font-bold uppercase text-zinc-500">
+            <tr>
+              {item.table.headers.map((h) => (
+                <th key={h} className="px-3 py-2.5">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {item.table.rows.map((row, i) => (
+              <tr key={i} className="border-b border-zinc-100 last:border-0">
+                {row.map((cell, j) => (
+                  <td key={j} className="px-3 py-2.5 text-zinc-700">
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-dashed border-zinc-200 bg-white px-4 py-10 text-center text-[12px] text-zinc-500">
+      暂无可预览内容
+    </div>
+  );
+}
+
 export function ArtifactPanel({
   ready,
   type,
   query = '',
+  agentName = '',
+  skills = [],
+  agentReply = '',
   kbArtifact = null,
   collapsed,
   onToggleCollapse,
@@ -33,9 +177,41 @@ export function ArtifactPanel({
   onRunExample,
 }: ArtifactPanelProps) {
   const deliverables = useMemo(
-    () => (ready && type ? buildDeliverables(type, query) : []),
-    [ready, type, query],
+    () =>
+      ready && type
+        ? buildDeliverablePreviews({
+            type,
+            query,
+            agentName,
+            skills,
+            agentReply,
+            kbArtifact,
+          })
+        : [],
+    [ready, type, query, agentName, skills, agentReply, kbArtifact],
   );
+
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!deliverables.length) {
+      setActiveId(null);
+      return;
+    }
+    if (!activeId || !deliverables.some((d) => d.id === activeId)) {
+      setActiveId(deliverables[0].id);
+    }
+  }, [deliverables, activeId]);
+
+  const active = deliverables.find((d) => d.id === activeId) ?? null;
+
+  const contextLine = [
+    agentName || null,
+    skills.length ? skills.slice(0, 2).join('、') : null,
+    query ? (query.length > 28 ? `${query.slice(0, 28)}…` : query) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <>
@@ -55,7 +231,9 @@ export function ArtifactPanel({
             </div>
             <div className="min-w-0">
               <p className="truncate text-[11px] font-semibold leading-none text-zinc-900">交付物预览</p>
-              <p className="mt-0.5 truncate text-[10px] text-zinc-500">看板 · 报告 · 引用溯源</p>
+              <p className="mt-0.5 truncate text-[10px] text-zinc-500">
+                {ready ? contextLine || 'Markdown · HTML · PDF · PPT' : '等待任务执行后展示'}
+              </p>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -81,25 +259,44 @@ export function ArtifactPanel({
         </div>
 
         {ready && deliverables.length > 0 && (
-          <div className="flex shrink-0 items-center gap-3 border-b border-zinc-200/80 bg-white px-4 py-2">
-            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">交付物</span>
-            <div className="flex flex-1 flex-wrap gap-1.5">
+          <div className="flex shrink-0 items-center gap-2 border-b border-zinc-200/80 bg-white px-3 py-2">
+            <div className="flex flex-1 gap-1.5 overflow-x-auto scroll-hidden">
               {deliverables.map((item) => (
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => {
-                    item.onDownload();
-                    onDeliverableDownload?.(item.name);
-                  }}
-                  className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] transition hover:border-zinc-300 hover:bg-white"
+                  onClick={() => setActiveId(item.id)}
+                  className={cn(
+                    'flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] transition',
+                    activeId === item.id
+                      ? 'border-zinc-900 bg-zinc-900 text-white'
+                      : 'border-zinc-200 bg-zinc-50 text-zinc-700 hover:border-zinc-300 hover:bg-white',
+                  )}
                 >
-                  <i className={cn('fa-solid text-[10px]', item.icon, item.iconClass)} />
-                  <span className="font-medium text-zinc-700">{item.name}</span>
-                  <span className="mono text-[10px] text-zinc-400">{item.size}</span>
+                  <i
+                    className={cn(
+                      'text-[10px]',
+                      item.icon.startsWith('fa-') ? `fa-solid ${item.icon}` : item.icon,
+                      activeId === item.id ? 'text-white/80' : item.iconClass,
+                    )}
+                  />
+                  <span className="font-medium">{item.name}</span>
                 </button>
               ))}
             </div>
+            {active ? (
+              <button
+                type="button"
+                onClick={() => {
+                  downloadDeliverable(active, query);
+                  onDeliverableDownload?.(active.name);
+                }}
+                className="shrink-0 rounded-lg border border-zinc-200 px-2 py-1.5 text-[10px] font-semibold text-zinc-600 hover:bg-zinc-50"
+                title="下载当前交付件"
+              >
+                <i className="fa-solid fa-download" />
+              </button>
+            ) : null}
           </div>
         )}
 
@@ -111,7 +308,7 @@ export function ArtifactPanel({
               </div>
               <h3 className="mb-1.5 text-[15px] font-semibold text-zinc-900">等待 Agent 交付物</h3>
               <p className="max-w-sm text-center text-[12px] leading-relaxed text-zinc-500">
-                描述任务并确认执行计划后，可验证的看板与报告将在此展示。
+                确认执行计划后，将按所选 Agent / Skill 生成 Markdown、HTML、PDF、PPT 等可预览交付件。
               </p>
               {onRunExample && (
                 <div className="mt-4 grid w-full max-w-sm grid-cols-1 gap-1.5">
@@ -153,13 +350,17 @@ export function ArtifactPanel({
             </div>
           )}
 
-          {ready && (
+          {ready && active && (
             <div className="scroll-hidden h-full overflow-y-auto">
-              {type === 'marketing' ? (
-                <MarketingBoard />
-              ) : (
-                <KnowledgeCard artifact={kbArtifact} onCitationClick={onCitationClick} />
-              )}
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-[11px] font-semibold text-zinc-800">{active.title}</p>
+                <span className="text-[10px] text-zinc-400">{active.size}</span>
+              </div>
+              <DeliverablePreviewView
+                item={active}
+                kbArtifact={kbArtifact}
+                onCitationClick={onCitationClick}
+              />
             </div>
           )}
         </div>

@@ -7,27 +7,29 @@ import {
   CenterModal,
   CenterPageHeader,
   CenterSearchInput,
-  EfficiencyFilterChips,
-  LearningCallout,
 } from '@/components/center/CenterShell';
+import { OrgAssetFilterBar } from '@/components/center/OrgAssetFilters';
 import { AgentEditorModal, type AgentEditorTarget } from '@/components/center/AgentEditorModal';
 import { AgentAvatar } from '@/components/brand/AgentAvatar';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
-import { useAppViewStore } from '@/stores/appViewStore';
-import { useNavPresentationStore } from '@/stores/navPresentationStore';
+import type { EfficiencyFilter } from '@/domain/assetFilters';
 
 interface AgentCenterPageProps {
   onInvoke: (agent: PrototypeAgentSeed, prompt?: string) => void;
 }
 
 export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
-  const setAppView = useAppViewStore((s) => s.setAppView);
-  const showAgentStudio = useNavPresentationStore((s) => s.isViewEnabled('agent-studio'));
   const {
     agentFilter,
     agentSearch,
+    agentDeptFilter,
+    agentRegionFilter,
+    agentScopeFilter,
     setAgentFilter,
     setAgentSearch,
+    setAgentDeptFilter,
+    setAgentRegionFilter,
+    setAgentScopeFilter,
     filteredAgents,
     bumpAgentInvokes,
   } = useMarketplaceStore();
@@ -45,39 +47,39 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
     <div className="center-surface center-page scroll-hidden flex-1 overflow-y-auto">
       <div className="mx-auto max-w-6xl">
         <CenterPageHeader
-          title="Agent 中心"
+          title="专家"
           subtitle="定义营销服 Agent · 挂载 Skill · 发布至团队调用"
+          tip={
+            <>
+              点击「配置」可设置 Persona、绑定 Skill 并发布；「调用」进入任务中心对话；已发布专家会出现在智能助理推荐区。
+            </>
+          }
           actions={
             <>
               <CenterSearchInput value={agentSearch} onChange={setAgentSearch} placeholder="搜索 Agent…" />
-              {showAgentStudio && (
-                <button
-                  type="button"
-                  onClick={() => setAppView('agent-studio')}
-                  className="apple-btn-secondary rounded-xl px-4 py-2 text-[12px] font-semibold"
-                >
-                  <i className="fa-solid fa-wand-magic-sparkles mr-1" />
-                  专家 Studio
-                </button>
-              )}
               <button
                 type="button"
                 onClick={() => setEditorTarget('new')}
                 className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white transition"
               >
                 <i className="fa-solid fa-plus mr-1" />
-                创建 Agent
+                创建专家
               </button>
             </>
           }
         />
 
-        <LearningCallout icon="fa-robot">
-          <strong>快速上手：</strong>
-          点击「调用」进入任务中心对话；「专家 Studio」可配置 Persona 与 Skill 绑定；已发布 Agent 会出现在智能助理推荐区。
-        </LearningCallout>
-
-        <EfficiencyFilterChips value={agentFilter} onChange={(id) => setAgentFilter(id as typeof agentFilter)} />
+        <OrgAssetFilterBar
+          deptFilter={agentDeptFilter}
+          regionFilter={agentRegionFilter}
+          efficiencyFilter={agentFilter === 'experience' ? 'all' : (agentFilter as EfficiencyFilter)}
+          scopeFilter={agentScopeFilter}
+          onDeptChange={setAgentDeptFilter}
+          onRegionChange={setAgentRegionFilter}
+          onEfficiencyChange={(id) => setAgentFilter(id)}
+          onScopeChange={setAgentScopeFilter}
+          showScope
+        />
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
           {agents.length ? (

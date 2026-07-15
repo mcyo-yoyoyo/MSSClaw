@@ -3,6 +3,7 @@ import { CenterModal } from '@/components/center/CenterShell';
 import { FormField, FormInput, FormSelect, FormTextarea, ModalActions } from '@/components/center/CenterFormFields';
 import type { PrototypeAutomation } from '@/domain/prototype/types';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
+import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 
 type EditorTarget = string | 'new' | null;
 
@@ -53,23 +54,34 @@ export function AutomationEditorModal({ target, onClose }: AutomationEditorModal
     }
     const prev = !isNew ? automations.find((a) => a.id === target) : null;
     const agent = agents.find((a) => a.id === form.agentId);
+    const id = isNew ? `auto-${Date.now()}` : (target as string);
+    const needsApproval = isNew;
 
     upsertAutomation(
       {
         ...form,
-        id: isNew ? `auto-${Date.now()}` : target,
+        id,
         name,
         desc: form.desc.trim(),
         agentId: form.agentId,
         skillIds: agent?.skillIds ?? prev?.skillIds ?? [],
         schedule: form.schedule.trim() || '每日',
-        enabled: prev?.enabled ?? true,
+        enabled: needsApproval ? false : (prev?.enabled ?? form.enabled),
         lastRun: prev?.lastRun ?? '未运行',
       },
       isNew,
     );
-    showToast('自动化已保存');
     onClose();
+    if (needsApproval) {
+      useAssetApprovalStore.getState().openApproval({
+        kind: 'automation',
+        assetId: id,
+        assetName: name,
+      });
+      showToast('自动化已保存，已进入上架审批');
+    } else {
+      showToast('自动化已保存');
+    }
   };
 
   return (

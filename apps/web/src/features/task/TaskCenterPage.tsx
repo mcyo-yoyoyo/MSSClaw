@@ -10,6 +10,8 @@ import { useConversationStore } from '@/stores/conversationStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useTaskStore } from '@/stores/taskStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { useAppViewStore } from '@/stores/appViewStore';
+import { useHomeStore } from '@/stores/homeStore';
 import { getAgentById } from '@/domain/plan';
 import { buildAppRoute } from '@/domain/appRoute';
 import { canUseWarRoomAi, isWarRoom } from '@/domain/chat';
@@ -20,11 +22,15 @@ interface TaskCenterPageProps {
 
 export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
   const workspaceId = useWorkspaceStore((s) => s.workspaceId);
+  const setAppView = useAppViewStore((s) => s.setAppView);
+  const setHomeMode = useHomeStore((s) => s.setHomeMode);
   const {
     taskListCollapsed,
     artifactPanelCollapsed,
+    focusBannerVisible,
     toggleTaskList,
     toggleArtifactPanel,
+    dismissFocusBanner,
     createDialogOpen,
     openCreateDialog,
     closeCreateDialog,
@@ -43,6 +49,9 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
   const sandboxReady = useConversationStore((s) => s.sandboxReady);
   const sandboxType = useConversationStore((s) => s.sandboxType);
   const sandboxQuery = useConversationStore((s) => s.sandboxQuery);
+  const sandboxAgentName = useConversationStore((s) => s.sandboxAgentName);
+  const sandboxSkills = useConversationStore((s) => s.sandboxSkills);
+  const sandboxAgentReply = useConversationStore((s) => s.sandboxAgentReply);
   const openExport = useConversationStore((s) => s.openExport);
   const pushToGroup = useConversationStore((s) => s.pushToGroup);
   const pinCurrentChat = useConversationStore((s) => s.pinCurrentChat);
@@ -72,6 +81,10 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
   const chat = chats[currentChatId];
   const previewDoc = kbPreviewDocId ? kbDocs.find((d) => d.id === kbPreviewDocId) ?? null : null;
   const aiAllowed = chat ? canUseWarRoomAi(chat) : false;
+  /** 无交付物时强制收起预览，聊天全宽 */
+  const hasDeliverable = sandboxReady;
+  const effectiveArtifactCollapsed = artifactPanelCollapsed || !hasDeliverable;
+  const prevReadyRef = useRef(false);
 
   useEffect(() => {
     const pending = consumePendingTaskSubmit();
@@ -87,8 +100,45 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
     }
   }, [currentChatId, consumePendingTaskSubmit, sendMessage, workspaceId]);
 
+  // 交付物就绪时轻提示打开预览
+  useEffect(() => {
+    if (sandboxReady && !prevReadyRef.current && artifactPanelCollapsed) {
+      useConversationStore.setState({
+        pushToast: '交付物已就绪 · 点击右侧「预览」查看',
+      });
+    }
+    prevReadyRef.current = sandboxReady;
+  }, [sandboxReady, artifactPanelCollapsed]);
+
   return (
     <div className="relative flex min-h-0 flex-1 overflow-hidden">
+      {focusBannerVisible ? (
+        <div className="absolute left-1/2 top-3 z-30 flex max-w-[min(92vw,520px)] -translate-x-1/2 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 shadow-md">
+          <i className="fa-solid fa-comments text-[12px] text-zinc-500" />
+          <p className="min-w-0 flex-1 text-[11px] leading-snug text-zinc-600">
+            已进入对话专注：侧栏已收起，会话列表可切换历史；交付物就绪后可打开右侧预览。
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              if (taskListCollapsed) toggleTaskList();
+              dismissFocusBanner();
+            }}
+            className="shrink-0 rounded-lg bg-zinc-900 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-zinc-800"
+          >
+            {taskListCollapsed ? '展开会话' : '知道了'}
+          </button>
+          <button
+            type="button"
+            onClick={dismissFocusBanner}
+            className="shrink-0 rounded-lg p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+            aria-label="关闭提示"
+          >
+            <i className="fa-solid fa-xmark text-[11px]" />
+          </button>
+        </div>
+      ) : null}
+
       <TaskListPanel
         chats={chats}
         currentChatId={currentChatId}
@@ -126,16 +176,27 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
             onClearSandbox={clearSandbox}
             onManageMembers={isWarRoom(chat) ? () => setMembersOpen(true) : undefined}
             aiAllowed={aiAllowed}
-            previewCollapsed={artifactPanelCollapsed}
+            previewCollapsed={effectiveArtifactCollapsed}
           />
 
           <ArtifactPanel
             ready={sandboxReady}
             type={sandboxType}
             query={sandboxQuery}
+            agentName={sandboxAgentName || (chat.agentId ? getAgentById(chat.agentId)?.name : undefined)}
+            skills={sandboxSkills}
+            agentReply={sandboxAgentReply}
             kbArtifact={kbArtifact}
-            collapsed={artifactPanelCollapsed}
-            onToggleCollapse={toggleArtifactPanel}
+            collapsed={effectiveArtifactCollapsed}
+            onToggleCollapse={() => {
+              if (!hasDeliverable) {
+                useConversationStore.setState({
+                  pushToast: '对话完成后将生成交付物，再打开右侧预览',
+                });
+                return;
+              }
+              toggleArtifactPanel();
+            }}
             onExport={openExport}
             onPush={() => void pushToGroup()}
             onCitationClick={(docId, index, snippet) => {
@@ -150,8 +211,29 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
           />
         </>
       ) : (
-        <div className="flex flex-1 items-center justify-center text-sm text-[#86868b]">
-          当前 Workspace 暂无任务会话 · 点击左侧 + 新建
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-[#86868b]">
+          <p>从智能助理发起对话，或展开左侧会话列表新建</p>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setHomeMode('assistant');
+                setAppView('home');
+              }}
+              className="rounded-lg bg-zinc-900 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-zinc-800"
+            >
+              回智能助理
+            </button>
+            {taskListCollapsed ? (
+              <button
+                type="button"
+                onClick={toggleTaskList}
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-[12px] font-medium text-zinc-700 hover:bg-zinc-50"
+              >
+                展开会话列表
+              </button>
+            ) : null}
+          </div>
         </div>
       )}
 

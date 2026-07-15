@@ -10,7 +10,7 @@ interface SettingsNavProps {
 export function SettingsNav({ activeTab, onChange }: SettingsNavProps) {
   return (
     <aside className="studio-list-panel w-[220px]">
-      <StudioListPanelHeader title="系统治理" subtitle="RBAC · 审计 · 连接器" />
+      <StudioListPanelHeader title="组织治理" subtitle="组织 · 部门 · 角色" />
       <nav className="flex-grow p-2">
         {SETTINGS_TABS.map((tab) => (
           <button

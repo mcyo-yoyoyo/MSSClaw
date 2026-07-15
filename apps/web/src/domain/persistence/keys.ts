@@ -5,12 +5,19 @@ export const LS_TASK_SESSIONS_VERSION = 'mssclaw_task_sessions_ver';
 
 export const LS_AGENTS = 'mssclaw_agents';
 export const LS_SKILLS = 'mssclaw_skills';
+export const LS_TOOLS = 'mssclaw_tools';
 export const LS_AUTOMATIONS = 'mssclaw_automations';
 export const LS_KB_DOCS = 'mssclaw_kb_docs';
 export const LS_TASK_SESSIONS = 'mssclaw_task_sessions';
+export const LS_PORTAL_CONTENT = 'mssclaw_portal_content';
+export const LS_PORTAL_CONTENT_VERSION = 'mssclaw_portal_content_ver';
 
 export function sessionsKeyForWorkspace(workspaceId: string): string {
   return `mssclaw_sessions_${workspaceId}`;
+}
+
+export function portalContentKeyForWorkspace(workspaceId: string): string {
+  return `mssclaw_portal_content_${workspaceId}`;
 }
 
 /**

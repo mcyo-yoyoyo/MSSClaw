@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { ChatConfigSchema, INITIAL_CHATS } from '@/domain/chat';
 import { getPrototypeAgentsAsDomain } from '@/domain/prototype/adapters';
 import { PROTOTYPE_WORKSPACE_ID } from '@/domain/prototype/constants';
-import { PROTOTYPE_WORKSPACES } from '@/domain/prototype/workspaces';
 
 export const ResourceStatusSchema = z.enum([
   'online',
@@ -67,9 +66,9 @@ const PROTOTYPE_AGENT_RESOURCES = buildAgentResources();
 const CN_MARKETING_CATALOG: WorkspaceCatalog = {
   workspace: {
     id: PROTOTYPE_WORKSPACE_ID,
-    name: PROTOTYPE_WORKSPACES[PROTOTYPE_WORKSPACE_ID].label,
+    name: '机关全球营销运营视角',
     namespace: 'cn.marketing',
-    description: '华为终端中国区营销服智枢作战空间',
+    description: '机关职能 · 全球营销运营（组织+职能视角）',
     memberCount: 42,
   },
   chats: structuredClone(INITIAL_CHATS),
@@ -99,9 +98,9 @@ const CN_MARKETING_CATALOG: WorkspaceCatalog = {
 const LATAM_CATALOG: WorkspaceCatalog = {
   workspace: {
     id: 'ws-3c-latam',
-    name: '3C 拉美事业部',
+    name: '拉美一线作战视角',
     namespace: '3c.latam',
-    description: '拉美穿戴与智能终端业务作战空间（兼容工作区 · 数据同设计稿）',
+    description: '一线区域 · 拉美 GTM/零售作战（组织+区域视角）',
     memberCount: 28,
   },
   chats: structuredClone(INITIAL_CHATS),
@@ -131,9 +130,9 @@ const LATAM_CATALOG: WorkspaceCatalog = {
 const GLOBAL_CATALOG: WorkspaceCatalog = {
   workspace: {
     id: 'ws-global-marketing',
-    name: '全球营销中台',
+    name: '全球营销职能视角',
     namespace: 'global.marketing',
-    description: '跨区域 Campaign 与渠道策略协同',
+    description: '机关职能 · 跨区域 Campaign 与渠道策略',
     memberCount: 56,
   },
   chats: {
@@ -210,9 +209,9 @@ const GLOBAL_CATALOG: WorkspaceCatalog = {
 const RD_CATALOG: WorkspaceCatalog = {
   workspace: {
     id: 'ws-rd-knowledge',
-    name: '研发知识库',
+    name: '机关知识研发视角',
     namespace: 'rd.knowledge',
-    description: '产品规格、SOP、合规与研发文档中心',
+    description: '机关职能 · 产品规格 / SOP / 合规知识',
     memberCount: 112,
   },
   chats: {

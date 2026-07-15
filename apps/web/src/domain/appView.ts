@@ -1,10 +1,12 @@
 export const APP_VIEWS = [
   'home',
+  'ai-map',
   'task',
   'agents',
   'agent-studio',
   'skills',
   'kb',
+  'cases',
   'automation',
   'workflow',
   'tools',
@@ -13,6 +15,7 @@ export const APP_VIEWS = [
   'admin',
   'presentation',
   'workspace-config',
+  'portal-ops',
 ] as const;
 export type AppView = (typeof APP_VIEWS)[number];
 
@@ -36,23 +39,30 @@ export interface AppViewNavItem {
 }
 
 export const APP_VIEW_NAV: AppViewNavItem[] = [
-  { id: 'home', label: '智能助理', subtitle: '意图输入 · 提交进任务中心', icon: 'fa-comment-dots', section: 'workspace' },
-  { id: 'task', label: '任务中心', subtitle: '计划确认 · 对话 · 交付物', icon: 'fa-list-check', section: 'workspace' },
-  { id: 'agents', label: 'Agent 中心', subtitle: '配置 · 发布 · 调用', icon: 'fa-robot', section: 'platform' },
-  { id: 'skills', label: 'Skill 中心', subtitle: '能力资产 · 挂载编排', icon: 'fa-cube', section: 'platform' },
-  { id: 'tools', label: 'Tool 中心', subtitle: '连接器 · 外部 API', icon: 'fa-plug', section: 'platform' },
-  { id: 'prompts', label: 'Prompt 中心', subtitle: '版本 · 审批 · 生命周期', icon: 'fa-file-code', section: 'platform' },
-  { id: 'memory', label: 'Memory 中心', subtitle: 'Agent 长期记忆 · Reflection', icon: 'fa-brain', section: 'platform' },
+  { id: 'home', label: '智能助理', subtitle: '输入即开始 · 工作台深入执行', icon: 'fa-comment-dots', section: 'workspace' },
+  { id: 'task', label: '任务中心', subtitle: '当前会话 · 计划确认 · 交付物', icon: 'fa-list-check', section: 'workspace' },
+  {
+    id: 'ai-map',
+    label: '案例',
+    subtitle: 'AI 样板间 · 场景案例与能力组合沉淀',
+    icon: 'fa-map',
+    section: 'platform',
+  },
+  { id: 'agents', label: '专家', subtitle: '配置 · 发布 · 调用', icon: 'fa-robot', section: 'platform' },
+  { id: 'skills', label: '技能', subtitle: '能力资产 · 挂载编排', icon: 'fa-cube', section: 'platform' },
+  { id: 'tools', label: '工具', subtitle: '连接器 · 外部 API', icon: 'fa-plug', section: 'platform' },
   { id: 'kb', label: '知识库', subtitle: '企业文档 · RAG · 溯源', icon: 'fa-book-open', section: 'platform' },
-  { id: 'automation', label: '自动化编排', subtitle: '定时 · 告警 · 周报', icon: 'fa-bolt', section: 'ops' },
+  { id: 'prompts', label: '提示词', subtitle: '版本 · 审批 · 生命周期', icon: 'fa-file-code', section: 'platform' },
+  { id: 'memory', label: '记忆', subtitle: 'Agent 长期记忆 · Reflection', icon: 'fa-brain', section: 'platform' },
+  { id: 'automation', label: '自动化', subtitle: '定时 · 告警 · 周报', icon: 'fa-bolt', section: 'ops' },
   { id: 'workflow', label: 'Workflow 画布', subtitle: 'LangGraph · 专家编排', icon: 'fa-diagram-project', section: 'ops' },
 ];
 
 export const NAV_SECTION_LABELS: Record<NavSection, string> = {
-  workspace: '工作台',
-  platform: '能力平台',
+  workspace: '工作平台',
+  platform: '能力沉淀',
   ops: '运营编排',
-  system: '系统',
+  system: '系统设置',
 };
 
 /** AppView 占位页（尚未实现的视图） */

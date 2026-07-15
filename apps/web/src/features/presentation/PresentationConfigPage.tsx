@@ -3,7 +3,6 @@ import { cn } from '@/lib/utils';
 import {
   NAV_PRESENTATION_META,
   NAV_PRESET_LABELS,
-  PRESENTATION_CONFIG_VIEW,
   type NavPresetId,
 } from '@/domain/navPresentation';
 import { isSystemAdmin } from '@/domain/currentUser';
@@ -12,6 +11,7 @@ import { NAV_SECTION_LABELS, type NavSection } from '@/domain/appView';
 import { CenterPageHeader } from '@/components/center/CenterShell';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useConversationStore } from '@/stores/conversationStore';
+import { useAppViewStore } from '@/stores/appViewStore';
 
 const PRESET_ORDER: Exclude<NavPresetId, 'custom'>[] = ['full', 'customer', 'standard'];
 
@@ -19,13 +19,13 @@ export function PresentationConfigPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const {
     preset,
-    enabled,
     applyPreset,
     setViewEnabled,
     resetToFull,
     exportConfig,
     importConfig,
     enabledCount,
+    isViewEnabled,
   } = useNavPresentationStore();
 
   const notify = (msg: string) => useConversationStore.setState({ pushToast: msg });
@@ -35,8 +35,9 @@ export function PresentationConfigPage() {
     label: NAV_SECTION_LABELS[section],
     items: NAV_PRESENTATION_META.filter((m) => {
       if (m.section !== section) return false;
-      // 租户配置仅系统管理员可见，不在展示配置中开关
-      if (m.id === WORKSPACE_CONFIG_VIEW && !isSystemAdmin()) return false;
+      if (m.hiddenFromSidebar) return false;
+      // 租户配置 / 门户运营仅系统管理员可见，不在展示配置中开关
+      if ((m.id === WORKSPACE_CONFIG_VIEW || m.id === 'portal-ops') && !isSystemAdmin()) return false;
       return true;
     }),
   }));
@@ -85,6 +86,10 @@ export function PresentationConfigPage() {
                 type="button"
                 onClick={() => {
                   applyPreset(id);
+                  if (id === 'standard') {
+                    const { navSectionsCollapsed, toggleNavSection } = useAppViewStore.getState();
+                    if (!navSectionsCollapsed.system) toggleNavSection('system');
+                  }
                   notify(`已切换为「${NAV_PRESET_LABELS[id].title}」`);
                 }}
                 className={cn(
@@ -116,14 +121,9 @@ export function PresentationConfigPage() {
                 </div>
                 <ul className="divide-y divide-zinc-100">
                   {items.map((item) => {
-                    const on =
-                      item.id === WORKSPACE_CONFIG_VIEW
-                        ? isSystemAdmin()
-                        : enabled[item.id] !== false;
-                    const locked =
-                      item.locked ||
-                      item.id === PRESENTATION_CONFIG_VIEW ||
-                      item.id === WORKSPACE_CONFIG_VIEW;
+                    const on = isViewEnabled(item.id);
+                    // 标准能力下系统项可在自定义中重新打开；展示配置本身允许关闭侧栏入口
+                    const locked = false;
                     return (
                       <li key={item.id} className="flex items-center justify-between gap-3 px-4 py-3">
                         <div className="flex min-w-0 items-center gap-3">

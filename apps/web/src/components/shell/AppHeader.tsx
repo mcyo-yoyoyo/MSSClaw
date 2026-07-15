@@ -1,7 +1,8 @@
 import { MssZhishuMark } from '@/components/brand/MssZhishuMark';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { ROLE_LABELS } from '@/domain/rbac';
+import { formatRolePerspective } from '@/domain/rolePerspective';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useWorkspaceConfigStore } from '@/stores/workspaceConfigStore';
 import { WORKSPACE_LOCALE_LABELS } from '@/domain/workspaceConfig';
@@ -26,6 +27,15 @@ export function AppHeader({ apiConnected, onWorkspaceSwitch }: AppHeaderProps) {
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   const getLocale = useWorkspaceConfigStore((s) => s.getLocale);
+
+  const perspectiveLabel = useMemo(() => {
+    if (!user) return '未登录视角';
+    return formatRolePerspective({
+      platformRole: user.platformRole,
+      deptIds: user.deptIds,
+      regionId: user.regionId,
+    });
+  }, [user]);
 
   const currentWs = workspaceList.find((w) => w.id === workspaceId) ?? workspaceList[0] ?? {
     id: workspaceId,
@@ -68,14 +78,26 @@ export function AppHeader({ apiConnected, onWorkspaceSwitch }: AppHeaderProps) {
             }}
             className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900"
           >
-            <span className="max-w-[200px] truncate font-medium">{currentWs.name}</span>
+            <span className="max-w-[220px] truncate font-medium">{perspectiveLabel}</span>
             <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-500">
               {WORKSPACE_LOCALE_LABELS[getLocale(workspaceId)]}
             </span>
             <i className="fa-solid fa-chevron-down text-[9px] text-zinc-400" />
           </button>
           {menuOpen && (
-            <div className="workspace-menu absolute left-0 top-full z-[60] mt-2 w-72 rounded-xl border border-zinc-200/80 bg-white py-1.5 shadow-apple-lg">
+            <div className="workspace-menu absolute left-0 top-full z-[60] mt-2 w-80 rounded-xl border border-zinc-200/80 bg-white py-1.5 shadow-apple-lg">
+              <p className="px-4 py-1.5 text-[10px] font-semibold tracking-wide text-zinc-400">
+                组织视角（当前登录角色）
+              </p>
+              <div className="border-b border-zinc-100 px-4 py-2">
+                <p className="text-[13px] font-semibold text-zinc-900">{perspectiveLabel}</p>
+                <p className="mt-0.5 text-[11px] text-zinc-500">
+                  {user ? ROLE_LABELS[user.platformRole] : ''} · 数据空间：{currentWs.name}
+                </p>
+              </div>
+              <p className="px-4 py-1.5 text-[10px] font-semibold tracking-wide text-zinc-400">
+                切换数据空间
+              </p>
               {workspaceList.map((ws) => (
                 <button
                   key={ws.id}
@@ -93,7 +115,10 @@ export function AppHeader({ apiConnected, onWorkspaceSwitch }: AppHeaderProps) {
                       ws.id !== workspaceId && 'text-transparent',
                     )}
                   />
-                  {ws.name}
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">{ws.name}</span>
+                    <span className="block truncate text-[10px] text-zinc-400">{ws.description}</span>
+                  </span>
                 </button>
               ))}
             </div>
@@ -150,7 +175,7 @@ export function AppHeader({ apiConnected, onWorkspaceSwitch }: AppHeaderProps) {
                 className="flex w-full items-center gap-2 px-4 py-2 text-left text-[13px] text-zinc-700 hover:bg-zinc-50"
               >
                 <i className="fa-solid fa-gear w-4 text-center text-[11px] text-zinc-400" />
-                系统设置
+                偏好设置
               </button>
               <button
                 type="button"

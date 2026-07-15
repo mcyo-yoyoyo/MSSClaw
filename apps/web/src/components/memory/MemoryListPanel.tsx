@@ -36,7 +36,7 @@ export function MemoryListPanel({
 }: MemoryListPanelProps) {
   return (
     <aside className="studio-list-panel">
-      <StudioListPanelHeader title="Memory 中心" subtitle="分层记忆 · 保留策略 · Reflection" />
+      <StudioListPanelHeader title="记忆" subtitle="分层记忆 · 保留策略 · Reflection" />
 
       <div className="border-b border-black/[0.05] px-3 py-3">
         <div className="flex flex-wrap gap-1.5">

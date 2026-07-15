@@ -33,7 +33,7 @@ export function CreateTaskDialog({ open, onClose, onCreateAgent, onCreateWarRoom
   if (!open) return null;
 
   const handleSubmit = () => {
-    const t = title.trim() || (type === 'warroom' ? '新 WarRoom' : '新 Agent 任务');
+    const t = title.trim() || (type === 'warroom' ? '新协作室' : '新 Agent 任务');
     if (type === 'warroom') onCreateWarRoom(t);
     else onCreateAgent(t, agentId);
     setTitle('');
@@ -78,7 +78,7 @@ export function CreateTaskDialog({ open, onClose, onCreateAgent, onCreateWarRoom
                 type === 'warroom' ? 'border-zinc-900 bg-claw-50 text-zinc-700' : 'border-black/8 hover:border-zinc-400',
               )}
             >
-              WarRoom
+              协作室
             </button>
           </div>
           <div>
@@ -116,7 +116,7 @@ export function CreateTaskDialog({ open, onClose, onCreateAgent, onCreateWarRoom
           )}
           {type === 'warroom' && (
             <p className="rounded-xl bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-800">
-              创建后你将成为管理员，可邀请成员进入本 WarRoom；AI 能力仅对本室成员开放。
+              创建后你将成为管理员，可邀请成员进入本协作室；AI 能力仅对本室成员开放。
             </p>
           )}
         </div>

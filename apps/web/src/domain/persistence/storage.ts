@@ -6,6 +6,7 @@ import {
 } from '@/domain/prototype/constants';
 import { PROTOTYPE_AGENTS } from '@/domain/prototype/agents';
 import { PROTOTYPE_SKILLS } from '@/domain/prototype/skills';
+import { PROTOTYPE_TOOLS } from '@/domain/prototype/tools';
 import { PROTOTYPE_AUTOMATIONS } from '@/domain/prototype/automations';
 import { PROTOTYPE_KB_DOCS } from '@/domain/prototype/kb';
 import type {
@@ -13,6 +14,7 @@ import type {
   PrototypeAutomation,
   PrototypeKbDocument,
   PrototypeSkillSeed,
+  PrototypeToolSeed,
 } from '@/domain/prototype/types';
 import {
   LS_AGENTS,
@@ -21,6 +23,7 @@ import {
   LS_KB_VERSION,
   LS_MARKET_VERSION,
   LS_SKILLS,
+  LS_TOOLS,
   LS_TASK_SESSIONS,
   LS_TASK_SESSIONS_VERSION,
   mergeCatalog,
@@ -37,6 +40,7 @@ import { useWorkspaceStore } from '@/stores/workspaceStore';
 export interface MarketplaceSnapshot {
   agents: PrototypeAgentSeed[];
   skills: PrototypeSkillSeed[];
+  tools: PrototypeToolSeed[];
   automations: PrototypeAutomation[];
   kbDocs: PrototypeKbDocument[];
 }
@@ -45,6 +49,7 @@ function readLocalMarketplace(): MarketplaceSnapshot {
   if (localStorage.getItem(LS_MARKET_VERSION) !== MARKET_VERSION) {
     localStorage.removeItem(LS_AGENTS);
     localStorage.removeItem(LS_SKILLS);
+    localStorage.removeItem(LS_TOOLS);
     localStorage.setItem(LS_MARKET_VERSION, MARKET_VERSION);
   }
   if (localStorage.getItem(LS_KB_VERSION) !== KB_VERSION) {
@@ -55,12 +60,14 @@ function readLocalMarketplace(): MarketplaceSnapshot {
   try {
     const savedA = JSON.parse(localStorage.getItem(LS_AGENTS) || 'null') as PrototypeAgentSeed[] | null;
     const savedS = JSON.parse(localStorage.getItem(LS_SKILLS) || 'null') as PrototypeSkillSeed[] | null;
+    const savedT = JSON.parse(localStorage.getItem(LS_TOOLS) || 'null') as PrototypeToolSeed[] | null;
     const savedAuto = JSON.parse(localStorage.getItem(LS_AUTOMATIONS) || 'null') as PrototypeAutomation[] | null;
     const savedKb = JSON.parse(localStorage.getItem(LS_KB_DOCS) || 'null') as PrototypeKbDocument[] | null;
 
     return {
       agents: mergeCatalog(PROTOTYPE_AGENTS, savedA),
       skills: mergeCatalog(PROTOTYPE_SKILLS, savedS),
+      tools: mergeCatalog(PROTOTYPE_TOOLS, savedT),
       automations:
         Array.isArray(savedAuto) && savedAuto.length ? savedAuto : structuredClone(PROTOTYPE_AUTOMATIONS),
       kbDocs: mergeCatalog(PROTOTYPE_KB_DOCS, savedKb),
@@ -69,6 +76,7 @@ function readLocalMarketplace(): MarketplaceSnapshot {
     return {
       agents: structuredClone(PROTOTYPE_AGENTS),
       skills: structuredClone(PROTOTYPE_SKILLS),
+      tools: structuredClone(PROTOTYPE_TOOLS),
       automations: structuredClone(PROTOTYPE_AUTOMATIONS),
       kbDocs: structuredClone(PROTOTYPE_KB_DOCS),
     };
@@ -78,6 +86,7 @@ function readLocalMarketplace(): MarketplaceSnapshot {
 function writeLocalMarketplace(snapshot: MarketplaceSnapshot) {
   localStorage.setItem(LS_AGENTS, JSON.stringify(snapshot.agents));
   localStorage.setItem(LS_SKILLS, JSON.stringify(snapshot.skills));
+  localStorage.setItem(LS_TOOLS, JSON.stringify(snapshot.tools));
   localStorage.setItem(LS_AUTOMATIONS, JSON.stringify(snapshot.automations));
   localStorage.setItem(LS_KB_DOCS, JSON.stringify(snapshot.kbDocs));
 }
@@ -91,6 +100,10 @@ export async function loadMarketplace(workspaceId: string): Promise<MarketplaceS
         return {
           agents: mergeCatalog(PROTOTYPE_AGENTS, remote.agents as PrototypeAgentSeed[]),
           skills: mergeCatalog(PROTOTYPE_SKILLS, remote.skills as PrototypeSkillSeed[]),
+          tools: mergeCatalog(
+            PROTOTYPE_TOOLS,
+            (remote as { tools?: PrototypeToolSeed[] }).tools,
+          ),
           automations:
             Array.isArray(remote.automations) && remote.automations.length
               ? (remote.automations as PrototypeAutomation[])

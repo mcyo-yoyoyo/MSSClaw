@@ -852,8 +852,14 @@
 
   background: #fff;
 
-  min-height: 120px;
+  min-height: 72px;
 
+}
+
+.wb-command-box--workspace {
+  min-height: 64px;
+  box-shadow: none;
+  border-radius: 14px;
 }
 
 

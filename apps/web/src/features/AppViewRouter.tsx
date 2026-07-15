@@ -8,11 +8,12 @@ import { AppViewPlaceholder } from '@/components/shell/AppViewPlaceholder';
 import { ViewLoadingFallback } from '@/components/common/ViewLoadingFallback';
 import {
   LazyAgentCenterPage,
-  LazyAgentStudioPage,
+  LazyAiMapPage,
   LazyAutomationCenterPage,
   LazyKnowledgeCenterPage,
   LazyMemoryCenterPage,
   LazyPresentationConfigPage,
+  LazyPortalContentOpsPage,
   LazyWorkspaceConfigPage,
   LazyPromptCenterPage,
   LazySettingsPage,
@@ -39,18 +40,21 @@ interface AppViewRouterProps {
 
 const VIEW_LABELS: Partial<Record<AppView, string>> = {
   task: '任务中心',
-  agents: 'Agent 中心',
-  'agent-studio': 'Agent Studio',
-  skills: 'Skill 中心',
+  'ai-map': '案例',
+  agents: '专家',
+  'agent-studio': '专家',
+  skills: '技能',
   kb: '知识库',
-  automation: '自动化编排',
+  cases: '案例库',
+  automation: '自动化',
   workflow: 'Workflow 画布',
-  tools: 'Tool 中心',
-  memory: 'Memory 中心',
-  prompts: 'Prompt 中心',
-  admin: '权限管理',
+  tools: '工具',
+  memory: '记忆',
+  prompts: '提示词',
+  admin: '组织权限',
   presentation: '展示配置',
-  'workspace-config': '租户配置',
+  'workspace-config': '组织与租户',
+  'portal-ops': '门户运营',
 };
 
 function LazyView({ label, children }: { label: string; children: ReactNode }) {
@@ -64,6 +68,7 @@ export function AppViewRouter({ appView, handlers }: AppViewRouterProps) {
         onSubmitTask={handlers.onSubmitTask}
         onInvokeAgent={handlers.onInvokeAgent}
         onInvokeSkill={handlers.onInvokeSkill}
+        onAskKbDocument={handlers.onAskKbDocument}
       />
     );
   }
@@ -81,6 +86,16 @@ export function AppViewRouter({ appView, handlers }: AppViewRouterProps) {
           <LazyTaskCenterPage onWorkspaceSwitch={handlers.onWorkspaceSwitch} />
         </LazyView>
       );
+    case 'ai-map':
+      return (
+        <LazyView label={label}>
+          <LazyAiMapPage
+            onInvokeAgent={handlers.onInvokeAgent}
+            onInvokeSkill={handlers.onInvokeSkill}
+            onAskKbDocument={handlers.onAskKbDocument}
+          />
+        </LazyView>
+      );
     case 'agents':
       return (
         <LazyView label={label}>
@@ -88,9 +103,10 @@ export function AppViewRouter({ appView, handlers }: AppViewRouterProps) {
         </LazyView>
       );
     case 'agent-studio':
+      // Agent Studio 已并入专家页；深链兜底重定向到专家
       return (
         <LazyView label={label}>
-          <LazyAgentStudioPage onOpenChat={handlers.onOpenTaskChat} />
+          <LazyAgentCenterPage onInvoke={handlers.onInvokeAgent} />
         </LazyView>
       );
     case 'skills':
@@ -103,6 +119,17 @@ export function AppViewRouter({ appView, handlers }: AppViewRouterProps) {
       return (
         <LazyView label={label}>
           <LazyKnowledgeCenterPage onAskDocument={handlers.onAskKbDocument} />
+        </LazyView>
+      );
+    case 'cases':
+      // 已并入场景地图；兜底仍渲染样板间
+      return (
+        <LazyView label="案例">
+          <LazyAiMapPage
+            onInvokeAgent={handlers.onInvokeAgent}
+            onInvokeSkill={handlers.onInvokeSkill}
+            onAskKbDocument={handlers.onAskKbDocument}
+          />
         </LazyView>
       );
     case 'automation':
@@ -153,12 +180,19 @@ export function AppViewRouter({ appView, handlers }: AppViewRouterProps) {
           <LazyWorkspaceConfigPage />
         </LazyView>
       );
+    case 'portal-ops':
+      return (
+        <LazyView label={label}>
+          <LazyPortalContentOpsPage />
+        </LazyView>
+      );
     default:
       return (
         <HomePage
           onSubmitTask={handlers.onSubmitTask}
           onInvokeAgent={handlers.onInvokeAgent}
           onInvokeSkill={handlers.onInvokeSkill}
+          onAskKbDocument={handlers.onAskKbDocument}
         />
       );
   }

@@ -76,7 +76,7 @@ export function SettingsDrawer() {
 
           <div>
 
-            <h2 className="text-[15px] font-semibold text-[#1d1d1f]">系统设置</h2>
+            <h2 className="text-[15px] font-semibold text-[#1d1d1f]">偏好设置</h2>
 
             <p className="text-[11px] text-[#86868b]">成员 · 安全 · Runtime</p>
 

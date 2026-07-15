@@ -134,7 +134,7 @@ function SessionItem({
             <span className="block truncate text-[13px] font-semibold text-[#1d1d1f]">{chat.title}</span>
           )}
           <span className="block truncate text-[10px] text-[#86868b]">
-            {chat.badge ?? (chat.type === 'group' ? 'WarRoom' : 'Agent')}
+            {chat.badge ?? (chat.type === 'group' || chat.sessionGroup === 'pinned' ? '协作室' : 'Agent')}
           </span>
         </div>
       </button>
@@ -214,7 +214,7 @@ export function TaskListPanel({
               type="button"
               onClick={onCreate}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-claw-600 text-white shadow-sm shadow-black/10 transition hover:bg-zinc-700"
-              title="新建 WarRoom 或 Agent 任务"
+              title="新建协作室或 Agent 任务"
             >
               <i className="fa-solid fa-plus text-xs" />
             </button>
@@ -235,7 +235,7 @@ export function TaskListPanel({
               type="text"
               value={sessionSearch}
               onChange={(e) => setSessionSearch(e.target.value)}
-              placeholder="搜索 Agent、任务或消息…"
+              placeholder="搜索任务标题、状态…"
               className="w-full rounded-xl border border-black/8 bg-[#fafafa] py-2 pl-9 pr-3 text-[13px] text-[#1d1d1f] placeholder:text-[#aeaeb2] focus:border-zinc-900/30 focus:outline-none focus:ring-2 focus:ring-zinc-900/15"
             />
           </div>
@@ -245,7 +245,7 @@ export function TaskListPanel({
           <div className={cn('session-group', sessionGroupsCollapsed.pinned && 'collapsed')}>
             <button type="button" className="session-group-header" onClick={() => toggleSessionGroup('pinned')}>
               <span className="flex items-center gap-2">
-                <span>WarRoom</span>
+                <span>协作室</span>
                 <span className="mono font-normal text-[#aeaeb2]">{pinned.length}</span>
               </span>
               <i className="fa-solid fa-chevron-down session-group-chevron" />
@@ -262,7 +262,7 @@ export function TaskListPanel({
                   />
                 ))
               ) : (
-                <p className="px-4 py-3 text-[11px] text-[#86868b]">暂无 WarRoom · 点击 + 创建</p>
+                <p className="px-4 py-3 text-[11px] text-[#86868b]">暂无协作室 · 点击 + 创建</p>
               )}
             </div>
           </div>

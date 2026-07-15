@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { CenterPageHeader } from '@/components/center/CenterShell';
 import { isSystemAdmin } from '@/domain/currentUser';
+import { HQ_DEPTS, REGIONS } from '@/domain/orgTaxonomy';
+import { ROLE_LABELS } from '@/domain/rbac';
 import { WORKSPACE_LOCALE_LABELS } from '@/domain/workspaceConfig';
 import type { WorkspaceLocale } from '@/domain/workspaceLocale';
 import { useAppViewStore } from '@/stores/appViewStore';
@@ -50,8 +52,8 @@ export function WorkspaceConfigPage() {
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-500">
             <i className="fa-solid fa-lock text-xl" />
           </div>
-          <h2 className="text-lg font-semibold text-zinc-900">无权访问租户配置</h2>
-          <p className="mt-2 text-[13px] text-zinc-500">仅系统管理员（Super Admin）可添加、删除与管理租户。</p>
+          <h2 className="text-lg font-semibold text-zinc-900">无权访问组织与租户</h2>
+          <p className="mt-2 text-[13px] text-zinc-500">仅系统管理员（Super Admin）可添加、删除与管理租户及组织架构。</p>
           <button
             type="button"
             onClick={() => setAppView('home')}
@@ -96,8 +98,8 @@ export function WorkspaceConfigPage() {
     <div className="center-surface center-page scroll-hidden flex-1 overflow-y-auto">
       <div className="mx-auto max-w-3xl">
         <CenterPageHeader
-          title="租户配置"
-          subtitle="管理系统租户：添加、删除、显示名称、语言与顶栏可见性（仅系统管理员）"
+          title="组织与租户"
+          subtitle="租户生命周期 · 组织双轴（部门 × 区域）· 语言与顶栏可见性"
           actions={
             <div className="flex flex-wrap gap-2">
               <button
@@ -199,6 +201,62 @@ export function WorkspaceConfigPage() {
             自定义租户可删除；内置租户仅可隐藏。隐藏后不会出现在顶栏下拉。
           </p>
         </div>
+
+        <section className="mb-5">
+          <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+            组织架构（部门 × 区域）
+          </h3>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="apple-card p-4">
+              <p className="mb-2 text-[12px] font-semibold text-zinc-800">机关部门</p>
+              <div className="flex flex-wrap gap-1.5">
+                {HQ_DEPTS.map((d) => (
+                  <span
+                    key={d.id}
+                    className="rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-medium text-zinc-700"
+                  >
+                    {d.label}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-2 text-[10px] text-zinc-400">
+                与「组织权限」共用同一套部门字典；成员归属影响场景推荐与资产可见性。
+              </p>
+            </div>
+            <div className="apple-card p-4">
+              <p className="mb-2 text-[12px] font-semibold text-zinc-800">一线区域</p>
+              <div className="flex flex-wrap gap-1.5">
+                {REGIONS.map((r) => (
+                  <span
+                    key={r.id}
+                    className="rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-medium text-zinc-700"
+                  >
+                    {r.label}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-2 text-[10px] text-zinc-400">
+                区域与租户解耦：区域是标签轴，不单独成租户。
+              </p>
+            </div>
+          </div>
+          <div className="apple-card mt-3 p-4">
+            <p className="mb-2 text-[12px] font-semibold text-zinc-800">平台角色</p>
+            <div className="flex flex-wrap gap-1.5">
+              {(Object.keys(ROLE_LABELS) as (keyof typeof ROLE_LABELS)[]).map((role) => (
+                <span
+                  key={role}
+                  className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-700"
+                >
+                  {ROLE_LABELS[role]}
+                </span>
+              ))}
+            </div>
+            <p className="mt-2 text-[10px] text-zinc-400">
+              角色在「组织权限」中配置；此处展示租户可挂载的角色全集。
+            </p>
+          </div>
+        </section>
 
         <section className="mb-5">
           <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">默认租户</h3>

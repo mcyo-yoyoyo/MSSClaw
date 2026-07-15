@@ -105,7 +105,7 @@ export function LoginPage() {
                   'rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-[11px] text-zinc-600 transition',
                   'hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900',
                 )}
-                title={hint.email}
+                title={hint.orgLabel ? `${hint.email} · ${hint.orgLabel}` : hint.email}
               >
                 {hint.name}
                 <span className="ml-1 text-zinc-400">· {ROLE_LABELS[hint.role]}</span>

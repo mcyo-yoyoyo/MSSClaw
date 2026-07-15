@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CenterPageHeader, LearningCallout } from '@/components/center/CenterShell';
+import { CenterPageHeader } from '@/components/center/CenterShell';
 import { AutomationEditorModal, type AutomationEditorTarget } from '@/components/center/AutomationEditorModal';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 
@@ -15,8 +15,13 @@ export function AutomationCenterPage({ onRun }: AutomationCenterPageProps) {
     <div className="center-surface center-page scroll-hidden flex-1 overflow-y-auto">
       <div className="mx-auto max-w-4xl">
         <CenterPageHeader
-          title="自动化编排"
+          title="自动化"
           subtitle="定时任务 · 告警触发 · 周报生成 · Workflow 调度"
+          tip={
+            <>
+              每条自动化绑定一个 Agent 与触发规则。启用后点击「立即运行」会跳转到任务中心执行，适合定时周报与告警场景。
+            </>
+          }
           actions={
             <button
               type="button"
@@ -28,11 +33,6 @@ export function AutomationCenterPage({ onRun }: AutomationCenterPageProps) {
             </button>
           }
         />
-
-        <LearningCallout icon="fa-bolt">
-          <strong>快速上手：</strong>
-          每条自动化绑定一个 Agent 与触发规则。启用后点击「立即运行」会跳转到任务中心执行，适合定时周报与告警场景。
-        </LearningCallout>
 
         <div className="space-y-3">
           {automations.map((a) => {

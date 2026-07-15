@@ -1,11 +1,14 @@
 import { create } from 'zustand';
 import {
   getMembersByWorkspace,
+  MEMBER_STATUS_LABELS,
   ROLE_LABELS,
   type PlatformRole,
   type SettingsTab,
   type WorkspaceMember,
 } from '@/domain/rbac';
+import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
+import { DEMO_PASSWORD } from '@/domain/authAccounts';
 
 const MEMBERS_LS_PREFIX = 'mssclaw_members_';
 
@@ -24,6 +27,16 @@ function persistMembers(workspaceId: string, members: WorkspaceMember[]) {
   localStorage.setItem(`${MEMBERS_LS_PREFIX}${workspaceId}`, JSON.stringify(members));
 }
 
+export interface InviteMemberInput {
+  email: string;
+  role: PlatformRole;
+  name?: string;
+  deptIds?: DeptId[];
+  regionId?: RegionId | null;
+  /** 邀请后立即激活，可直接用演示密码登录 */
+  activateNow?: boolean;
+}
+
 interface SettingsState {
   workspaceId: string;
   activeTab: SettingsTab;
@@ -33,13 +46,19 @@ interface SettingsState {
   loadWorkspace: (workspaceId: string) => void;
   setActiveTab: (tab: SettingsTab) => void;
   updateMemberRole: (memberId: string, role: PlatformRole) => void;
-  inviteMember: (email: string, role: PlatformRole) => void;
+  updateMemberOrg: (
+    memberId: string,
+    patch: { deptIds?: DeptId[]; regionId?: RegionId | null },
+  ) => void;
+  setMemberStatus: (memberId: string, status: WorkspaceMember['status']) => void;
+  inviteMember: (input: InviteMemberInput | string, role?: PlatformRole) => void;
+  removeMember: (memberId: string) => void;
   dismissToast: () => void;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   workspaceId: 'ws-3c-latam',
-  activeTab: 'general',
+  activeTab: 'members',
   members: loadMembers('ws-3c-latam'),
   toast: null,
 
@@ -47,7 +66,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({
       workspaceId,
       members: loadMembers(workspaceId),
-      activeTab: 'general',
+      activeTab: 'members',
     });
   },
 
@@ -63,8 +82,40 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     });
   },
 
-  inviteMember: (email, role) => {
-    const trimmed = email.trim();
+  updateMemberOrg: (memberId, patch) => {
+    const members = get().members.map((m) =>
+      m.id === memberId
+        ? {
+            ...m,
+            ...(patch.deptIds !== undefined ? { deptIds: patch.deptIds } : {}),
+            ...(patch.regionId !== undefined ? { regionId: patch.regionId } : {}),
+          }
+        : m,
+    );
+    persistMembers(get().workspaceId, members);
+    set({ members, toast: '成员组织归属已更新' });
+  },
+
+  setMemberStatus: (memberId, status) => {
+    const member = get().members.find((m) => m.id === memberId);
+    const members = get().members.map((m) => (m.id === memberId ? { ...m, status } : m));
+    persistMembers(get().workspaceId, members);
+    const tip =
+      status === 'active' && member
+        ? `已激活 ${member.email}，可用演示密码 ${DEMO_PASSWORD} 登录`
+        : member
+          ? `${member.name} 状态：${MEMBER_STATUS_LABELS[status]}`
+          : '状态已更新';
+    set({ members, toast: tip });
+  },
+
+  inviteMember: (input, roleArg) => {
+    const payload: InviteMemberInput =
+      typeof input === 'string'
+        ? { email: input, role: roleArg ?? 'developer' }
+        : input;
+
+    const trimmed = payload.email.trim();
     if (!trimmed || !trimmed.includes('@')) {
       set({ toast: '请输入有效邮箱' });
       return;
@@ -75,23 +126,40 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     }
 
     const id = `inv_${Date.now()}`;
+    const status: WorkspaceMember['status'] = payload.activateNow ? 'active' : 'invited';
     const members = [
       ...get().members,
       {
         id,
-        name: trimmed.split('@')[0],
+        name: payload.name?.trim() || trimmed.split('@')[0],
         email: trimmed,
-        role,
+        role: payload.role,
         avatar: 'bg-slate-500',
-        lastActive: '—',
-        status: 'invited' as const,
+        lastActive: status === 'active' ? '刚刚' : '—',
+        status,
+        deptIds: payload.deptIds ?? [],
+        regionId: payload.regionId ?? null,
       },
     ];
     persistMembers(get().workspaceId, members);
     set({
       members,
-      toast: `邀请已发送至 ${trimmed}`,
+      toast: payload.activateNow
+        ? `已邀请并激活 ${trimmed}，可用密码 ${DEMO_PASSWORD} 登录`
+        : `邀请已发送至 ${trimmed}（待管理员激活后方可登录）`,
     });
+  },
+
+  removeMember: (memberId) => {
+    const member = get().members.find((m) => m.id === memberId);
+    if (!member) return;
+    if (member.email.toLowerCase() === 'mcyo@company.com') {
+      set({ toast: '不能移除演示超级管理员账号' });
+      return;
+    }
+    const members = get().members.filter((m) => m.id !== memberId);
+    persistMembers(get().workspaceId, members);
+    set({ members, toast: `已移除成员 ${member.name}` });
   },
 
   dismissToast: () => set({ toast: null }),

@@ -27,7 +27,7 @@ export function PromptListPanel({
 }: PromptListPanelProps) {
   return (
     <aside className="studio-list-panel w-wide">
-      <StudioListPanelHeader title="Prompt 中心" subtitle="草稿 → 评审 → 发布" />
+      <StudioListPanelHeader title="提示词" subtitle="草稿 → 评审 → 发布" />
 
       <div className="border-b border-black/[0.05] px-3 py-3">
         <div className="flex flex-wrap gap-1.5">

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 interface CenterModalProps {
@@ -39,17 +39,52 @@ interface CenterPageHeaderProps {
   title: string;
   subtitle: string;
   actions?: ReactNode;
+  /** 标题旁的快速上手提示（悬停/点击展开） */
+  tip?: ReactNode;
 }
 
-export function CenterPageHeader({ title, subtitle, actions }: CenterPageHeaderProps) {
+export function CenterPageHeader({ title, subtitle, actions, tip }: CenterPageHeaderProps) {
   return (
     <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-end">
       <div className="max-w-2xl">
         <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400">MSS Claw</p>
-        <h2 className="text-[20px] font-semibold tracking-tight text-zinc-900 md:text-[22px]">{title}</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-[20px] font-semibold tracking-tight text-zinc-900 md:text-[22px]">{title}</h2>
+          {tip ? <HeaderQuickTip>{tip}</HeaderQuickTip> : null}
+        </div>
         <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">{subtitle}</p>
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+    </div>
+  );
+}
+
+function HeaderQuickTip({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative inline-flex items-center">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        className={cn(
+          'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition',
+          open
+            ? 'border-claw-600/30 bg-claw-50 text-claw-700'
+            : 'border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300 hover:text-zinc-800',
+        )}
+        aria-expanded={open}
+        aria-label="快速上手"
+      >
+        <i className="fa-solid fa-lightbulb text-[9px]" />
+        快速上手
+      </button>
+      {open ? (
+        <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-[min(320px,80vw)] rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-[11px] leading-relaxed text-zinc-600 shadow-lg">
+          <p className="mb-1 text-[10px] font-semibold tracking-wide text-zinc-400">快速上手</p>
+          <div className="learning-callout-inline">{children}</div>
+        </div>
+      ) : null}
     </div>
   );
 }

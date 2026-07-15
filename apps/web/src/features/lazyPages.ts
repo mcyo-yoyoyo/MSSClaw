@@ -13,8 +13,16 @@ export const LazySkillCenterPage = lazy(() =>
   import('@/features/skill/SkillCenterPage').then((m) => ({ default: m.SkillCenterPage })),
 );
 
+export const LazyAiMapPage = lazy(() =>
+  import('@/features/ai-map/AiMapPage').then((m) => ({ default: m.AiMapPage })),
+);
+
 export const LazyKnowledgeCenterPage = lazy(() =>
   import('@/features/knowledge/KnowledgeCenterPage').then((m) => ({ default: m.KnowledgeCenterPage })),
+);
+
+export const LazyCaseLibraryPage = lazy(() =>
+  import('@/features/cases/CaseLibraryPage').then((m) => ({ default: m.CaseLibraryPage })),
 );
 
 export const LazyAutomationCenterPage = lazy(() =>
@@ -30,7 +38,7 @@ export const LazyWorkflowStudioPage = lazy(() =>
 );
 
 export const LazyToolCenterPage = lazy(() =>
-  import('@/features/_legacy/tool/ToolCenterPage').then((m) => ({ default: m.ToolCenterPage })),
+  import('@/features/tool/ToolCenterPage').then((m) => ({ default: m.ToolCenterPage })),
 );
 
 export const LazyMemoryCenterPage = lazy(() =>
@@ -53,6 +61,10 @@ export const LazyWorkspaceConfigPage = lazy(() =>
   import('@/features/workspace/WorkspaceConfigPage').then((m) => ({ default: m.WorkspaceConfigPage })),
 );
 
+export const LazyPortalContentOpsPage = lazy(() =>
+  import('@/features/ops/PortalContentOpsPage').then((m) => ({ default: m.PortalContentOpsPage })),
+);
+
 export const LazyCommandPalette = lazy(() =>
   import('@/components/shell/CommandPalette').then((m) => ({ default: m.CommandPalette })),
 );
@@ -71,13 +83,16 @@ export const ROUTE_PREFETCH: Partial<Record<AppView, () => void>> = {
   agents: () => void import('@/features/agent/AgentCenterPage'),
   'agent-studio': () => void import('@/features/_legacy/agent/AgentStudioPage'),
   skills: () => void import('@/features/skill/SkillCenterPage'),
+  'ai-map': () => void import('@/features/ai-map/AiMapPage'),
   kb: () => void import('@/features/knowledge/KnowledgeCenterPage'),
+  cases: () => void import('@/features/cases/CaseLibraryPage'),
   automation: () => void import('@/features/automation/AutomationCenterPage'),
   workflow: () => void import('@/features/_legacy/workflow/WorkflowStudioPage'),
-  tools: () => void import('@/features/_legacy/tool/ToolCenterPage'),
+  tools: () => void import('@/features/tool/ToolCenterPage'),
   memory: () => void import('@/features/_legacy/memory/MemoryCenterPage'),
   prompts: () => void import('@/features/_legacy/prompt/PromptCenterPage'),
   admin: () => void import('@/features/_legacy/settings/SettingsPage'),
   presentation: () => void import('@/features/presentation/PresentationConfigPage'),
   'workspace-config': () => void import('@/features/workspace/WorkspaceConfigPage'),
+  'portal-ops': () => void import('@/features/ops/PortalContentOpsPage'),
 };

@@ -1,5 +1,9 @@
 import { Body, Controller, Get, Param, Put } from '@nestjs/common';
-import { PersistenceService, type MarketplacePayload } from './persistence.service';
+import {
+  PersistenceService,
+  type MarketplacePayload,
+  type PortalContentPayload,
+} from './persistence.service';
 
 @Controller('workspaces/:workspaceId')
 export class PersistenceController {
@@ -26,5 +30,18 @@ export class PersistenceController {
   @Put('marketplace')
   putMarketplace(@Param('workspaceId') workspaceId: string, @Body() body: MarketplacePayload) {
     return this.persistence.putMarketplace(workspaceId, body);
+  }
+
+  @Get('portal-content')
+  getPortalContent(@Param('workspaceId') workspaceId: string) {
+    return this.persistence.getPortalContent(workspaceId);
+  }
+
+  @Put('portal-content')
+  putPortalContent(
+    @Param('workspaceId') workspaceId: string,
+    @Body() body: PortalContentPayload,
+  ) {
+    return this.persistence.putPortalContent(workspaceId, body ?? { items: [] });
   }
 }

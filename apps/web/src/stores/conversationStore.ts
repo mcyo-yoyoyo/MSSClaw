@@ -56,6 +56,9 @@ interface ConversationState {
   sandboxReady: boolean;
   sandboxType: 'marketing' | 'knowledge' | null;
   sandboxQuery: string;
+  sandboxAgentName: string;
+  sandboxSkills: string[];
+  sandboxAgentReply: string;
   executionSteps: ExecutionStep[];
   totalLatency: string;
   exportOpen: boolean;
@@ -103,6 +106,8 @@ interface ConversationState {
   deleteTaskSession: (chatId: string) => boolean;
   renameTaskSession: (chatId: string, title: string) => boolean;
   runTaskExample: (type: 'marketing' | 'knowledge' | 'warroom') => void;
+  dismissChatPrompt: (prompt: string) => void;
+  dismissAllChatPrompts: () => void;
 }
 
 function resetSandboxState() {
@@ -110,6 +115,9 @@ function resetSandboxState() {
     sandboxReady: false,
     sandboxType: null as 'marketing' | 'knowledge' | null,
     sandboxQuery: '',
+    sandboxAgentName: '',
+    sandboxSkills: [] as string[],
+    sandboxAgentReply: '',
     executionSteps: [] as ExecutionStep[],
     totalLatency: '0.00s',
     kbArtifact: null as KbArtifact | null,
@@ -236,6 +244,13 @@ async function runApprovedPipeline(get: () => ConversationState, set: (partial: 
         );
         if (event.followUp) history = [...history, event.followUp];
 
+        const lastAgent = [...history].reverse().find((m) => m.role === 'agent' && m.text?.trim());
+        const planMsg = [...history].reverse().find((m) => m.role === 'plan');
+        const skills =
+          planMsg?.mountedSkills?.length
+            ? planMsg.mountedSkills
+            : getSkillLabels(pipeline.agentId ?? c.agentId);
+
         return {
           isAgentTyping: false,
           streamStatus: null,
@@ -243,6 +258,9 @@ async function runApprovedPipeline(get: () => ConversationState, set: (partial: 
           sandboxReady: true,
           sandboxType: agentTypeResult,
           sandboxQuery: pipeline.text,
+          sandboxAgentName: event.agentName || pipeline.targetAgent,
+          sandboxSkills: skills,
+          sandboxAgentReply: lastAgent?.text ?? '',
           executionSteps: event.steps,
           totalLatency: event.totalTime,
           kbArtifact: agentTypeResult === 'knowledge' ? state.kbArtifact : null,
@@ -602,6 +620,35 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
   dismissToast: () => set({ pushToast: null }),
 
+  dismissChatPrompt: (prompt) => {
+    const { chats, currentChatId } = get();
+    const chat = chats[currentChatId];
+    if (!chat) return;
+    set({
+      chats: {
+        ...chats,
+        [currentChatId]: {
+          ...chat,
+          prompts: chat.prompts.filter((p) => p !== prompt),
+        },
+      },
+    });
+    schedulePersistFromState(get);
+  },
+
+  dismissAllChatPrompts: () => {
+    const { chats, currentChatId } = get();
+    const chat = chats[currentChatId];
+    if (!chat || !chat.prompts.length) return;
+    set({
+      chats: {
+        ...chats,
+        [currentChatId]: { ...chat, prompts: [] },
+      },
+    });
+    schedulePersistFromState(get);
+  },
+
   createAgentTaskSession: ({
     title,
     agentName,
@@ -635,9 +682,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
             : `任务「${title}」已创建。请 @ Agent 或 / 调用 Skill，确认计划后执行。`,
         },
       ],
-      prompts: agentName
-        ? [`继续完善「${title}」`, `@${agentName} 执行并生成交付物`]
-        : ['@数据分析 Agent 分析代表处 SO 排名，/数据分析', '生成会议纪要并推送 WeCom，/会议纪要'],
+      prompts: [],
     };
 
     if (agentId) set({ activeAgentId: agentId });

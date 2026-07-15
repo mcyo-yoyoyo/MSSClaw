@@ -3,6 +3,13 @@ import {
   type PlatformRole,
   type WorkspaceMember,
 } from '@/domain/rbac';
+import {
+  formatOrgAffiliation,
+  normalizeOrgAffiliation,
+  type DeptId,
+  type OrgAffiliation,
+  type RegionId,
+} from '@/domain/orgTaxonomy';
 
 /** 演示环境统一密码（对接成员权限管理账号） */
 export const DEMO_PASSWORD = 'mssclaw';
@@ -16,6 +23,9 @@ export interface LoginAccount {
   status: WorkspaceMember['status'];
   /** 所属工作区（用于提示） */
   workspaceIds: string[];
+  /** 组织归属：机关职能 + 一线区域 */
+  deptIds: DeptId[];
+  regionId: RegionId | null;
 }
 
 const ROLE_RANK: Record<PlatformRole, number> = {
@@ -28,6 +38,23 @@ const ROLE_RANK: Record<PlatformRole, number> = {
 
 /** 平台级超级管理员邮箱（可管理租户配置） */
 const SUPER_ADMIN_EMAILS = new Set(['mcyo@company.com']);
+
+function mergeAffiliation(
+  existing: OrgAffiliation,
+  incoming: OrgAffiliation,
+): OrgAffiliation {
+  return normalizeOrgAffiliation({
+    deptIds: [...existing.deptIds, ...incoming.deptIds],
+    regionId: existing.regionId ?? incoming.regionId,
+  });
+}
+
+function memberAffiliation(member: WorkspaceMember): OrgAffiliation {
+  return normalizeOrgAffiliation({
+    deptIds: (member.deptIds as DeptId[] | undefined) ?? [],
+    regionId: (member.regionId as RegionId | null | undefined) ?? null,
+  });
+}
 
 function loadPersistedMembers(): WorkspaceMember[] {
   const out: WorkspaceMember[] = [];
@@ -63,6 +90,7 @@ export function buildLoginAccounts(): LoginAccount[] {
     const platformRole: PlatformRole = SUPER_ADMIN_EMAILS.has(email)
       ? 'super_admin'
       : member.role;
+    const aff = memberAffiliation(member);
 
     const existing = byEmail.get(email);
     if (!existing) {
@@ -74,11 +102,13 @@ export function buildLoginAccounts(): LoginAccount[] {
         avatar: member.avatar,
         status: member.status,
         workspaceIds: workspaceId ? [workspaceId] : [],
+        deptIds: aff.deptIds,
+        regionId: aff.regionId ?? null,
       });
       return;
     }
 
-    // 合并：优先 active；角色取更高权限；保留主 id（latam m1 优先）
+    // 合并：优先 active；角色取更高权限；归属取并集
     if (member.status === 'active' && existing.status !== 'active') {
       existing.status = 'active';
     }
@@ -88,6 +118,13 @@ export function buildLoginAccounts(): LoginAccount[] {
     if (workspaceId && !existing.workspaceIds.includes(workspaceId)) {
       existing.workspaceIds.push(workspaceId);
     }
+    const merged = mergeAffiliation(
+      { deptIds: existing.deptIds, regionId: existing.regionId },
+      aff,
+    );
+    existing.deptIds = merged.deptIds;
+    existing.regionId = merged.regionId ?? null;
+
     // 默认工作区成员 id 优先（m1 而非 g2）
     if (workspaceId === 'ws-3c-latam') {
       existing.id = member.id;
@@ -130,9 +167,23 @@ export function authenticate(emailInput: string, password: string): AuthResult {
 }
 
 /** 登录页展示的演示账号提示 */
-export function getDemoAccountHints(): { email: string; name: string; role: PlatformRole }[] {
+export function getDemoAccountHints(): {
+  email: string;
+  name: string;
+  role: PlatformRole;
+  orgLabel?: string;
+}[] {
   return buildLoginAccounts()
     .filter((a) => a.status === 'active')
     .slice(0, 4)
-    .map((a) => ({ email: a.email, name: a.name, role: a.platformRole }));
+    .map((a) => ({
+      email: a.email,
+      name: a.name,
+      role: a.platformRole,
+      orgLabel: formatAccountOrg(a),
+    }));
+}
+
+function formatAccountOrg(a: LoginAccount): string {
+  return formatOrgAffiliation({ deptIds: a.deptIds, regionId: a.regionId });
 }

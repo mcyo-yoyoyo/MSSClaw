@@ -1,46 +1,91 @@
 import { create } from 'zustand';
 import {
   DEFAULT_LLM_CONFIG,
+  DEFAULT_LLM_MODELS,
   isLlmConfigComplete,
-  LLM_PROVIDERS,
+  resolveModelMeta,
+  type CustomLlmModel,
   type LlmConfig,
-  type LlmProviderId,
 } from '@/domain/llmConfig';
 
 const LS_PREFIX = 'mssclaw_llm_';
 
+function loadCustomModels(): CustomLlmModel[] {
+  try {
+    const raw = localStorage.getItem(`${LS_PREFIX}custom_models`);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (m): m is CustomLlmModel =>
+        !!m && typeof m === 'object' && typeof (m as CustomLlmModel).id === 'string',
+    );
+  } catch {
+    return [];
+  }
+}
+
+function migrateLegacyModel(model: string): string {
+  const legacy: Record<string, string> = {
+    'gpt-4o': 'GLM-5.1',
+    'gpt-4o-mini': 'GLM-5.1',
+    'gpt-4-turbo': 'GLM-5.1',
+    'deepseek-chat': 'DeepSeek-V4',
+    'deepseek-reasoner': 'DeepSeek-V4',
+    'qwen-plus': 'Qwen-3.7',
+    'qwen-max': 'Qwen-3.7',
+    'qwen-turbo': 'Qwen-3.7',
+  };
+  return legacy[model] ?? model;
+}
+
 function loadConfig(): LlmConfig {
-  const provider = (localStorage.getItem(`${LS_PREFIX}provider`) || DEFAULT_LLM_CONFIG.provider) as LlmProviderId;
-  const preset = LLM_PROVIDERS[provider] ?? LLM_PROVIDERS.openai;
+  const customModels = loadCustomModels();
+  const rawModel = localStorage.getItem(`${LS_PREFIX}model`) || DEFAULT_LLM_CONFIG.model;
+  const model = migrateLegacyModel(rawModel);
+  const meta = resolveModelMeta({ model, customModels });
+  const storedUrl = localStorage.getItem(`${LS_PREFIX}base_url`);
   return {
-    provider,
-    baseUrl: localStorage.getItem(`${LS_PREFIX}base_url`) || preset.baseUrl || DEFAULT_LLM_CONFIG.baseUrl,
+    model,
+    baseUrl: storedUrl || meta.baseUrl || DEFAULT_LLM_CONFIG.baseUrl,
     apiKey: localStorage.getItem(`${LS_PREFIX}api_key`) || '',
-    model: localStorage.getItem(`${LS_PREFIX}model`) || preset.models[0] || DEFAULT_LLM_CONFIG.model,
+    customModels,
   };
 }
 
 function persistConfig(cfg: Partial<LlmConfig>) {
-  if (cfg.provider != null) localStorage.setItem(`${LS_PREFIX}provider`, cfg.provider);
   if (cfg.baseUrl != null) localStorage.setItem(`${LS_PREFIX}base_url`, cfg.baseUrl);
   if (cfg.apiKey != null) localStorage.setItem(`${LS_PREFIX}api_key`, cfg.apiKey);
   if (cfg.model != null) localStorage.setItem(`${LS_PREFIX}model`, cfg.model);
+  if (cfg.customModels != null) {
+    localStorage.setItem(`${LS_PREFIX}custom_models`, JSON.stringify(cfg.customModels));
+  }
+}
+
+export interface ModelOption {
+  id: string;
+  label: string;
+  group: 'default' | 'custom';
 }
 
 interface LlmConfigState {
   config: LlmConfig;
   settingsOpen: boolean;
   saveConfig: (patch: Partial<LlmConfig>) => void;
-  setProvider: (provider: LlmProviderId) => void;
-  openSettings: () => void;
+  selectModel: (modelId: string) => void;
+  addCustomModel: (model: CustomLlmModel) => void;
+  removeCustomModel: (modelId: string) => void;
+  openSettings: (opts?: { focusAdd?: boolean }) => void;
   closeSettings: () => void;
-  modelOptions: () => string[];
+  settingsFocusAdd: boolean;
+  modelOptions: () => ModelOption[];
   statusLabel: () => { text: string; configured: boolean };
 }
 
 export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
   config: loadConfig(),
   settingsOpen: false,
+  settingsFocusAdd: false,
 
   saveConfig: (patch) => {
     const next = { ...get().config, ...patch };
@@ -48,31 +93,77 @@ export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
     set({ config: next });
   },
 
-  setProvider: (provider) => {
-    const preset = LLM_PROVIDERS[provider] ?? LLM_PROVIDERS.openai;
+  selectModel: (modelId) => {
+    if (modelId === '__configure__') {
+      get().openSettings();
+      return;
+    }
+    const { config } = get();
+    const meta = resolveModelMeta({ model: modelId, customModels: config.customModels });
     get().saveConfig({
-      provider,
-      baseUrl: preset.baseUrl || get().config.baseUrl,
-      model: preset.models[0] || get().config.model,
+      model: modelId,
+      baseUrl: meta.baseUrl || config.baseUrl,
     });
   },
 
-  openSettings: () => set({ settingsOpen: true }),
-  closeSettings: () => set({ settingsOpen: false }),
+  addCustomModel: (model) => {
+    const id = model.id.trim();
+    if (!id) return;
+    const { config } = get();
+    const nextList = [
+      ...config.customModels.filter((m) => m.id !== id),
+      { id, label: model.label.trim() || id, baseUrl: model.baseUrl.trim() },
+    ];
+    get().saveConfig({
+      customModels: nextList,
+      model: id,
+      baseUrl: model.baseUrl.trim() || config.baseUrl,
+    });
+  },
+
+  removeCustomModel: (modelId) => {
+    const { config } = get();
+    const nextList = config.customModels.filter((m) => m.id !== modelId);
+    const nextModel =
+      config.model === modelId ? DEFAULT_LLM_MODELS[0].id : config.model;
+    const meta = resolveModelMeta({ model: nextModel, customModels: nextList });
+    get().saveConfig({
+      customModels: nextList,
+      model: nextModel,
+      baseUrl: meta.baseUrl || config.baseUrl,
+    });
+  },
+
+  openSettings: (opts) => set({ settingsOpen: true, settingsFocusAdd: Boolean(opts?.focusAdd) }),
+  closeSettings: () => set({ settingsOpen: false, settingsFocusAdd: false }),
 
   modelOptions: () => {
     const { config } = get();
-    const preset = LLM_PROVIDERS[config.provider] ?? LLM_PROVIDERS.openai;
-    const models = preset.models.length ? [...preset.models] : [config.model];
-    return models.includes(config.model) ? models : [config.model, ...models];
+    const defaults: ModelOption[] = DEFAULT_LLM_MODELS.map((m) => ({
+      id: m.id,
+      label: m.label,
+      group: 'default',
+    }));
+    const customs: ModelOption[] = config.customModels.map((m) => ({
+      id: m.id,
+      label: m.label || m.id,
+      group: 'custom',
+    }));
+    // 当前模型若不在列表中，补一条
+    const known = new Set([...defaults, ...customs].map((m) => m.id));
+    const orphan: ModelOption[] =
+      config.model && !known.has(config.model)
+        ? [{ id: config.model, label: config.model, group: 'custom' }]
+        : [];
+    return [...defaults, ...customs, ...orphan];
   },
 
   statusLabel: () => {
     const { config } = get();
-    const providerName = LLM_PROVIDERS[config.provider]?.name || config.provider;
+    const meta = resolveModelMeta(config);
     if (isLlmConfigComplete(config)) {
-      return { text: `${providerName} · ${config.model} · 已接入 Plan/Execute`, configured: true };
+      return { text: `${meta.label} · 已接入 Plan/Execute`, configured: true };
     }
-    return { text: `${providerName} · 未配置 API Key · 本地 Mock`, configured: false };
+    return { text: `${meta.label} · 未配置 API Key · 本地 Mock`, configured: false };
   },
 }));

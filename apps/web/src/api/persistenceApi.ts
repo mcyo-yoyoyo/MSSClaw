@@ -1,5 +1,6 @@
 import type { ChatConfig } from '@/domain/chat';
 import type { MarketplaceSnapshot } from '@/domain/persistence/storage';
+import type { PortalContentItem } from '@/domain/prototype/portalContent';
 import { apiUrl, isApiEnabled } from '@/api/client';
 
 export async function fetchApiHealth(): Promise<boolean> {
@@ -47,6 +48,31 @@ export async function saveMarketplaceApi(
   snapshot: MarketplaceSnapshot,
 ): Promise<void> {
   const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/marketplace`), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(snapshot),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+export async function fetchPortalContentApi(
+  workspaceId: string,
+): Promise<{ items: PortalContentItem[] } | null> {
+  const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/portal-content`));
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const payload = await res.json();
+  if (payload == null) return null;
+  if (typeof payload === 'object' && Array.isArray((payload as { items?: unknown }).items)) {
+    return payload as { items: PortalContentItem[] };
+  }
+  return null;
+}
+
+export async function savePortalContentApi(
+  workspaceId: string,
+  snapshot: { items: PortalContentItem[] },
+): Promise<void> {
+  const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/portal-content`), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(snapshot),

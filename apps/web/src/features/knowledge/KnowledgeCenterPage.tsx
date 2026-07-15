@@ -16,17 +16,19 @@ import {
 
   CenterSearchInput,
 
-  LearningCallout,
-
   StatCardGrid,
 
 } from '@/components/center/CenterShell';
 
 import { KbDocumentEditorModal } from '@/components/center/KbDocumentEditorModal';
+import { DocumentPreviewPanel } from '@/components/center/DocumentPreviewPanel';
+import { OrgAssetFilterBar } from '@/components/center/OrgAssetFilters';
 
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
+import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 import { fetchKbVectorStatus, type KbVectorStatus } from '@/api/kbClient';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 
 
 
@@ -102,6 +104,18 @@ export function KnowledgeCenterPage({ onAskDocument }: KnowledgeCenterPageProps)
 
     setKbSearch,
 
+    kbDeptFilter,
+
+    kbRegionFilter,
+
+    kbEfficiencyFilter,
+
+    setKbDeptFilter,
+
+    setKbRegionFilter,
+
+    setKbEfficiencyFilter,
+
     filteredKbDocs,
 
     uploadKbFile,
@@ -128,7 +142,24 @@ export function KnowledgeCenterPage({ onAskDocument }: KnowledgeCenterPageProps)
 
   const [editorTarget, setEditorTarget] = useState<string | null>(null);
 
+  const consumeKbDocId = useNavigationIntentStore((s) => s.consumeKbDocId);
+  const pendingKbDocId = useNavigationIntentStore((s) => s.pendingKbDocId);
+
   const docs = filteredKbDocs();
+
+  useEffect(() => {
+    if (!pendingKbDocId) return;
+    const id = consumeKbDocId();
+    if (!id) return;
+    const found = kbDocs.find((d) => d.id === id);
+    if (!found) {
+      showToast(`未找到知识文档：${id}`);
+      return;
+    }
+    setKbSearch('');
+    setKbFilter(found.collection);
+    setPreview(found);
+  }, [pendingKbDocId, kbDocs, consumeKbDocId, setKbFilter, setKbSearch, showToast]);
 
 
 
@@ -162,14 +193,18 @@ export function KnowledgeCenterPage({ onAskDocument }: KnowledgeCenterPageProps)
 
 
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-
-    if (file) void uploadKbFile(file);
-
     e.target.value = '';
-
+    if (!file) return;
+    const docId = await uploadKbFile(file);
+    if (!docId) return;
+    const doc = useMarketplaceStore.getState().kbDocs.find((d) => d.id === docId);
+    useAssetApprovalStore.getState().openApproval({
+      kind: 'kb',
+      assetId: docId,
+      assetName: doc?.title || file.name,
+    });
   };
 
 
@@ -201,6 +236,12 @@ export function KnowledgeCenterPage({ onAskDocument }: KnowledgeCenterPageProps)
           title="知识库"
 
           subtitle="企业文档 · RAG 检索 · 引用溯源"
+
+          tip={
+            <>
+              上传文档后 Agent 可在任务中心基于 RAG 检索并引用溯源。向量索引状态显示在页头，支持 Milvus 语义检索。
+            </>
+          }
 
           actions={
 
@@ -268,10 +309,14 @@ export function KnowledgeCenterPage({ onAskDocument }: KnowledgeCenterPageProps)
 
         <StatCardGrid items={stats} />
 
-        <LearningCallout icon="fa-book-open">
-          <strong>快速上手：</strong>
-          上传文档后 Agent 可在任务中心基于 RAG 检索并引用溯源。向量索引状态显示在页头，支持 Milvus 语义检索。
-        </LearningCallout>
+        <OrgAssetFilterBar
+          deptFilter={kbDeptFilter}
+          regionFilter={kbRegionFilter}
+          efficiencyFilter={kbEfficiencyFilter === 'experience' ? 'all' : kbEfficiencyFilter}
+          onDeptChange={setKbDeptFilter}
+          onRegionChange={setKbRegionFilter}
+          onEfficiencyChange={(id) => setKbEfficiencyFilter(id)}
+        />
 
         <div className="flex flex-col gap-4 lg:flex-row">
 
@@ -401,7 +446,7 @@ export function KnowledgeCenterPage({ onAskDocument }: KnowledgeCenterPageProps)
 
                       >
 
-                        预览
+                        在线预览
 
                       </button>
 
@@ -534,43 +579,17 @@ export function KnowledgeCenterPage({ onAskDocument }: KnowledgeCenterPageProps)
       >
 
         {preview && (
-
-          <div className="space-y-3 text-left text-[13px]">
-
-            <div className="flex flex-wrap gap-2">
-
-              {preview.tags.map((t) => (
-
-                <span key={t} className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[10px]">
-
-                  {t}
-
-                </span>
-
-              ))}
-
-            </div>
-
-            <pre className="whitespace-pre-wrap rounded-xl bg-black/[0.03] p-4 text-[12px] leading-relaxed">
-
-              {kbPreview(preview)}
-
-            </pre>
-
-            <div className="grid grid-cols-2 gap-2 text-[11px] text-[#86868b]">
-
-              <span>分区：{getCollectionName(preview.collection)}</span>
-
-              <span>作者：{preview.author}</span>
-
-              <span>类型：{preview.type}</span>
-
-              <span>更新：{preview.updatedAt}</span>
-
-            </div>
-
-          </div>
-
+          <DocumentPreviewPanel
+            meta={{
+              title: preview.title,
+              typeLabel: preview.type,
+              author: preview.author,
+              updatedAt: preview.updatedAt,
+              size: preview.size,
+              pages: preview.pages || Math.max(2, Math.ceil(preview.chunks / 80)),
+              summary: kbPreview(preview),
+            }}
+          />
         )}
 
       </CenterModal>

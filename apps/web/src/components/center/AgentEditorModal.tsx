@@ -12,6 +12,7 @@ import {
 import { getEfficiencyLabel } from '@/domain/prototype/constants';
 import type { EfficiencyCategory, PrototypeAgentSeed } from '@/domain/prototype/types';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
+import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 
 type EditorTarget = string | 'new' | null;
 
@@ -56,7 +57,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
   if (!target) return null;
 
   const isNew = target === 'new';
-  const title = isNew ? '创建 Agent' : '配置 Agent';
+  const title = isNew ? '创建专家' : '配置专家';
 
   const toggleSkill = (skillId: string) => {
     setForm((f) => ({
@@ -75,9 +76,11 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
     }
     const prev = !isNew ? agents.find((a) => a.id === target) : null;
     const category = form.category as EfficiencyCategory;
+    const id = isNew ? `agent-${Date.now()}` : (target as string);
+    const needsApproval = isNew || (form.published && !prev?.published);
     upsertAgent({
       ...form,
-      id: isNew ? `agent-${Date.now()}` : target,
+      id,
       name,
       desc: form.desc.trim(),
       systemPrompt: form.systemPrompt?.trim() || '',
@@ -88,9 +91,19 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
       invokes: prev?.invokes ?? 0,
       icon: prev?.icon ?? 'fa-robot',
       color: prev?.color ?? 'from-[#18181b] to-[#18181b]',
+      published: needsApproval ? false : form.published,
     }, isNew);
-    showToast(form.published ? 'Agent 已发布' : 'Agent 已保存（草稿）');
     onClose();
+    if (needsApproval) {
+      useAssetApprovalStore.getState().openApproval({
+        kind: 'agent',
+        assetId: id,
+        assetName: name,
+      });
+      showToast('专家已保存，已进入上架审批');
+    } else {
+      showToast(form.published ? '专家已保存' : '专家已保存（草稿）');
+    }
   };
 
   return (
@@ -111,10 +124,10 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
             onChange={(e) => setForm({ ...form, desc: e.target.value })}
           />
         </FormField>
-        <FormField label="System Prompt">
+        <FormField label="Persona（人设）">
           <FormTextarea
-            rows={2}
-            placeholder="角色与约束…"
+            rows={3}
+            placeholder="角色定位、约束与回复风格…"
             value={form.systemPrompt ?? ''}
             onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })}
           />
@@ -175,7 +188,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
             checked={form.published}
             onChange={(e) => setForm({ ...form, published: e.target.checked })}
           />
-          <span className="text-[13px]">发布到 Agent 中心</span>
+          <span className="text-[13px]">提交上架审批</span>
         </label>
       </div>
     </CenterModal>

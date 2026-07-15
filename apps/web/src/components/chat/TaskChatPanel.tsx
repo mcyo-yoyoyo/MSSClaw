@@ -1,13 +1,10 @@
 import { useRef, useState } from 'react';
 import type { ChatConfig, ChatMessage } from '@/domain/chat';
 import { isUserCreatedTask, isWarRoom } from '@/domain/chat';
-import { appendAttachmentReference } from '@/lib/attachment';
-import { getSlashQuery } from '@/stores/homeStore';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { PlanMessageCard } from '@/components/chat/PlanMessageCard';
 import { StepMessageRow } from '@/components/chat/StepMessageRow';
-import { HomeSlashMenu } from '@/components/home/HomeSlashMenu';
-import { HomePickerModal } from '@/components/home/HomePickerModal';
+import { SharedComposer } from '@/components/chat/SharedComposer';
 import { cn } from '@/lib/utils';
 import { useConversationStore } from '@/stores/conversationStore';
 
@@ -52,55 +49,12 @@ export function TaskChatPanel({
   aiAllowed = true,
   previewCollapsed = false,
 }: TaskChatPanelProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [slashOpen, setSlashOpen] = useState(false);
-  const [slashMode, setSlashMode] = useState<'/' | '@'>('/');
-  const [picker, setPicker] = useState<'agent' | 'skill' | null>(null);
   const iconBg = chat.iconBg ?? 'bg-gradient-to-br from-[#18181b] to-[#18181b]';
   const canDelete = isUserCreatedTask(chat) && !!onDeleteChat;
   const warroom = isWarRoom(chat);
   const memberCount = chat.members?.length ?? 0;
-
-  const handleDraftInput = (value: string, cursor: number) => {
-    onDraftChange(value);
-    const before = value.slice(0, cursor);
-    if (before.match(/\/[^\s]*$/)) {
-      setSlashMode('/');
-      setSlashOpen(true);
-    } else if (before.match(/@[^\s]*$/)) {
-      setSlashMode('@');
-      setSlashOpen(true);
-    } else {
-      setSlashOpen(false);
-    }
-  };
-
-  const insertSkill = (command: string) => {
-    const val = draft.replace(/\/[^\s]*$/, '').trimEnd();
-    onDraftChange((val ? `${val} ` : '') + command + ' ');
-    setSlashOpen(false);
-    setPicker(null);
-    textareaRef.current?.focus();
-  };
-
-  const insertAgent = (name: string) => {
-    const val = draft.replace(/@[^\s]*$/, '').trimEnd();
-    onDraftChange((val ? `${val} ` : '') + `@${name} `);
-    setSlashOpen(false);
-    setPicker(null);
-    textareaRef.current?.focus();
-  };
-
-  const sendDraft = () => {
-    const trimmed = draft.trim();
-    if (!trimmed || isAgentTyping) return;
-    onSend(trimmed);
-    onDraftChange('');
-    setSlashOpen(false);
-  };
 
   const renderMessage = (message: ChatMessage, index: number) => {
     if (message.role === 'plan') {
@@ -138,18 +92,6 @@ export function TaskChatPanel({
           : 'w-[340px] min-w-[300px] max-w-[380px] shrink-0',
       )}
     >
-      <input
-        ref={fileInputRef}
-        type="file"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (!file) return;
-          onDraftChange(appendAttachmentReference(draft, file.name));
-          useConversationStore.setState({ pushToast: `已添加附件引用：${file.name}` });
-          e.target.value = '';
-        }}
-      />
       <header className="glass-bar flex h-14 shrink-0 items-center justify-between border-b border-black/[0.06] px-5">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className={cn('relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-sm', iconBg)}>
@@ -280,25 +222,52 @@ export function TaskChatPanel({
         </div>
       )}
 
-      {!warroom && chat.prompts.length > 0 && aiAllowed && (
+      {!warroom &&
+        chat.prompts.length > 0 &&
+        aiAllowed &&
+        (chat.id === 'marketing' || chat.id === 'knowledge') && (
         <div className="border-t border-black/[0.06] bg-white/95 px-4 py-3 backdrop-blur">
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2 flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#86868b]">
               <i className="fa-solid fa-bolt text-amber-500" />
               推荐指令
             </span>
+            <button
+              type="button"
+              onClick={() => useConversationStore.getState().dismissAllChatPrompts()}
+              className="rounded px-1.5 py-0.5 text-[10px] text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700"
+              title="关闭全部推荐"
+            >
+              全部关闭
+            </button>
           </div>
           <div className="flex flex-col gap-1.5">
             {chat.prompts.slice(0, 3).map((prompt) => (
-              <button
+              <div
                 key={prompt}
-                type="button"
-                onClick={() => onSend(prompt)}
-                className="prompt-chip line-clamp-1 rounded-lg bg-white px-3 py-2.5 text-left text-[12px] text-[#424245]"
+                className="prompt-chip group flex items-stretch overflow-hidden rounded-lg bg-white"
               >
-                <i className="fa-solid fa-terminal mr-1 text-[10px] text-[#aeaeb2]" />
-                {prompt}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => onSend(prompt)}
+                  className="line-clamp-1 min-w-0 flex-1 px-3 py-2.5 text-left text-[12px] text-[#424245] transition hover:bg-zinc-50"
+                >
+                  <i className="fa-solid fa-terminal mr-1 text-[10px] text-[#aeaeb2]" />
+                  {prompt}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    useConversationStore.getState().dismissChatPrompt(prompt);
+                  }}
+                  className="flex w-8 shrink-0 items-center justify-center border-l border-zinc-100 text-zinc-300 transition hover:bg-zinc-50 hover:text-zinc-600"
+                  title="关闭此推荐"
+                  aria-label="关闭此推荐"
+                >
+                  <i className="fa-solid fa-xmark text-[11px]" />
+                </button>
+              </div>
             ))}
           </div>
         </div>
@@ -320,82 +289,14 @@ export function TaskChatPanel({
             )}
           </div>
         ) : (
-          <>
-            {slashOpen && (
-              <div className="absolute bottom-full left-3 right-3 z-40 mb-1">
-                <HomeSlashMenu
-                  mode={slashMode}
-                  query={getSlashQuery(draft, slashMode)}
-                  onSelectSkill={(skill) => insertSkill(skill.command)}
-                  onSelectAgent={(agent) => insertAgent(agent.name)}
-                  onClose={() => setSlashOpen(false)}
-                />
-              </div>
-            )}
-            <div className="flex items-end gap-1.5 rounded-xl border border-zinc-200 bg-zinc-50 p-1.5 shadow-sm transition-all focus-within:border-zinc-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-zinc-900/10">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="shrink-0 rounded-lg p-2 text-[#86868b] transition hover:bg-black/[0.04] hover:text-claw-600"
-                title="添加附件引用"
-              >
-                <i className="fa-solid fa-paperclip text-base" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setPicker('agent')}
-                className="shrink-0 rounded-lg px-2 py-2 text-[11px] font-semibold text-[#86868b] transition hover:bg-black/[0.04] hover:text-claw-600"
-                title="@ Agent"
-              >
-                @
-              </button>
-              <button
-                type="button"
-                onClick={() => setPicker('skill')}
-                className="shrink-0 rounded-lg px-2 py-2 text-[11px] font-semibold text-[#86868b] transition hover:bg-black/[0.04] hover:text-claw-600"
-                title="/ Skill"
-              >
-                /
-              </button>
-              <textarea
-                ref={textareaRef}
-                rows={1}
-                value={draft}
-                onChange={(e) => handleDraftInput(e.target.value, e.target.selectionStart ?? e.target.value.length)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    setSlashOpen(false);
-                    return;
-                  }
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    sendDraft();
-                  }
-                }}
-                className="max-h-28 w-full resize-none bg-transparent px-1 py-1.5 text-[13px] text-zinc-900 placeholder:text-zinc-400 focus:outline-none"
-                placeholder={warroom ? '本室成员可 @ Agent、/ Skill…' : '描述任务… @ Agent  / Skill'}
-              />
-              <button
-                type="button"
-                onClick={sendDraft}
-                disabled={isAgentTyping}
-                className="apple-btn-primary ml-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white disabled:opacity-50"
-              >
-                <i className="fa-solid fa-arrow-up text-sm" />
-              </button>
-            </div>
-            <p className="mt-2 text-center text-[10px] text-[#86868b]">
-              Enter 发送 · @ 选 Agent · / 调 Skill · 计划确认后执行
-            </p>
-            {picker && (
-              <HomePickerModal
-                type={picker}
-                onClose={() => setPicker(null)}
-                onPickSkill={(skill) => insertSkill(skill.command)}
-                onPickAgent={(agent) => insertAgent(agent.name)}
-              />
-            )}
-          </>
+          <SharedComposer
+            variant="workspace"
+            value={draft}
+            onChange={onDraftChange}
+            onSubmit={onSend}
+            disabled={isAgentTyping}
+            placeholder={warroom ? '本室成员可 @ Agent、/ Skill…' : '继续对话… @ Agent · / Skill'}
+          />
         )}
       </div>
 

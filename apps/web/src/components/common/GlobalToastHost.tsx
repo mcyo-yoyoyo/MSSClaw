@@ -9,6 +9,7 @@ import { useToolStore } from '@/stores/toolStore';
 import { useMemoryStore } from '@/stores/memoryStore';
 import { usePromptStore } from '@/stores/promptStore';
 import { useAgentStore } from '@/stores/agentStore';
+import { usePortalContentStore } from '@/stores/portalContentStore';
 
 /** Isolated toast subscriptions — prevents App shell re-renders on toast updates */
 export function GlobalToastHost() {
@@ -30,6 +31,8 @@ export function GlobalToastHost() {
   const dismissPromptToast = usePromptStore((s) => s.dismissToast);
   const agentToast = useAgentStore((s) => s.toast);
   const dismissAgentToast = useAgentStore((s) => s.dismissToast);
+  const portalToast = usePortalContentStore((s) => s.toast);
+  const dismissPortalToast = usePortalContentStore((s) => s.dismissToast);
 
   const sources = useMemo(
     () => [
@@ -42,6 +45,7 @@ export function GlobalToastHost() {
       { key: 'memory', message: memoryToast, dismiss: dismissMemoryToast },
       { key: 'prompt', message: promptToast, dismiss: dismissPromptToast },
       { key: 'agent', message: agentToast, dismiss: dismissAgentToast },
+      { key: 'portal', message: portalToast, dismiss: dismissPortalToast },
     ],
     [
       pushToast,
@@ -53,6 +57,7 @@ export function GlobalToastHost() {
       memoryToast,
       promptToast,
       agentToast,
+      portalToast,
       dismissToast,
       dismissSwitchToast,
       dismissSettingsToast,
@@ -62,6 +67,7 @@ export function GlobalToastHost() {
       dismissMemoryToast,
       dismissPromptToast,
       dismissAgentToast,
+      dismissPortalToast,
     ],
   );
 

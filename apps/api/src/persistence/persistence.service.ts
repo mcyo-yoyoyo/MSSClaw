@@ -5,8 +5,13 @@ import { PrismaService } from '../prisma/prisma.service';
 export interface MarketplacePayload {
   agents?: unknown[];
   skills?: unknown[];
+  tools?: unknown[];
   automations?: unknown[];
   kbDocs?: unknown[];
+}
+
+export interface PortalContentPayload {
+  items?: unknown[];
 }
 
 @Injectable()
@@ -47,6 +52,31 @@ export class PersistenceService {
         id,
         workspaceId,
         kind: 'marketplace',
+        payload: payload as Prisma.InputJsonValue,
+      },
+      update: {
+        payload: payload as Prisma.InputJsonValue,
+      },
+    });
+    return payload;
+  }
+
+  async getPortalContent(workspaceId: string): Promise<PortalContentPayload | null> {
+    const row = await this.prisma.centerRecord.findFirst({
+      where: { workspaceId, kind: 'portal-content' },
+    });
+    if (!row) return null;
+    return row.payload as PortalContentPayload;
+  }
+
+  async putPortalContent(workspaceId: string, payload: PortalContentPayload) {
+    const id = `portal-content-${workspaceId}`;
+    await this.prisma.centerRecord.upsert({
+      where: { id },
+      create: {
+        id,
+        workspaceId,
+        kind: 'portal-content',
         payload: payload as Prisma.InputJsonValue,
       },
       update: {

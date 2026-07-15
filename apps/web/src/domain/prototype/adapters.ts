@@ -34,7 +34,7 @@ export function prototypeAgentToDomain(seed: PrototypeAgentSeed): Agent {
     icon: seed.icon,
     color: mapPrototypeColor(seed.color),
     persona: seed.systemPrompt ?? `你是 ${seed.name}，服务华为 MSS 营销服智枢平台。`,
-    llm: { model: 'gpt-4o-mini', temperature: 0.2, maxTokens: 4096 },
+    llm: { model: 'GLM-5.1', temperature: 0.2, maxTokens: 4096 },
     bindings: {
       promptId: `prompt-${seed.id}`,
       promptName: `${seed.name.replace(/\s*Agent\s*/i, '')}_BRIEF`,

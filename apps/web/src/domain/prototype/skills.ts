@@ -1,7 +1,8 @@
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
+import { withSkillOwnership } from '@/domain/prototype/skillOwnership';
 
 /** 来源：index.html DEFAULT_SKILLS（Phase1 打样 23 Skill） */
-export const PROTOTYPE_SKILLS: PrototypeSkillSeed[] = [
+const PROTOTYPE_SKILLS_RAW: PrototypeSkillSeed[] = [
   { id: 'skill-data-analysis', name: 'MultiSourceAnalysis', desc: '【办公提效】AI 辅助数据分析 · 多源数据自动分析与可视化', category: 'office', command: '/数据分析', author: '华为 MSS', version: '2.0.0', connector: 'ISRP + Sandbox', published: true, invokes: 18400, icon: 'fa-chart-line', tags: ['数据分析', 'ISRP'] },
   { id: 'skill-doc-gen', name: 'DocDraftGenerator', desc: '【办公提效】AI 辅助文档生成 · 文档初稿自动生成与解读', category: 'office', command: '/文档生成', author: '华为 MSS', version: '1.6.0', connector: 'Doc AI', published: true, invokes: 9100, icon: 'fa-file-lines', tags: ['文档', '初稿'] },
   { id: 'skill-doc-compliance', name: 'DocComplianceChecker', desc: '【办公提效】AI 辅助文档解读 · 营销物料/合同/招投标合规筛查', category: 'office', command: '/合规筛查', author: '华为 MSS', version: '1.4.0', connector: 'Doc AI', published: true, invokes: 6700, icon: 'fa-file-shield', tags: ['合规', '医疗用语'] },
@@ -14,8 +15,8 @@ export const PROTOTYPE_SKILLS: PrototypeSkillSeed[] = [
   { id: 'skill-survey-insight', name: 'SurveyInsightAnalyzer', desc: '【管理提效】洞察部用户问卷调研分析与报告生成', category: 'manage', command: '/问卷洞察', author: '华为 MSS', version: '1.1.0', connector: 'Survey Hub', published: true, invokes: 2100, icon: 'fa-square-poll-vertical', tags: ['问卷', 'MKT'] },
   { id: 'skill-review-cluster', name: 'ReviewClusterAnalysis', desc: '【管理提效】评论分析 · 订单评论多语种聚类分析', category: 'manage', command: '/评论分析', author: '华为 MSS', version: '2.2.0', connector: 'Amazon/Lazada', published: true, invokes: 7600, icon: 'fa-comments', tags: ['评论', '电商'] },
   { id: 'skill-retail-insight', name: 'RetailInsightPi', desc: '【管理提效】零售信息洞察 π · 门店 DOS/转化/陈列报告', category: 'manage', command: '/零售洞察', author: '华为 MSS', version: '1.8.0', connector: 'iRetail', published: true, invokes: 9800, icon: 'fa-store', tags: ['零售', '洞察π'] },
-  { id: 'skill-price-monitor', name: 'PriceOfferMonitor', desc: '【管理提效】价格监测 · 18 国多渠道价格 & offer 监测', category: 'manage', command: '/价格监测', author: '华为 MSS', version: '3.0.1', connector: 'Market Intel', published: true, invokes: 25600, icon: 'fa-tags', tags: ['价格', 'offer'] },
-  { id: 'skill-so-report', name: 'SOReportBuilder', desc: '代表处 SO/SI 排名、环比、IoT 剔除报表', category: 'manage', command: '/so报表', author: '华为 MSS', version: '3.0.1', connector: 'ISRP', published: true, invokes: 14300, icon: 'fa-table', tags: ['SO', '代表处'] },
+  { id: 'skill-price-monitor', name: 'PriceOfferMonitor', desc: '【管理提效】价格监测 · 18 国多渠道价格 & offer 监测', category: 'manage', command: '/价格监测', author: '华为 MSS', version: '3.0.1', connector: 'Market Intel', published: true, invokes: 25600, icon: 'fa-tags', tags: ['价格', 'offer', '价格监测'] },
+  { id: 'skill-so-report', name: 'SOReportBuilder', desc: '代表处 SO/SI 排名、环比、IoT 剔除报表', category: 'manage', command: '/so报表', author: '华为 MSS', version: '3.0.1', connector: 'ISRP', published: true, invokes: 14300, icon: 'fa-table', tags: ['SO', '代表处', '返利'] },
   { id: 'skill-jd-parser', name: 'JDParser', desc: '【流程提效】招聘 JD 结构化解析与胜任力提取', category: 'process', command: '/jd解析', author: '华为 MSS', version: '1.0.2', connector: 'HR Hub', published: true, invokes: 3200, icon: 'fa-briefcase', tags: ['JD', 'HR'] },
   { id: 'skill-resume-screen', name: 'ResumeScreener', desc: '【流程提效】招聘需求简历分析 · AI 简历筛选与人岗匹配', category: 'process', command: '/简历筛选', author: '华为 MSS', version: '1.4.0', connector: 'HR Hub', published: true, invokes: 4100, icon: 'fa-user-check', tags: ['简历', 'HR'] },
   { id: 'skill-interview-analysis', name: 'InterviewAnalyzer', desc: '【流程提效】面试记录分析与评估报告生成', category: 'process', command: '/面试分析', author: '华为 MSS', version: '1.2.0', connector: 'HR Hub', published: true, invokes: 2800, icon: 'fa-user-pen', tags: ['面试', 'HR'] },
@@ -26,3 +27,5 @@ export const PROTOTYPE_SKILLS: PrototypeSkillSeed[] = [
   { id: 'skill-complaint-sop', name: 'ComplaintSOPMatch', desc: '【体验提升】客诉 SOP 检索与话术推荐', category: 'experience', command: '/客诉', author: '华为 MSS', version: '2.2.0', connector: 'CSC Ticket', published: true, invokes: 8300, icon: 'fa-ticket', tags: ['客诉', 'SOP'] },
   { id: 'skill-wecom', name: 'WeComPush', desc: '企业微信消息/卡片/群机器人推送', category: 'experience', command: '/wecom', author: '华为 MSS', version: '2.0.0', connector: 'WeCom API', published: true, invokes: 22100, icon: 'fa-comment-dots', tags: ['WeCom', '推送'] },
 ];
+
+export const PROTOTYPE_SKILLS: PrototypeSkillSeed[] = withSkillOwnership(PROTOTYPE_SKILLS_RAW);

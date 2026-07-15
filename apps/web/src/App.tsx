@@ -2,12 +2,16 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { AppHeader } from '@/components/shell/AppHeader';
 import { AppShellSidebar } from '@/components/shell/AppShellSidebar';
 import { GlobalToastHost } from '@/components/common/GlobalToastHost';
+import { AssetApprovalModal } from '@/components/center/AssetApprovalModal';
 import { OfflineBanner } from '@/components/common/OfflineBanner';
 import { MssZhishuMark } from '@/components/brand/MssZhishuMark';
+import { HomeToTaskTransit } from '@/components/home/HomeToTaskTransit';
 import { useConversationStore } from '@/stores/conversationStore';
 import { useHomeStore } from '@/stores/homeStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
+import { usePortalContentStore } from '@/stores/portalContentStore';
 import { getAgentById } from '@/domain/plan';
+import { enterTaskChatFocusMode } from '@/domain/taskFocusMode';
 import type { PrototypeAgentSeed, PrototypeKbDocument, PrototypeSkillSeed } from '@/domain/prototype/types';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useAppViewStore } from '@/stores/appViewStore';
@@ -27,6 +31,7 @@ import {
 import { useCommandPaletteStore } from '@/stores/commandPaletteStore';
 import { useWorkspaceConfigStore } from '@/stores/workspaceConfigStore';
 import { useSessionStore } from '@/stores/sessionStore';
+import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 
 export function App() {
   const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
@@ -66,7 +71,34 @@ export function App() {
     [workspaceId, workspaceList],
   );
   const hydratedRef = useRef(false);
+  const transitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [workspaceHydrating, setWorkspaceHydrating] = useState(false);
+  const [transit, setTransit] = useState<{ open: boolean; summary: string }>({
+    open: false,
+    summary: '',
+  });
+
+  const goToTaskWithTransit = useCallback(
+    (summary: string) => {
+      if (transitTimerRef.current) clearTimeout(transitTimerRef.current);
+      const preview = summary.trim().length > 48 ? `${summary.trim().slice(0, 48)}…` : summary.trim();
+      setTransit({ open: true, summary: preview });
+      enterTaskChatFocusMode();
+      transitTimerRef.current = setTimeout(() => {
+        setAppView('task');
+        setTransit({ open: false, summary: '' });
+        transitTimerRef.current = null;
+      }, 720);
+    },
+    [setAppView],
+  );
+
+  useEffect(
+    () => () => {
+      if (transitTimerRef.current) clearTimeout(transitTimerRef.current);
+    },
+    [],
+  );
 
   useAppRouting();
   useTaskRouteSync(appView);
@@ -107,6 +139,7 @@ export function App() {
       const defaultChatId = getCatalog(wsId).defaultChatId;
 
       await useMarketplaceStore.getState().bootstrap(wsId);
+      await usePortalContentStore.getState().bootstrap(wsId);
 
       const persisted = await loadSessions(wsId);
       const catalogChats = getCatalog(wsId).chats;
@@ -120,10 +153,12 @@ export function App() {
 
   const reloadAllStores = useCallback((nextWorkspaceId: string) => {
     const defaultChatId = switchWorkspace(nextWorkspaceId);
+    useNavigationIntentStore.getState().clearAll();
     setWorkspaceHydrating(true);
     void (async () => {
       try {
         await useMarketplaceStore.getState().bootstrap(nextWorkspaceId);
+        await usePortalContentStore.getState().bootstrap(nextWorkspaceId);
         const persisted = await loadSessions(nextWorkspaceId);
         const catalog = useWorkspaceStore.getState().getCatalog(nextWorkspaceId);
         const mergedSessions = persisted
@@ -153,6 +188,7 @@ export function App() {
       useConversationStore.setState({ pushToast: '请输入任务描述' });
       return;
     }
+
     const title = trimmed.length > 28 ? `${trimmed.slice(0, 28)}…` : trimmed;
     createAgentTaskSession({
       title,
@@ -161,10 +197,12 @@ export function App() {
       agentId: agent?.id,
       initialMessage: trimmed,
       autoSend: true,
+      switchTo: true,
     });
     useHomeStore.getState().setDraftText('');
-    setAppView('task');
-  }, [createAgentTaskSession, setAppView]);
+    useHomeStore.getState().setHomeMode('assistant');
+    goToTaskWithTransit(trimmed);
+  }, [createAgentTaskSession, goToTaskWithTransit]);
 
   const handleInvokeAgent = useCallback((agent: PrototypeAgentSeed, prompt?: string) => {
     const chatId = findOrCreateAgentSession(agent.id, agent.name, agent.icon);
@@ -174,8 +212,8 @@ export function App() {
       pendingTaskSubmit: { chatId, message, autoSend: Boolean(prompt) },
       ...(!prompt ? { pushToast: `已选择 ${agent.name}` } : {}),
     });
-    setAppView('task');
-  }, [findOrCreateAgentSession, switchChat, setAppView]);
+    goToTaskWithTransit(prompt?.trim() || `调用 ${agent.name}`);
+  }, [findOrCreateAgentSession, switchChat, goToTaskWithTransit]);
 
   const handleInvokeSkill = useCallback((skill: PrototypeSkillSeed) => {
     createAgentTaskSession({
@@ -183,8 +221,8 @@ export function App() {
       initialMessage: `${skill.command} `,
       autoSend: false,
     });
-    setAppView('task');
-  }, [createAgentTaskSession, setAppView]);
+    goToTaskWithTransit(skill.name);
+  }, [createAgentTaskSession, goToTaskWithTransit]);
 
   const handleAskKbDocument = useCallback((doc: PrototypeKbDocument) => {
     const agent = getAgentById('agent-knowledge');
@@ -331,7 +369,9 @@ export function App() {
         </Suspense>
       )}
 
+      <HomeToTaskTransit open={transit.open} summary={transit.summary} />
       <GlobalToastHost />
+      <AssetApprovalModal />
     </div>
   );
 }
