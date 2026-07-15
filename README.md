@@ -4,9 +4,22 @@
 
 ## 在线演示
 
-- 地址：https://mcyo-yoyoyo.github.io/MSSClaw/
+- GitHub Pages：https://mcyo-yoyoyo.github.io/MSSClaw/
+- Vercel：https://mssclaw.vercel.app/（静态托管 `apps/web` 构建产物，与 Pages 同一套 React 应用）
 - 演示账号：`mcyo@company.com` / `mssclaw`（系统管理员）
-- 说明：与本地 `npm run dev` 同一套 React 应用（GitHub Actions 构建 `apps/web`）
+- 说明：与本地 `npm run dev` 同一套 React 应用（GitHub Actions / Vercel 构建 `apps/web`）
+
+### Vercel 部署注意
+
+本仓库是 **Vite 静态前端** + 可选 Nest API。Vercel 演示站只发前端，**不要**把 Framework 设成 Nest/Node 或把 Root 指到 `apps/api`，否则会出现 `FUNCTION_INVOCATION_FAILED`。
+
+推荐项目设置（或依赖根目录 / `apps/web` 的 `vercel.json`）：
+
+1. **Root Directory**：仓库根，或 `apps/web`
+2. **Framework**：Vite（或 Other）
+3. **Build Command**：`npm run build --workspace @mss-claw/web`（Root 为仓库根时）
+4. **Output Directory**：`apps/web/dist`（Root 为仓库根时）或 `dist`（Root 为 `apps/web` 时）
+5. 不需要配置 Serverless / Database；原型前端可纯静态运行
 
 ### 重要：Pages 必须用 GitHub Actions
 
