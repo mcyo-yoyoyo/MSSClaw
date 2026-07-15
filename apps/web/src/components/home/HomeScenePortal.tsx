@@ -410,18 +410,13 @@ export function HomeScenePortal({ onInvokeAgent, onInvokeSkill }: HomeScenePorta
               <button
                 type="button"
                 onClick={() => openScenario(s.id)}
-                className="flex items-start gap-2.5 text-left"
+                className="min-w-0 pr-5 text-left"
               >
-                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-white">
-                  <i className={cn('fa-solid text-[11px]', s.icon)} />
+                <span className="block truncate text-[12px] font-semibold text-zinc-900">
+                  {s.label}
                 </span>
-                <span className="min-w-0 pr-5">
-                  <span className="block truncate text-[12px] font-semibold text-zinc-900">
-                    {s.label}
-                  </span>
-                  <span className="mt-0.5 line-clamp-1 block text-[10px] leading-snug text-zinc-400">
-                    {s.desc}
-                  </span>
+                <span className="mt-0.5 line-clamp-1 block text-[10px] leading-snug text-zinc-400">
+                  {s.desc}
                 </span>
               </button>
               <EngagementActions
@@ -482,15 +477,10 @@ export function HomeScenePortal({ onInvokeAgent, onInvokeSkill }: HomeScenePorta
                 key={c.id}
                 type="button"
                 onClick={() => handleCard(c)}
-                className="flex items-start gap-2.5 rounded-xl border border-zinc-200/70 bg-zinc-50/80 px-3 py-2.5 text-left transition hover:border-zinc-300 hover:bg-white"
+                className="rounded-xl border border-zinc-200/70 bg-zinc-50/80 px-3 py-2.5 text-left transition hover:border-zinc-300 hover:bg-white"
               >
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-zinc-700 text-white">
-                  <i className={cn('fa-solid text-[10px]', c.icon)} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[12px] font-semibold text-zinc-800">{c.title}</p>
-                  <p className="mt-0.5 line-clamp-1 text-[10px] text-zinc-400">{c.desc}</p>
-                </div>
+                <p className="truncate text-[12px] font-semibold text-zinc-800">{c.title}</p>
+                <p className="mt-0.5 line-clamp-1 text-[10px] text-zinc-400">{c.desc}</p>
               </button>
             ))
           ) : (

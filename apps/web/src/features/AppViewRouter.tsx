@@ -54,7 +54,7 @@ const VIEW_LABELS: Partial<Record<AppView, string>> = {
   admin: '组织权限',
   presentation: '展示配置',
   'workspace-config': '组织与租户',
-  'portal-ops': '门户运营',
+  'portal-ops': '运营',
 };
 
 function LazyView({ label, children }: { label: string; children: ReactNode }) {

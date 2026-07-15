@@ -72,7 +72,7 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   },
   {
     id: 'portal-ops',
-    label: '门户运营',
+    label: '运营',
     subtitle: '前沿洞察与培训赋能上架 · 案例归案例样板间',
     icon: 'fa-newspaper',
     section: 'system',
