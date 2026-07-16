@@ -13,7 +13,7 @@ import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useConversationStore } from '@/stores/conversationStore';
 import { useAppViewStore } from '@/stores/appViewStore';
 
-const PRESET_ORDER: Exclude<NavPresetId, 'custom'>[] = ['full', 'customer', 'standard'];
+const PRESET_ORDER: Exclude<NavPresetId, 'custom'>[] = ['customer', 'standard', 'full'];
 
 export function PresentationConfigPage() {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -56,11 +56,14 @@ export function PresentationConfigPage() {
       <div className="mx-auto max-w-3xl">
         <CenterPageHeader
           title="展示配置"
-          subtitle="面向客户演示时精简侧栏菜单，完整能力可随时恢复，不影响底层功能实现"
+          subtitle="按快速方案精简侧栏菜单，完整能力可随时恢复，不影响底层功能实现"
           actions={
             <button
               type="button"
-              onClick={resetToFull}
+              onClick={() => {
+                resetToFull();
+                useAppViewStore.getState().setNavSectionCollapsed('system', false);
+              }}
               className="apple-btn-secondary rounded-lg px-3 py-2 text-[12px] font-semibold"
             >
               恢复完整版
@@ -86,10 +89,8 @@ export function PresentationConfigPage() {
                 type="button"
                 onClick={() => {
                   applyPreset(id);
-                  if (id === 'standard') {
-                    const { navSectionsCollapsed, toggleNavSection } = useAppViewStore.getState();
-                    if (!navSectionsCollapsed.system) toggleNavSection('system');
-                  }
+                  // MVP：系统设置收起以隐藏子菜单；其它方案展开
+                  useAppViewStore.getState().setNavSectionCollapsed('system', id === 'customer');
                   notify(`已切换为「${NAV_PRESET_LABELS[id].title}」`);
                 }}
                 className={cn(

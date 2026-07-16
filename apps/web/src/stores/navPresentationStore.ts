@@ -11,8 +11,8 @@ import {
 import { isSystemAdmin } from '@/domain/currentUser';
 import { WORKSPACE_CONFIG_VIEW } from '@/domain/workspaceConfig';
 
-/** v2：默认改为「标准能力」，系统菜单不再强制开启 */
-const LS_KEY = 'mssclaw_nav_presentation_v2';
+/** v3：默认「MVP演示」；菜单范围按方案重切 */
+const LS_KEY = 'mssclaw_nav_presentation_v3';
 
 interface PersistedNavPresentation {
   preset: NavPresetId;
@@ -23,14 +23,14 @@ function fullEnabled(): Record<AppView, boolean> {
   return Object.fromEntries(APP_VIEWS.map((v) => [v, true])) as Record<AppView, boolean>;
 }
 
-function standardEnabled(): Record<AppView, boolean> {
-  return { ...NAV_PRESET_ENABLED.standard };
+function mvpEnabled(): Record<AppView, boolean> {
+  return { ...NAV_PRESET_ENABLED.customer };
 }
 
 function loadPersisted(): PersistedNavPresentation {
   try {
     const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return { preset: 'standard', enabled: standardEnabled() };
+    if (!raw) return { preset: 'customer', enabled: mvpEnabled() };
     const parsed = JSON.parse(raw) as Partial<PersistedNavPresentation>;
     const enabled = fullEnabled();
     if (parsed.enabled && typeof parsed.enabled === 'object') {
@@ -44,10 +44,10 @@ function loadPersisted(): PersistedNavPresentation {
       parsed.preset === 'custom' ||
       parsed.preset === 'full'
         ? parsed.preset
-        : 'standard';
+        : 'customer';
     return { preset, enabled };
   } catch {
-    return { preset: 'standard', enabled: standardEnabled() };
+    return { preset: 'customer', enabled: mvpEnabled() };
   }
 }
 
@@ -96,8 +96,8 @@ export const useNavPresentationStore = create<NavPresentationState>((set, get) =
 
     applyPreset: (preset) => {
       const enabled = { ...NAV_PRESET_ENABLED[preset] };
-      // 完整产品 / 客户演示：管理员仍可进租户配置与门户运营
-      if (preset === 'full' || preset === 'customer') {
+      // 完整产品：管理员保留租户配置与门户运营入口
+      if (preset === 'full') {
         enabled[PRESENTATION_CONFIG_VIEW] = true;
         enabled[WORKSPACE_CONFIG_VIEW] = isSystemAdmin();
         enabled['portal-ops'] = isSystemAdmin();

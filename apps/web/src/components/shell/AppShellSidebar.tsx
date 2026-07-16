@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import {
   APP_VIEW_NAV,
   NAV_SECTION_LABELS,
@@ -54,6 +54,44 @@ export function AppShellSidebar() {
     return acc;
   }, [isViewEnabled]);
 
+  const systemNavNodes = useMemo(() => {
+    const byId = new Map(itemsBySection.system.map((i) => [i.id, i]));
+    const renderItem = (item: (typeof APP_VIEW_NAV)[number]) => (
+      <button
+        key={item.id}
+        type="button"
+        onClick={() => setAppView(item.id)}
+        onMouseEnter={() => ROUTE_PREFETCH[item.id]?.()}
+        className={cn('wb-nav-item', appView === item.id && 'active')}
+        title={item.label}
+      >
+        <i className={cn('fa-solid w-5 text-center text-[15px]', item.icon)} />
+        <span className="nav-label">{item.label}</span>
+      </button>
+    );
+    const settingsBtn = (
+      <button
+        key="quick-settings"
+        type="button"
+        onClick={openSettings}
+        className="wb-nav-item"
+        title="快捷设置"
+      >
+        <i className="fa-solid fa-gear w-5 text-center text-[15px]" />
+        <span className="nav-label">快捷设置</span>
+      </button>
+    );
+    const nodes: ReactNode[] = [];
+    const portal = byId.get('portal-ops');
+    if (portal) nodes.push(renderItem(portal));
+    nodes.push(settingsBtn);
+    for (const id of ['admin', 'presentation', 'workspace-config'] as AppView[]) {
+      const item = byId.get(id);
+      if (item) nodes.push(renderItem(item));
+    }
+    return nodes;
+  }, [itemsBySection.system, appView, setAppView, openSettings]);
+
   const initial = (user?.name?.trim()?.[0] ?? 'U').toUpperCase();
   const roleLabel = user ? ROLE_LABELS[user.platformRole] : '';
 
@@ -86,25 +124,7 @@ export function AppShellSidebar() {
             <span>{NAV_SECTION_LABELS.system}</span>
             <i className="fa-solid fa-chevron-down nav-section-chevron" />
           </button>
-          <div className="nav-section-body">
-            <button type="button" onClick={openSettings} className="wb-nav-item" title="快捷">
-              <i className="fa-solid fa-gear w-5 text-center text-[15px]" />
-              <span className="nav-label">快捷</span>
-            </button>
-            {itemsBySection.system.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setAppView(item.id)}
-                onMouseEnter={() => ROUTE_PREFETCH[item.id]?.()}
-                className={cn('wb-nav-item', appView === item.id && 'active')}
-                title={item.label}
-              >
-                <i className={cn('fa-solid w-5 text-center text-[15px]', item.icon)} />
-                <span className="nav-label">{item.label}</span>
-              </button>
-            ))}
-          </div>
+          <div className="nav-section-body">{systemNavNodes}</div>
         </div>
       </nav>
 

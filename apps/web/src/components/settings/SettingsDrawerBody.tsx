@@ -109,7 +109,7 @@ export function SettingsDrawerBody({ onClose }: SettingsDrawerBodyProps) {
     <div className="space-y-4 pb-2">
       <SettingsCard title="展示与导航">
         <p className="mb-3 text-[12px] leading-relaxed text-[#86868b]">
-          配置侧栏可见菜单（标准能力默认隐藏系统菜单）
+          配置侧栏可见菜单（默认 MVP演示；可切换标准能力 / 完整产品）
         </p>
         <button
           type="button"

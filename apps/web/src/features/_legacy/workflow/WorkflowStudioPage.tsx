@@ -30,7 +30,7 @@ export function WorkflowStudioPage() {
           <i className="fa-solid fa-diagram-project text-claw-600" />
           <span>
             <strong>学习提示：</strong>
-            Workflow 画布基于 LangGraph 节点编排。选中节点后在右侧 Inspector 调试，通过后推进发布状态。
+            Workflow 基于 LangGraph 节点编排。选中节点后在右侧 Inspector 调试，通过后推进发布状态。
           </span>
         </>
       }

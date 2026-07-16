@@ -51,11 +51,11 @@ export const APP_VIEW_NAV: AppViewNavItem[] = [
   { id: 'agents', label: '专家', subtitle: '配置 · 发布 · 调用', icon: 'fa-robot', section: 'platform' },
   { id: 'skills', label: '技能', subtitle: '能力资产 · 挂载编排', icon: 'fa-cube', section: 'platform' },
   { id: 'tools', label: '工具', subtitle: '连接器 · 外部 API', icon: 'fa-plug', section: 'platform' },
+  { id: 'memory', label: '记忆', subtitle: 'Agent 长期记忆 · Reflection', icon: 'fa-brain', section: 'platform' },
   { id: 'kb', label: '知识', subtitle: '企业文档 · RAG · 溯源', icon: 'fa-book-open', section: 'platform' },
   { id: 'prompts', label: '提示词', subtitle: '版本 · 审批 · 生命周期', icon: 'fa-file-code', section: 'platform' },
-  { id: 'memory', label: '记忆', subtitle: 'Agent 长期记忆 · Reflection', icon: 'fa-brain', section: 'platform' },
   { id: 'automation', label: '自动化', subtitle: '定时 · 告警 · 周报', icon: 'fa-bolt', section: 'ops' },
-  { id: 'workflow', label: 'Workflow 画布', subtitle: 'LangGraph · 专家编排', icon: 'fa-diagram-project', section: 'ops' },
+  { id: 'workflow', label: '工作流', subtitle: 'LangGraph · 专家编排', icon: 'fa-diagram-project', section: 'ops' },
 ];
 
 export const NAV_SECTION_LABELS: Record<NavSection, string> = {

@@ -6,10 +6,10 @@ import { useConversationStore } from '@/stores/conversationStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 const LS_SIDEBAR = 'mssclaw_sidebar_collapsed';
-const LS_NAV_SECTIONS = 'mssclaw_nav_sections_v2';
+const LS_NAV_SECTIONS = 'mssclaw_nav_sections_v4';
 
 function loadNavSections(): Record<NavSection, boolean> {
-  // 默认：系统分组收起（隐藏系统菜单）
+  // MVP 默认：系统设置收起（隐藏门户运营 / 快捷设置 / 组织权限等子项）
   const defaults = Object.fromEntries(NAV_SECTIONS.map((s) => [s, s === 'system'])) as Record<
     NavSection,
     boolean
@@ -33,6 +33,7 @@ interface AppViewState {
   setAppView: (view: AppView) => void;
   toggleSidebar: () => void;
   toggleNavSection: (section: NavSection) => void;
+  setNavSectionCollapsed: (section: NavSection, collapsed: boolean) => void;
   openSettings: () => void;
   closeSettings: () => void;
 }
@@ -87,6 +88,15 @@ export const useAppViewStore = create<AppViewState>((set, get) => ({
     const next = {
       ...get().navSectionsCollapsed,
       [section]: !get().navSectionsCollapsed[section],
+    };
+    localStorage.setItem(LS_NAV_SECTIONS, JSON.stringify(next));
+    set({ navSectionsCollapsed: next });
+  },
+
+  setNavSectionCollapsed: (section, collapsed) => {
+    const next = {
+      ...get().navSectionsCollapsed,
+      [section]: collapsed,
     };
     localStorage.setItem(LS_NAV_SECTIONS, JSON.stringify(next));
     set({ navSectionsCollapsed: next });

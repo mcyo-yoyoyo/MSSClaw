@@ -47,14 +47,14 @@ const VIEW_LABELS: Partial<Record<AppView, string>> = {
   kb: '知识',
   cases: '案例',
   automation: '自动化',
-  workflow: 'Workflow 画布',
+  workflow: '工作流',
   tools: '工具',
   memory: '记忆',
   prompts: '提示词',
   admin: '组织权限',
   presentation: '展示配置',
-  'workspace-config': '组织与租户',
-  'portal-ops': '运营',
+  'workspace-config': '租户配置',
+  'portal-ops': '门户运营',
 };
 
 function LazyView({ label, children }: { label: string; children: ReactNode }) {

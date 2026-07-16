@@ -61,7 +61,7 @@ const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
   { id: 'goto-automation', label: '打开自动化', icon: 'fa-bolt', view: 'automation', run: () => h.goto('automation') },
   {
     id: 'goto-workflow',
-    label: '打开 Workflow 画布',
+    label: '打开工作流',
     icon: 'fa-diagram-project',
     keywords: 'langgraph workflow',
     view: 'workflow',
@@ -78,7 +78,7 @@ const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
   },
   {
     id: 'goto-workspace-config',
-    label: '打开组织与租户',
+    label: '打开租户配置',
     icon: 'fa-building',
     keywords: 'workspace tenant 租户 组织 事业部',
     view: 'workspace-config',
@@ -96,7 +96,7 @@ const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
   { id: 'new-session', label: '新建任务', icon: 'fa-plus', view: 'task', run: () => h.newTask() },
   { id: 'export', label: '导出交付物', icon: 'fa-file-export', run: () => h.exportArtifact() },
   { id: 'push', label: '推送到作战室', icon: 'fa-paper-plane', run: () => h.pushToGroup() },
-  { id: 'settings', label: '打开快捷', icon: 'fa-gear', keywords: '设置 偏好 settings', run: () => h.openSettings() },
+  { id: 'settings', label: '打开快捷设置', icon: 'fa-gear', keywords: '设置 偏好 settings 快捷', run: () => h.openSettings() },
 ];
 
 export function buildAppCommands(

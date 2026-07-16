@@ -52,7 +52,7 @@ export function WorkspaceConfigPage() {
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-500">
             <i className="fa-solid fa-lock text-xl" />
           </div>
-          <h2 className="text-lg font-semibold text-zinc-900">无权访问组织与租户</h2>
+          <h2 className="text-lg font-semibold text-zinc-900">无权访问租户配置</h2>
           <p className="mt-2 text-[13px] text-zinc-500">仅系统管理员（Super Admin）可添加、删除与管理租户及组织架构。</p>
           <button
             type="button"
@@ -98,7 +98,7 @@ export function WorkspaceConfigPage() {
     <div className="center-surface center-page scroll-hidden flex-1 overflow-y-auto">
       <div className="mx-auto max-w-3xl">
         <CenterPageHeader
-          title="组织与租户"
+          title="租户配置"
           subtitle="租户生命周期 · 组织双轴（部门 × 区域）· 语言与顶栏可见性"
           actions={
             <div className="flex flex-wrap gap-2">
