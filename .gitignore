@@ -11,3 +11,5 @@ coverage/
 *.local
 .vite/
 apps/web/dist/
+.vercel
+.env*

@@ -2288,3 +2288,26 @@
 }
 
 
+
+/* AI广场 · 本周精选广播条 */
+@keyframes plaza-marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.plaza-marquee-track {
+  animation-name: plaza-marquee;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+
+.plaza-marquee-paused {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plaza-marquee-track {
+    animation: none;
+  }
+}

@@ -1,6 +1,6 @@
 import type { EfficiencyCategory } from '@/domain/prototype/types';
 
-export const MARKET_VERSION = 'v9-home-ux-polish';
+export const MARKET_VERSION = 'v10-rename-xiaowei';
 export const KB_VERSION = 'v2-biz-dept';
 export const TASK_SESSIONS_VERSION = 'v2-no-default-warroom';
 export const PORTAL_CONTENT_VERSION = 'v1-ops-portal';

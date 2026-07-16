@@ -9,13 +9,15 @@ import {
 import { openPortalCard } from '@/domain/portalNavigation';
 import {
   AI_TOOL_NAV_CATEGORIES,
-  AI_TOOL_SCOPE_OPTIONS,
   isHomeAiTool,
-  toolBelongsToNavCategory,
-  toolBelongsToScope,
   type AiToolNavCategoryId,
-  type AiToolScopeId,
 } from '@/domain/aiToolCategories';
+import { getPlazaToolPicks } from '@/domain/plazaToolPicks';
+import {
+  getPlazaToolGuides,
+  PLAZA_GUIDE_TYPE_LABEL,
+  type PlazaToolGuide,
+} from '@/domain/plazaToolGuides';
 import {
   DISCOVER_SCENARIO_IDS,
   SCENARIO_CAPABILITY_CATEGORIES,
@@ -41,6 +43,7 @@ import {
   ensureEngagementSeeds,
   useContentEngagementStore,
 } from '@/stores/contentEngagementStore';
+import { isNewScenario } from '@/domain/contentBadges';
 
 interface HomeScenePortalProps {
   onInvokeAgent: (agent: PrototypeAgentSeed, prompt?: string) => void;
@@ -66,7 +69,6 @@ function SectionToolbar({
   );
 }
 
-/** 统一筛选轨：浅底 + 白底选中 */
 function FilterTrack({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div
@@ -98,9 +100,7 @@ function FilterChip({
       onClick={onClick}
       className={cn(
         'inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition',
-        active
-          ? 'bg-white text-zinc-900 shadow-sm'
-          : 'text-zinc-500 hover:text-zinc-800',
+        active ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-800',
       )}
     >
       {children}
@@ -108,7 +108,6 @@ function FilterChip({
   );
 }
 
-/** 紧凑下拉：三处筛选统一固定宽度 */
 function MiniSelect<T extends string>({
   value,
   onChange,
@@ -142,34 +141,171 @@ function MiniSelect<T extends string>({
 function ToolIconRow({
   tools,
   onOpen,
+  onHowTo,
+  emptyText = '暂无推荐',
 }: {
   tools: PrototypeToolSeed[];
   onOpen: (id: string) => void;
+  onHowTo: (tool: PrototypeToolSeed) => void;
+  emptyText?: string;
 }) {
   return (
-    <div className="flex h-full min-h-[76px] items-center gap-2 overflow-x-auto px-1 scroll-hidden">
-      {tools.map((t) => (
-        <button
-          key={t.id}
-          type="button"
-          title={t.desc}
-          onClick={() => onOpen(t.id)}
-          className="flex w-[76px] shrink-0 flex-col items-center justify-center gap-1.5 rounded-xl px-1.5 py-2 transition hover:bg-zinc-100/90"
-        >
-          <ToolLogo name={t.name} logoUrl={t.logoUrl} icon={t.icon} size={32} />
-          <span className="w-full truncate text-center text-[11px] font-semibold text-zinc-800">
-            {t.name}
-          </span>
-        </button>
-      ))}
-      {!tools.length ? (
-        <p className="px-3 py-4 text-[12px] text-zinc-400">该分类暂无推荐工具</p>
-      ) : null}
+    <div className="flex min-h-[72px] items-center gap-3 overflow-x-auto px-1 scroll-hidden">
+      {tools.map((t) => {
+        const hasGuide = getPlazaToolGuides(t.id).length > 0;
+        return (
+          <div key={t.id} className="flex shrink-0 items-center gap-2 px-1 py-1">
+            <button
+              type="button"
+              title={t.desc}
+              onClick={() => onOpen(t.id)}
+              className="flex w-[64px] flex-col items-center justify-center gap-1.5 rounded-lg py-1 transition hover:bg-zinc-100/70"
+            >
+              <ToolLogo name={t.name} logoUrl={t.logoUrl} icon={t.icon} size={28} />
+              <span className="w-full truncate text-center text-[11px] font-semibold text-zinc-800">
+                {t.name}
+              </span>
+            </button>
+            {hasGuide ? (
+              <button
+                type="button"
+                title="试用前有疑问？点此查看 How to 指引"
+                onClick={() => onHowTo(t)}
+                className="group flex flex-col items-start justify-center gap-0.5 rounded-md px-0.5 py-1 text-left transition"
+              >
+                <span className="font-serif text-[10px] italic leading-none tracking-wide text-zinc-300 transition group-hover:text-zinc-500">
+                  How to
+                </span>
+                <span className="text-[9px] leading-none text-zinc-300/80 transition group-hover:text-zinc-400">
+                  有疑问点这里
+                </span>
+              </button>
+            ) : null}
+          </div>
+        );
+      })}
+      {!tools.length ? <p className="px-2 py-3 text-[11px] text-zinc-400">{emptyText}</p> : null}
     </div>
   );
 }
 
-type OpsTab = 'news' | 'training';
+function HowToDrawer({
+  toolName,
+  guides,
+  onClose,
+  onOpenGuide,
+}: {
+  toolName: string;
+  guides: PlazaToolGuide[];
+  onClose: () => void;
+  onOpenGuide: (g: PlazaToolGuide) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/20" onClick={onClose}>
+      <aside
+        className="flex h-full w-full max-w-[320px] flex-col border-l border-zinc-200 bg-white shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-zinc-100 px-4 py-3.5">
+          <div className="min-w-0">
+            <p className="font-serif text-[12px] italic text-zinc-400">How to</p>
+            <h3 className="mt-0.5 truncate text-[14px] font-semibold text-zinc-900">{toolName}</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-2 py-1 text-[12px] text-zinc-400 hover:bg-zinc-50 hover:text-zinc-700"
+          >
+            关闭
+          </button>
+        </div>
+        <div className="flex-1 space-y-2 overflow-y-auto px-4 py-3">
+          {guides.map((g) => (
+            <button
+              key={g.id}
+              type="button"
+              onClick={() => onOpenGuide(g)}
+              className="flex w-full items-start gap-2.5 rounded-xl border border-zinc-200/80 bg-zinc-50/50 px-3 py-2.5 text-left transition hover:border-zinc-300 hover:bg-white"
+            >
+              <span className="mt-0.5 shrink-0 rounded-md bg-zinc-900/90 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+                {PLAZA_GUIDE_TYPE_LABEL[g.type]}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[12px] font-semibold text-zinc-800">{g.title}</span>
+                {g.blurb ? (
+                  <span className="mt-0.5 block text-[10px] leading-snug text-zinc-400">{g.blurb}</span>
+                ) : null}
+              </span>
+            </button>
+          ))}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+/** 本周精选 · 自动横向广播滚动 */
+function PlazaPromoBanner({
+  items,
+  onOpen,
+  onMore,
+}: {
+  items: PortalMapCard[];
+  onOpen: (card: PortalMapCard) => void;
+  onMore: () => void;
+}) {
+  const [paused, setPaused] = useState(false);
+  // 单元内容铺满后再复制一份，配合 translateX(-50%) 无缝循环
+  const track = useMemo(() => {
+    if (!items.length) return [];
+    let unit = [...items];
+    while (unit.length < 5) unit = [...unit, ...items];
+    return [...unit, ...unit];
+  }, [items]);
+
+  return (
+    <div className="flex items-center gap-2.5 rounded-xl border border-zinc-200/70 bg-gradient-to-r from-zinc-50 via-white to-zinc-50 px-2.5 py-2">
+      <span className="shrink-0 rounded-md bg-zinc-900 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+        本周精选
+      </span>
+      <div
+        className="plaza-marquee min-w-0 flex-1 overflow-hidden"
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
+      >
+        {items.length ? (
+          <div
+            className={cn('plaza-marquee-track flex w-max gap-2.5', paused && 'plaza-marquee-paused')}
+            style={{ animationDuration: `${Math.max(18, items.length * 5)}s` }}
+          >
+            {track.map((c, i) => (
+              <button
+                key={`${c.id}-${i}`}
+                type="button"
+                onClick={() => onOpen(c)}
+                className="flex max-w-[240px] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/60 bg-white/90 px-3 py-1.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition hover:border-zinc-300"
+              >
+                <span className="shrink-0 rounded bg-zinc-100 px-1 py-0.5 text-[9px] font-medium text-zinc-500">
+                  {c.kind === 'training' ? '培训' : '洞察'}
+                </span>
+                <span className="truncate text-[12px] font-semibold text-zinc-800">{c.title}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="px-2 py-1 text-[12px] text-zinc-400">暂无精选内容</p>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={onMore}
+        className="shrink-0 text-[11px] font-medium text-zinc-400 transition hover:text-zinc-700"
+      >
+        更多
+      </button>
+    </div>
+  );
+}
 
 export function HomeScenePortal({ onInvokeAgent, onInvokeSkill }: HomeScenePortalProps) {
   const agents = useMarketplaceStore((s) => s.agents);
@@ -181,11 +317,9 @@ export function HomeScenePortal({ onInvokeAgent, onInvokeSkill }: HomeScenePorta
   const user = useSessionStore((s) => s.user);
 
   const [rankMode, setRankMode] = useState<RankMode>('trending');
-  const [opsRankMode, setOpsRankMode] = useState<RankMode>('trending');
   const [capability, setCapability] = useState<ScenarioCapabilityId | 'all'>('all');
   const [toolCat, setToolCat] = useState<AiToolNavCategoryId>('chat');
-  const [toolScope, setToolScope] = useState<AiToolScopeId>('external');
-  const [opsTab, setOpsTab] = useState<OpsTab>('news');
+  const [howToTool, setHowToTool] = useState<PrototypeToolSeed | null>(null);
   const focusPortalType = useNavigationIntentStore((s) => s.focusPortalType);
   const focusScenario = useNavigationIntentStore((s) => s.focusScenario);
   const engagementOf = useContentEngagementStore((s) => s.get);
@@ -201,14 +335,17 @@ export function HomeScenePortal({ onInvokeAgent, onInvokeSkill }: HomeScenePorta
   );
 
   const homeAiTools = useMemo(() => tools.filter(isHomeAiTool), [tools]);
+  const toolsById = useMemo(() => new Map(homeAiTools.map((t) => [t.id, t])), [homeAiTools]);
 
-  const toolsInCategory = useMemo(
-    () =>
-      homeAiTools.filter(
-        (t) => toolBelongsToScope(t, toolScope) && toolBelongsToNavCategory(t, toolCat),
-      ),
-    [homeAiTools, toolCat, toolScope],
-  );
+  const pickedTools = useMemo(() => {
+    const picks = getPlazaToolPicks(toolCat);
+    const resolve = (ids: string[]) =>
+      ids.map((id) => toolsById.get(id)).filter((t): t is PrototypeToolSeed => Boolean(t));
+    return {
+      external: resolve(picks.external),
+      internal: resolve(picks.internal),
+    };
+  }, [toolCat, toolsById]);
 
   const discoverScenarios = useMemo(
     () =>
@@ -232,7 +369,6 @@ export function HomeScenePortal({ onInvokeAgent, onInvokeSkill }: HomeScenePorta
     );
   }, [discoverScenarios, capability, rankMode, engagementOf, engagementById]);
 
-  /** 当前能力筛下按热度的 Top3，用于火标 */
   const hotTop3Ids = useMemo(() => {
     const filtered = discoverScenarios.filter((s) =>
       scenarioBelongsToCapability(s.id, capability),
@@ -269,22 +405,17 @@ export function HomeScenePortal({ onInvokeAgent, onInvokeSkill }: HomeScenePorta
     ensureEngagementSeeds(ids);
   }, [catalog, portalContent]);
 
-  const opsPools = useMemo(() => {
+  /** 洞察 + 培训混排，供横幅轮播 */
+  const promoItems = useMemo(() => {
     const news = catalog.filter((c) => c.kind === 'news');
     const training = catalog.filter((c) => c.kind === 'training');
-    const sort = (list: PortalMapCard[]) =>
-      sortByRankMode(
-        list.map((c) => ({ ...c, publishedAt: c.publishedAt })),
-        opsRankMode,
-        engagementOf,
-      );
-    return {
-      news: sort(news).slice(0, 3),
-      training: sort(training).slice(0, 3),
-    };
-  }, [catalog, opsRankMode, engagementOf, engagementById]);
-
-  const opsCards = opsPools[opsTab];
+    const ranked = sortByRankMode(
+      [...news, ...training].map((c) => ({ ...c, publishedAt: c.publishedAt })),
+      'trending',
+      engagementOf,
+    );
+    return ranked.slice(0, 8);
+  }, [catalog, engagementOf, engagementById]);
 
   const handleCard = (card: PortalMapCard) => {
     bumpUse(card.id);
@@ -306,8 +437,20 @@ export function HomeScenePortal({ onInvokeAgent, onInvokeSkill }: HomeScenePorta
     showToast(`已打开：${tool.name}`);
   };
 
+  const openHowTo = (tool: PrototypeToolSeed) => {
+    setHowToTool(tool);
+  };
+
+  const openGuideResource = (g: PlazaToolGuide) => {
+    if (!g.url || g.url === '#') {
+      showToast(`指引「${g.title}」演示占位，后续可挂 PPT / 图片 / 视频`);
+      return;
+    }
+    window.open(g.url, '_blank', 'noopener,noreferrer');
+  };
+
   const goOpsMore = () => {
-    focusPortalType(opsTab);
+    focusPortalType('news');
     setAppView('portal-ops');
   };
 
@@ -322,7 +465,10 @@ export function HomeScenePortal({ onInvokeAgent, onInvokeSkill }: HomeScenePorta
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-[1.35rem] pb-2">
-      {/* 1. 马上能用：标题 | 能力筛选 …… 外部/内部 | 更多→工具 */}
+      {/* 0. 本周精选横幅 */}
+      <PlazaPromoBanner items={promoItems} onOpen={handleCard} onMore={goOpsMore} />
+
+      {/* 1. 马上能用：能力筛选 + 外部 | 内部 并排精选 */}
       <section>
         <SectionToolbar
           title="马上能用"
@@ -337,25 +483,29 @@ export function HomeScenePortal({ onInvokeAgent, onInvokeSkill }: HomeScenePorta
             </FilterTrack>
           }
           trailing={
-            <>
-              <MiniSelect
-                ariaLabel="工具来源"
-                value={toolScope}
-                onChange={setToolScope}
-                options={[...AI_TOOL_SCOPE_OPTIONS]}
-              />
-              <button type="button" onClick={() => setAppView('tools')} className={linkBtnClass}>
-                更多
-              </button>
-            </>
+            <button type="button" onClick={() => setAppView('tools')} className={linkBtnClass}>
+              更多
+            </button>
           }
         />
-        <div className="min-h-[92px] rounded-2xl border border-zinc-200/70 bg-white/80 px-2 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-          <ToolIconRow tools={toolsInCategory} onOpen={openTool} />
+        <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+          <div className="rounded-2xl border border-zinc-200/70 bg-white/80 px-2.5 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+            <p className="mb-1 px-1 text-[11px] font-semibold text-zinc-500">外部</p>
+            <ToolIconRow tools={pickedTools.external} onOpen={openTool} onHowTo={openHowTo} />
+          </div>
+          <div className="rounded-2xl border border-zinc-200/70 bg-white/80 px-2.5 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+            <p className="mb-1 px-1 text-[11px] font-semibold text-zinc-500">内部</p>
+            <ToolIconRow
+              tools={pickedTools.internal}
+              onOpen={openTool}
+              onHowTo={openHowTo}
+              emptyText="暂无内部推荐"
+            />
+          </div>
         </div>
       </section>
 
-      {/* 2. 场景案例：标题 | 能力筛选 …… 排行下拉 | 更多 · 最多两排 */}
+      {/* 2. 场景案例：最多两排 */}
       <section>
         <SectionToolbar
           title="场景案例"
@@ -398,13 +548,27 @@ export function HomeScenePortal({ onInvokeAgent, onInvokeSkill }: HomeScenePorta
               key={s.id}
               className="relative flex flex-col gap-2 rounded-xl border border-zinc-200/80 bg-white px-3 py-2.5 transition hover:border-zinc-300 hover:bg-zinc-50/60"
             >
-              {hotTop3Ids.includes(s.id) ? (
-                <span
-                  className="pointer-events-none absolute right-2 top-2 z-10 flex h-5 w-5 items-center justify-center text-[#E85D04]"
-                  title="最火 Top3"
-                  aria-label="最火"
-                >
-                  <i className="fa-solid fa-fire text-[11px]" />
+              {(hotTop3Ids.includes(s.id) || isNewScenario(s.id)) ? (
+                <span className="pointer-events-none absolute right-2 top-2 z-10 flex items-center gap-1">
+                  {isNewScenario(s.id) ? (
+                    <span
+                      className="rounded px-1 py-px text-[9px] font-bold uppercase tracking-wide text-white"
+                      style={{ backgroundColor: '#C8102E' }}
+                      title="新品"
+                      aria-label="New"
+                    >
+                      New
+                    </span>
+                  ) : null}
+                  {hotTop3Ids.includes(s.id) ? (
+                    <span
+                      className="flex h-5 w-5 items-center justify-center text-[#E85D04]"
+                      title="最火 Top3"
+                      aria-label="最火"
+                    >
+                      <i className="fa-solid fa-fire text-[11px]" />
+                    </span>
+                  ) : null}
                 </span>
               ) : null}
               <button
@@ -437,57 +601,14 @@ export function HomeScenePortal({ onInvokeAgent, onInvokeSkill }: HomeScenePorta
         </div>
       </section>
 
-      {/* 3. 本周精选：标题 | 洞察/培训 …… 排序下拉 | 更多 */}
-      <section className="border-t border-zinc-100">
-        <SectionToolbar
-          title="本周精选"
-          filters={
-            <FilterTrack>
-              {(
-                [
-                  { id: 'news' as const, label: 'AI前沿洞察' },
-                  { id: 'training' as const, label: 'AI培训学院' },
-                ] as const
-              ).map((t) => (
-                <FilterChip key={t.id} active={opsTab === t.id} onClick={() => setOpsTab(t.id)}>
-                  {t.label}
-                </FilterChip>
-              ))}
-            </FilterTrack>
-          }
-          trailing={
-            <>
-              <MiniSelect
-                ariaLabel="精选排序"
-                value={opsRankMode}
-                onChange={setOpsRankMode}
-                options={[...RANK_MODE_OPTIONS]}
-              />
-              <button type="button" onClick={goOpsMore} className={linkBtnClass}>
-                更多
-              </button>
-            </>
-          }
+      {howToTool ? (
+        <HowToDrawer
+          toolName={howToTool.name}
+          guides={getPlazaToolGuides(howToTool.id)}
+          onClose={() => setHowToTool(null)}
+          onOpenGuide={openGuideResource}
         />
-
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-          {opsCards.length ? (
-            opsCards.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => handleCard(c)}
-                className="rounded-xl border border-zinc-200/70 bg-zinc-50/80 px-3 py-2.5 text-left transition hover:border-zinc-300 hover:bg-white"
-              >
-                <p className="truncate text-[12px] font-semibold text-zinc-800">{c.title}</p>
-                <p className="mt-0.5 line-clamp-1 text-[10px] text-zinc-400">{c.desc}</p>
-              </button>
-            ))
-          ) : (
-            <p className="col-span-full py-4 text-center text-[12px] text-zinc-400">暂无精选内容</p>
-          )}
-        </div>
-      </section>
+      ) : null}
     </div>
   );
 }

@@ -7,7 +7,7 @@ interface MssZhishuMarkProps {
 }
 
 /** MSS智枢 品牌徽标 — 智枢 hub 轨道 + 连接节点 */
-export function MssZhishuMark({ size = 56, className, title = 'MSS智枢' }: MssZhishuMarkProps) {
+export function MssZhishuMark({ size = 56, className, title = 'MSS AI提效作战平台' }: MssZhishuMarkProps) {
   const id = `mss-mark-${size}`;
 
   return (

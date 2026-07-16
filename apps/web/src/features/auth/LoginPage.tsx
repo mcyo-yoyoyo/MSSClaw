@@ -33,7 +33,7 @@ export function LoginPage() {
             <MssZhishuMark size={64} />
           </div>
           <h1 className="home-slogan-art">
-            <span className="home-slogan-gradient">MSS智枢，就是好用！</span>
+            <span className="home-slogan-gradient">MSS AI提效作战平台，就是好用！</span>
           </h1>
           <p className="mx-auto mt-3 max-w-sm text-[13px] leading-relaxed text-zinc-500">
             集成多位数字员工，7*24小时随时待命，帮你实现个人提效，助力MSS实现组织提效！
@@ -42,7 +42,7 @@ export function LoginPage() {
 
         <form onSubmit={handleSubmit} className="apple-card space-y-4 p-6">
           <div>
-            <h2 className="text-[15px] font-semibold text-zinc-900">登录 MSS智枢</h2>
+            <h2 className="text-[15px] font-semibold text-zinc-900">登录 MSS AI提效作战平台</h2>
             <p className="mt-1 text-[12px] text-zinc-500">使用成员权限管理中的账号进入工作台</p>
           </div>
 

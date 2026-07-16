@@ -23,6 +23,7 @@ import { AgentAvatar } from '@/components/brand/AgentAvatar';
 import { useHomeStore, type ExpertBrowseAxis } from '@/stores/homeStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useSessionStore } from '@/stores/sessionStore';
+import { isNewAgent } from '@/domain/contentBadges';
 
 interface HomePageProps {
   onSubmitTask: (text: string, agent?: PrototypeAgentSeed | null) => void;
@@ -38,13 +39,13 @@ const INTENT_PROMPTS = [
   '生成门店培训话术并翻译成西语',
 ] as const;
 
-const ASK_SUBTITLE = '说出来就干活 · 输入需求，智枢帮你调度专家与技能';
+const ASK_SUBTITLE = '说出来就干活 · 输入需求，帮你调度专家与技能';
 const DISCOVER_SUBTITLE = '按业务场景找工具与样板 · 精选内容在下方';
 
 const EXPERT_AXIS_TABS: { id: ExpertBrowseAxis; label: string }[] = [
-  { id: 'agent', label: 'Agent' },
-  { id: 'dept', label: 'NP' },
+  { id: 'agent', label: '全球' },
   { id: 'region', label: '区域' },
+  { id: 'dept', label: '领域' },
 ];
 
 export function HomePage({
@@ -141,7 +142,7 @@ export function HomePage({
       ? '该角色暂无相关专家'
       : expertAxis === 'region'
         ? '该区域暂无相关专家'
-        : '该业务线暂无相关专家';
+        : '该领域暂无相关专家';
 
   const deptChips = HOME_CATEGORIES.filter((c) => visibleDepts.includes(c.id));
   const regionChips = REGIONS.filter((r) => visibleRegions.includes(r.id));
@@ -151,7 +152,7 @@ export function HomePage({
       <div className="mx-auto flex w-full max-w-[960px] flex-1 flex-col px-5 py-4 md:px-6 md:py-5">
         <header className="mb-3 text-center">
           <h1 className="home-slogan-art">
-            <span className="home-slogan-gradient">MSS AI提效作战平台：智枢，就是好用！</span>
+            <span className="home-slogan-gradient">MSS AI提效作战平台，就是好用！</span>
           </h1>
           <p className="mx-auto mt-2 max-w-xl text-[12px] leading-relaxed text-zinc-500">
             {homeMode === 'assistant' ? ASK_SUBTITLE : DISCOVER_SUBTITLE}
@@ -302,10 +303,20 @@ export function HomePage({
                       key={agent.id}
                       type="button"
                       onClick={() => onInvokeAgent(agent)}
-                      className="flex items-start gap-2.5 rounded-xl border border-zinc-200/70 bg-white/80 p-2.5 text-left transition hover:border-zinc-300"
+                      className="relative flex items-start gap-2.5 rounded-xl border border-zinc-200/70 bg-white/80 p-2.5 text-left transition hover:border-zinc-300"
                     >
+                      {isNewAgent(agent.id) ? (
+                        <span
+                          className="pointer-events-none absolute right-2 top-2 z-10 rounded px-1 py-px text-[9px] font-bold uppercase tracking-wide text-white"
+                          style={{ backgroundColor: '#C8102E' }}
+                          title="新品"
+                          aria-label="New"
+                        >
+                          New
+                        </span>
+                      ) : null}
                       <AgentAvatar agentId={agent.id} size={32} title={agent.name} />
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 flex-1 pr-8">
                         <p className="truncate text-[12px] font-semibold text-zinc-900">{agent.name}</p>
                         <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-zinc-500">
                           {agent.desc}

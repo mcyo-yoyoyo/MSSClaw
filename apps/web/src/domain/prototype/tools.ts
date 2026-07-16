@@ -774,7 +774,7 @@ export const PROTOTYPE_TOOLS: PrototypeToolSeed[] = [
   },
   {
     id: 'tool-hw-xiaowei',
-    name: '小薇助手',
+    name: '小微助手',
     desc: '华为内部智能助理，支持日常问答与办公协同',
     category: 'platform',
     author: '华为内部',

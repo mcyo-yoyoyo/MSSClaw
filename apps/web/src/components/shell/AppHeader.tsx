@@ -60,10 +60,10 @@ export function AppHeader({ apiConnected, onWorkspaceSwitch }: AppHeaderProps) {
     <header className="apple-header z-50 flex h-[52px] shrink-0 items-center justify-between px-6">
       <div className="flex items-center gap-5">
         <div className="flex items-center gap-3">
-          <MssZhishuMark size={32} className="shrink-0" title="MSS智枢" />
+          <MssZhishuMark size={32} className="shrink-0" title="MSS AI提效作战平台" />
           <div className="flex items-baseline gap-2.5">
-            <span className="text-[15px] font-semibold tracking-tight text-zinc-900">MSS智枢</span>
-            <span className="hidden text-[11px] font-medium text-zinc-400 sm:inline">就是好用</span>
+            <span className="text-[15px] font-semibold tracking-tight text-zinc-900">MSS AI</span>
+            <span className="hidden text-[11px] font-medium text-zinc-400 sm:inline">提效作战平台</span>
           </div>
         </div>
 
