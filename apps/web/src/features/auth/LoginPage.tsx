@@ -33,7 +33,7 @@ export function LoginPage() {
             <MssZhishuMark size={64} />
           </div>
           <h1 className="home-slogan-art">
-            <span className="home-slogan-gradient">MSS AI提效作战平台，就是好用！</span>
+            <span className="home-slogan-gradient">MSS AI提效作战平台，好学又好用！</span>
           </h1>
           <p className="mx-auto mt-3 max-w-sm text-[13px] leading-relaxed text-zinc-500">
             集成多位数字员工，7*24小时随时待命，帮你实现个人提效，助力MSS实现组织提效！

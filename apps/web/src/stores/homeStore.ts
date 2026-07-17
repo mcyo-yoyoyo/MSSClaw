@@ -31,7 +31,7 @@ interface HomeState {
 }
 
 export const useHomeStore = create<HomeState>((set, get) => ({
-  homeMode: 'assistant',
+  homeMode: 'portal',
   expertAxis: 'agent',
   agentRoleId: 'scout',
   category: 'ecommerce',

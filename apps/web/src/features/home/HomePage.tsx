@@ -152,7 +152,7 @@ export function HomePage({
       <div className="mx-auto flex w-full max-w-[960px] flex-1 flex-col px-5 py-4 md:px-6 md:py-5">
         <header className="mb-3 text-center">
           <h1 className="home-slogan-art">
-            <span className="home-slogan-gradient">MSS AI提效作战平台，就是好用！</span>
+            <span className="home-slogan-gradient">MSS AI提效作战平台，好学又好用！</span>
           </h1>
           <p className="mx-auto mt-2 max-w-xl text-[12px] leading-relaxed text-zinc-500">
             {homeMode === 'assistant' ? ASK_SUBTITLE : DISCOVER_SUBTITLE}
@@ -163,8 +163,8 @@ export function HomePage({
           <div className="inline-flex gap-1 rounded-full bg-zinc-100/90 p-1">
             {(
               [
-                { id: 'assistant' as const, label: 'AI助手', icon: 'fa-comment-dots' },
-                { id: 'portal' as const, label: 'AI广场', icon: 'fa-compass' },
+                { id: 'portal' as const, label: 'AI广场：一学就会', icon: 'fa-compass' },
+                { id: 'assistant' as const, label: 'AI助手：一用就对', icon: 'fa-comment-dots' },
               ] as const
             ).map((tab) => (
               <button
