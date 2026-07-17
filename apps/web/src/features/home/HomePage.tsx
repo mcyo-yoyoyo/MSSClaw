@@ -163,8 +163,8 @@ export function HomePage({
           <div className="inline-flex gap-1 rounded-full bg-zinc-100/90 p-1">
             {(
               [
-                { id: 'portal' as const, label: 'AI广场：一学就会', icon: 'fa-compass' },
-                { id: 'assistant' as const, label: 'AI助手：一用就对', icon: 'fa-comment-dots' },
+                { id: 'portal' as const, label: 'AI广场', icon: 'fa-compass' },
+                { id: 'assistant' as const, label: 'AI助手', icon: 'fa-comment-dots' },
               ] as const
             ).map((tab) => (
               <button
