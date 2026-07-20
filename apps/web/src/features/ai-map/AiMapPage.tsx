@@ -6,7 +6,6 @@ import type {
   PrototypeSkillSeed,
 } from '@/domain/prototype/types';
 import {
-  buildOrgCoverage,
   buildScenarioBundles,
   type PortalMapCard,
   type ScenarioBundle,
@@ -17,8 +16,25 @@ import {
   CenterPageHeader,
   CenterSearchInput,
 } from '@/components/center/CenterShell';
-import { DocumentPreviewPanel } from '@/components/center/DocumentPreviewPanel';
+import { CaseEditorModal } from '@/components/center/CaseEditorModal';
+import { CaseOutcomePanel } from '@/components/content/CaseOutcomePanel';
 import { OrgAssetFilterBar } from '@/components/center/OrgAssetFilters';
+import { downloadCaseFile, downloadScenarioCasePack } from '@/domain/caseExport';
+import { isSystemAdmin } from '@/domain/currentUser';
+import {
+  getPortalItemById,
+  outcomeFromNarrativeCard,
+  resolveScenarioCaseItems,
+} from '@/domain/portalCase';
+import {
+  resolvePipelineStepTargets,
+  resolveScenarioDemoPlan,
+  type ScenarioDemoPlan,
+  type ScenarioPipelineStep,
+} from '@/domain/scenarioPipeline';
+import { buildSkillDemoPrompt } from '@/domain/skillRuntime';
+import { buildAgentDemoPrompt } from '@/domain/agents/runtime';
+import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { openPortalCard } from '@/domain/portalNavigation';
 import type { DeptFilter, EfficiencyFilter, RegionFilter } from '@/domain/assetFilters';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
@@ -27,14 +43,15 @@ import { useAppViewStore } from '@/stores/appViewStore';
 import { useHomeStore } from '@/stores/homeStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
+import { ExpertTeamModal } from '@/components/content/ExpertTeamModal';
 
 interface AiMapPageProps {
   onInvokeAgent: (agent: PrototypeAgentSeed, prompt?: string) => void;
   onInvokeSkill: (skill: PrototypeSkillSeed) => void;
   onAskKbDocument?: (doc: PrototypeKbDocument) => void;
+  /** 专家团同会话顺序接力 */
+  onStartExpertTeam: (plan: ScenarioDemoPlan, fromIndex?: number) => void;
 }
-
-type LeftTab = 'scenarios' | 'coverage';
 
 function Quadrant({
   title,
@@ -82,7 +99,12 @@ function Quadrant({
   );
 }
 
-export function AiMapPage({ onInvokeAgent, onInvokeSkill, onAskKbDocument }: AiMapPageProps) {
+export function AiMapPage({
+  onInvokeAgent,
+  onInvokeSkill,
+  onAskKbDocument,
+  onStartExpertTeam,
+}: AiMapPageProps) {
   const agents = useMarketplaceStore((s) => s.agents);
   const skills = useMarketplaceStore((s) => s.skills);
   const tools = useMarketplaceStore((s) => s.tools);
@@ -91,15 +113,15 @@ export function AiMapPage({ onInvokeAgent, onInvokeSkill, onAskKbDocument }: AiM
   const setAppView = useAppViewStore((s) => s.setAppView);
   const user = useSessionStore((s) => s.user);
 
-  const [leftTab, setLeftTab] = useState<LeftTab>('scenarios');
   const [listFilter, setListFilter] = useState<ScenarioListFilter>('related');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [narrativeCard, setNarrativeCard] = useState<PortalMapCard | null>(null);
-  const [narrativeKind, setNarrativeKind] = useState<'all' | 'case' | 'insight' | 'training' | 'news'>(
-    'all',
-  );
-  const [capsOpen, setCapsOpen] = useState(false);
+  const [editorTarget, setEditorTarget] = useState<string | 'new' | null>(null);
+  const [narrativeKind, setNarrativeKind] = useState<'all' | 'case' | 'training' | 'news'>('all');
+  const [teamPlan, setTeamPlan] = useState<ScenarioDemoPlan | null>(null);
+  const canEditCase = isSystemAdmin(user?.platformRole);
+  const [capsOpen, setCapsOpen] = useState(true);
   const [deptFilter, setDeptFilter] = useState<DeptFilter>('all');
   const [regionFilter, setRegionFilter] = useState<RegionFilter>('all');
   const [efficiencyFilter, setEfficiencyFilter] = useState<EfficiencyFilter>('all');
@@ -150,7 +172,8 @@ export function AiMapPage({ onInvokeAgent, onInvokeSkill, onAskKbDocument }: AiM
     ],
   );
 
-  const allBundlesForCoverage = useMemo(
+  /** 深链定位用不带搜索的全量场景列表 */
+  const allBundles = useMemo(
     () =>
       buildScenarioBundles({
         agents,
@@ -167,97 +190,191 @@ export function AiMapPage({ onInvokeAgent, onInvokeSkill, onAskKbDocument }: AiM
     [agents, skills, tools, portalContent, affiliation, user?.id, user?.name, user?.platformRole],
   );
 
-  const coverage = useMemo(() => buildOrgCoverage(allBundlesForCoverage), [allBundlesForCoverage]);
-
   useEffect(() => {
     if (!bundles.length) {
+      // 深链等待全量列表时，勿清空已选场景
+      if (pendingScenarioId || pendingCaseId || allBundles.some((b) => b.id === selectedId)) {
+        return;
+      }
       setSelectedId(null);
       return;
     }
     if (!selectedId || !bundles.some((b) => b.id === selectedId)) {
+      // 已选场景在全量中存在、仅被筛选隐藏时，保留选中，避免盖掉深链
+      if (selectedId && allBundles.some((b) => b.id === selectedId)) return;
       setSelectedId(bundles[0].id);
     }
-  }, [bundles, selectedId]);
+  }, [bundles, selectedId, allBundles, pendingScenarioId, pendingCaseId]);
 
   useEffect(() => {
     setNarrativeKind('all');
   }, [selectedId]);
 
-  // 原案例库深链：定位到包含该案例的场景并打开叙事预览
+  // 原案例库 / 首页橱窗深链：定位场景并打开对应案例叙事
   useEffect(() => {
     if (!pendingCaseId) return;
-    const id = consumeCaseId();
-    if (!id) return;
-    const pool = allBundlesForCoverage.length ? allBundlesForCoverage : bundles;
-    const hit = pool.find((b) =>
+    if (!allBundles.length) return;
+    const id = pendingCaseId;
+    const hit = allBundles.find((b) =>
       b.cases.some((c) => c.action.type === 'case' && c.action.caseId === id),
     );
     if (!hit) {
-      showToast(`未在样板间找到案例：${id}`);
+      consumeCaseId();
+      showToast(`未在场景案例中找到：${id}`);
       return;
     }
+    consumeCaseId();
     setListFilter('all');
-    setLeftTab('scenarios');
+    setDeptFilter('all');
+    setRegionFilter('all');
+    setEfficiencyFilter('all');
+    setSearch('');
     setSelectedId(hit.id);
     const card = hit.cases.find((c) => c.action.type === 'case' && c.action.caseId === id) ?? null;
-    if (card) setNarrativeCard(card);
-  }, [pendingCaseId, allBundlesForCoverage, bundles, consumeCaseId, showToast]);
+    if (card) {
+      setNarrativeCard(card);
+      setNarrativeKind(card.kind === 'insight' ? 'news' : card.kind === 'training' ? 'training' : card.kind === 'case' ? 'case' : 'all');
+    }
+  }, [pendingCaseId, allBundles, consumeCaseId, showToast]);
 
-  // 发现页场景入口：直接聚焦对应样板间场景
+  // 发现页场景入口：聚焦场景；若同时带了案例深链则由上方 case effect 打开叙事
   useEffect(() => {
     if (!pendingScenarioId) return;
-    const id = consumeScenarioId();
-    if (!id) return;
-    const pool = allBundlesForCoverage.length ? allBundlesForCoverage : bundles;
-    const hit = pool.find((b) => b.id === id);
+    if (!allBundles.length) return;
+    const id = pendingScenarioId;
+    const hit = allBundles.find((b) => b.id === id);
     if (!hit) {
+      consumeScenarioId();
       showToast(`未找到场景：${id}`);
-      setListFilter('all');
-      setLeftTab('scenarios');
       return;
     }
+    consumeScenarioId();
     setListFilter('all');
-    setLeftTab('scenarios');
+    setDeptFilter('all');
+    setRegionFilter('all');
+    setEfficiencyFilter('all');
+    setSearch('');
     setSelectedId(hit.id);
-    showToast(`已定位场景：${hit.label}`);
-  }, [pendingScenarioId, allBundlesForCoverage, bundles, consumeScenarioId, showToast]);
+    // 无独立案例深链时，自动打开该场景主案例
+    if (!useNavigationIntentStore.getState().peekCaseId()) {
+      const primary =
+        hit.cases.find(
+          (c) =>
+            c.action.type === 'case' &&
+            getPortalItemById(c.action.caseId)?.isGold &&
+            getPortalItemById(c.action.caseId)?.type === 'case',
+        ) ??
+        hit.cases.find(
+          (c) => c.action.type === 'case' && getPortalItemById(c.action.caseId)?.type === 'case',
+        ) ??
+        hit.cases[0] ??
+        null;
+      if (primary) setNarrativeCard(primary);
+    }
+  }, [pendingScenarioId, allBundles, consumeScenarioId, showToast]);
 
   const selected: ScenarioBundle | null = bundles.find((b) => b.id === selectedId) ?? null;
 
   const narrativeCards = useMemo(() => {
     if (!selected) return [];
     if (narrativeKind === 'all') return selected.cases;
+    if (narrativeKind === 'news') {
+      return selected.cases.filter((c) => c.kind === 'news' || c.kind === 'insight');
+    }
     return selected.cases.filter((c) => c.kind === narrativeKind);
   }, [selected, narrativeKind]);
 
   const narrativeKindOptions = useMemo(() => {
-    if (!selected?.cases.length) return [] as Array<'case' | 'insight' | 'training' | 'news'>;
-    const set = new Set(selected.cases.map((c) => c.kind));
-    return (['case', 'insight', 'training', 'news'] as const).filter((k) => set.has(k));
+    if (!selected?.cases.length) return [] as Array<'case' | 'training' | 'news'>;
+    const kinds = selected.cases.map((c) => (c.kind === 'insight' ? 'news' : c.kind));
+    const set = new Set(kinds);
+    return (['case', 'training', 'news'] as const).filter((k) => set.has(k));
   }, [selected]);
 
   const handleCard = (card: PortalMapCard) => {
     openPortalCard(card, { onInvokeAgent, onInvokeSkill, onAskKbDocument, showToast });
   };
 
-  const startScenario = (bundle: ScenarioBundle) => {
-    const primary = bundle.agents[0] ?? bundle.tools[0];
-    if (!primary) {
-      showToast('该场景尚无可用 Agent / Tool');
+  const invokePipelineStep = (plan: ScenarioDemoPlan, step: ScenarioPipelineStep, stepIndex: number) => {
+    const { agent, skill } = resolvePipelineStepTargets(step);
+    const total = plan.steps.length;
+    const prefix = `【专家团 ${stepIndex + 1}/${total} · ${plan.scenarioLabel} · ${step.label}】`;
+    if (skill) {
+      const body = buildSkillDemoPrompt(skill);
+      if (agent) {
+        onInvokeAgent(agent, `${prefix} ${body}`);
+      } else {
+        onInvokeSkill(skill);
+      }
+      showToast(`专家团第 ${stepIndex + 1}/${total} 步：${step.label}`);
       return;
     }
-    handleCard(primary);
+    if (agent) {
+      onInvokeAgent(agent, `${prefix} ${buildAgentDemoPrompt(agent)}`);
+      showToast(`专家团第 ${stepIndex + 1}/${total} 步：${agent.name}`);
+      return;
+    }
+    showToast(`未找到可调用的专家/技能：${step.label}`);
   };
+
+  const startScenario = (bundle: ScenarioBundle) => {
+    const plan = resolveScenarioDemoPlan(bundle);
+    if (!plan) {
+      showToast('该场景尚无可用专家或技能');
+      return;
+    }
+    if (plan.mode === 'team') {
+      setTeamPlan(plan);
+      return;
+    }
+    if (plan.soloSkill) {
+      onInvokeSkill(plan.soloSkill);
+      showToast(`已启动主能力（单专家）：${plan.label}`);
+      return;
+    }
+    if (plan.soloAgent) {
+      onInvokeAgent(plan.soloAgent);
+      showToast(`已启动主专家：${plan.soloAgent.name}`);
+      return;
+    }
+    showToast('该场景尚无可用专家或技能');
+  };
+
+  const selectedDemoPlan = selected ? resolveScenarioDemoPlan(selected) : null;
+
+  const downloadScenarioPack = (bundle: ScenarioBundle) => {
+    const items = resolveScenarioCaseItems(bundle);
+    if (!items.length) {
+      showToast('该场景暂无可下载的案例包');
+      return;
+    }
+    downloadScenarioCasePack(bundle.label, items);
+    const bump = useContentEngagementStore.getState().bumpDownload;
+    items.forEach((i) => bump(i.id));
+    showToast(
+      items.length === 1
+        ? `已下载案例包：${items[0]!.title}`
+        : `已下载场景案例包（${items.length} 个）`,
+    );
+  };
+
+  const narrativeOutcome = narrativeCard ? outcomeFromNarrativeCard(narrativeCard) : null;
+  const narrativeSkill = narrativeOutcome?.skillId
+    ? skills.find((s) => s.id === narrativeOutcome.skillId)
+    : undefined;
+  const narrativeAgent = narrativeOutcome?.agentId
+    ? agents.find((a) => a.id === narrativeOutcome.agentId)
+    : undefined;
 
   return (
     <div className="center-surface center-page scroll-hidden flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-4 py-4 md:px-6">
         <CenterPageHeader
-          title="场景库"
-          subtitle="样板间 · 可复制业务场景与能力组合"
+          title="场景案例"
+          subtitle="多专家场景走专家团打样 · 单专家场景走主能力 · 也可单独调用某位专家"
           tip={
             <>
-              左侧选业务场景 → 先看场景叙事与「一键打样」→ 再按需展开能力组合。首页「AI广场」是橱窗，这里是完整场景库。
+              3 分钟演示：选场景 → 打开金案例成效卡 →「立即打样」调用金牌 Skill。首页「AI广场」是橱窗，这里是完整案例库。
             </>
           }
           actions={
@@ -277,6 +394,16 @@ export function AiMapPage({ onInvokeAgent, onInvokeSkill, onAskKbDocument }: AiM
               >
                 回AI广场（橱窗）
               </button>
+              {canEditCase ? (
+                <button
+                  type="button"
+                  onClick={() => setEditorTarget('new')}
+                  className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white"
+                >
+                  <i className="fa-solid fa-plus mr-1" />
+                  新建案例
+                </button>
+              ) : null}
             </>
           }
         />
@@ -285,144 +412,82 @@ export function AiMapPage({ onInvokeAgent, onInvokeSkill, onAskKbDocument }: AiM
           deptFilter={deptFilter}
           regionFilter={regionFilter}
           efficiencyFilter={efficiencyFilter}
+          scenarioFilter={listFilter}
           onDeptChange={setDeptFilter}
           onRegionChange={setRegionFilter}
           onEfficiencyChange={setEfficiencyFilter}
+          onScenarioFilterChange={setListFilter}
         />
 
         <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3 md:flex-row">
           <aside className="flex w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white md:w-[260px]">
-            <div className="flex border-b border-zinc-100 p-1.5">
-              {(
-                [
-                  ['scenarios', '场景'],
-                  ['coverage', '组织覆盖'],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setLeftTab(id)}
-                  className={cn(
-                    'flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition',
-                    leftTab === id ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:bg-zinc-50',
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="border-b border-zinc-100 px-3 py-2">
+              <p className="text-[11px] font-semibold text-zinc-700">业务场景</p>
+              <p className="text-[10px] text-zinc-400">
+                {listFilter === 'related' ? '与我相关' : '全部场景'} · {bundles.length}
+              </p>
             </div>
-
-            {leftTab === 'scenarios' ? (
-              <div className="flex min-h-0 flex-1 flex-col">
-                <div className="flex gap-1 border-b border-zinc-100 px-2 py-2">
-                  {(
-                    [
-                      ['related', '与我相关'],
-                      ['all', '全部场景'],
-                    ] as const
-                  ).map(([id, label]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setListFilter(id)}
+            <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
+              {bundles.length === 0 ? (
+                <p className="px-2 py-8 text-center text-[11px] text-zinc-400">
+                  暂无匹配场景，试试顶部筛选「全部场景」
+                </p>
+              ) : (
+                bundles.map((b) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => setSelectedId(b.id)}
+                    className={cn(
+                      'flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition',
+                      selectedId === b.id
+                        ? 'bg-zinc-900 text-white'
+                        : 'text-zinc-700 hover:bg-zinc-50',
+                    )}
+                  >
+                    <span
                       className={cn(
-                        'rounded-md px-2 py-1 text-[10px] font-medium transition',
-                        listFilter === id
-                          ? 'bg-claw-600/10 text-claw-700'
-                          : 'text-zinc-400 hover:text-zinc-700',
+                        'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md',
+                        selectedId === b.id ? 'bg-white/15' : 'bg-zinc-100',
                       )}
                     >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
-                  {bundles.length === 0 ? (
-                    <p className="px-2 py-8 text-center text-[11px] text-zinc-400">
-                      暂无匹配场景，试试「全部场景」
-                    </p>
-                  ) : (
-                    bundles.map((b) => (
-                      <button
-                        key={b.id}
-                        type="button"
-                        onClick={() => setSelectedId(b.id)}
-                        className={cn(
-                          'flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition',
-                          selectedId === b.id
-                            ? 'bg-zinc-900 text-white'
-                            : 'text-zinc-700 hover:bg-zinc-50',
-                        )}
-                      >
+                      <i className={`fa-solid ${b.icon} text-[10px]`} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-1">
+                        <span className="truncate text-[12px] font-semibold">{b.label}</span>
                         <span
                           className={cn(
-                            'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md',
-                            selectedId === b.id ? 'bg-white/15' : 'bg-zinc-100',
+                            'shrink-0 text-[9px]',
+                            selectedId === b.id ? 'text-white/60' : 'text-zinc-400',
                           )}
                         >
-                          <i className={`fa-solid ${b.icon} text-[10px]`} />
+                          {b.completeness}/4
                         </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-center justify-between gap-1">
-                            <span className="truncate text-[12px] font-semibold">{b.label}</span>
-                            <span
-                              className={cn(
-                                'shrink-0 text-[9px]',
-                                selectedId === b.id ? 'text-white/60' : 'text-zinc-400',
-                              )}
-                            >
-                              {b.completeness}/4
-                            </span>
-                          </span>
-                          <span
-                            className={cn(
-                              'mt-0.5 block truncate text-[10px]',
-                              selectedId === b.id ? 'text-white/55' : 'text-zinc-400',
-                            )}
-                          >
-                            {b.desc}
-                          </span>
-                          <span
-                            className={cn(
-                              'mt-1 flex flex-wrap gap-1.5 text-[9px]',
-                              selectedId === b.id ? 'text-white/50' : 'text-zinc-400',
-                            )}
-                          >
-                            <span>专家 {b.agents.length}</span>
-                            <span>工具 {b.tools.length}</span>
-                            <span>案例 {b.cases.length}</span>
-                          </span>
-                        </span>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
-                <div>
-                  <p className="mb-1.5 text-[10px] font-semibold tracking-wide text-zinc-400">NP</p>
-                  <div className="space-y-1">
-                    {coverage
-                      .filter((r) => r.axis === 'dept')
-                      .map((row) => (
-                        <CoverageRow key={row.id} row={row} />
-                      ))}
-                  </div>
-                </div>
-                <div>
-                  <p className="mb-1.5 text-[10px] font-semibold tracking-wide text-zinc-400">区域</p>
-                  <div className="space-y-1">
-                    {coverage
-                      .filter((r) => r.axis === 'region')
-                      .map((row) => (
-                        <CoverageRow key={row.id} row={row} />
-                      ))}
-                  </div>
-                </div>
-              </div>
-            )}
+                      </span>
+                      <span
+                        className={cn(
+                          'mt-0.5 block truncate text-[10px]',
+                          selectedId === b.id ? 'text-white/55' : 'text-zinc-400',
+                        )}
+                      >
+                        {b.desc}
+                      </span>
+                      <span
+                        className={cn(
+                          'mt-1 flex flex-wrap gap-1.5 text-[9px]',
+                          selectedId === b.id ? 'text-white/50' : 'text-zinc-400',
+                        )}
+                      >
+                        <span>专家 {b.agents.length}</span>
+                        <span>工具 {b.tools.length}</span>
+                        <span>案例 {b.cases.length}</span>
+                      </span>
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
           </aside>
 
           <main className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-zinc-200/80 bg-[#fafafa]/80 p-3 md:p-4">
@@ -442,23 +507,38 @@ export function AiMapPage({ onInvokeAgent, onInvokeSkill, onAskKbDocument }: AiM
                     <p className="mt-2 text-[11px] text-zinc-400">
                       能力齐套 {selected.completeness}/4
                       {selected.related ? ' · 与你相关' : ''}
+                      {selectedDemoPlan?.mode === 'team'
+                        ? ` · 专家团 ${selectedDemoPlan.steps.length} 步`
+                        : ' · 单专家主能力'}
                       {selected.matchTags.length
                         ? ` · ${selected.matchTags.map((t) => `#${t}`).join(' ')}`
                         : ''}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => startScenario(selected)}
-                    className="rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-800"
-                  >
-                    一键打样
-                  </button>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => downloadScenarioPack(selected)}
+                      className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03]"
+                    >
+                      <i className="fa-solid fa-download mr-1 text-[10px]" />
+                      一键下载案例包
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => startScenario(selected)}
+                      className="rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-800"
+                    >
+                      {selectedDemoPlan?.mode === 'team'
+                        ? '一键打样（专家团）'
+                        : '一键打样（专家）'}
+                    </button>
+                  </div>
                 </div>
 
                 <section className="rounded-xl border border-zinc-200/80 bg-white p-3">
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-[12px] font-semibold text-claw-600">场景叙事 · 案例与培训</h3>
+                    <h3 className="text-[12px] font-semibold text-claw-600">样板间叙事 · 案例与培训</h3>
                     <span className="text-[10px] text-zinc-400">
                       {narrativeCards.length}/{selected.cases.length}
                     </span>
@@ -496,12 +576,10 @@ export function AiMapPage({ onInvokeAgent, onInvokeSkill, onAskKbDocument }: AiM
                               )}
                             >
                               {k === 'case'
-                                ? '案例'
-                                : k === 'insight'
-                                  ? '洞察'
-                                  : k === 'training'
-                                    ? '培训'
-                                    : '资讯'}
+                                ? '场景案例'
+                                : k === 'training'
+                                  ? '培训'
+                                  : '前沿洞察'}
                             </button>
                           ))}
                         </div>
@@ -526,6 +604,12 @@ export function AiMapPage({ onInvokeAgent, onInvokeSkill, onAskKbDocument }: AiM
                                 <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] font-semibold text-zinc-500">
                                   {card.kindLabel}
                                 </span>
+                                {card.action.type === 'case' &&
+                                getPortalItemById(card.action.caseId)?.isGold ? (
+                                  <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold text-amber-800">
+                                    金
+                                  </span>
+                                ) : null}
                               </div>
                               <p className="truncate text-[12px] font-semibold text-zinc-900">{card.title}</p>
                               <p className="mt-0.5 line-clamp-2 text-[10px] text-zinc-500">{card.desc}</p>
@@ -559,13 +643,13 @@ export function AiMapPage({ onInvokeAgent, onInvokeSkill, onAskKbDocument }: AiM
                   {capsOpen ? (
                     <div className="grid grid-cols-1 gap-3 border-t border-zinc-100 p-3 sm:grid-cols-3">
                       <Quadrant
-                        title="推荐 Agent"
-                        emptyHint="待建设 · 可挂载业务 Agent"
+                        title="专家（单独调用）"
+                        emptyHint="待建设 · 可挂载业务专家"
                         cards={selected.agents}
                         onCard={handleCard}
                       />
                       <Quadrant
-                        title="可用 Tool / Skill"
+                        title="技能 / 工具"
                         emptyHint="待建设 · 可挂载工具或 Skill"
                         cards={selected.tools}
                         onCard={handleCard}
@@ -589,10 +673,29 @@ export function AiMapPage({ onInvokeAgent, onInvokeSkill, onAskKbDocument }: AiM
         </div>
       </div>
 
+      <ExpertTeamModal
+        plan={teamPlan}
+        onClose={() => setTeamPlan(null)}
+        onStartTeam={(fromIndex = 0) => {
+          if (!teamPlan) return;
+          onStartExpertTeam(teamPlan, fromIndex);
+          setTeamPlan(null);
+        }}
+        onInvokeStep={(step) => {
+          if (!teamPlan) return;
+          const idx = teamPlan.steps.findIndex(
+            (s) => s.agentId === step.agentId && s.skillId === step.skillId,
+          );
+          invokePipelineStep(teamPlan, step, idx >= 0 ? idx : 0);
+          setTeamPlan(null);
+        }}
+      />
+
       <CenterModal
         open={!!narrativeCard}
-        title={narrativeCard?.title ?? '场景叙事'}
+        title={narrativeCard?.title ?? '案例成效'}
         onClose={() => setNarrativeCard(null)}
+        size="lg"
         actions={
           <button
             type="button"
@@ -603,56 +706,81 @@ export function AiMapPage({ onInvokeAgent, onInvokeSkill, onAskKbDocument }: AiM
           </button>
         }
       >
-        {narrativeCard ? (
-          <DocumentPreviewPanel
-            meta={{
-              title: narrativeCard.title,
-              typeLabel: narrativeCard.kindLabel,
-              author: narrativeCard.publisher,
-              updatedAt: narrativeCard.publishedAt,
-              pages: 3,
-              summary: narrativeCard.desc,
-              bodyParagraphs: [
-                narrativeCard.desc,
-                `本条目属于场景样板间资产，可与 Agent / Tool / 知识组合打样。`,
-                `类型：${narrativeCard.kindLabel} · 可见性与组织归属随门户运营配置。`,
-              ],
+        {narrativeCard && narrativeOutcome ? (
+          <CaseOutcomePanel
+            card={narrativeOutcome}
+            skillLabel={narrativeSkill?.name}
+            agentLabel={narrativeAgent?.name}
+            onInvokeSkill={
+              narrativeSkill
+                ? () => {
+                    onInvokeSkill(narrativeSkill);
+                    setNarrativeCard(null);
+                    showToast(`已调用金牌能力：${narrativeSkill.name}`);
+                  }
+                : narrativeAgent
+                  ? () => {
+                      onInvokeAgent(narrativeAgent);
+                      setNarrativeCard(null);
+                      showToast(`已调用专家：${narrativeAgent.name}`);
+                    }
+                  : undefined
+            }
+            onInvokeAgent={
+              narrativeAgent && narrativeSkill
+                ? () => {
+                    onInvokeAgent(narrativeAgent);
+                    setNarrativeCard(null);
+                  }
+                : undefined
+            }
+            onEdit={
+              canEditCase
+                ? () => {
+                    const id =
+                      narrativeCard.action.type === 'case'
+                        ? narrativeCard.action.caseId
+                        : narrativeOutcome.id;
+                    setEditorTarget(id);
+                  }
+                : undefined
+            }
+            onDownload={() => {
+              const item =
+                narrativeCard.action.type === 'case'
+                  ? getPortalItemById(narrativeCard.action.caseId)
+                  : getPortalItemById(narrativeOutcome.id);
+              if (!item) {
+                showToast('未找到可下载的案例内容');
+                return;
+              }
+              downloadCaseFile(item);
+              showToast('已下载案例包（.case.zip）');
             }}
           />
         ) : null}
       </CenterModal>
-    </div>
-  );
-}
 
-function CoverageRow({
-  row,
-}: {
-  row: ReturnType<typeof buildOrgCoverage>[number];
-}) {
-  return (
-    <div className="rounded-lg border border-zinc-100 px-2.5 py-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[12px] font-medium text-zinc-800">{row.label}</span>
-        <span
-          className={cn(
-            'rounded-full px-1.5 py-0.5 text-[9px] font-semibold',
-            row.strength === 'strong' && 'bg-emerald-50 text-emerald-700',
-            row.strength === 'partial' && 'bg-amber-50 text-amber-700',
-            row.strength === 'empty' && 'bg-zinc-100 text-zinc-400',
-          )}
-        >
-          {row.strength === 'strong' ? '齐套' : row.strength === 'partial' ? '部分' : '空白'}
-        </span>
-      </div>
-      <p className="mt-0.5 text-[10px] text-zinc-400">
-        {row.scenarioCount} 个场景 · {row.assetCount} 项资产
-      </p>
-      {row.gapLabels.length > 0 ? (
-        <p className="mt-1 truncate text-[10px] text-amber-600/90">
-          缺口：{row.gapLabels.slice(0, 3).join('、')}
-        </p>
-      ) : null}
+      <CaseEditorModal
+        target={editorTarget}
+        onClose={() => setEditorTarget(null)}
+        onSaved={(item) => {
+          // 若正在看该案例，刷新成效卡标题对应的 portal 数据即可（store 已更新）
+          if (
+            narrativeCard?.action.type === 'case' &&
+            narrativeCard.action.caseId === item.id
+          ) {
+            setNarrativeCard({
+              ...narrativeCard,
+              title: item.title,
+              desc: item.desc,
+              icon: item.icon,
+              publisher: item.publisher,
+              publishedAt: item.publishedAt,
+            });
+          }
+        }}
+      />
     </div>
   );
 }

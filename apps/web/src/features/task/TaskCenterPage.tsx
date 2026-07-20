@@ -5,6 +5,7 @@ import { WarRoomMembersModal } from '@/components/task/WarRoomMembersModal';
 import { TaskResourceExplorer } from '@/components/task/TaskResourceExplorer';
 import { TaskChatPanel } from '@/components/chat/TaskChatPanel';
 import { ArtifactPanel } from '@/components/artifact/ArtifactPanel';
+import { PushDeliverableModal } from '@/components/artifact/PushDeliverableModal';
 import { KbCitationPreviewModal } from '@/components/knowledge/KbCitationPreviewModal';
 import { useConversationStore } from '@/stores/conversationStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
@@ -15,6 +16,7 @@ import { useHomeStore } from '@/stores/homeStore';
 import { getAgentById } from '@/domain/plan';
 import { buildAppRoute } from '@/domain/appRoute';
 import { canUseWarRoomAi, isWarRoom } from '@/domain/chat';
+import { getMembersByWorkspace } from '@/domain/rbac';
 
 interface TaskCenterPageProps {
   onWorkspaceSwitch?: (workspaceId: string) => void;
@@ -24,6 +26,7 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
   const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const setAppView = useAppViewStore((s) => s.setAppView);
   const setHomeMode = useHomeStore((s) => s.setHomeMode);
+  const [pushOpen, setPushOpen] = useState(false);
   const {
     taskListCollapsed,
     artifactPanelCollapsed,
@@ -52,7 +55,6 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
   const sandboxAgentName = useConversationStore((s) => s.sandboxAgentName);
   const sandboxSkills = useConversationStore((s) => s.sandboxSkills);
   const sandboxAgentReply = useConversationStore((s) => s.sandboxAgentReply);
-  const openExport = useConversationStore((s) => s.openExport);
   const pushToGroup = useConversationStore((s) => s.pushToGroup);
   const pinCurrentChat = useConversationStore((s) => s.pinCurrentChat);
   const exportChatJson = useConversationStore((s) => s.exportChatJson);
@@ -61,6 +63,8 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
   const kbPreviewDocId = useConversationStore((s) => s.kbPreviewDocId);
   const openKbPreview = useConversationStore((s) => s.openKbPreview);
   const closeKbPreview = useConversationStore((s) => s.closeKbPreview);
+  const pendingTaskSubmit = useConversationStore((s) => s.pendingTaskSubmit);
+  const expertTeamRelay = useConversationStore((s) => s.expertTeamRelay);
   const consumePendingTaskSubmit = useConversationStore((s) => s.consumePendingTaskSubmit);
   const createAgentTaskSession = useConversationStore((s) => s.createAgentTaskSession);
   const createWarRoomSession = useConversationStore((s) => s.createWarRoomSession);
@@ -87,8 +91,9 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
   const prevReadyRef = useRef(false);
 
   useEffect(() => {
+    if (!pendingTaskSubmit || pendingTaskSubmit.chatId !== currentChatId) return;
     const pending = consumePendingTaskSubmit();
-    if (!pending || pending.chatId !== currentChatId) return;
+    if (!pending) return;
     const key = `${pending.chatId}:${pending.message}:${pending.autoSend}`;
     if (pendingHandled.current === key) return;
     pendingHandled.current = key;
@@ -98,13 +103,13 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
     } else {
       setDraft(pending.message);
     }
-  }, [currentChatId, consumePendingTaskSubmit, sendMessage, workspaceId]);
+  }, [currentChatId, pendingTaskSubmit, consumePendingTaskSubmit, sendMessage, workspaceId]);
 
   // 交付物就绪时轻提示打开预览
   useEffect(() => {
     if (sandboxReady && !prevReadyRef.current && artifactPanelCollapsed) {
       useConversationStore.setState({
-        pushToast: '交付物已就绪 · 点击右侧「预览」查看',
+        pushToast: '交付件已就绪 · 点击右侧「预览」查看',
       });
     }
     prevReadyRef.current = sandboxReady;
@@ -112,11 +117,28 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
 
   return (
     <div className="relative flex min-h-0 flex-1 overflow-hidden">
-      {focusBannerVisible ? (
+      {expertTeamRelay && expertTeamRelay.chatId === currentChatId ? (
+        <div className="absolute left-1/2 top-3 z-30 flex max-w-[min(92vw,560px)] -translate-x-1/2 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 shadow-md">
+          <i className="fa-solid fa-people-group text-[12px] text-zinc-600" />
+          <p className="min-w-0 flex-1 text-[11px] leading-snug text-zinc-600">
+            专家团「{expertTeamRelay.scenarioLabel}」接力中 · 第{' '}
+            {expertTeamRelay.currentIndex + 1}/{expertTeamRelay.steps.length} 步 ·{' '}
+            {expertTeamRelay.steps[expertTeamRelay.currentIndex]?.label ?? '—'}
+            {expertTeamRelay.autoApprove ? '（计划自动确认）' : ''}
+          </p>
+          <button
+            type="button"
+            onClick={cancelStream}
+            className="shrink-0 rounded-lg border border-zinc-200 px-2.5 py-1 text-[10px] font-medium text-zinc-600 hover:bg-zinc-50"
+          >
+            中止接力
+          </button>
+        </div>
+      ) : focusBannerVisible ? (
         <div className="absolute left-1/2 top-3 z-30 flex max-w-[min(92vw,520px)] -translate-x-1/2 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 shadow-md">
           <i className="fa-solid fa-comments text-[12px] text-zinc-500" />
           <p className="min-w-0 flex-1 text-[11px] leading-snug text-zinc-600">
-            已进入对话专注：侧栏已收起，会话列表可切换历史；交付物就绪后可打开右侧预览。
+            已进入对话专注：侧栏已收起，会话列表可切换历史；交付件就绪后可打开右侧预览。
           </p>
           <button
             type="button"
@@ -191,14 +213,13 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
             onToggleCollapse={() => {
               if (!hasDeliverable) {
                 useConversationStore.setState({
-                  pushToast: '对话完成后将生成交付物，再打开右侧预览',
+                  pushToast: '对话完成后将生成交付件，再打开右侧预览',
                 });
                 return;
               }
               toggleArtifactPanel();
             }}
-            onExport={openExport}
-            onPush={() => void pushToGroup()}
+            onPush={() => setPushOpen(true)}
             onCitationClick={(docId, index, snippet) => {
               setCitationSnippet(snippet);
               setCitationIndex(index);
@@ -276,6 +297,20 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
           onToggleAi={(memberId, canUseAi) => setWarRoomMemberAi(chat.id, memberId, canUseAi)}
         />
       )}
+
+      <PushDeliverableModal
+        open={pushOpen}
+        onClose={() => setPushOpen(false)}
+        warrooms={Object.values(chats).filter((c) => isWarRoom(c))}
+        members={getMembersByWorkspace(workspaceId)}
+        onConfirm={(target) => {
+          void pushToGroup(
+            target.mode === 'warroom'
+              ? { warroomIds: target.warroomIds }
+              : { memberIds: target.memberIds },
+          );
+        }}
+      />
     </div>
   );
 }

@@ -20,6 +20,8 @@ const SKILL_COLORS: Record<string, { from: string; to: string }> = {
   'skill-doc-parser': { from: '#0ea5e9', to: '#0369a1' },
   'skill-launch-sentiment': { from: '#f43f5e', to: '#be123c' },
   'skill-survey-insight': { from: '#06b6d4', to: '#0e7490' },
+  'skill-review-collect': { from: '#059669', to: '#065f46' },
+  'skill-review-translate': { from: '#0284c7', to: '#075985' },
   'skill-review-cluster': { from: '#eab308', to: '#a16207' },
   'skill-retail-insight': { from: '#22c55e', to: '#15803d' },
   'skill-price-monitor': { from: '#10b981', to: '#047857' },

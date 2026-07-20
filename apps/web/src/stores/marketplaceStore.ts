@@ -13,7 +13,8 @@ import type {
 } from '@/domain/prototype/types';
 import type { EfficiencyCategory } from '@/domain/prototype/types';
 import { kbDocFromFile, readKbFileAsText } from '@/domain/kbUtils';
-import { parseSkillImport } from '@/domain/skillExport';
+import { parseSkillUpload } from '@/domain/skillExport';
+import { parseAgentUpload } from '@/domain/agentExport';
 import { parseKbDocument } from '@/api/kbClient';
 import { rebuildKbVectorIndex } from '@/api/kbClient';
 import { loadMarketplace, scheduleSaveMarketplace } from '@/domain/persistence/storage';
@@ -65,7 +66,8 @@ interface MarketplaceState {
   upsertAutomation: (automation: PrototypeAutomation, isNew?: boolean) => void;
   upsertKbDoc: (doc: PrototypeKbDocument, isNew?: boolean) => void;
   uploadKbFile: (file: File) => Promise<string | null>;
-  importSkillFile: (file: File) => Promise<void>;
+  importSkillFile: (file: File) => Promise<PrototypeSkillSeed[]>;
+  importAgentFile: (file: File) => Promise<PrototypeAgentSeed[]>;
   syncKbIndex: () => void;
   getPublishedAgents: () => PrototypeAgentSeed[];
   getPublishedSkills: () => PrototypeSkillSeed[];
@@ -216,31 +218,79 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
 
   importSkillFile: async (file) => {
     try {
-      const text = await file.text();
-      const json = JSON.parse(text) as unknown;
-      const items = Array.isArray(json) ? json : [json];
-      let imported = 0;
+      const items = await parseSkillUpload(file);
+      const importedSkills: PrototypeSkillSeed[] = [];
+      const userName = getCurrentUserName() || 'Imported';
+      const userId = getCurrentUserId();
 
-      for (const item of items) {
-        const parsed = parseSkillImport(item);
-        if (!parsed) continue;
-
+      for (const parsed of items) {
         const idTaken = get().skills.some((s) => s.id === parsed.id);
-        const skill: PrototypeSkillSeed = idTaken
-          ? { ...parsed, id: `skill-import-${Date.now()}-${imported}` }
-          : parsed;
+        const skill: PrototypeSkillSeed = {
+          ...(idTaken
+            ? { ...parsed, id: `skill-import-${Date.now()}-${importedSkills.length}` }
+            : parsed),
+          // 导入视为当前用户构建，便于在「我构建的」中找到
+          publisher: userName,
+          publisherUserId: userId || parsed.publisherUserId,
+          author: parsed.author || userName,
+        };
 
         get().upsertSkill(skill, true);
-        imported += 1;
+        importedSkills.push(skill);
       }
 
-      if (imported > 0) {
-        get().showToast(`已导入 ${imported} 个 Skill`);
+      if (importedSkills.length > 0) {
+        const names = importedSkills.map((s) => s.name).join('、');
+        get().showToast(
+          importedSkills.length === 1
+            ? `已导入技能「${names}」（列表顶部 · 可筛「我构建的」）`
+            : `已导入 ${importedSkills.length} 个技能：${names}`,
+        );
       } else {
-        get().showToast('未能识别有效的 Skill 包格式');
+        get().showToast('未能识别有效的 Skill 包（支持 .skill.zip / SKILL.md / JSON）');
       }
+      return importedSkills;
     } catch {
-      get().showToast('Skill 包解析失败，请检查 JSON 格式');
+      get().showToast('Skill 包解析失败，请检查 ZIP / SKILL.md / JSON 格式');
+      return [];
+    }
+  },
+
+  importAgentFile: async (file) => {
+    try {
+      const items = await parseAgentUpload(file);
+      const imported: PrototypeAgentSeed[] = [];
+      const userName = getCurrentUserName() || 'Imported';
+      const userId = getCurrentUserId();
+
+      for (const parsed of items) {
+        const idTaken = get().agents.some((a) => a.id === parsed.id);
+        const agent: PrototypeAgentSeed = {
+          ...(idTaken
+            ? { ...parsed, id: `agent-import-${Date.now()}-${imported.length}` }
+            : parsed),
+          publisher: userName,
+          publisherUserId: userId || parsed.publisherUserId,
+          author: parsed.author || userName,
+        };
+        get().upsertAgent(agent, true);
+        imported.push(agent);
+      }
+
+      if (imported.length > 0) {
+        const names = imported.map((a) => a.name).join('、');
+        get().showToast(
+          imported.length === 1
+            ? `已导入专家「${names}」（列表顶部 · 可筛「我构建的」）`
+            : `已导入 ${imported.length} 个专家：${names}`,
+        );
+      } else {
+        get().showToast('未能识别有效的专家包（支持 .agent.zip / JSON）');
+      }
+      return imported;
+    } catch {
+      get().showToast('专家包解析失败，请检查 ZIP / JSON 格式');
+      return [];
     }
   },
 

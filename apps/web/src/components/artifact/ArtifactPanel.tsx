@@ -1,13 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
-import { KnowledgeCard } from '@/components/artifact/KnowledgeCard';
-import { MarketingBoard } from '@/components/artifact/MarketingBoard';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildDeliverablePreviews,
   downloadDeliverable,
+  generateDeliverableFromMarkdown,
+  hasDeliverableContent,
+  isGeneratableKind,
   type DeliverablePreview,
 } from '@/domain/deliverables';
 import type { KbArtifact } from '@/domain/kbSearch';
+import { isLlmConfigured } from '@/api/llmClient';
 import { cn } from '@/lib/utils';
+import { PptDeckPreview } from '@/components/artifact/PptDeckPreview';
+import type { PptSlide } from '@/domain/pptSlides';
 
 interface ArtifactPanelProps {
   ready: boolean;
@@ -19,7 +23,6 @@ interface ArtifactPanelProps {
   kbArtifact?: KbArtifact | null;
   collapsed: boolean;
   onToggleCollapse: () => void;
-  onExport: () => void;
   onPush: () => void;
   onCitationClick?: (docId: string, citationIndex: number, snippet: string) => void;
   onDeliverableDownload?: (name: string) => void;
@@ -43,42 +46,19 @@ function renderSimpleMarkdown(md: string): string {
     .replace(/\n\n/g, '<br/><br/>');
 }
 
-/** 交付物 HTML 预览：避免 sandbox="" 导致空白页 */
+/** 交付件 HTML 预览：用 srcDoc，避免 blob URL + sandbox 在部分环境空白 */
 function HtmlDeliverableFrame({ title, html }: { title: string; html: string }) {
-  const src = useMemo(() => {
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    return URL.createObjectURL(blob);
-  }, [html]);
-
-  useEffect(() => {
-    return () => URL.revokeObjectURL(src);
-  }, [src]);
-
   return (
     <iframe
       title={title}
-      src={src}
-      // 同源 blob + 允许样式；不开放脚本，避免 XSS
-      sandbox="allow-same-origin"
-      className="h-[min(70vh,560px)] w-full rounded-xl border border-zinc-200 bg-white"
+      srcDoc={html}
+      sandbox=""
+      className="h-[min(72vh,640px)] w-full rounded-xl border border-zinc-200 bg-white"
     />
   );
 }
 
-function DeliverablePreviewView({
-  item,
-  kbArtifact,
-  onCitationClick,
-}: {
-  item: DeliverablePreview;
-  kbArtifact?: KbArtifact | null;
-  onCitationClick?: (docId: string, citationIndex: number, snippet: string) => void;
-}) {
-  if (item.kind === 'board') return <MarketingBoard />;
-  if (item.kind === 'knowledge') {
-    return <KnowledgeCard artifact={kbArtifact} onCitationClick={onCitationClick} />;
-  }
-
+function DeliverablePreviewView({ item }: { item: DeliverablePreview }) {
   if (item.kind === 'markdown' && item.markdown) {
     return (
       <div
@@ -92,80 +72,8 @@ function DeliverablePreviewView({
     return <HtmlDeliverableFrame title={item.title} html={item.html} />;
   }
 
-  if (item.kind === 'pdf' && item.pdfPages) {
-    return (
-      <div className="space-y-3 rounded-xl bg-[#f3f3f5] p-3">
-        {item.pdfPages.map((page, i) => (
-          <article
-            key={i}
-            className="mx-auto min-h-[200px] max-w-lg rounded-sm bg-white px-8 py-7 shadow-sm ring-1 ring-black/5"
-          >
-            <div className="mb-3 flex items-center justify-between border-b border-zinc-100 pb-2">
-              <h3 className="text-[13px] font-semibold text-zinc-900">{page.heading}</h3>
-              <span className="text-[10px] text-zinc-400">
-                {i + 1} / {item.pdfPages!.length}
-              </span>
-            </div>
-            <p className="whitespace-pre-wrap text-[12px] leading-7 text-zinc-700">{page.body}</p>
-          </article>
-        ))}
-      </div>
-    );
-  }
-
   if (item.kind === 'ppt' && item.slides) {
-    return (
-      <div className="space-y-3">
-        {item.slides.map((slide, i) => (
-          <div
-            key={i}
-            className="aspect-[16/9] overflow-hidden rounded-xl border border-zinc-200 bg-gradient-to-br from-zinc-900 to-zinc-700 p-6 text-white shadow-sm"
-          >
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/50">
-              Slide {i + 1}
-            </p>
-            <h3 className="mt-2 text-[18px] font-semibold">{slide.title}</h3>
-            <ul className="mt-4 space-y-2 text-[13px] text-white/85">
-              {slide.bullets.map((b) => (
-                <li key={b} className="flex gap-2">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
-                  <span>{b}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (item.kind === 'xlsx' && item.table) {
-    return (
-      <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
-        <table className="w-full min-w-[360px] text-left text-[12px]">
-          <thead className="border-b border-zinc-200 bg-zinc-50 text-[10px] font-bold uppercase text-zinc-500">
-            <tr>
-              {item.table.headers.map((h) => (
-                <th key={h} className="px-3 py-2.5">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {item.table.rows.map((row, i) => (
-              <tr key={i} className="border-b border-zinc-100 last:border-0">
-                {row.map((cell, j) => (
-                  <td key={j} className="px-3 py-2.5 text-zinc-700">
-                    {cell}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
+    return <PptDeckPreview slides={item.slides as PptSlide[]} />;
   }
 
   return (
@@ -185,13 +93,11 @@ export function ArtifactPanel({
   kbArtifact = null,
   collapsed,
   onToggleCollapse,
-  onExport,
   onPush,
-  onCitationClick,
   onDeliverableDownload,
   onRunExample,
 }: ArtifactPanelProps) {
-  const deliverables = useMemo(
+  const baseDeliverables = useMemo(
     () =>
       ready && type
         ? buildDeliverablePreviews({
@@ -206,7 +112,30 @@ export function ArtifactPanel({
     [ready, type, query, agentName, skills, agentReply, kbArtifact],
   );
 
+  /** 任务上下文变化时重置已生成的 HTML/PPT */
+  const contextKey = `${type}|${query}|${agentName}|${agentReply.slice(0, 80)}`;
+  const [overrides, setOverrides] = useState<Record<string, Partial<DeliverablePreview>>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    setOverrides({});
+    setGenerateError(null);
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setGeneratingId(null);
+  }, [contextKey]);
+
+  const deliverables = useMemo(
+    () =>
+      baseDeliverables.map((item) => {
+        const patch = overrides[item.id];
+        return patch ? { ...item, ...patch, pendingGenerate: false } : item;
+      }),
+    [baseDeliverables, overrides],
+  );
 
   useEffect(() => {
     if (!deliverables.length) {
@@ -214,19 +143,50 @@ export function ArtifactPanel({
       return;
     }
     if (!activeId || !deliverables.some((d) => d.id === activeId)) {
-      setActiveId(deliverables[0].id);
+      setActiveId(deliverables[0]!.id);
     }
   }, [deliverables, activeId]);
 
   const active = deliverables.find((d) => d.id === activeId) ?? null;
+  const markdownSource = deliverables.find((d) => d.kind === 'markdown')?.markdown ?? '';
+  const activeHasContent = active ? hasDeliverableContent(active) : false;
+  const canGenerate =
+    active &&
+    isGeneratableKind(active.kind) &&
+    !activeHasContent &&
+    Boolean(markdownSource.trim());
 
-  const contextLine = [
-    agentName || null,
-    skills.length ? skills.slice(0, 2).join('、') : null,
-    query ? (query.length > 28 ? `${query.slice(0, 28)}…` : query) : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const handleGenerate = async () => {
+    if (!active || !type || !isGeneratableKind(active.kind) || !markdownSource.trim()) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setGeneratingId(active.id);
+    setGenerateError(null);
+
+    try {
+      const generated = await generateDeliverableFromMarkdown(
+        active.kind,
+        markdownSource,
+        { type, query, agentName, skills, agentReply, kbArtifact },
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      setOverrides((prev) => ({
+        ...prev,
+        [active.id]: {
+          ...generated,
+          pendingGenerate: false,
+        },
+      }));
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      setGenerateError(err instanceof Error ? err.message : '生成失败，请重试');
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null;
+      setGeneratingId((id) => (id === active.id ? null : id));
+    }
+  };
 
   return (
     <>
@@ -237,69 +197,69 @@ export function ArtifactPanel({
               type="button"
               onClick={onToggleCollapse}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900"
-              title="收起交付物预览"
+              title="收起交付件预览"
             >
               <i className="fa-solid fa-chevron-right text-xs" />
             </button>
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-100 text-zinc-700">
               <i className="fa-solid fa-file-lines text-xs" />
             </div>
-            <div className="min-w-0">
-              <p className="truncate text-[11px] font-semibold leading-none text-zinc-900">交付物预览</p>
-              <p className="mt-0.5 truncate text-[10px] text-zinc-500">
-                {ready ? contextLine || 'Markdown · HTML · PDF · PPT' : '等待任务执行后展示'}
-              </p>
-            </div>
+            <p className="truncate text-[11px] font-semibold leading-none text-zinc-900">交付件预览</p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={onExport}
-              disabled={!ready}
-              className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-zinc-600 shadow-sm transition hover:border-zinc-300 hover:text-zinc-900 disabled:opacity-40"
-            >
-              <i className="fa-solid fa-file-export text-[10px] text-zinc-400" />
-              导出
-            </button>
-            <button
-              type="button"
-              onClick={onPush}
-              disabled={!ready}
-              className="apple-btn-primary flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-40"
-            >
-              <i className="fa-solid fa-paper-plane text-[10px]" />
-              推送作战室
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onPush}
+            disabled={!ready}
+            className="apple-btn-primary flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-40"
+          >
+            <i className="fa-solid fa-paper-plane text-[10px]" />
+            推送
+          </button>
         </div>
 
         {ready && deliverables.length > 0 && (
           <div className="flex shrink-0 items-center gap-2 border-b border-zinc-200/80 bg-white px-3 py-2">
             <div className="flex flex-1 gap-1.5 overflow-x-auto scroll-hidden">
-              {deliverables.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setActiveId(item.id)}
-                  className={cn(
-                    'flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] transition',
-                    activeId === item.id
-                      ? 'border-zinc-900 bg-zinc-900 text-white'
-                      : 'border-zinc-200 bg-zinc-50 text-zinc-700 hover:border-zinc-300 hover:bg-white',
-                  )}
-                >
-                  <i
+              {deliverables.map((item) => {
+                const filled = hasDeliverableContent(item);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveId(item.id);
+                      setGenerateError(null);
+                    }}
                     className={cn(
-                      'text-[10px]',
-                      item.icon.startsWith('fa-') ? `fa-solid ${item.icon}` : item.icon,
-                      activeId === item.id ? 'text-white/80' : item.iconClass,
+                      'flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] transition',
+                      activeId === item.id
+                        ? 'border-zinc-900 bg-zinc-900 text-white'
+                        : 'border-zinc-200 bg-zinc-50 text-zinc-700 hover:border-zinc-300 hover:bg-white',
                     )}
-                  />
-                  <span className="font-medium">{item.name}</span>
-                </button>
-              ))}
+                  >
+                    <i
+                      className={cn(
+                        'text-[10px]',
+                        item.icon.startsWith('fa-') ? `fa-solid ${item.icon}` : item.icon,
+                        activeId === item.id ? 'text-white/80' : item.iconClass,
+                      )}
+                    />
+                    <span className="font-medium">{item.name}</span>
+                    {!filled && item.kind !== 'markdown' ? (
+                      <span
+                        className={cn(
+                          'rounded px-1 text-[9px]',
+                          activeId === item.id ? 'bg-white/15 text-white/70' : 'bg-zinc-200/80 text-zinc-500',
+                        )}
+                      >
+                        空
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
             </div>
-            {active ? (
+            {active && activeHasContent ? (
               <button
                 type="button"
                 onClick={() => {
@@ -321,9 +281,9 @@ export function ArtifactPanel({
               <div className="canvas-empty-icon relative mb-4 flex h-20 w-20 items-center justify-center rounded-xl border border-zinc-200 shadow-sm">
                 <i className="fa-solid fa-wand-magic-sparkles text-3xl text-zinc-400" />
               </div>
-              <h3 className="mb-1.5 text-[15px] font-semibold text-zinc-900">等待 Agent 交付物</h3>
+              <h3 className="mb-1.5 text-[15px] font-semibold text-zinc-900">等待 Agent 交付件</h3>
               <p className="max-w-sm text-center text-[12px] leading-relaxed text-zinc-500">
-                确认执行计划后，将按所选 Agent / Skill 生成 Markdown、HTML、PDF、PPT 等可预览交付件。
+                确认执行计划后，将先生成 Markdown；可再切换到 HTML / PPT，基于全文点击「开始生成」预览。
               </p>
               {onRunExample && (
                 <div className="mt-4 grid w-full max-w-sm grid-cols-1 gap-1.5">
@@ -371,11 +331,57 @@ export function ArtifactPanel({
                 <p className="text-[11px] font-semibold text-zinc-800">{active.title}</p>
                 <span className="text-[10px] text-zinc-400">{active.size}</span>
               </div>
-              <DeliverablePreviewView
-                item={active}
-                kbArtifact={kbArtifact}
-                onCitationClick={onCitationClick}
-              />
+
+              {generatingId === active.id ? (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-white px-4 py-16 text-center">
+                  <i className="fa-solid fa-spinner fa-spin mb-3 text-2xl text-zinc-400" />
+                  <p className="text-[13px] font-semibold text-zinc-800">
+                    正在基于 Markdown 生成 {active.name}…
+                  </p>
+                  <p className="mt-1 text-[11px] text-zinc-500">
+                    {active.kind === 'html'
+                      ? isLlmConfigured()
+                        ? '模型提炼分析看板 · 本地模板排版中'
+                        : '本地转写 HTML 报告中'
+                      : isLlmConfigured()
+                        ? '调用 AI 模型提炼幻灯片结构'
+                        : '正在按章节拆解为幻灯片'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => abortRef.current?.abort()}
+                    className="mt-4 rounded-lg border border-zinc-200 px-3 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"
+                  >
+                    取消
+                  </button>
+                </div>
+              ) : canGenerate ? (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-4 py-14 text-center">
+                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-500">
+                    <i className={cn('fa-solid text-lg', active.icon)} />
+                  </div>
+                  <p className="text-[13px] font-semibold text-zinc-800">{active.name} 尚未生成</p>
+                  <p className="mt-1.5 max-w-xs text-[11px] leading-relaxed text-zinc-500">
+                    {active.kind === 'html'
+                      ? isLlmConfigured()
+                        ? '模型按场景提炼 KPI/发现/风险/行动，再用现有精美模板排版；正文仍完整保留 Markdown。'
+                        : '将把当前 Markdown 全文排版为可预览 HTML 报告（未配置模型时走本地转写）。'
+                      : `将按章节把 Markdown 拆成 16:9 幻灯片${isLlmConfigured() ? '（可调用模型提炼要点）' : ''}。`}
+                  </p>
+                  {generateError ? (
+                    <p className="mt-2 max-w-xs text-[11px] text-red-600">{generateError}</p>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void handleGenerate()}
+                    className="apple-btn-primary mt-4 rounded-lg px-4 py-2 text-[12px] font-semibold text-white"
+                  >
+                    开始生成
+                  </button>
+                </div>
+              ) : (
+                <DeliverablePreviewView item={active} />
+              )}
             </div>
           )}
         </div>
@@ -386,7 +392,7 @@ export function ArtifactPanel({
           type="button"
           onClick={onToggleCollapse}
           className="artifact-panel-expand-tab visible flex flex-col items-center justify-center gap-1 text-[10px] font-semibold"
-          title="展开交付物预览"
+          title="展开交付件预览"
         >
           <i className="fa-solid fa-file-lines text-sm" />
           <span style={{ writingMode: 'vertical-rl' }}>预览</span>

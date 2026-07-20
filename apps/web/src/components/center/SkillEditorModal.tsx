@@ -34,11 +34,24 @@ function emptySkill(): PrototypeSkillSeed {
     invokes: 0,
     icon: 'fa-cube',
     tags: [],
+    instructions: '',
+    planSteps: [],
     sourceType: 'internal',
     visibility: 'public',
     ownerDeptIds: [],
     ownerRegionId: null,
     homepageUrl: '',
+  };
+}
+
+function normalizeSkillForm(skill: PrototypeSkillSeed): PrototypeSkillSeed {
+  return {
+    ...emptySkill(),
+    ...skill,
+    tags: Array.isArray(skill.tags) ? skill.tags : [],
+    instructions: skill.instructions ?? '',
+    planSteps: Array.isArray(skill.planSteps) ? skill.planSteps : [],
+    ownerDeptIds: Array.isArray(skill.ownerDeptIds) ? skill.ownerDeptIds : [],
   };
 }
 
@@ -58,7 +71,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       return;
     }
     const existing = skills.find((s) => s.id === target);
-    setForm(existing ? { ...existing } : emptySkill());
+    setForm(existing ? normalizeSkillForm(existing) : emptySkill());
   }, [target, skills]);
 
   if (!target) return null;
@@ -82,6 +95,8 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     const userId = getCurrentUserId();
     const id = isNew ? `skill-${Date.now()}` : (target as string);
     const needsApproval = isNew || (form.published && !prev?.published);
+    const instructions = form.instructions?.trim() || undefined;
+    const planSteps = (form.planSteps ?? []).map((s) => s.trim()).filter(Boolean);
 
     upsertSkill(
       {
@@ -93,12 +108,14 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
         command: cmd,
         version: form.version.trim() || '1.0.0',
         connector: form.connector.trim(),
-        tags: form.tags,
+        tags: Array.isArray(form.tags) ? form.tags : [],
+        instructions,
+        planSteps: planSteps.length ? planSteps : undefined,
         author: prev?.author ?? userName,
         publisher: form.publisher || userName,
         publisherUserId: form.publisherUserId || userId || undefined,
         invokes: prev?.invokes ?? 0,
-        icon: prev?.icon ?? 'fa-cube',
+        icon: prev?.icon ?? form.icon ?? 'fa-cube',
         sourceType: form.sourceType ?? 'internal',
         visibility: form.visibility ?? 'public',
         ownerDeptIds: (form.ownerDeptIds ?? []) as DeptId[],
@@ -124,6 +141,8 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   return (
     <CenterModal
       open
+      elevate
+      size="lg"
       title={isNew ? '创建技能' : '编辑技能'}
       onClose={onClose}
       actions={<ModalActions onCancel={onClose} onSave={handleSave} />}
@@ -190,7 +209,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
         </div>
         <FormField label="标签（逗号分隔）">
           <FormInput
-            value={form.tags.join(', ')}
+            value={(form.tags ?? []).join(', ')}
             onChange={(e) =>
               setForm({
                 ...form,
@@ -198,6 +217,40 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                   .split(',')
                   .map((t) => t.trim())
                   .filter(Boolean),
+              })
+            }
+          />
+        </FormField>
+
+        <FormField
+          label="Skill 正文（对话执行时注入）"
+          hint="填写后技能页显示「可对话执行」；任务中挂载该正文"
+        >
+          <FormTextarea
+            rows={8}
+            className="font-mono text-[12px] leading-relaxed"
+            placeholder={'你是某某 Skill（/指令）。\n\n## 能力范围\n...\n\n## 必须输出\n...'}
+            value={form.instructions ?? ''}
+            onChange={(e) => setForm({ ...form, instructions: e.target.value })}
+          />
+        </FormField>
+
+        <FormField
+          label="执行计划步骤（每行一步）"
+          hint="挂载技能时展示的默认计划；留空则使用通用计划"
+        >
+          <FormTextarea
+            rows={5}
+            className="font-mono text-[12px] leading-relaxed"
+            placeholder={'解析任务范围\n汇总关键数据\n生成结论与行动建议'}
+            value={(form.planSteps ?? []).join('\n')}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                planSteps: e.target.value
+                  .split('\n')
+                  .map((s) => s.trimEnd())
+                  .filter((s) => s.trim().length > 0),
               })
             }
           />

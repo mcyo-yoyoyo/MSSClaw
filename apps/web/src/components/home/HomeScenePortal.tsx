@@ -6,6 +6,7 @@ import {
   filterAiMapCards,
   type PortalMapCard,
 } from '@/domain/portalMap';
+import { resolvePrimaryCaseIdForScenario } from '@/domain/portalCase';
 import { openPortalCard } from '@/domain/portalNavigation';
 import {
   AI_TOOL_NAV_CATEGORIES,
@@ -322,6 +323,7 @@ export function HomeScenePortal({ onInvokeAgent, onInvokeSkill }: HomeScenePorta
   const [howToTool, setHowToTool] = useState<PrototypeToolSeed | null>(null);
   const focusPortalType = useNavigationIntentStore((s) => s.focusPortalType);
   const focusScenario = useNavigationIntentStore((s) => s.focusScenario);
+  const focusCase = useNavigationIntentStore((s) => s.focusCase);
   const engagementOf = useContentEngagementStore((s) => s.get);
   const engagementById = useContentEngagementStore((s) => s.byId);
   const bumpUse = useContentEngagementStore((s) => s.bumpUse);
@@ -360,14 +362,22 @@ export function HomeScenePortal({ onInvokeAgent, onInvokeSkill }: HomeScenePorta
       scenarioBelongsToCapability(s.id, capability),
     );
     return sortByRankMode(
-      filtered.map((s) => ({
-        ...s,
-        publishedAt: SCENARIO_PUBLISHED_AT[s.id as DiscoverScenarioId],
-      })),
+      filtered.map((s) => {
+        const caseId = resolvePrimaryCaseIdForScenario(s.id);
+        const caseItem = caseId
+          ? portalContent.find((p) => p.id === caseId)
+          : undefined;
+        return {
+          ...s,
+          publishedAt: SCENARIO_PUBLISHED_AT[s.id as DiscoverScenarioId],
+          primaryCaseId: caseId,
+          primaryCaseTitle: caseItem?.title,
+        };
+      }),
       rankMode,
       engagementOf,
     );
-  }, [discoverScenarios, capability, rankMode, engagementOf, engagementById]);
+  }, [discoverScenarios, capability, rankMode, engagementOf, engagementById, portalContent]);
 
   const hotTop3Ids = useMemo(() => {
     const filtered = discoverScenarios.filter((s) =>
@@ -456,7 +466,9 @@ export function HomeScenePortal({ onInvokeAgent, onInvokeSkill }: HomeScenePorta
 
   const openScenario = (scenarioId: string) => {
     bumpUse(scenarioId);
+    const caseId = resolvePrimaryCaseIdForScenario(scenarioId);
     focusScenario(scenarioId);
+    if (caseId) focusCase(caseId);
     setAppView('ai-map');
   };
 
@@ -580,7 +592,7 @@ export function HomeScenePortal({ onInvokeAgent, onInvokeSkill }: HomeScenePorta
                   {s.label}
                 </span>
                 <span className="mt-0.5 line-clamp-1 block text-[10px] leading-snug text-zinc-400">
-                  {s.desc}
+                  {s.primaryCaseTitle ? `代表案例：${s.primaryCaseTitle}` : s.desc}
                 </span>
               </button>
               <EngagementActions

@@ -18,6 +18,24 @@ import {
   resolvePlanSteps,
 } from '@/domain/plan';
 import {
+  buildSystemPromptWithSkill,
+  getSkillById,
+  getSkillPlanSteps,
+  resolveSkillFromText,
+} from '@/domain/skillRuntime';
+import { getSkillPack } from '@/domain/skills/catalog';
+import {
+  buildAgentOrchestrationSteps,
+  getAgentSystemPrompt,
+  getPrimarySkill,
+} from '@/domain/agents/runtime';
+import { getAgentPack } from '@/domain/agents/catalog';
+import {
+  buildExpertTeamStepPrompt,
+  resolvePipelineStepTargets,
+  type ScenarioPipelineStep,
+} from '@/domain/scenarioPipeline';
+import {
   type ChatConfig,
   type ChatMessage,
   type ExecutionStep,
@@ -44,6 +62,18 @@ interface PendingPipeline {
   steps: string[];
   planId: string;
   agentId?: string;
+  skillId?: string;
+}
+
+/** 场景专家团：同会话顺序接力状态 */
+export interface ExpertTeamRelay {
+  chatId: string;
+  scenarioId: string;
+  scenarioLabel: string;
+  steps: ScenarioPipelineStep[];
+  currentIndex: number;
+  /** 演示模式：计划自动确认，无需每次点「确认执行」 */
+  autoApprove: boolean;
 }
 
 interface ConversationState {
@@ -66,6 +96,7 @@ interface ConversationState {
   selectedResourceName: string | null;
   pendingTaskSubmit: PendingTaskSubmit | null;
   pendingPipeline: PendingPipeline | null;
+  expertTeamRelay: ExpertTeamRelay | null;
   activeAgentId: string | null;
   persistWorkspaceId: string | null;
   kbArtifact: KbArtifact | null;
@@ -86,7 +117,11 @@ interface ConversationState {
   clearSandbox: () => void;
   openKbPreview: (docId: string) => void;
   closeKbPreview: () => void;
-  pushToGroup: () => Promise<void>;
+  /** 推送交付物到作战室和/或成员（成员走「我的消息」） */
+  pushToGroup: (target?: {
+    warroomIds?: string[];
+    memberIds?: string[];
+  }) => Promise<void>;
   dismissToast: () => void;
   createAgentTaskSession: (opts: {
     title: string;
@@ -97,6 +132,15 @@ interface ConversationState {
     autoSend?: boolean;
     switchTo?: boolean;
   }) => string;
+  /** 专家团同会话接力：建一个任务，从 fromIndex 起自动顺序跑完 */
+  startExpertTeamRelay: (opts: {
+    scenarioId: string;
+    scenarioLabel: string;
+    steps: ScenarioPipelineStep[];
+    fromIndex?: number;
+    autoApprove?: boolean;
+  }) => string;
+  clearExpertTeamRelay: (reason?: string) => void;
   createWarRoomSession: (title: string) => string;
   addWarRoomMember: (chatId: string, member: WarRoomMember) => boolean;
   removeWarRoomMember: (chatId: string, memberId: string) => boolean;
@@ -143,7 +187,101 @@ function schedulePersistFromState(get: () => ConversationState) {
   scheduleSaveSessions(persistWorkspaceId, chats);
 }
 
-async function runApprovedPipeline(get: () => ConversationState, set: (partial: Partial<ConversationState> | ((s: ConversationState) => Partial<ConversationState>)) => void) {
+type StoreSet = (
+  partial: Partial<ConversationState> | ((s: ConversationState) => Partial<ConversationState>),
+) => void;
+
+async function advanceExpertTeamRelay(get: () => ConversationState, set: StoreSet) {
+  const relay = get().expertTeamRelay;
+  if (!relay) return;
+
+  const finishedIndex = relay.currentIndex;
+  const finishedStep = relay.steps[finishedIndex];
+  const nextIndex = finishedIndex + 1;
+  const prevReply = get().sandboxAgentReply;
+
+  if (nextIndex >= relay.steps.length) {
+    const chat = get().chats[relay.chatId];
+    if (chat) {
+      set({
+        expertTeamRelay: null,
+        pushToast: `专家团「${relay.scenarioLabel}」已全部完成（${relay.steps.length} 步）`,
+        chats: {
+          ...get().chats,
+          [relay.chatId]: {
+            ...chat,
+            status: `专家团完成 · ${relay.steps.length} 步`,
+            history: [
+              ...chat.history,
+              {
+                role: 'agent',
+                name: '专家团编排',
+                text: `🎉 专家团「${relay.scenarioLabel}」已全部完成（共 ${relay.steps.length} 步）。可在右侧预览各步交付物，或继续追问。`,
+              },
+            ],
+          },
+        },
+      });
+    } else {
+      set({
+        expertTeamRelay: null,
+        pushToast: `专家团「${relay.scenarioLabel}」已全部完成`,
+      });
+    }
+    schedulePersistFromState(get);
+    return;
+  }
+
+  const nextStep = relay.steps[nextIndex]!;
+  const { agent: nextAgent } = resolvePipelineStepTargets(nextStep);
+  const chat = get().chats[relay.chatId];
+  if (!chat) {
+    set({ expertTeamRelay: null });
+    return;
+  }
+
+  set({
+    expertTeamRelay: { ...relay, currentIndex: nextIndex },
+    ...(nextAgent ? { activeAgentId: nextAgent.id } : {}),
+    ...(get().currentChatId !== relay.chatId ? { currentChatId: relay.chatId } : {}),
+    pushToast: `专家团接力 ${nextIndex + 1}/${relay.steps.length}：${nextStep.label}`,
+    chats: {
+      ...get().chats,
+      [relay.chatId]: {
+        ...chat,
+        agentId: nextAgent?.id ?? nextStep.agentId,
+        badge: (nextAgent?.name ?? nextStep.label).replace(/\s*Agent\s*/i, ''),
+        status: `专家团 ${nextIndex + 1}/${relay.steps.length} · ${nextStep.label}`,
+        iconBg: nextAgent?.color
+          ? `bg-gradient-to-br ${nextAgent.color}`
+          : chat.iconBg,
+        history: [
+          ...chat.history,
+          {
+            role: 'agent',
+            name: '专家团编排',
+            text: `✅ 第 ${finishedIndex + 1} 步「${finishedStep?.label ?? ''}」完成 · 正在接力第 ${nextIndex + 1} 步「${nextStep.label}」…`,
+          },
+        ],
+      },
+    },
+  });
+  schedulePersistFromState(get);
+
+  await sleep(480);
+  const liveRelay = get().expertTeamRelay;
+  if (!liveRelay || liveRelay.chatId !== relay.chatId) return;
+  if (get().isAgentTyping || get().pendingPipeline) return;
+
+  const message = buildExpertTeamStepPrompt(
+    { scenarioLabel: relay.scenarioLabel, steps: relay.steps },
+    nextIndex,
+    prevReply,
+  );
+  await get().sendMessage(message);
+}
+
+async function runApprovedPipeline(get: () => ConversationState, set: StoreSet) {
   const pipeline = get().pendingPipeline;
   if (!pipeline) return;
 
@@ -152,6 +290,11 @@ async function runApprovedPipeline(get: () => ConversationState, set: (partial: 
   if (!chat) return;
 
   const agent = getAgentById(pipeline.agentId);
+  const skill = getSkillById(pipeline.skillId);
+  const systemPrompt = buildSystemPromptWithSkill(
+    getAgentSystemPrompt(agent) ?? agent?.systemPrompt,
+    skill,
+  );
   const useLlm = isLlmConfigured();
   let kbContext: string | undefined;
 
@@ -167,7 +310,13 @@ async function runApprovedPipeline(get: () => ConversationState, set: (partial: 
   set({
     pendingPipeline: null,
     isAgentTyping: true,
-    streamStatus: useLlm ? `LLM 执行中 · ${pipeline.targetAgent}` : '连接 API Runtime…',
+    streamStatus: useLlm
+      ? `LLM 执行中 · ${pipeline.targetAgent}${skill ? ` · ${skill.name}` : ''}`
+      : skill
+        ? `执行专家编排 · ${pipeline.targetAgent} · ${skill.name}`
+        : agent
+          ? `执行专家 · ${pipeline.targetAgent}`
+          : '连接 API Runtime…',
   });
   get().abortController?.abort();
   const controller = new AbortController();
@@ -176,6 +325,7 @@ async function runApprovedPipeline(get: () => ConversationState, set: (partial: 
   let stepCounter = 0;
   let agentTypeResult: 'marketing' | 'knowledge' = pipeline.actionType;
   let streamingStarted = false;
+  let completedOk = false;
 
   const applyEvent = (event: StreamEvent) => {
     const current = get().chats[currentChatId];
@@ -234,6 +384,7 @@ async function runApprovedPipeline(get: () => ConversationState, set: (partial: 
     }
 
     if (event.type === 'done') {
+      completedOk = true;
       set((state) => {
         const c = state.chats[currentChatId];
         let history = c.history.map((m) =>
@@ -304,9 +455,11 @@ async function runApprovedPipeline(get: () => ConversationState, set: (partial: 
       planSteps: pipeline.steps,
       agentId: pipeline.agentId,
       agentName: pipeline.targetAgent,
-      systemPrompt: agent?.systemPrompt,
+      systemPrompt,
       actionType: pipeline.actionType,
       kbContext,
+      skillId: pipeline.skillId,
+      skillName: skill?.name,
     })) {
       if (controller.signal.aborted) break;
       applyEvent(event);
@@ -317,6 +470,15 @@ async function runApprovedPipeline(get: () => ConversationState, set: (partial: 
     }
   } finally {
     schedulePersistFromState(get);
+    const relay = get().expertTeamRelay;
+    if (
+      completedOk &&
+      !controller.signal.aborted &&
+      relay &&
+      relay.chatId === currentChatId
+    ) {
+      void advanceExpertTeamRelay(get, set);
+    }
   }
 }
 
@@ -333,6 +495,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   selectedResourceName: null,
   pendingTaskSubmit: null,
   pendingPipeline: null,
+  expertTeamRelay: null,
   activeAgentId: 'agent-data-analysis',
   persistWorkspaceId: null,
   kbArtifact: null,
@@ -343,6 +506,8 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
   loadWorkspace: (workspaceId, defaultChatId, persistedChats) => {
     get().abortController?.abort();
+    const prev = get();
+    const pending = prev.pendingTaskSubmit;
     const catalog = useWorkspaceStore.getState().getCatalog(workspaceId);
     const baseChats = structuredClone(catalog.chats);
     const merged = persistedChats ? { ...baseChats, ...persistedChats } : baseChats;
@@ -365,7 +530,21 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         return [id, chat];
       }),
     ) as Record<string, ChatConfig>;
-    const chatId = chats[defaultChatId] ? defaultChatId : Object.keys(chats)[0] ?? defaultChatId;
+
+    // 保留水合期间内存里新建的任务，避免刚创建就被异步 loadWorkspace 冲掉
+    for (const [id, chat] of Object.entries(prev.chats)) {
+      if (!chats[id] && isUserCreatedTask(chat)) {
+        chats[id] = chat;
+      }
+    }
+
+    let chatId = chats[defaultChatId] ? defaultChatId : Object.keys(chats)[0] ?? defaultChatId;
+    if (pending?.chatId && chats[pending.chatId]) {
+      chatId = pending.chatId;
+    } else if (prev.currentChatId && chats[prev.currentChatId] && isUserCreatedTask(chats[prev.currentChatId])) {
+      chatId = prev.currentChatId;
+    }
+
     set({
       chats,
       currentChatId: chatId,
@@ -376,6 +555,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       streamStatus: null,
       abortController: null,
       pendingPipeline: null,
+      // 保留 pendingTaskSubmit，供任务页自动投递
       ...resetSandboxState(),
     });
   },
@@ -396,7 +576,19 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
   cancelStream: () => {
     get().abortController?.abort();
-    set({ isAgentTyping: false, streamStatus: null, abortController: null });
+    const relay = get().expertTeamRelay;
+    set({
+      isAgentTyping: false,
+      streamStatus: null,
+      abortController: null,
+      ...(relay
+        ? {
+            expertTeamRelay: null,
+            pendingPipeline: null,
+            pushToast: `专家团「${relay.scenarioLabel}」已中止`,
+          }
+        : {}),
+    });
   },
 
   sendMessage: async (text, _workspaceId) => {
@@ -421,14 +613,31 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       return;
     }
 
-    const bound = resolveAgentFromText(trimmed) ?? getAgentById(chat.agentId ?? get().activeAgentId ?? undefined);
+    const skillFromText = resolveSkillFromText(trimmed);
+    const skillBoundAgent = skillFromText
+      ? useMarketplaceStore.getState().agents.find((a) => a.skillIds?.includes(skillFromText.id) && a.published) ??
+        null
+      : null;
+    const bound =
+      resolveAgentFromText(trimmed) ??
+      getAgentById(chat.agentId ?? get().activeAgentId ?? undefined) ??
+      skillBoundAgent;
     if (bound) set({ activeAgentId: bound.id });
+
+    // 消息未显式 /skill 时，自动挂载专家主 Skill
+    const skill = skillFromText ?? (bound ? getPrimarySkill(bound) : null);
+    const skillPack = skill ? getSkillPack(skill.id) : null;
+    const agentPack = bound ? getAgentPack(bound.id) : null;
 
     const userMessage: ChatMessage = { role: 'user', text: trimmed };
     const llmReady = isLlmConfigured();
     set({
       isAgentTyping: true,
-      streamStatus: llmReady ? 'LLM 正在生成执行计划…' : 'Agent 正在理解任务…',
+      streamStatus: llmReady
+        ? 'LLM 正在生成执行计划…'
+        : skill
+          ? `正在挂载 Skill · ${skill.name}${bound ? ` · ${bound.name}` : ''}`
+          : 'Agent 正在理解任务…',
       chats: {
         ...chats,
         [currentChatId]: { ...chat, history: [...chat.history, userMessage, { role: 'typing' }] },
@@ -437,20 +646,31 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
     await sleep(llmReady ? 200 : 600);
 
-    const actionType = resolveActionTypeFromText(trimmed, bound?.id ?? chat.agentId);
+    const actionType =
+      skillPack?.agentType ??
+      agentPack?.agentType ??
+      resolveActionTypeFromText(trimmed, bound?.id ?? chat.agentId);
     let targetAgent = bound?.name ?? (chat.type === 'bot' ? chat.title : '营销 Agent');
     if (!bound && chat.type === 'group') {
       targetAgent = actionType === 'knowledge' ? '知识 Agent' : '数据分析 Agent';
     }
 
-    const { steps, fromLlm } = await resolvePlanSteps({
-      userTask: trimmed,
-      actionType,
-      agentId: bound?.id ?? chat.agentId,
-      agentName: targetAgent,
-    });
+    const orchSteps = buildAgentOrchestrationSteps(bound, skill);
+    const skillSteps = getSkillPlanSteps(skill);
+    const presetSteps = orchSteps ?? skillSteps;
+    const resolved = presetSteps
+      ? { steps: presetSteps, fromLlm: false }
+      : await resolvePlanSteps({
+          userTask: trimmed,
+          actionType,
+          agentId: bound?.id ?? chat.agentId,
+          agentName: targetAgent,
+        });
+    const { steps, fromLlm } = resolved;
     const planId = `plan-${Date.now()}`;
-    const mountedSkills = getSkillLabels(bound?.id ?? chat.agentId);
+    const mountedSkills = skill
+      ? [skill.name, ...getSkillLabels(bound?.id ?? chat.agentId).filter((n) => n !== skill.name)].slice(0, 4)
+      : getSkillLabels(bound?.id ?? chat.agentId);
     const planMsg: ChatMessage = {
       role: 'plan',
       name: targetAgent,
@@ -465,7 +685,11 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       const history = current.history.filter((m) => m.role !== 'typing');
       return {
         isAgentTyping: false,
-        streamStatus: fromLlm ? 'LLM 计划已生成 · 等待确认' : '等待确认执行计划',
+        streamStatus: fromLlm
+          ? 'LLM 计划已生成 · 等待确认'
+          : skill
+            ? `已挂载「${skill.name}」· 专家编排待确认`
+            : '等待确认执行计划',
         pendingPipeline: {
           text: trimmed,
           actionType,
@@ -473,6 +697,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
           steps,
           planId,
           agentId: bound?.id ?? chat.agentId,
+          skillId: skill?.id,
         },
         chats: {
           ...state.chats,
@@ -481,6 +706,17 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       };
     });
     schedulePersistFromState(get);
+
+    const relay = get().expertTeamRelay;
+    const pending = get().pendingPipeline;
+    if (
+      relay?.autoApprove &&
+      relay.chatId === currentChatId &&
+      pending &&
+      pending.planId === planId
+    ) {
+      await get().approvePlan(pending.planId, pending.steps);
+    }
   },
 
   approvePlan: async (planId, steps) => {
@@ -577,45 +813,110 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   openKbPreview: (docId) => set({ kbPreviewDocId: docId }),
   closeKbPreview: () => set({ kbPreviewDocId: null }),
 
-  pushToGroup: async () => {
+  pushToGroup: async (target) => {
     const { chats, currentChatId, sandboxReady, sandboxType, sandboxQuery } = get();
     if (!sandboxReady) {
       set({ pushToast: '请先生成交付物后再推送' });
       return;
     }
 
-    const warroom = Object.values(chats).find((c) => c.sessionGroup === 'pinned');
-    const targetGroup = warroom?.title ?? '作战 WarRoom';
-    const chatTitle = chats[currentChatId].title;
+    const chatTitle = chats[currentChatId]?.title ?? '当前任务';
+    const allRooms = Object.values(chats).filter((c) => isWarRoom(c));
+    const warroomIds =
+      target?.warroomIds?.length
+        ? target.warroomIds
+        : target?.memberIds?.length
+          ? []
+          : allRooms.slice(0, 1).map((r) => r.id);
+    const memberIds = target?.memberIds ?? [];
 
-    const result = await pushArtifactToGroup({
-      chatTitle,
-      targetGroup,
-      artifactType: sandboxType ?? 'marketing',
-      query: sandboxQuery,
-      webhookUrl: loadWarroomWebhookUrl(),
-    });
-
-    if (result.ok && warroom) {
-      const pushMsg: ChatMessage = {
-        role: 'system',
-        text: `📦 ${chatTitle} 推送了一份 Agent 分析 Artifact 到群组`,
-      };
-      set((state) => ({
-        pushToast: result.message,
-        chats: {
-          ...state.chats,
-          [warroom.id]: {
-            ...state.chats[warroom.id],
-            history: [...state.chats[warroom.id].history, pushMsg],
-          },
-        },
-      }));
-      schedulePersistFromState(get);
+    if (!warroomIds.length && !memberIds.length) {
+      set({ pushToast: '请选择作战室或成员' });
       return;
     }
 
-    set({ pushToast: result.message });
+    const { useInboxStore } = await import('@/stores/inboxStore');
+    const inbox = useInboxStore.getState();
+    const fromName = getCurrentUserName() || '同事';
+    const fromUserId = getCurrentUserId() || undefined;
+    let pushedRooms = 0;
+    let lastMessage = '';
+
+    for (const rid of warroomIds) {
+      const warroom = chats[rid];
+      if (!warroom || !isWarRoom(warroom)) continue;
+      const targetGroup = warroom.title;
+      const result = await pushArtifactToGroup({
+        chatTitle,
+        targetGroup,
+        artifactType: sandboxType ?? 'marketing',
+        query: sandboxQuery,
+        webhookUrl: loadWarroomWebhookUrl(),
+      });
+      lastMessage = result.message;
+      if (!result.ok) continue;
+
+      const pushMsg: ChatMessage = {
+        role: 'system',
+        text: `📦 ${fromName} 从「${chatTitle}」推送了一份交付物到本作战室`,
+      };
+      set((state) => ({
+        chats: {
+          ...state.chats,
+          [rid]: {
+            ...state.chats[rid],
+            history: [...state.chats[rid].history, pushMsg],
+          },
+        },
+      }));
+      pushedRooms += 1;
+
+      const recipientIds = (warroom.members ?? [])
+        .map((m) => m.id)
+        .filter((id) => id && id !== fromUserId);
+      if (recipientIds.length) {
+        inbox.pushToUsers(recipientIds, {
+          kind: 'deliverable',
+          title: `作战室「${targetGroup}」收到交付物`,
+          body: `${fromName} 推送了「${chatTitle}」的分析交付物${sandboxQuery ? `（${sandboxQuery}）` : ''}。可在任务中心查看。`,
+          fromUserId,
+          fromName,
+          meta: {
+            chatId: currentChatId,
+            warroomId: rid,
+            warroomTitle: targetGroup,
+            artifactType: sandboxType ?? undefined,
+            query: sandboxQuery || undefined,
+          },
+        });
+      }
+    }
+
+    if (memberIds.length) {
+      inbox.pushToUsers(memberIds, {
+        kind: 'deliverable',
+        title: `${fromName} 向你推送了交付物`,
+        body: `来自任务「${chatTitle}」${sandboxQuery ? ` · ${sandboxQuery}` : ''}。请在任务中心打开对应会话查看预览。`,
+        fromUserId,
+        fromName,
+        meta: {
+          chatId: currentChatId,
+          artifactType: sandboxType ?? undefined,
+          query: sandboxQuery || undefined,
+        },
+      });
+    }
+
+    schedulePersistFromState(get);
+
+    const parts: string[] = [];
+    if (pushedRooms) parts.push(`${pushedRooms} 个作战室`);
+    if (memberIds.length) parts.push(`${memberIds.length} 位成员（我的消息）`);
+    set({
+      pushToast: parts.length
+        ? `已推送到 ${parts.join(' · ')}`
+        : lastMessage || '推送完成',
+    });
   },
 
   dismissToast: () => set({ pushToast: null }),
@@ -703,6 +1004,91 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
     schedulePersistFromState(get);
     return id;
+  },
+
+  startExpertTeamRelay: ({
+    scenarioId,
+    scenarioLabel,
+    steps,
+    fromIndex = 0,
+    autoApprove = true,
+  }) => {
+    const stepsToRun = steps.slice(fromIndex);
+    if (!stepsToRun.length) {
+      set({ pushToast: '专家团无可用步骤' });
+      return '';
+    }
+
+    const first = stepsToRun[0]!;
+    const { agent: firstAgent } = resolvePipelineStepTargets(first);
+    const bound = firstAgent ?? getAgentById(first.agentId);
+    const initialMessage = buildExpertTeamStepPrompt(
+      { scenarioLabel, steps: stepsToRun },
+      0,
+    );
+
+    const id = get().createAgentTaskSession({
+      title: `专家团 · ${scenarioLabel}`,
+      agentName: bound?.name ?? first.label,
+      agentIcon: bound?.icon ?? 'fa-users',
+      agentId: bound?.id ?? first.agentId,
+      initialMessage,
+      autoSend: true,
+      switchTo: true,
+    });
+
+    const chat = get().chats[id];
+    if (chat) {
+      set({
+        expertTeamRelay: {
+          chatId: id,
+          scenarioId,
+          scenarioLabel,
+          steps: stepsToRun,
+          currentIndex: 0,
+          autoApprove,
+        },
+        pushToast: `专家团已启动 · 共 ${stepsToRun.length} 步，同会话自动接力`,
+        chats: {
+          ...get().chats,
+          [id]: {
+            ...chat,
+            status: `专家团 1/${stepsToRun.length} · ${first.label}`,
+            history: [
+              {
+                role: 'agent',
+                name: '专家团编排',
+                text: `已创建专家团任务「${scenarioLabel}」，共 ${stepsToRun.length} 步，将在同一会话中顺序接力${autoApprove ? '（计划自动确认）' : ''}。`,
+              },
+            ],
+          },
+        },
+      });
+    } else {
+      set({
+        expertTeamRelay: {
+          chatId: id,
+          scenarioId,
+          scenarioLabel,
+          steps: stepsToRun,
+          currentIndex: 0,
+          autoApprove,
+        },
+        pushToast: `专家团已启动 · 共 ${stepsToRun.length} 步`,
+      });
+    }
+
+    schedulePersistFromState(get);
+    return id;
+  },
+
+  clearExpertTeamRelay: (reason) => {
+    const relay = get().expertTeamRelay;
+    if (!relay) return;
+    set({
+      expertTeamRelay: null,
+      ...(reason ? { pushToast: reason } : {}),
+    });
   },
 
   createWarRoomSession: (title) => {
@@ -849,8 +1235,11 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   },
 
   consumePendingTaskSubmit: () => {
-    const pending = get().pendingTaskSubmit;
-    if (pending) set({ pendingTaskSubmit: null });
+    const { pendingTaskSubmit: pending, currentChatId } = get();
+    if (!pending) return null;
+    // 仅在当前会话匹配时消费，避免路由/水合竞态把待发送消息清掉
+    if (pending.chatId !== currentChatId) return null;
+    set({ pendingTaskSubmit: null });
     return pending;
   },
 
@@ -876,6 +1265,9 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     const deletingCurrent = get().currentChatId === chatId;
     if (deletingCurrent) {
       get().abortController?.abort();
+    }
+    if (get().expertTeamRelay?.chatId === chatId) {
+      set({ expertTeamRelay: null });
     }
 
     const remainingEntries = Object.entries(get().chats).filter(([id]) => id !== chatId);

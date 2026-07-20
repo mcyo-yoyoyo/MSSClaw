@@ -4,6 +4,11 @@ import { parseSSEStream } from '@/domain/stream';
 import { apiUrl, isApiEnabled } from '@/api/client';
 import { isLlmConfigured, llmExecutionStream } from '@/api/llmClient';
 import { resolveAgentType } from '@/lib/utils';
+import { getSkillPack, getSkillPackByCommand } from '@/domain/skills/catalog';
+import { planStepsToExecSteps } from '@/domain/skills/types';
+import { resolveSkillFromText } from '@/domain/skillRuntime';
+import { getAgentPack } from '@/domain/agents/catalog';
+import { getAgentMockReport } from '@/domain/agents/runtime';
 
 const MARKETING_STEPS: ExecutionStep[] = [
   { skill: 'Intent_Parser', time: '120ms', label: '多模态意图识别', detail: '解析群聊上下文，提取实体与 Action。' },
@@ -28,7 +33,36 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function buildReplyTokens(agentType: 'marketing' | 'knowledge', query: string) {
+function resolveRunnablePack(params: { message: string; skillId?: string }) {
+  if (params.skillId) {
+    const byId = getSkillPack(params.skillId);
+    if (byId) return byId;
+  }
+  const fromText = resolveSkillFromText(params.message);
+  if (fromText) {
+    const bySkill = getSkillPack(fromText.id);
+    if (bySkill) return bySkill;
+  }
+  // 兜底：按 slash command 前缀匹配 pack
+  const cmd = params.message.trim().split(/\s+/)[0];
+  if (cmd?.startsWith('/')) return getSkillPackByCommand(cmd);
+  return null;
+}
+
+function tokenizeReport(plain: string): string[] {
+  return plain.match(/(\*\*[^*]+\*\*|`[^`]+`|[^\s]+|\s+)/g) ?? [plain];
+}
+
+function buildReplyTokens(
+  agentType: 'marketing' | 'knowledge',
+  query: string,
+  mockReport?: string,
+) {
+  if (mockReport?.trim()) {
+    const plain = `${mockReport.trim()}\n\n> 触发语句：${query.length > 48 ? `${query.slice(0, 48)}…` : query}`;
+    return tokenizeReport(plain);
+  }
+
   const previewHint =
     agentType === 'marketing'
       ? '点击查看右侧沙盒生成的交互看板及 NBA 策略'
@@ -64,37 +98,61 @@ export async function* mockExecutionStream(params: {
   chatId: string;
   message: string;
   signal?: AbortSignal;
+  skillId?: string;
+  skillName?: string;
+  agentId?: string;
+  agentName?: string;
+  planSteps?: string[];
 }): AsyncGenerator<StreamEvent> {
   const { signal } = params;
   if (signal?.aborted) return;
 
-  const agentType = resolveAgentType(params.chatId, params.message);
-  const steps = agentType === 'marketing' ? MARKETING_STEPS : KNOWLEDGE_STEPS;
+  const skillPack = resolveRunnablePack(params);
+  const agentPack = getAgentPack(params.agentId);
+  const agentType =
+    skillPack?.agentType ??
+    agentPack?.agentType ??
+    resolveAgentType(params.chatId, params.message);
+  const steps =
+    (params.planSteps?.length
+      ? planStepsToExecSteps(params.planSteps, agentPack ? 'Agent' : 'Plan')
+      : null) ??
+    skillPack?.execSteps ??
+    (agentType === 'marketing' ? MARKETING_STEPS : KNOWLEDGE_STEPS);
   const executionId = `exec_${Date.now()}`;
+  const demoMode = Boolean(skillPack || agentPack);
+  const mockReport =
+    skillPack?.mockReport ||
+    getAgentMockReport(params.agentId) ||
+    undefined;
 
   yield { type: 'execution_start', executionId };
 
   for (const step of steps) {
     if (signal?.aborted) return;
     yield { type: 'skill_start', skill: step.skill, label: step.label };
-    await sleep(step.skill === 'Python_Sandbox' ? 480 : 220);
+    await sleep(step.skill.includes('Python') || step.skill.includes('Cluster') ? 480 : 220);
     if (signal?.aborted) return;
     yield { type: 'skill_end', skill: step.skill, latency: step.time };
   }
 
-  const tokens = buildReplyTokens(agentType, params.message);
+  const tokens = buildReplyTokens(agentType, params.message, mockReport);
   for (const token of tokens) {
     if (signal?.aborted) return;
     yield { type: 'token', content: token };
-    await sleep(28 + Math.floor(Math.random() * 22));
+    await sleep(demoMode ? 12 + Math.floor(Math.random() * 12) : 28 + Math.floor(Math.random() * 22));
   }
 
   yield { type: 'artifact', agentType };
   yield {
     type: 'done',
-    totalTime: agentType === 'marketing' ? '4.28s' : '1.84s',
+    totalTime: demoMode ? '2.46s' : agentType === 'marketing' ? '4.28s' : '1.84s',
     steps,
-    agentName: getAgentName(params.chatId, agentType),
+    agentName:
+      params.agentName ||
+      params.skillName ||
+      resolveSkillFromText(params.message)?.name ||
+      getAgentName(params.chatId, agentType),
     followUp: getFollowUp(params.chatId),
   };
 }
@@ -111,6 +169,8 @@ export async function* streamExecution(params: {
   systemPrompt?: string;
   actionType?: 'marketing' | 'knowledge';
   kbContext?: string;
+  skillId?: string;
+  skillName?: string;
 }): AsyncGenerator<StreamEvent> {
   if (isLlmConfigured() && params.planSteps?.length) {
     yield* llmExecutionStream({

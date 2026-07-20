@@ -1,6 +1,10 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { HOME_BIZ_AGENTS, HOME_CATEGORIES, HOME_REGION_AGENTS } from '@/domain/prototype/home';
+import {
+  HOME_BIZ_SKILLS,
+  HOME_CATEGORIES,
+  HOME_REGION_SKILLS,
+} from '@/domain/prototype/home';
 import type {
   PrototypeAgentSeed,
   PrototypeKbDocument,
@@ -12,18 +16,14 @@ import {
   getVisibleHomeRegions,
 } from '@/domain/rolePerspective';
 import { canViewAsset } from '@/domain/assetVisibility';
-import {
-  AGENT_ROLE_BY_ID,
-  AGENT_ROLE_CATEGORIES,
-  type AgentRoleId,
-} from '@/domain/agentRoles';
+import { SKILL_ROLE_BY_ID, SKILL_ROLE_CATEGORIES, type SkillRoleId } from '@/domain/skillRoles';
 import { HomeCommandBox } from '@/components/home/HomeCommandBox';
 import { HomeScenePortal } from '@/components/home/HomeScenePortal';
-import { AgentAvatar } from '@/components/brand/AgentAvatar';
+import { SkillAvatar } from '@/components/brand/SkillAvatar';
 import { useHomeStore, type ExpertBrowseAxis } from '@/stores/homeStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useSessionStore } from '@/stores/sessionStore';
-import { isNewAgent } from '@/domain/contentBadges';
+import { isNewSkill } from '@/domain/contentBadges';
 
 interface HomePageProps {
   onSubmitTask: (text: string, agent?: PrototypeAgentSeed | null) => void;
@@ -32,17 +32,17 @@ interface HomePageProps {
   onAskKbDocument?: (doc: PrototypeKbDocument) => void;
 }
 
-/** AI助手 Tab：对齐场景库的高频意图 */
+/** AI助手 Tab：对齐场景库的高频意图（偏 Skill 命令） */
 const INTENT_PROMPTS = [
-  '帮我分析本周竞品价格异动',
-  '聚类本周电渠差评并给出改进建议',
-  '生成门店培训话术并翻译成西语',
+  '/价格监测 分析本周竞品价格异动',
+  '/评论分析 聚类本周电渠差评并给建议',
+  '/培训内容 生成门店话术并准备陪练',
 ] as const;
 
-const ASK_SUBTITLE = '说出来就干活 · 输入需求，帮你调度专家与技能';
-const DISCOVER_SUBTITLE = '按业务场景找工具与样板 · 精选内容在下方';
+const ASK_SUBTITLE = '说出来就干活 · 输入需求或点选技能，在对话框里直接调用';
+const DISCOVER_SUBTITLE = '按业务场景找案例与工具 · 一键打样跑通专家团或主能力';
 
-const EXPERT_AXIS_TABS: { id: ExpertBrowseAxis; label: string }[] = [
+const SKILL_AXIS_TABS: { id: ExpertBrowseAxis; label: string }[] = [
   { id: 'agent', label: '全球' },
   { id: 'region', label: '区域' },
   { id: 'dept', label: '领域' },
@@ -67,7 +67,7 @@ export function HomePage({
     setDraftText,
     applyUserOrgDefaults,
   } = useHomeStore();
-  const agents = useMarketplaceStore((s) => s.agents);
+  const skills = useMarketplaceStore((s) => s.skills);
   const user = useSessionStore((s) => s.user);
   const [orgBrowseOpen, setOrgBrowseOpen] = useState(true);
 
@@ -111,22 +111,22 @@ export function HomePage({
     }
   }, [visibleRegions, regionId]);
 
-  const featuredAgents = useMemo(() => {
-    const byId = new Map(agents.filter((a) => a.published).map((a) => [a.id, a]));
+  const featuredSkills = useMemo(() => {
+    const byId = new Map(skills.filter((s) => s.published).map((s) => [s.id, s]));
     const ids: string[] =
       expertAxis === 'agent'
-        ? Object.entries(AGENT_ROLE_BY_ID)
+        ? Object.entries(SKILL_ROLE_BY_ID)
             .filter(([, role]) => role === agentRoleId)
             .map(([id]) => id)
         : expertAxis === 'region'
-          ? (HOME_REGION_AGENTS[regionId] ?? [])
-          : (HOME_BIZ_AGENTS[category] ?? []);
+          ? (HOME_REGION_SKILLS[regionId] ?? [])
+          : (HOME_BIZ_SKILLS[category] ?? []);
 
     const list = ids
       .map((id) => byId.get(id))
-      .filter((a): a is PrototypeAgentSeed => Boolean(a))
-      .filter((a) =>
-        canViewAsset(a, {
+      .filter((s): s is PrototypeSkillSeed => Boolean(s))
+      .filter((s) =>
+        canViewAsset(s, {
           userId: user?.id,
           userName: user?.name,
           affiliation,
@@ -134,15 +134,15 @@ export function HomePage({
         }),
       );
 
-    return expertAxis === 'agent' ? list : list.slice(0, 3);
-  }, [agents, expertAxis, agentRoleId, category, regionId, user, affiliation]);
+    return expertAxis === 'agent' ? list.slice(0, 9) : list.slice(0, 3);
+  }, [skills, expertAxis, agentRoleId, category, regionId, user, affiliation]);
 
   const emptyHint =
     expertAxis === 'agent'
-      ? '该角色暂无相关专家'
+      ? '该角色暂无相关技能'
       : expertAxis === 'region'
-        ? '该区域暂无相关专家'
-        : '该领域暂无相关专家';
+        ? '该区域暂无相关技能'
+        : '该领域暂无相关技能';
 
   const deptChips = HOME_CATEGORIES.filter((c) => visibleDepts.includes(c.id));
   const regionChips = REGIONS.filter((r) => visibleRegions.includes(r.id));
@@ -208,7 +208,7 @@ export function HomePage({
 
             <section className="mt-8">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-[12px] font-semibold text-zinc-800">推荐专家</h2>
+                <h2 className="text-[12px] font-semibold text-zinc-800">推荐技能</h2>
                 <button
                   type="button"
                   onClick={() => setOrgBrowseOpen((v) => !v)}
@@ -227,7 +227,7 @@ export function HomePage({
               {orgBrowseOpen ? (
                 <div className="mb-3 space-y-2 rounded-xl border border-zinc-200/60 bg-zinc-50/60 p-2.5">
                   <div className="flex justify-center gap-1 rounded-full bg-zinc-100/80 p-1">
-                    {EXPERT_AXIS_TABS.map((tab) => (
+                    {SKILL_AXIS_TABS.map((tab) => (
                       <button
                         key={tab.id}
                         type="button"
@@ -245,14 +245,14 @@ export function HomePage({
                   </div>
                   <div className="flex flex-wrap justify-center gap-1.5">
                     {expertAxis === 'agent'
-                      ? AGENT_ROLE_CATEGORIES.map((role) => {
+                      ? SKILL_ROLE_CATEGORIES.map((role) => {
                           const active = agentRoleId === role.id;
                           return (
                             <button
                               key={role.id}
                               type="button"
                               title={role.blurb}
-                              onClick={() => setAgentRoleId(role.id as AgentRoleId)}
+                              onClick={() => setAgentRoleId(role.id as SkillRoleId)}
                               className={cn(
                                 'subcat-chip inline-flex items-center gap-1 px-3 py-1 text-[11px] font-medium',
                                 active && 'subcat-chip-active',
@@ -289,23 +289,23 @@ export function HomePage({
                 </div>
               ) : null}
 
-              {featuredAgents.length === 0 ? (
+              {featuredSkills.length === 0 ? (
                 <p className="py-4 text-center text-[12px] text-zinc-400">{emptyHint}</p>
               ) : (
                 <div
                   className={cn(
                     'grid grid-cols-1 gap-2',
-                    featuredAgents.length >= 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2',
+                    featuredSkills.length >= 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2',
                   )}
                 >
-                  {featuredAgents.map((agent) => (
+                  {featuredSkills.map((skill) => (
                     <button
-                      key={agent.id}
+                      key={skill.id}
                       type="button"
-                      onClick={() => onInvokeAgent(agent)}
+                      onClick={() => onInvokeSkill(skill)}
                       className="relative flex items-start gap-2.5 rounded-xl border border-zinc-200/70 bg-white/80 p-2.5 text-left transition hover:border-zinc-300"
                     >
-                      {isNewAgent(agent.id) ? (
+                      {isNewSkill(skill.id) ? (
                         <span
                           className="pointer-events-none absolute right-2 top-2 z-10 rounded px-1 py-px text-[9px] font-bold uppercase tracking-wide text-white"
                           style={{ backgroundColor: '#C8102E' }}
@@ -315,11 +315,19 @@ export function HomePage({
                           New
                         </span>
                       ) : null}
-                      <AgentAvatar agentId={agent.id} size={32} title={agent.name} />
+                      <SkillAvatar
+                        skillId={skill.id}
+                        icon={skill.icon}
+                        size={32}
+                        title={skill.name}
+                      />
                       <div className="min-w-0 flex-1 pr-8">
-                        <p className="truncate text-[12px] font-semibold text-zinc-900">{agent.name}</p>
+                        <p className="truncate text-[12px] font-semibold text-zinc-900">
+                          {skill.name}
+                        </p>
+                        <p className="mt-0.5 font-mono text-[10px] text-claw-700">{skill.command}</p>
                         <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-zinc-500">
-                          {agent.desc}
+                          {skill.desc}
                         </p>
                       </div>
                     </button>

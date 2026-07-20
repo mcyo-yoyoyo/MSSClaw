@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type PortalOpsType = 'news' | 'training';
+type PortalOpsType = 'case' | 'news' | 'training';
 
 interface NavigationIntentState {
   pendingToolId: string | null;

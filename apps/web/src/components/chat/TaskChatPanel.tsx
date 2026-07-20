@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ChatConfig, ChatMessage } from '@/domain/chat';
 import { isUserCreatedTask, isWarRoom } from '@/domain/chat';
 import { MessageBubble } from '@/components/chat/MessageBubble';
@@ -7,6 +7,8 @@ import { StepMessageRow } from '@/components/chat/StepMessageRow';
 import { SharedComposer } from '@/components/chat/SharedComposer';
 import { cn } from '@/lib/utils';
 import { useConversationStore } from '@/stores/conversationStore';
+
+const NEAR_BOTTOM_PX = 96;
 
 interface TaskChatPanelProps {
   chat: ChatConfig;
@@ -26,7 +28,7 @@ interface TaskChatPanelProps {
   onManageMembers?: () => void;
   /** WarRoom 内是否允许当前用户使用 AI */
   aiAllowed?: boolean;
-  /** 右侧交付物预览已收起时，聊天区占满剩余宽度 */
+  /** 右侧交付件预览已收起时，聊天区占满剩余宽度 */
   previewCollapsed?: boolean;
 }
 
@@ -50,11 +52,55 @@ export function TaskChatPanel({
   previewCollapsed = false,
 }: TaskChatPanelProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showJumpLatest, setShowJumpLatest] = useState(false);
   const iconBg = chat.iconBg ?? 'bg-gradient-to-br from-[#18181b] to-[#18181b]';
   const canDelete = isUserCreatedTask(chat) && !!onDeleteChat;
   const warroom = isWarRoom(chat);
   const memberCount = chat.members?.length ?? 0;
+
+  const distanceFromBottom = (el: HTMLDivElement) =>
+    el.scrollHeight - el.scrollTop - el.clientHeight;
+
+  const updateJumpVisibility = () => {
+    const el = messagesRef.current;
+    if (!el) return;
+    setShowJumpLatest(distanceFromBottom(el) > NEAR_BOTTOM_PX);
+  };
+
+  const scrollToLatest = (smooth = true) => {
+    const el = messagesRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+    setShowJumpLatest(false);
+  };
+
+  // 监听滚动：离开底部时显示「下滑到最新」
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    const onScroll = () => updateJumpVisibility();
+    el.addEventListener('scroll', onScroll, { passive: true });
+    updateJumpVisibility();
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [chat.id]);
+
+  // 切换会话时落到最新；新消息时若已在底部附近则自动跟上，否则亮起跳转按钮
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    if (distanceFromBottom(el) <= NEAR_BOTTOM_PX + 40) {
+      scrollToLatest(false);
+    } else {
+      setShowJumpLatest(true);
+    }
+  }, [chat.id, chat.history.length, isAgentTyping, streamStatus]);
+
+  useEffect(() => {
+    // 切会话：强制到最新
+    scrollToLatest(false);
+  }, [chat.id]);
 
   const renderMessage = (message: ChatMessage, index: number) => {
     if (message.role === 'plan') {
@@ -210,8 +256,29 @@ export function TaskChatPanel({
         </div>
       </header>
 
-      <div className="chat-surface scroll-hidden flex-grow space-y-4 overflow-y-auto px-5 py-4">
-        {chat.history.map((m, i) => renderMessage(m, i))}
+      <div className="relative min-h-0 flex-grow">
+        <div
+          ref={messagesRef}
+          className="chat-surface scroll-hidden h-full space-y-4 overflow-y-auto px-5 py-4"
+        >
+          {chat.history.map((m, i) => renderMessage(m, i))}
+        </div>
+        {showJumpLatest ? (
+          <button
+            type="button"
+            onClick={() => scrollToLatest(true)}
+            className={cn(
+              'absolute bottom-3 right-4 z-20 flex h-9 w-9 items-center justify-center rounded-full',
+              'border border-zinc-200/90 bg-white text-zinc-700 shadow-md',
+              'transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/40',
+            )}
+            title="下滑到最新消息"
+            aria-label="下滑到最新消息"
+          >
+            <i className="fa-solid fa-arrow-down text-[13px]" />
+          </button>
+        ) : null}
       </div>
 
       {warroom && (

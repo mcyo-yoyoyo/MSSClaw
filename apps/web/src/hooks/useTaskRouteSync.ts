@@ -21,14 +21,12 @@ export function useTaskRouteSync(appView: AppView) {
 
     const applyRoute = () => {
       const route = parseAppRoute(window.location.hash);
+      // 仅同步会话，视图切换交给 useAppRouting，避免 hash 尚未更新时把其它页面抢回任务
       if (route.view === 'task' && route.chat) {
         const { chats: latest } = useConversationStore.getState();
         if (latest[route.chat] && appliedFromUrl.current !== route.chat) {
           useConversationStore.getState().switchChat(route.chat);
           appliedFromUrl.current = route.chat;
-        }
-        if (useAppViewStore.getState().appView !== 'task') {
-          useAppViewStore.getState().setAppView('task');
         }
       }
     };

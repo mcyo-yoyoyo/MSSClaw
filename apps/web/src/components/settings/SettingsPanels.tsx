@@ -7,9 +7,9 @@ import {
   PERMISSION_CLASSES,
   PERMISSION_LABELS,
   PlatformRoleSchema,
-  RBAC_MATRIX,
   ROLE_DESCRIPTIONS,
   ROLE_LABELS,
+  getRbacMatrix,
   type PlatformRole,
   type ResourceModule,
   type SettingsTab,
@@ -63,7 +63,7 @@ export function SettingsContent({
       />
     );
   }
-  if (tab === 'rbac') return <RbacMatrixPanel />;
+  if (tab === 'rbac') return <RbacMatrixPanel workspace={workspace} />;
   return <AuditPanel workspace={workspace} />;
 }
 
@@ -526,15 +526,16 @@ function MembersPanel({
   );
 }
 
-function RbacMatrixPanel() {
+function RbacMatrixPanel({ workspace }: { workspace: Workspace }) {
   const modules = Object.keys(MODULE_LABELS) as ResourceModule[];
+  const matrix = getRbacMatrix(workspace.id);
 
   return (
     <div className="space-y-6">
-      <Section title="RBAC 权限矩阵">
+      <Section title={`RBAC 权限矩阵 · ${workspace.name}`}>
         <p className="mb-4 text-xs text-[#86868b]">
-          定义各角色对平台模块的访问级别（演示只读矩阵）。Admin = 完全控制 · Write = 创建/编辑 · Execute =
-          运行 · R = 只读。实际授权请通过「成员管理」改派角色。
+          当前数字空间的角色×模块访问级别（演示只读，随工作区切换而变化）。Admin = 完全控制 · Write =
+          创建/编辑 · Execute = 运行 · R = 只读 · — = 无权限。实际授权请通过「成员管理」改派角色。
         </p>
         <div className="overflow-x-auto rounded-xl border border-black/[0.06]">
           <table className="w-full min-w-[720px] text-center text-xs">
@@ -556,7 +557,7 @@ function RbacMatrixPanel() {
                     <p className="text-[10px] text-[#aeaeb2]">{ROLE_DESCRIPTIONS[role]}</p>
                   </td>
                   {modules.map((mod) => {
-                    const level = RBAC_MATRIX[role][mod];
+                    const level = matrix[role][mod];
                     return (
                       <td key={mod} className="px-2 py-3">
                         <span className={cn('inline-block rounded px-2 py-1 font-bold', PERMISSION_CLASSES[level])}>

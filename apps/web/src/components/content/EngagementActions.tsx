@@ -11,6 +11,8 @@ interface EngagementActionsProps {
   compact?: boolean;
   className?: string;
   onAfterAction?: (action: 'like' | 'dislike' | 'download') => void;
+  /** 提供时：计数后执行真实下载（如案例包） */
+  onDownload?: () => void;
 }
 
 export function EngagementActions({
@@ -19,6 +21,7 @@ export function EngagementActions({
   compact = false,
   className,
   onAfterAction,
+  onDownload,
 }: EngagementActionsProps) {
   const byId = useContentEngagementStore((s) => s.byId);
   const userVotes = useContentEngagementStore((s) => s.userVotes);
@@ -88,10 +91,11 @@ export function EngagementActions({
       </button>
       <button
         type="button"
-        title="下载 / 收藏副本"
+        title={onDownload ? '下载案例包' : '下载 / 收藏副本'}
         onClick={(ev) => {
           stop(ev);
           bumpDownload(contentId);
+          onDownload?.();
           onAfterAction?.('download');
         }}
         className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-zinc-400 transition hover:text-zinc-700"

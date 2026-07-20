@@ -6,23 +6,14 @@ import {
   CenterSearchInput,
   StatCardGrid,
 } from '@/components/center/CenterShell';
-import {
-  FormField,
-  FormInput,
-  FormSelect,
-  FormTextarea,
-  ModalActions,
-} from '@/components/center/CenterFormFields';
-import { OwnershipFormFields } from '@/components/center/OrgAssetFilters';
+import { CaseEditorModal } from '@/components/center/CaseEditorModal';
+import { CaseOutcomePanel } from '@/components/content/CaseOutcomePanel';
 import { EngagementActions, formatEngagementLine } from '@/components/content/EngagementActions';
 import { isSystemAdmin } from '@/domain/currentUser';
 import {
   ASSET_VISIBILITY_LABELS,
   getDeptLabel,
   getRegionLabel,
-  type AssetVisibility,
-  type DeptId,
-  type RegionId,
 } from '@/domain/orgTaxonomy';
 import {
   heatScore,
@@ -30,11 +21,15 @@ import {
   sortByRankMode,
   type RankMode,
 } from '@/domain/contentEngagement';
+import { toCaseOutcomeCard } from '@/domain/portalCase';
 import {
   PORTAL_CONTENT_TYPE_LABELS,
+  PORTAL_OPS_TYPE_OPTIONS,
   type PortalContentItem,
 } from '@/domain/prototype/portalContent';
+import { downloadCaseFile, parseCaseUpload } from '@/domain/caseExport';
 import { useAppViewStore } from '@/stores/appViewStore';
+import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { usePortalContentStore } from '@/stores/portalContentStore';
 import {
@@ -45,25 +40,6 @@ import {
 
 type EditorTarget = string | 'new' | null;
 
-const TYPE_OPTIONS: PortalContentItem['type'][] = ['news', 'training'];
-
-function emptyItem(): PortalContentItem {
-  const today = new Date().toISOString().slice(0, 10);
-  return {
-    id: '',
-    type: 'news',
-    title: '',
-    desc: '',
-    icon: 'fa-newspaper',
-    ownerDeptIds: [],
-    ownerRegionId: null,
-    visibility: 'public',
-    publishedAt: today,
-    scenarioTags: [],
-    published: true,
-  };
-}
-
 export function PortalContentOpsPage() {
   const items = usePortalContentStore((s) => s.items);
   const upsertItem = usePortalContentStore((s) => s.upsertItem);
@@ -72,6 +48,8 @@ export function PortalContentOpsPage() {
   const resetToSeeds = usePortalContentStore((s) => s.resetToSeeds);
   const showToast = usePortalContentStore((s) => s.showToast);
   const setAppView = useAppViewStore((s) => s.setAppView);
+  const skills = useMarketplaceStore((s) => s.skills);
+  const agents = useMarketplaceStore((s) => s.agents);
   const engagementOf = useContentEngagementStore((s) => s.get);
   const engagementById = useContentEngagementStore((s) => s.byId);
   const optimizationQueue = useContentEngagementStore((s) => s.optimizationQueue);
@@ -80,7 +58,7 @@ export function PortalContentOpsPage() {
   const [typeFilter, setTypeFilter] = useState<'all' | PortalContentItem['type']>('all');
   const [rankMode, setRankMode] = useState<RankMode>('trending');
   const [editorTarget, setEditorTarget] = useState<EditorTarget>(null);
-  const [form, setForm] = useState<PortalContentItem>(emptyItem());
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const consumePortalType = useNavigationIntentStore((s) => s.consumePortalType);
 
   useEffect(() => {
@@ -88,10 +66,7 @@ export function PortalContentOpsPage() {
     if (t) setTypeFilter(t);
   }, [consumePortalType]);
 
-  const opsItems = useMemo(
-    () => items.filter((i) => i.type === 'news' || i.type === 'training'),
-    [items],
-  );
+  const opsItems = useMemo(() => items, [items]);
 
   useEffect(() => {
     const ids = opsItems.map((i) => i.id);
@@ -102,7 +77,13 @@ export function PortalContentOpsPage() {
   const list = useMemo(() => {
     const q = search.trim().toLowerCase();
     const filtered = opsItems.filter((item) => {
-      if (typeFilter !== 'all' && item.type !== typeFilter) return false;
+      if (typeFilter !== 'all') {
+        if (typeFilter === 'news') {
+          if (item.type !== 'news' && item.type !== 'insight') return false;
+        } else if (item.type !== typeFilter) {
+          return false;
+        }
+      }
       if (!q) return true;
       return `${item.title} ${item.desc} ${item.publisher ?? ''} ${(item.scenarioTags ?? []).join(' ')}`
         .toLowerCase()
@@ -157,6 +138,24 @@ export function PortalContentOpsPage() {
     ] as [string, string | number][];
   }, [opsItems, engagementOf, engagementById, pendingOptimize.length]);
 
+  const previewItem = useMemo(
+    () => (previewId ? items.find((i) => i.id === previewId) ?? null : null),
+    [previewId, items],
+  );
+  const previewCard = useMemo(
+    () =>
+      previewItem
+        ? toCaseOutcomeCard(previewItem, PORTAL_CONTENT_TYPE_LABELS[previewItem.type])
+        : null,
+    [previewItem],
+  );
+  const previewSkill = previewCard?.skillId
+    ? skills.find((s) => s.id === previewCard.skillId)
+    : undefined;
+  const previewAgent = previewCard?.agentId
+    ? agents.find((a) => a.id === previewCard.agentId)
+    : undefined;
+
   if (!isSystemAdmin()) {
     return (
       <div className="center-surface center-page scroll-hidden flex-1 overflow-y-auto">
@@ -178,55 +177,47 @@ export function PortalContentOpsPage() {
     );
   }
 
-  const openEditor = (target: EditorTarget) => {
-    if (target === 'new') {
-      setForm(emptyItem());
-    } else if (target) {
-      const existing = items.find((i) => i.id === target);
-      setForm(existing ? { ...existing } : emptyItem());
-    }
-    setEditorTarget(target);
-  };
-
-  const handleSave = () => {
-    const title = form.title.trim();
-    if (!title) {
-      showToast('请填写标题');
-      return;
-    }
-    const isNew = editorTarget === 'new';
-    upsertItem(
-      {
-        ...form,
-        id: isNew ? `portal-ops-${Date.now()}` : (editorTarget as string),
-        title,
-        desc: form.desc.trim(),
-        publishedAt: form.publishedAt || new Date().toISOString().slice(0, 10),
-        ownerDeptIds: (form.ownerDeptIds ?? []) as DeptId[],
-        ownerRegionId: (form.ownerRegionId ?? null) as RegionId | null,
-        visibility: (form.visibility ?? 'public') as AssetVisibility,
-        published: form.published !== false,
-      },
-      isNew,
-    );
-    showToast(form.published !== false ? '内容已保存并上架' : '内容已保存为草稿');
-    setEditorTarget(null);
-  };
-
   return (
     <div className="center-surface center-page scroll-hidden flex-1 overflow-y-auto">
       <div className="mx-auto max-w-6xl">
         <CenterPageHeader
           title="门户运营"
-          subtitle="维护首页前沿洞察与培训赋能 · 排行牵引 · 上架审核"
+          subtitle="案例样板间 · 洞察 / 培训 / 资讯上架 · 排行与成效字段"
           tip={
             <>
-              统一热度 / 赞踩 / 下载指标驱动发现默认序；点踩占比过高的内容进入「待优化」队列。
+              金案例填写痛点 / 指标 / 三步走并绑定金牌 Skill，上架后出现在「案例 · 样板间」。下载导出为 .case.zip。
             </>
           }
           actions={
             <>
               <CenterSearchInput value={search} onChange={setSearch} placeholder="搜索内容…" />
+              <label className="cursor-pointer rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03]">
+                导入案例包
+                <input
+                  type="file"
+                  accept=".zip,.case.zip,.json,application/zip,application/json"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (!file) return;
+                    try {
+                      const imported = await parseCaseUpload(file);
+                      if (!imported.length) {
+                        showToast('未能解析案例包');
+                        return;
+                      }
+                      for (const item of imported) {
+                        const exists = items.some((i) => i.id === item.id);
+                        upsertItem(item, !exists);
+                      }
+                      showToast(`已导入 ${imported.length} 条案例内容`);
+                    } catch {
+                      showToast('导入失败，请检查文件格式');
+                    }
+                  }}
+                />
+              </label>
               <button
                 type="button"
                 onClick={() => {
@@ -242,11 +233,11 @@ export function PortalContentOpsPage() {
                 onClick={() => setAppView('ai-map')}
                 className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03]"
               >
-                预览案例
+                预览样板间
               </button>
               <button
                 type="button"
-                onClick={() => openEditor('new')}
+                onClick={() => setEditorTarget('new')}
                 className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white"
               >
                 <i className="fa-solid fa-plus mr-1" />
@@ -303,7 +294,7 @@ export function PortalContentOpsPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => openEditor(row.id)}
+                    onClick={() => setEditorTarget(row.id)}
                     className="shrink-0 rounded-lg border border-amber-200 bg-white px-2.5 py-1 text-[10px] font-medium text-amber-800 hover:bg-amber-50"
                   >
                     处理
@@ -343,7 +334,7 @@ export function PortalContentOpsPage() {
             >
               全部
             </button>
-            {TYPE_OPTIONS.map((t) => (
+            {PORTAL_OPS_TYPE_OPTIONS.map((t) => (
               <button
                 key={t}
                 type="button"
@@ -367,6 +358,11 @@ export function PortalContentOpsPage() {
                   <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600">
                     {PORTAL_CONTENT_TYPE_LABELS[item.type]}
                   </span>
+                  {item.isGold ? (
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                      金案例
+                    </span>
+                  ) : null}
                   <span
                     className={cn(
                       'rounded-full px-2 py-0.5 text-[10px] font-semibold',
@@ -390,10 +386,33 @@ export function PortalContentOpsPage() {
                   {item.publishedAt}
                 </p>
                 <div className="mt-2">
-                  <EngagementActions contentId={item.id} />
+                  <EngagementActions
+                    contentId={item.id}
+                    onDownload={() => {
+                      downloadCaseFile(item);
+                      showToast('已下载案例包');
+                    }}
+                  />
                 </div>
               </div>
-              <div className="flex shrink-0 gap-2">
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPreviewId(item.id)}
+                  className="rounded-lg border border-black/8 px-3 py-1.5 text-[11px] font-medium hover:bg-black/[0.03]"
+                >
+                  预览
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    downloadCaseFile(item);
+                    showToast('已下载案例包');
+                  }}
+                  className="rounded-lg border border-black/8 px-3 py-1.5 text-[11px] font-medium hover:bg-black/[0.03]"
+                >
+                  导出
+                </button>
                 <button
                   type="button"
                   onClick={() => togglePublished(item.id)}
@@ -403,7 +422,7 @@ export function PortalContentOpsPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => openEditor(item.id)}
+                  onClick={() => setEditorTarget(item.id)}
                   className="rounded-lg border border-black/8 px-3 py-1.5 text-[11px] font-medium hover:bg-black/[0.03]"
                 >
                   编辑
@@ -428,123 +447,54 @@ export function PortalContentOpsPage() {
       </div>
 
       <CenterModal
-        open={!!editorTarget}
-        title={editorTarget === 'new' ? '新建门户内容' : '编辑门户内容'}
-        onClose={() => setEditorTarget(null)}
-        actions={<ModalActions onCancel={() => setEditorTarget(null)} onSave={handleSave} />}
-      >
-        <div className="space-y-3 text-left">
-          <FormField label="标题">
-            <FormInput value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-          </FormField>
-          <FormField label="描述">
-            <FormTextarea
-              rows={2}
-              value={form.desc}
-              onChange={(e) => setForm({ ...form, desc: e.target.value })}
-            />
-          </FormField>
-          <div className="grid grid-cols-2 gap-2">
-            <FormField label="类型">
-              <FormSelect
-                value={form.type}
-                onChange={(e) =>
-                  setForm({ ...form, type: e.target.value as PortalContentItem['type'] })
-                }
+        open={!!previewCard}
+        title={previewItem ? `预览 · ${previewItem.title}` : '内容预览'}
+        onClose={() => setPreviewId(null)}
+        size="lg"
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => setPreviewId(null)}
+              className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium"
+            >
+              关闭
+            </button>
+            {previewItem ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const id = previewItem.id;
+                  setPreviewId(null);
+                  setEditorTarget(id);
+                }}
+                className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white"
               >
-                {TYPE_OPTIONS.map((t) => (
-                  <option key={t} value={t}>
-                    {PORTAL_CONTENT_TYPE_LABELS[t]}
-                  </option>
-                ))}
-              </FormSelect>
-            </FormField>
-            <FormField label="发布日期">
-              <FormInput
-                type="date"
-                value={form.publishedAt}
-                onChange={(e) => setForm({ ...form, publishedAt: e.target.value })}
-              />
-            </FormField>
-          </div>
-          <FormField label="图标 class（Font Awesome）">
-            <FormInput
-              value={form.icon}
-              onChange={(e) => setForm({ ...form, icon: e.target.value })}
-              placeholder="fa-lightbulb"
-            />
-          </FormField>
-          <FormField label="场景标签（逗号分隔）">
-            <FormInput
-              value={(form.scenarioTags ?? []).join(', ')}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  scenarioTags: e.target.value
-                    .split(',')
-                    .map((t) => t.trim())
-                    .filter(Boolean),
-                })
-              }
-            />
-          </FormField>
-          <div className="grid grid-cols-2 gap-2">
-            <FormField label="关联 Agent ID">
-              <FormInput
-                value={form.agentId ?? ''}
-                onChange={(e) => setForm({ ...form, agentId: e.target.value || undefined })}
-              />
-            </FormField>
-            <FormField label="关联 Skill ID">
-              <FormInput
-                value={form.skillId ?? ''}
-                onChange={(e) => setForm({ ...form, skillId: e.target.value || undefined })}
-              />
-            </FormField>
-            <FormField label="关联 Tool ID">
-              <FormInput
-                value={form.toolId ?? ''}
-                onChange={(e) => setForm({ ...form, toolId: e.target.value || undefined })}
-              />
-            </FormField>
-            <FormField label="关联知识库文档 ID">
-              <FormInput
-                value={form.kbDocId ?? ''}
-                onChange={(e) => setForm({ ...form, kbDocId: e.target.value || undefined })}
-              />
-            </FormField>
-          </div>
-
-          <OwnershipFormFields
-            ownerDeptIds={form.ownerDeptIds ?? []}
-            ownerRegionId={form.ownerRegionId ?? null}
-            sourceType="internal"
-            visibility={(form.visibility ?? 'public') as AssetVisibility}
-            homepageUrl={form.homepageUrl}
-            onChange={(patch) =>
-              setForm({
-                ...form,
-                ...patch,
-                ownerDeptIds: (patch.ownerDeptIds as DeptId[] | undefined) ?? form.ownerDeptIds,
-                ownerRegionId:
-                  patch.ownerRegionId !== undefined
-                    ? (patch.ownerRegionId as RegionId | null)
-                    : form.ownerRegionId,
-              })
-            }
+                编辑此内容
+              </button>
+            ) : null}
+          </>
+        }
+      >
+        {previewCard && previewItem ? (
+          <CaseOutcomePanel
+            card={previewCard}
+            skillLabel={previewSkill?.name}
+            agentLabel={previewAgent?.name}
+            onEdit={() => {
+              const id = previewItem.id;
+              setPreviewId(null);
+              setEditorTarget(id);
+            }}
+            onDownload={() => {
+              downloadCaseFile(previewItem);
+              showToast('已下载案例包');
+            }}
           />
-
-          <label className="flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              className="accent-claw-600"
-              checked={form.published !== false}
-              onChange={(e) => setForm({ ...form, published: e.target.checked })}
-            />
-            <span className="text-[13px]">上架到场景地图样板间 / 首页门户</span>
-          </label>
-        </div>
+        ) : null}
       </CenterModal>
+
+      <CaseEditorModal target={editorTarget} onClose={() => setEditorTarget(null)} />
     </div>
   );
 }

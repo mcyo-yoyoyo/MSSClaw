@@ -16,10 +16,17 @@ export interface PortalContentSnapshot {
   items: PortalContentItem[];
 }
 
-function readLocalPortalContent(workspaceId: string): PortalContentSnapshot {
-  if (localStorage.getItem(LS_PORTAL_CONTENT_VERSION) !== PORTAL_CONTENT_VERSION) {
-    localStorage.setItem(LS_PORTAL_CONTENT_VERSION, PORTAL_CONTENT_VERSION);
+function clearStalePortalContentCaches() {
+  if (localStorage.getItem(LS_PORTAL_CONTENT_VERSION) === PORTAL_CONTENT_VERSION) return;
+  for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+    const key = localStorage.key(i);
+    if (key?.startsWith('mssclaw_portal_content_')) localStorage.removeItem(key);
   }
+  localStorage.setItem(LS_PORTAL_CONTENT_VERSION, PORTAL_CONTENT_VERSION);
+}
+
+function readLocalPortalContent(workspaceId: string): PortalContentSnapshot {
+  clearStalePortalContentCaches();
 
   try {
     const raw = localStorage.getItem(portalContentKeyForWorkspace(workspaceId));

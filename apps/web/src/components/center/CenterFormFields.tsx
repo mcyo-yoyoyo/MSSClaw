@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { cn } from '@/lib/utils';
 
 const fieldClass =
   'mt-1 w-full rounded-xl border border-black/8 px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-zinc-900/20';
@@ -21,16 +22,16 @@ export function FormField({
   );
 }
 
-export function FormInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={fieldClass} {...props} />;
+export function FormInput({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+  return <input className={cn(fieldClass, className)} {...props} />;
 }
 
-export function FormTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={fieldClass} {...props} />;
+export function FormTextarea({ className, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea className={cn(fieldClass, className)} {...props} />;
 }
 
-export function FormSelect(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select className={fieldClass} {...props} />;
+export function FormSelect({ className, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select className={cn(fieldClass, className)} {...props} />;
 }
 
 export const EFFICIENCY_OPTIONS = [

@@ -95,7 +95,15 @@ const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
   { id: 'goto-warroom', label: '打开 WarRoom', icon: 'fa-users', run: () => h.openWarRoom() },
   { id: 'new-session', label: '新建任务', icon: 'fa-plus', view: 'task', run: () => h.newTask() },
   { id: 'export', label: '导出交付物', icon: 'fa-file-export', run: () => h.exportArtifact() },
-  { id: 'push', label: '推送到作战室', icon: 'fa-paper-plane', run: () => h.pushToGroup() },
+  {
+    id: 'goto-messages',
+    label: '打开我的消息',
+    icon: 'fa-envelope',
+    keywords: '消息 通知 inbox messages',
+    view: 'messages',
+    run: () => h.goto('messages'),
+  },
+  { id: 'push', label: '推送交付物', icon: 'fa-paper-plane', run: () => h.pushToGroup() },
   { id: 'settings', label: '打开快捷设置', icon: 'fa-gear', keywords: '设置 偏好 settings 快捷', run: () => h.openSettings() },
 ];
 

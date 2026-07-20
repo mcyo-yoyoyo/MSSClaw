@@ -1,9 +1,10 @@
 import type { EfficiencyCategory } from '@/domain/prototype/types';
 
-export const MARKET_VERSION = 'v10-rename-xiaowei';
+export const MARKET_VERSION = 'v14-review-pipeline-3agents';
+
 export const KB_VERSION = 'v2-biz-dept';
 export const TASK_SESSIONS_VERSION = 'v2-no-default-warroom';
-export const PORTAL_CONTENT_VERSION = 'v1-ops-portal';
+export const PORTAL_CONTENT_VERSION = 'v5-review-pipeline-3agents';
 
 /** 设计稿默认工作区 ID */
 export const PROTOTYPE_WORKSPACE_ID = 'ws-cn-marketing';

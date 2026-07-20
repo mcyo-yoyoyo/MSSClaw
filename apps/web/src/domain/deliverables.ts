@@ -1,7 +1,28 @@
 import { downloadBlob } from '@/lib/download';
 import type { KbArtifact } from '@/domain/kbSearch';
+import { isLlmConfigured } from '@/api/llmClient';
+import {
+  generateDeliverableFormatWithLlm,
+  generateHtmlAnalysisBoardWithLlm,
+} from '@/api/deliverableLlm';
+import { markdownToHtmlFragment } from '@/domain/markdownRender';
+import {
+  ANALYSIS_REPORT_CSS,
+  buildAnalysisDashboardHtml,
+  buildLocalAnalysisBoardData,
+  mergeAnalysisBoardData,
+  type AnalysisBoardData,
+} from '@/domain/htmlReportAnalysis';
+import {
+  buildPptDeckFromMarkdown,
+  finalizePptDeck,
+  type PptSlide,
+} from '@/domain/pptSlides';
+import { downloadPptx } from '@/domain/pptxExport';
 
-export type DeliverableKind = 'markdown' | 'html' | 'pdf' | 'ppt' | 'xlsx' | 'board' | 'knowledge';
+export type DeliverableKind = 'markdown' | 'html' | 'ppt' | 'xlsx' | 'board' | 'knowledge';
+
+export type GeneratableKind = 'html' | 'ppt';
 
 export interface DeliverablePreview {
   id: string;
@@ -13,10 +34,11 @@ export interface DeliverablePreview {
   iconClass: string;
   markdown?: string;
   html?: string;
-  slides?: { title: string; bullets: string[] }[];
-  pdfPages?: { heading: string; body: string }[];
+  slides?: PptSlide[];
   /** xlsx 预览用表格 */
   table?: { headers: string[]; rows: string[][] };
+  /** 是否仍待基于 Markdown 生成（HTML/PPT） */
+  pendingGenerate?: boolean;
 }
 
 export interface BuildDeliverablesContext {
@@ -38,22 +60,15 @@ export interface DeliverableItem {
   onDownload: () => void;
 }
 
-function esc(s: string) {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 function skillLine(skills?: string[]) {
   return skills?.length ? skills.join(' · ') : '（未挂载 Skill）';
 }
 
+/** 保留 Agent 回复主体，避免 Markdown 源头就丢内容 */
 function stripReply(reply?: string) {
   const t = (reply ?? '').trim();
   if (!t) return '';
-  return t.length > 1200 ? `${t.slice(0, 1200)}…` : t;
+  return t.length > 8000 ? `${t.slice(0, 8000)}\n\n…（后续内容已截断）` : t;
 }
 
 function marketingMarkdown(ctx: BuildDeliverablesContext) {
@@ -87,44 +102,12 @@ function marketingMarkdown(ctx: BuildDeliverablesContext) {
   ].join('\n');
 }
 
-function marketingHtml(ctx: BuildDeliverablesContext) {
-  const mdBits = esc(ctx.query || '营销分析任务');
-  const agent = esc(ctx.agentName || '数据分析 Agent');
-  const skills = esc(skillLine(ctx.skills));
-  return `<!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="utf-8"/><title>执行简报</title>
-<style>
-  body{font-family:system-ui,sans-serif;margin:0;background:#f6f7f9;color:#1d1d1f}
-  .card{max-width:640px;margin:24px auto;background:#fff;border-radius:16px;padding:28px;box-shadow:0 8px 30px rgba(0,0,0,.06)}
-  h1{font-size:20px;margin:0 0 8px} .meta{font-size:12px;color:#86868b;margin-bottom:20px}
-  .kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:16px 0}
-  .kpi div{background:#fafafa;border:1px solid #eee;border-radius:12px;padding:12px;text-align:center}
-  .kpi b{display:block;font-size:18px;margin-top:4px} .kpi span{font-size:11px;color:#86868b}
-  ul{padding-left:18px;font-size:13px;line-height:1.7}
-</style></head><body>
-<div class="card">
-  <h1>执行简报 · HTML</h1>
-  <p class="meta">${agent} · ${skills}</p>
-  <p style="font-size:13px;line-height:1.6"><strong>任务：</strong>${mdBits}</p>
-  <div class="kpi">
-    <div><span>SO 环比</span><b>+8.2%</b></div>
-    <div><span>TOP 代表处</span><b>墨西哥</b></div>
-    <div><span>风险市场</span><b>巴西</b></div>
-  </div>
-  <ul>
-    <li>渠道促销为主要归因因子</li>
-    <li>建议巴西启动 NBA 补贴券</li>
-    <li>IoT 剔除后排名稳定</li>
-  </ul>
-</div></body></html>`;
-}
-
 function knowledgeMarkdown(ctx: BuildDeliverablesContext) {
   const reply = stripReply(ctx.agentReply);
   const cites =
     ctx.kbArtifact?.citations
-      ?.slice(0, 4)
-      .map((c, i) => `${i + 1}. **${c.docTitle}** — ${c.snippet?.slice(0, 80) || c.docId}`)
+      ?.slice(0, 8)
+      .map((c, i) => `${i + 1}. **${c.docTitle}** — ${c.snippet?.slice(0, 120) || c.docId}`)
       .join('\n') || '1. 拉美合规准入指南\n2. 3C 营销话术规范';
 
   return [
@@ -154,232 +137,377 @@ function knowledgeMarkdown(ctx: BuildDeliverablesContext) {
   ].join('\n');
 }
 
-function knowledgeHtml(ctx: BuildDeliverablesContext) {
-  const q = esc(ctx.query || '知识检索');
-  const agent = esc(ctx.agentName || '知识 Agent');
+function wrapReportHtml(
+  bodyHtml: string,
+  meta: {
+    title: string;
+    agent: string;
+    query: string;
+    analysisHtml?: string;
+  },
+) {
+  const q = meta.query ? meta.query.slice(0, 80) : '';
   return `<!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="utf-8"/><title>合规筛查报告</title>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>${escapeAttr(meta.title)}</title>
 <style>
-  body{font-family:system-ui,sans-serif;margin:0;background:#f4f5f7;color:#1d1d1f}
-  .wrap{max-width:680px;margin:24px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 8px 28px rgba(0,0,0,.06)}
-  .hd{background:#18181b;color:#fff;padding:18px 24px} .hd h1{margin:0;font-size:18px}
-  .bd{padding:22px 24px;font-size:13px;line-height:1.7}
-  .tag{display:inline-block;background:#fef3c7;color:#92400e;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:600}
-</style></head><body>
-<div class="wrap">
-  <div class="hd"><h1>合规筛查报告</h1><p style="margin:6px 0 0;opacity:.7;font-size:12px">${agent}</p></div>
-  <div class="bd">
-    <p><span class="tag">需复核</span></p>
-    <p><strong>查询：</strong>${q}</p>
-    <p>检测到潜在医疗功效表述风险，建议删除或改为「健康管理」类合规用语，并附引用溯源后再发布。</p>
+  :root {
+    --ink: #18181b;
+    --muted: #71717a;
+    --line: #e4e4e7;
+    --bg: #f4f4f5;
+    --card: #ffffff;
+    --accent: #0f766e;
+    --accent-soft: #ccfbf1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1200px 400px at 10% -10%, #d1fae5 0%, transparent 55%),
+      radial-gradient(900px 360px at 100% 0%, #e0f2fe 0%, transparent 50%),
+      var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 820px; margin: 0 auto; padding: 28px 18px 48px; }
+  .sheet {
+    background: var(--card);
+    border: 1px solid rgba(24,24,27,.06);
+    border-radius: 20px;
+    box-shadow: 0 18px 50px rgba(24,24,27,.08);
+    overflow: hidden;
+  }
+  .hero {
+    padding: 28px 32px 22px;
+    background: linear-gradient(135deg, #134e4a 0%, #0f766e 48%, #155e75 100%);
+    color: #fff;
+  }
+  .hero .eyebrow {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 600; letter-spacing: .04em;
+    text-transform: uppercase; opacity: .85; margin-bottom: 10px;
+  }
+  .hero h1 {
+    margin: 0 0 10px; font-size: 26px; line-height: 1.25; font-weight: 700; letter-spacing: -.02em;
+  }
+  .hero .meta { margin: 0; font-size: 12.5px; opacity: .88; }
+  .content { padding: 8px 32px 32px; }
+  .content > .body-detail h1 { font-size: 22px; margin: 24px 0 10px; letter-spacing: -.02em; }
+  .content > .body-detail h2 {
+    font-size: 16px; margin: 28px 0 10px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--line); color: #134e4a;
+  }
+  .content > .body-detail h3 { font-size: 14px; margin: 20px 0 8px; color: #3f3f46; }
+  .content > .body-detail h4 { font-size: 13px; margin: 16px 0 6px; color: #52525b; }
+  .content > .body-detail p { margin: 0 0 12px; font-size: 14px; color: #27272a; }
+  .content > .body-detail ul, .content > .body-detail ol { margin: 0 0 14px; padding-left: 1.25em; }
+  .content > .body-detail li { margin: 0 0 6px; font-size: 14px; color: #27272a; }
+  .content > .body-detail li::marker { color: var(--accent); }
+  .content > .body-detail strong { color: #134e4a; font-weight: 700; }
+  .content > .body-detail em { color: #3f3f46; }
+  .content > .body-detail code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px; background: #f4f4f5; border: 1px solid var(--line);
+    border-radius: 6px; padding: 1px 6px;
+  }
+  .content > .body-detail a { color: #0e7490; text-decoration: none; border-bottom: 1px solid rgba(14,116,144,.25); }
+  .content > .body-detail blockquote {
+    margin: 14px 0 18px; padding: 12px 16px;
+    background: var(--accent-soft); border-left: 3px solid var(--accent);
+    border-radius: 0 12px 12px 0; color: #115e59; font-size: 13px;
+  }
+  .content > .body-detail hr {
+    border: 0; height: 1px; margin: 28px 0;
+    background: linear-gradient(90deg, transparent, var(--line), transparent);
+  }
+  .content > .body-detail .md-table-wrap {
+    margin: 14px 0 18px; overflow-x: auto; border-radius: 14px;
+    border: 1px solid var(--line); background: #fff;
+    box-shadow: 0 1px 0 rgba(24,24,27,.03);
+  }
+  .content > .body-detail table.md-table {
+    width: 100%; border-collapse: collapse; min-width: 480px; font-size: 12.5px;
+  }
+  .content > .body-detail table.md-table th {
+    text-align: left; padding: 10px 12px; background: #f0fdfa; color: #134e4a;
+    font-weight: 700; border-bottom: 1px solid #99f6e4; white-space: nowrap;
+  }
+  .content > .body-detail table.md-table td {
+    padding: 9px 12px; border-bottom: 1px solid #f4f4f5; color: #3f3f46;
+    vertical-align: top; line-height: 1.5;
+  }
+  .content > .body-detail table.md-table tr:last-child td { border-bottom: 0; }
+  .content > .body-detail table.md-table tbody tr:nth-child(even) td { background: #fafafa; }
+  .footer {
+    margin-top: 8px; padding-top: 16px; border-top: 1px dashed var(--line);
+    font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; gap: 12px;
+  }
+  ${ANALYSIS_REPORT_CSS}
+  @media (max-width: 640px) {
+    .hero, .content { padding-left: 20px; padding-right: 20px; }
+    .hero h1 { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+    <article class="sheet">
+      <header class="hero">
+        <div class="eyebrow">MSS Claw · 分析报告</div>
+        <h1>${escapeAttr(meta.title)}</h1>
+        <p class="meta">${escapeAttr(meta.agent)}${q ? ` · ${escapeAttr(q)}` : ''} · Markdown 智能分析 + 正文详稿</p>
+      </header>
+      <div class="content">
+        ${meta.analysisHtml || ''}
+        <div class="body-detail">
+          ${bodyHtml}
+        </div>
+        <div class="footer">
+          <span>智能分析看板 + Markdown 正文 · 指标与要点自动抽取</span>
+          <span>${escapeAttr(new Date().toLocaleString('zh-CN'))}</span>
+        </div>
+      </div>
+    </article>
   </div>
-</div></body></html>`;
+</body>
+</html>`;
 }
 
-/** 构建与当前任务上下文匹配的可预览交付件 */
-export function buildDeliverablePreviews(ctx: BuildDeliverablesContext): DeliverablePreview[] {
-  const q = ctx.query || '';
-  const agent = ctx.agentName || (ctx.type === 'marketing' ? '数据分析 Agent' : '知识 Agent');
+function escapeAttr(s: string) {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
-  if (ctx.type === 'marketing') {
-    const md = marketingMarkdown(ctx);
-    const html = marketingHtml(ctx);
-    return [
-      {
-        id: 'm-md',
-        kind: 'markdown',
-        name: '任务报告.md',
-        title: 'Markdown 报告',
-        size: '12 KB',
-        icon: 'fa-file-lines',
-        iconClass: 'text-zinc-700',
-        markdown: md,
-      },
-      {
-        id: 'm-html',
-        kind: 'html',
-        name: '执行简报.html',
-        title: 'HTML 报告',
-        size: '18 KB',
-        icon: 'fa-file-code',
-        iconClass: 'text-orange-600',
-        html,
-      },
-      {
-        id: 'm-ppt',
-        kind: 'ppt',
-        name: '策略汇报.pptx',
-        title: 'PPT 预览',
-        size: '2.4 MB',
-        icon: 'fa-file-powerpoint',
-        iconClass: 'text-amber-600',
-        slides: [
-          {
-            title: '任务背景',
-            bullets: [`Agent：${agent}`, `Skill：${skillLine(ctx.skills)}`, q || '多源数据分析'],
-          },
-          {
-            title: '核心发现',
-            bullets: ['SO 环比 +8.2%', '墨西哥领先，巴西承压', '渠道促销为首要归因'],
-          },
-          {
-            title: '行动建议',
-            bullets: ['巴西启动 NBA', '复核价盘与竞品', '下周复盘转化指标'],
-          },
-        ],
-      },
-      {
-        id: 'm-pdf',
-        kind: 'pdf',
-        name: '策略摘要.pdf',
-        title: 'PDF 预览',
-        size: '126 KB',
-        icon: 'fa-file-pdf',
-        iconClass: 'text-red-500',
-        pdfPages: [
-          {
-            heading: '策略摘要',
-            body: `任务：${q || '营销数据分析'}\n执行 Agent：${agent}\n\n结论：拉美穿戴 SO 环比提升，建议对巴西市场采取补贴券策略，并持续监测竞品价盘。`,
-          },
-          {
-            heading: '附录 · Skill 轨迹',
-            body: `挂载 Skill：${skillLine(ctx.skills)}\n\n本页为演示 PDF 排版；导出可下载文本摘要。`,
-          },
-        ],
-      },
-      {
-        id: 'm-xlsx',
-        kind: 'xlsx',
-        name: 'Q3归因报告.xlsx',
-        title: '表格预览',
-        size: '842 KB',
-        icon: 'fa-file-excel',
-        iconClass: 'text-emerald-600',
-        table: {
-          headers: ['代表处', 'SO排名', '环比', '归因因子'],
-          rows: [
-            ['墨西哥', '1', '+12.4%', '渠道促销'],
-            ['巴西', '2', '-3.1%', '竞品降价'],
-            ['阿根廷', '3', '+5.8%', '新品上市'],
-          ],
-        },
-      },
-      {
-        id: 'm-board',
-        kind: 'board',
-        name: '分析看板',
-        title: '交互看板',
-        size: '实时',
-        icon: 'fa-chart-column',
-        iconClass: 'text-claw-600',
-      },
-    ];
+function extractDocTitle(markdown: string, fallback: string) {
+  const m = /^#\s+(.+)$/m.exec(markdown);
+  return m?.[1]?.trim() || fallback;
+}
+
+function buildHtmlFromMarkdown(
+  markdown: string,
+  ctx?: Pick<BuildDeliverablesContext, 'agentName' | 'query' | 'type'>,
+  board?: AnalysisBoardData,
+) {
+  const fragment = markdownToHtmlFragment(markdown);
+  // 去掉与 hero 重复的首个 h1，避免双标题
+  const body = fragment.replace(/^\s*<h1>[\s\S]*?<\/h1>\s*/i, '');
+  const title = extractDocTitle(
+    markdown,
+    ctx?.type === 'knowledge' ? '知识检索交付' : '任务交付报告',
+  );
+  const analysisHtml = buildAnalysisDashboardHtml(markdown, {
+    type: ctx?.type,
+    board: board ?? buildLocalAnalysisBoardData(markdown, { type: ctx?.type }),
+  });
+  return wrapReportHtml(body || fragment, {
+    title,
+    agent: ctx?.agentName || 'Agent',
+    query: ctx?.query || '',
+    analysisHtml,
+  });
+}
+
+function buildPptFromMarkdown(
+  markdown: string,
+  ctx?: Pick<BuildDeliverablesContext, 'agentName' | 'query' | 'skills'>,
+) {
+  return buildPptDeckFromMarkdown(markdown, ctx);
+}
+
+/** 本地：由完整 Markdown 派生精美 HTML / PPT */
+export function deriveDeliverableFromMarkdown(
+  kind: GeneratableKind,
+  markdown: string,
+  ctx?: Pick<BuildDeliverablesContext, 'agentName' | 'query' | 'type' | 'skills'>,
+): Pick<DeliverablePreview, 'html' | 'slides' | 'size' | 'pendingGenerate'> {
+  if (kind === 'html') {
+    const html = buildHtmlFromMarkdown(markdown, ctx);
+    return {
+      html,
+      size: `${Math.max(6, Math.round(html.length / 1024))} KB`,
+      pendingGenerate: false,
+    };
   }
 
-  const md = knowledgeMarkdown(ctx);
-  const html = knowledgeHtml(ctx);
+  const slides = buildPptFromMarkdown(markdown, ctx);
+  return {
+    slides,
+    size: `${Math.max(0.6, slides.length * 0.35).toFixed(1)} MB`,
+    pendingGenerate: false,
+  };
+}
+
+export function hasDeliverableContent(item: DeliverablePreview): boolean {
+  if (item.pendingGenerate) return false;
+  if (item.kind === 'markdown') return Boolean(item.markdown?.trim());
+  if (item.kind === 'html') return Boolean(item.html?.trim());
+  if (item.kind === 'ppt') return Boolean(item.slides?.length);
+  if (item.kind === 'xlsx') return Boolean(item.table);
+  if (item.kind === 'board' || item.kind === 'knowledge') return true;
+  return false;
+}
+
+export function isGeneratableKind(kind: DeliverableKind): kind is GeneratableKind {
+  return kind === 'html' || kind === 'ppt';
+}
+
+/**
+ * 基于 Markdown 生成 HTML / PPT
+ * - HTML：模型提炼看板 JSON + 本地固定模板排版（观感不变、适配多场景）；无模型则纯本地
+ * - PPT：可选用模型提炼幻灯片结构
+ */
+export async function generateDeliverableFromMarkdown(
+  kind: GeneratableKind,
+  markdown: string,
+  ctx: BuildDeliverablesContext,
+  signal?: AbortSignal,
+): Promise<Pick<DeliverablePreview, 'html' | 'slides' | 'size' | 'pendingGenerate'>> {
+  const source = markdown.trim();
+  if (!source) {
+    throw new Error('请先确保 Markdown 交付件有内容');
+  }
+
+  const local = deriveDeliverableFromMarkdown(kind, source, ctx);
+
+  if (kind === 'html') {
+    let board = buildLocalAnalysisBoardData(source, { type: ctx.type });
+    if (isLlmConfigured()) {
+      try {
+        const modelBoard = await generateHtmlAnalysisBoardWithLlm({
+          markdown: source,
+          agentName: ctx.agentName,
+          query: ctx.query,
+          type: ctx.type,
+          signal,
+        });
+        if (signal?.aborted) throw new Error('已取消生成');
+        board = mergeAnalysisBoardData(board, modelBoard);
+      } catch {
+        // 模型失败：保留本地看板，观感与正文仍可用
+      }
+    } else {
+      await new Promise((r) => setTimeout(r, 280));
+    }
+    if (signal?.aborted) throw new Error('已取消生成');
+    const html = buildHtmlFromMarkdown(source, ctx, board);
+    return {
+      html,
+      size: `${Math.max(6, Math.round(html.length / 1024))} KB`,
+      pendingGenerate: false,
+    };
+  }
+
+  if (isLlmConfigured()) {
+    try {
+      const llm = await generateDeliverableFormatWithLlm({
+        kind: 'ppt',
+        markdown: source,
+        agentName: ctx.agentName,
+        query: ctx.query,
+        type: ctx.type,
+        signal,
+      });
+      if (llm.slides?.length) {
+        const localSlides = local.slides?.length ?? 0;
+        if (llm.slides.length + 1 >= localSlides || llm.slides.length >= 4) {
+          const slides = finalizePptDeck(
+            llm.slides.map((s) => ({
+              title: s.title,
+              bullets: s.bullets,
+              role: 'content' as const,
+            })),
+            {
+              title: extractDocTitle(source, '业务汇报'),
+              agentName: ctx.agentName,
+              query: ctx.query,
+              skills: ctx.skills,
+            },
+          );
+          return {
+            slides,
+            size: `${Math.max(0.6, slides.length * 0.35).toFixed(1)} MB`,
+            pendingGenerate: false,
+          };
+        }
+      }
+    } catch {
+      // 回落本地
+    }
+  }
+
+  await new Promise((r) => setTimeout(r, 280));
+  if (signal?.aborted) throw new Error('已取消生成');
+  return local;
+}
+
+function emptyFormatStub(
+  id: string,
+  kind: GeneratableKind,
+  name: string,
+  title: string,
+  icon: string,
+  iconClass: string,
+): DeliverablePreview {
+  return {
+    id,
+    kind,
+    name,
+    title,
+    size: '待生成',
+    icon,
+    iconClass,
+    pendingGenerate: true,
+  };
+}
+
+/** 构建与当前任务上下文匹配的可预览交付件（默认仅 Markdown 有内容） */
+export function buildDeliverablePreviews(ctx: BuildDeliverablesContext): DeliverablePreview[] {
+  const md = ctx.type === 'marketing' ? marketingMarkdown(ctx) : knowledgeMarkdown(ctx);
+  const prefix = ctx.type === 'marketing' ? 'm' : 'k';
+
   return [
     {
-      id: 'k-md',
+      id: `${prefix}-md`,
       kind: 'markdown',
-      name: '检索摘要.md',
-      title: 'Markdown 摘要',
-      size: '8 KB',
+      name: 'Markdown',
+      title: 'Markdown',
+      size: `${Math.max(2, Math.round(md.length / 1024))} KB`,
       icon: 'fa-file-lines',
       iconClass: 'text-zinc-700',
       markdown: md,
+      pendingGenerate: false,
     },
-    {
-      id: 'k-html',
-      kind: 'html',
-      name: '合规报告.html',
-      title: 'HTML 报告',
-      size: '14 KB',
-      icon: 'fa-file-code',
-      iconClass: 'text-orange-600',
-      html,
-    },
-    {
-      id: 'k-pdf',
-      kind: 'pdf',
-      name: '溯源简报.pdf',
-      title: 'PDF 预览',
-      size: '96 KB',
-      icon: 'fa-file-pdf',
-      iconClass: 'text-red-500',
-      pdfPages: [
-        {
-          heading: '知识检索简报',
-          body: `查询：${q || '知识检索'}\nAgent：${agent}\n\n${stripReply(ctx.agentReply) || '已完成向量检索与重排，结论见 Markdown 摘要。'}`,
-        },
-        {
-          heading: '引用清单',
-          body: (ctx.kbArtifact?.citations ?? [])
-            .slice(0, 5)
-            .map((c, i) => `${i + 1}. ${c.docTitle}`)
-            .join('\n') || '1. 拉美合规准入指南\n2. 3C 营销话术规范',
-        },
-      ],
-    },
-    {
-      id: 'k-ppt',
-      kind: 'ppt',
-      name: '赋能汇报.pptx',
-      title: 'PPT 预览',
-      size: '1.6 MB',
-      icon: 'fa-file-powerpoint',
-      iconClass: 'text-amber-600',
-      slides: [
-        {
-          title: '检索任务',
-          bullets: [`Agent：${agent}`, `Skill：${skillLine(ctx.skills)}`, q || '合规 / SOP 检索'],
-        },
-        {
-          title: '关键结论',
-          bullets: ['避免未获批医疗功效表述', '提交合规复核', '保留引用溯源'],
-        },
-      ],
-    },
-    {
-      id: 'k-card',
-      kind: 'knowledge',
-      name: '溯源卡片',
-      title: '引用卡片',
-      size: '实时',
-      icon: 'fa-book-open',
-      iconClass: 'text-claw-600',
-    },
+    emptyFormatStub(`${prefix}-html`, 'html', 'HTML', 'HTML', 'fa-file-code', 'text-orange-600'),
+    emptyFormatStub(`${prefix}-ppt`, 'ppt', 'PPT', 'PPT', 'fa-file-powerpoint', 'text-amber-600'),
   ];
 }
 
 export function downloadDeliverable(item: DeliverablePreview, query = '') {
   if (item.kind === 'markdown' && item.markdown) {
-    downloadBlob(item.name, item.markdown, 'text/markdown;charset=utf-8');
+    downloadBlob(`${item.name}.md`, item.markdown, 'text/markdown;charset=utf-8');
     return;
   }
   if (item.kind === 'html' && item.html) {
-    downloadBlob(item.name, item.html, 'text/html;charset=utf-8');
+    downloadBlob(`${item.name}.html`, item.html, 'text/html;charset=utf-8');
     return;
   }
-  if (item.kind === 'pdf' && item.pdfPages) {
-    downloadBlob(
-      item.name.replace(/\.pdf$/i, '.txt'),
-      item.pdfPages.map((p) => `# ${p.heading}\n\n${p.body}`).join('\n\n---\n\n'),
-      'text/plain;charset=utf-8',
-    );
-    return;
-  }
-  if (item.kind === 'ppt' && item.slides) {
-    downloadBlob(
-      item.name.replace(/\.pptx$/i, '.md'),
-      item.slides.map((s, i) => `## Slide ${i + 1}: ${s.title}\n\n${s.bullets.map((b) => `- ${b}`).join('\n')}`).join('\n\n'),
-      'text/markdown;charset=utf-8',
-    );
+  if (item.kind === 'ppt' && item.slides?.length) {
+    // 导出真实 .pptx（此前用 .md 大纲凑合，和 HTML 扩展名不一致）
+    downloadPptx(item.name, item.slides);
     return;
   }
   if (item.kind === 'xlsx' && item.table) {
     const csv = [item.table.headers.join(','), ...item.table.rows.map((r) => r.join(','))].join('\n');
-    downloadBlob(item.name.replace(/\.xlsx$/i, '.csv'), `${csv}\n# ${query}`, 'text/csv;charset=utf-8');
+    downloadBlob(`${item.name}.csv`, `${csv}\n# ${query}`, 'text/csv;charset=utf-8');
     return;
   }
   downloadBlob(

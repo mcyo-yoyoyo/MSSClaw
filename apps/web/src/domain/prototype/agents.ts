@@ -1,11 +1,12 @@
 import type { PrototypeAgentSeed } from '@/domain/prototype/types';
+import { getAgentPack } from '@/domain/agents/catalog';
 
 /** 来源：index.html DEFAULT_AGENTS（Phase1 打样 14 Agent）+ 组织归属字段 */
-export const PROTOTYPE_AGENTS: PrototypeAgentSeed[] = [
+const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
   {
     id: 'agent-data-analysis',
     name: '数据分析 Agent',
-    desc: '【办公提效】多源数据自动分析，融合 ISRP/零售/电商数据输出洞察报表',
+    desc: '【办公提效】多源数据自动分析，融合 ISRP/零售/电商数据输出洞察报表（可对话编排 Skill）',
     category: 'office',
     bizLine: 'GTM/渠道',
     homeTag: 'gtm',
@@ -18,13 +19,12 @@ export const PROTOTYPE_AGENTS: PrototypeAgentSeed[] = [
     chatId: 'marketing',
     icon: 'fa-chart-pie',
     color: 'from-zinc-700 to-zinc-900',
-    systemPrompt: '你是 MSS 数据分析专家，优先使用多源数据分析与 SO 报表 Skill。',
     scenarioTags: ['综履', '结算', '返利', 'SO'],
   },
   {
     id: 'agent-doc-review',
     name: '文档解读 Agent',
-    desc: '【办公提效】营销物料/合同/招投标文档内容正确性、风险与合规筛查',
+    desc: '【办公提效】营销物料/合同/招投标文档内容正确性、风险与合规筛查（可对话编排 Skill）',
     category: 'office',
     bizLine: 'MKT/质量与运营',
     homeTag: 'mkt',
@@ -42,7 +42,7 @@ export const PROTOTYPE_AGENTS: PrototypeAgentSeed[] = [
   {
     id: 'agent-file-organize',
     name: '文件整理 Agent',
-    desc: '【办公提效】本地文件夹/员工助手/Email 多源文件清洗归档与个人总结',
+    desc: '【办公提效】本地文件夹/员工助手/Email 多源文件清洗归档与个人总结（可对话编排 Skill）',
     category: 'office',
     bizLine: 'HR',
     homeTag: 'hr',
@@ -59,7 +59,7 @@ export const PROTOTYPE_AGENTS: PrototypeAgentSeed[] = [
   {
     id: 'agent-ppt',
     name: 'PPT 生成 Agent',
-    desc: '【办公提效】多源数据驱动 PPT 自动生成，支持员工助手内部 POC 验证',
+    desc: '【办公提效】多源数据驱动 PPT 自动生成，支持员工助手内部 POC 验证（可对话编排 Skill）',
     category: 'office',
     bizLine: 'MKT/GTM',
     homeTag: 'mkt',
@@ -77,7 +77,7 @@ export const PROTOTYPE_AGENTS: PrototypeAgentSeed[] = [
   {
     id: 'agent-meeting',
     name: '会议纪要 Agent',
-    desc: '【办公提效】会议纪要 AI 自动生成，小批量试点 60% AI + 40% 人工',
+    desc: '【办公提效】会议纪要 AI 自动生成，小批量试点 60% AI + 40% 人工（可对话编排 Skill）',
     category: 'office',
     bizLine: 'HR',
     homeTag: 'hr',
@@ -94,7 +94,7 @@ export const PROTOTYPE_AGENTS: PrototypeAgentSeed[] = [
   {
     id: 'agent-launch-sentiment',
     name: '舆情快报 Agent',
-    desc: '【管理提效】产品发布舆情 AI 分析快报，面向 MKT/服务',
+    desc: '【管理提效】产品发布舆情 AI 分析快报，面向 MKT/服务（可对话编排 Skill）',
     category: 'manage',
     bizLine: 'MKT/服务',
     homeTag: 'mkt',
@@ -111,7 +111,7 @@ export const PROTOTYPE_AGENTS: PrototypeAgentSeed[] = [
   {
     id: 'agent-survey',
     name: '问卷洞察 Agent',
-    desc: '【管理提效】洞察部用户问卷调研设计与开放题洞察分析',
+    desc: '【管理提效】洞察部用户问卷调研设计与开放题洞察分析（可对话编排 Skill）',
     category: 'manage',
     bizLine: 'MKT',
     homeTag: 'mkt',
@@ -125,9 +125,45 @@ export const PROTOTYPE_AGENTS: PrototypeAgentSeed[] = [
     color: 'from-stone-500 to-zinc-600',
   },
   {
+    id: 'agent-review-collect',
+    name: '评分采集 Agent',
+    desc: '【管理提效】采集 Amazon 等平台 3C 商品购买页用户订单评论，清洗后交接翻译链路（可对话编排 Skill）',
+    category: 'manage',
+    bizLine: '电商/服务',
+    homeTag: 'ecommerce',
+    ownerDeptIds: ['ecommerce', 'service'],
+    ownerRegionIds: ['apac', 'europe', 'latam'],
+    author: '华为 MSS',
+    published: true,
+    invokes: 2100,
+    skillIds: ['skill-review-collect', 'skill-review-translate', 'skill-data-analysis'],
+    chatId: 'knowledge',
+    icon: 'fa-download',
+    color: 'from-emerald-700 to-slate-800',
+    scenarioTags: ['评论分析', '评论', '电商'],
+  },
+  {
+    id: 'agent-review-translate',
+    name: '语种翻译 Agent',
+    desc: '【管理提效】将采集的多语种订单评论统一翻译成英语与中文，保留原文对照（可对话编排 Skill）',
+    category: 'manage',
+    bizLine: '电商/服务',
+    homeTag: 'ecommerce',
+    ownerDeptIds: ['ecommerce', 'mkt', 'service'],
+    ownerRegionIds: ['apac', 'europe', 'latam'],
+    author: '华为 MSS',
+    published: true,
+    invokes: 1960,
+    skillIds: ['skill-review-translate', 'skill-review-cluster', 'skill-doc-gen'],
+    chatId: 'knowledge',
+    icon: 'fa-language',
+    color: 'from-sky-600 to-slate-700',
+    scenarioTags: ['评论分析', '评论', '电商', '翻译', '本地化', '小语种'],
+  },
+  {
     id: 'agent-review',
     name: '评论分析 Agent',
-    desc: '【管理提效】Amazon/Lazada 订单评论多语种聚类分析，面向电商/服务/MKT',
+    desc: '【管理提效】对采集清洗并完成中英翻译的订单评论做情感判断与用户数据挖掘，面向电商/服务/MKT',
     category: 'manage',
     bizLine: '电商/服务',
     homeTag: 'ecommerce',
@@ -140,12 +176,12 @@ export const PROTOTYPE_AGENTS: PrototypeAgentSeed[] = [
     chatId: 'knowledge',
     icon: 'fa-comments',
     color: 'from-slate-500 to-slate-700',
-    scenarioTags: ['评论分析', '评论', '电商', '翻译', '本地化'],
+    scenarioTags: ['评论分析', '评论', '电商'],
   },
   {
     id: 'agent-retail-insight',
     name: '零售洞察 Agent',
-    desc: '【管理提效】零售信息洞察 π 例行报告，门店 DOS/转化/陈列分析',
+    desc: '【管理提效】零售信息洞察 π 例行报告，门店 DOS/转化/陈列分析（可对话编排 Skill）',
     category: 'manage',
     bizLine: '零售/电商',
     homeTag: 'retail',
@@ -162,7 +198,7 @@ export const PROTOTYPE_AGENTS: PrototypeAgentSeed[] = [
   {
     id: 'agent-price-monitor',
     name: '价格监测 Agent',
-    desc: '【管理提效】18 国多渠道价格 & offer 监测，覆盖 5347 行/周级入表',
+    desc: '【管理提效】18 国多渠道价格 & offer 监测，覆盖 5347 行/周级入表（可对话编排 Skill）',
     category: 'manage',
     bizLine: '渠道/电商/GTM',
     homeTag: 'gtm',
@@ -180,7 +216,7 @@ export const PROTOTYPE_AGENTS: PrototypeAgentSeed[] = [
   {
     id: 'agent-hr-resume',
     name: '简历筛选 Agent',
-    desc: '【流程提效】JD 解析 + 简历筛选 + 面试分析三 Agent 协同，面向 HR/用人部门',
+    desc: '【流程提效】JD 解析 + 简历筛选 + 面试分析三 Agent 协同，面向 HR/用人部门（可对话编排 Skill）',
     category: 'process',
     bizLine: 'HR',
     homeTag: 'hr',
@@ -197,7 +233,7 @@ export const PROTOTYPE_AGENTS: PrototypeAgentSeed[] = [
   {
     id: 'agent-training',
     name: '培训内容 Agent',
-    desc: '【流程提效】Nova 新品培训内容生成，多 Agent 对抗协同与门店陪练衔接',
+    desc: '【流程提效】Nova 新品培训内容生成，多 Agent 对抗协同与门店陪练衔接（可对话编排 Skill）',
     category: 'process',
     bizLine: '零售/门店',
     homeTag: 'retail',
@@ -215,7 +251,7 @@ export const PROTOTYPE_AGENTS: PrototypeAgentSeed[] = [
   {
     id: 'agent-knowledge',
     name: '知识 Agent',
-    desc: '【体验提升】企业 RAG 问答，带引用的文献溯源与 SOP 检索',
+    desc: '【体验提升】企业 RAG 问答，带引用的文献溯源与 SOP 检索（可对话编排 Skill）',
     category: 'experience',
     bizLine: '服务/质量与运营',
     homeTag: 'service',
@@ -233,7 +269,7 @@ export const PROTOTYPE_AGENTS: PrototypeAgentSeed[] = [
   {
     id: 'agent-retail-coach',
     name: '零售陪练 Agent',
-    desc: '【体验提升】门店 AI 陪练、卖点演练与考核反馈，衔接培训内容 Agent',
+    desc: '【体验提升】门店 AI 陪练、卖点演练与考核反馈，衔接培训内容 Agent（可对话编排 Skill）',
     category: 'experience',
     bizLine: '零售/门店',
     homeTag: 'retail',
@@ -249,3 +285,17 @@ export const PROTOTYPE_AGENTS: PrototypeAgentSeed[] = [
     scenarioTags: ['门店', '培训'],
   },
 ];
+
+function withAgentPack(agent: PrototypeAgentSeed): PrototypeAgentSeed {
+  const pack = getAgentPack(agent.id);
+  if (!pack) return agent;
+  return {
+    ...agent,
+    systemPrompt: pack.systemPrompt,
+    primarySkillId: pack.primarySkillId,
+    demoPrompt: pack.demoPrompt,
+    planSteps: [...pack.planSteps],
+  };
+}
+
+export const PROTOTYPE_AGENTS: PrototypeAgentSeed[] = PROTOTYPE_AGENTS_RAW.map(withAgentPack);

@@ -10,9 +10,14 @@ import { useConversationStore } from '@/stores/conversationStore';
 import { useHomeStore } from '@/stores/homeStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { usePortalContentStore } from '@/stores/portalContentStore';
+import { useInboxStore } from '@/stores/inboxStore';
 import { getAgentById } from '@/domain/plan';
+import { buildSkillDemoPrompt } from '@/domain/skillRuntime';
+import { buildAgentDemoPrompt } from '@/domain/agents/runtime';
 import { enterTaskChatFocusMode } from '@/domain/taskFocusMode';
+import { PROTOTYPE_AGENTS } from '@/domain/prototype/agents';
 import type { PrototypeAgentSeed, PrototypeKbDocument, PrototypeSkillSeed } from '@/domain/prototype/types';
+import type { ScenarioDemoPlan } from '@/domain/scenarioPipeline';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useTaskStore } from '@/stores/taskStore';
@@ -55,6 +60,7 @@ export function App() {
   const closeExport = useConversationStore((s) => s.closeExport);
   const exportResult = useConversationStore((s) => s.exportResult);
   const createAgentTaskSession = useConversationStore((s) => s.createAgentTaskSession);
+  const startExpertTeamRelay = useConversationStore((s) => s.startExpertTeamRelay);
   const findOrCreateAgentSession = useConversationStore((s) => s.findOrCreateAgentSession);
   const switchChat = useConversationStore((s) => s.switchChat);
   const openExport = useConversationStore((s) => s.openExport);
@@ -73,25 +79,24 @@ export function App() {
   const hydratedRef = useRef(false);
   const transitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [workspaceHydrating, setWorkspaceHydrating] = useState(false);
+  const [sessionsReady, setSessionsReady] = useState(false);
   const [transit, setTransit] = useState<{ open: boolean; summary: string }>({
     open: false,
     summary: '',
   });
 
-  const goToTaskWithTransit = useCallback(
-    (summary: string) => {
-      if (transitTimerRef.current) clearTimeout(transitTimerRef.current);
-      const preview = summary.trim().length > 48 ? `${summary.trim().slice(0, 48)}…` : summary.trim();
-      setTransit({ open: true, summary: preview });
-      enterTaskChatFocusMode();
-      transitTimerRef.current = setTimeout(() => {
-        setAppView('task');
-        setTransit({ open: false, summary: '' });
-        transitTimerRef.current = null;
-      }, 720);
-    },
-    [setAppView],
-  );
+  const goToTaskWithTransit = useCallback((summary: string, chatId?: string) => {
+    if (transitTimerRef.current) clearTimeout(transitTimerRef.current);
+    const preview = summary.trim().length > 48 ? `${summary.trim().slice(0, 48)}…` : summary.trim();
+    setTransit({ open: true, summary: preview });
+    enterTaskChatFocusMode();
+    transitTimerRef.current = setTimeout(() => {
+      if (chatId) navigateToTaskChat(chatId);
+      else setAppView('task');
+      setTransit({ open: false, summary: '' });
+      transitTimerRef.current = null;
+    }, 720);
+  }, [setAppView]);
 
   useEffect(
     () => () => {
@@ -133,21 +138,27 @@ export function App() {
   useEffect(() => {
     if (!catalogReady || hydratedRef.current) return;
     hydratedRef.current = true;
+    setSessionsReady(false);
 
     void (async () => {
-      const { workspaceId: wsId, getCatalog } = useWorkspaceStore.getState();
-      const defaultChatId = getCatalog(wsId).defaultChatId;
+      try {
+        const { workspaceId: wsId, getCatalog } = useWorkspaceStore.getState();
+        const defaultChatId = getCatalog(wsId).defaultChatId;
 
-      await useMarketplaceStore.getState().bootstrap(wsId);
-      await usePortalContentStore.getState().bootstrap(wsId);
+        await useMarketplaceStore.getState().bootstrap(wsId);
+        await usePortalContentStore.getState().bootstrap(wsId);
+        useInboxStore.getState().bootstrap(wsId);
 
-      const persisted = await loadSessions(wsId);
-      const catalogChats = getCatalog(wsId).chats;
-      const mergedSessions = persisted
-        ? { ...structuredClone(catalogChats), ...persisted }
-        : undefined;
+        const persisted = await loadSessions(wsId);
+        const catalogChats = getCatalog(wsId).chats;
+        const mergedSessions = persisted
+          ? { ...structuredClone(catalogChats), ...persisted }
+          : undefined;
 
-      loadWorkspace(wsId, defaultChatId, mergedSessions);
+        loadWorkspace(wsId, defaultChatId, mergedSessions);
+      } finally {
+        setSessionsReady(true);
+      }
     })();
   }, [catalogReady, loadWorkspace]);
 
@@ -155,10 +166,12 @@ export function App() {
     const defaultChatId = switchWorkspace(nextWorkspaceId);
     useNavigationIntentStore.getState().clearAll();
     setWorkspaceHydrating(true);
+    setSessionsReady(false);
     void (async () => {
       try {
         await useMarketplaceStore.getState().bootstrap(nextWorkspaceId);
         await usePortalContentStore.getState().bootstrap(nextWorkspaceId);
+        useInboxStore.getState().bootstrap(nextWorkspaceId);
         const persisted = await loadSessions(nextWorkspaceId);
         const catalog = useWorkspaceStore.getState().getCatalog(nextWorkspaceId);
         const mergedSessions = persisted
@@ -168,6 +181,7 @@ export function App() {
         loadWorkspace(nextWorkspaceId, defaultChatId, mergedSessions);
       } finally {
         setWorkspaceHydrating(false);
+        setSessionsReady(true);
       }
     })();
   }, [switchWorkspace, loadWorkspace]);
@@ -188,9 +202,13 @@ export function App() {
       useConversationStore.setState({ pushToast: '请输入任务描述' });
       return;
     }
+    if (!sessionsReady) {
+      useConversationStore.setState({ pushToast: '工作区加载中，请稍候再试' });
+      return;
+    }
 
     const title = trimmed.length > 28 ? `${trimmed.slice(0, 28)}…` : trimmed;
-    createAgentTaskSession({
+    const chatId = createAgentTaskSession({
       title,
       agentName: agent?.name,
       agentIcon: agent?.icon,
@@ -201,28 +219,51 @@ export function App() {
     });
     useHomeStore.getState().setDraftText('');
     useHomeStore.getState().setHomeMode('assistant');
-    goToTaskWithTransit(trimmed);
-  }, [createAgentTaskSession, goToTaskWithTransit]);
+    goToTaskWithTransit(trimmed, chatId);
+  }, [createAgentTaskSession, goToTaskWithTransit, sessionsReady]);
 
   const handleInvokeAgent = useCallback((agent: PrototypeAgentSeed, prompt?: string) => {
+    if (!sessionsReady) {
+      useConversationStore.setState({ pushToast: '工作区加载中，请稍候再试' });
+      return;
+    }
     const chatId = findOrCreateAgentSession(agent.id, agent.name, agent.icon);
     switchChat(chatId);
-    const message = prompt || `@${agent.name} `;
+    // 无外部 prompt 时使用专家演示任务并自动发送（挂载主 Skill）
+    const message = (prompt?.trim() || buildAgentDemoPrompt(agent)).trim();
     useConversationStore.setState({
-      pendingTaskSubmit: { chatId, message, autoSend: Boolean(prompt) },
-      ...(!prompt ? { pushToast: `已选择 ${agent.name}` } : {}),
+      pendingTaskSubmit: { chatId, message, autoSend: true },
     });
-    goToTaskWithTransit(prompt?.trim() || `调用 ${agent.name}`);
-  }, [findOrCreateAgentSession, switchChat, goToTaskWithTransit]);
+    goToTaskWithTransit(message, chatId);
+  }, [findOrCreateAgentSession, switchChat, goToTaskWithTransit, sessionsReady]);
 
   const handleInvokeSkill = useCallback((skill: PrototypeSkillSeed) => {
-    createAgentTaskSession({
+    if (!sessionsReady) {
+      useConversationStore.setState({ pushToast: '工作区加载中，请稍候再试' });
+      return;
+    }
+    const reviewAgent = getAgentById('agent-review');
+    const marketAgents = useMarketplaceStore.getState().agents;
+    const boundAgent =
+      reviewAgent?.skillIds?.includes(skill.id)
+        ? reviewAgent
+        : marketAgents.find((a) => a.skillIds?.includes(skill.id) && a.published) ??
+          PROTOTYPE_AGENTS.find((a) => a.skillIds?.includes(skill.id) && a.published) ??
+          reviewAgent;
+    const initialMessage = buildSkillDemoPrompt(skill);
+    // 进入任务对话并自动发送，使 AI 助手链路挂载 Skill 正文后执行
+    const chatId = createAgentTaskSession({
       title: skill.name,
-      initialMessage: `${skill.command} `,
-      autoSend: false,
+      agentId: boundAgent?.id,
+      agentName: boundAgent?.name,
+      agentIcon: boundAgent?.icon ?? skill.icon,
+      initialMessage,
+      autoSend: Boolean(initialMessage.trim()),
+      switchTo: true,
     });
-    goToTaskWithTransit(skill.name);
-  }, [createAgentTaskSession, goToTaskWithTransit]);
+    useHomeStore.getState().setHomeMode('assistant');
+    goToTaskWithTransit(skill.name, chatId);
+  }, [createAgentTaskSession, goToTaskWithTransit, sessionsReady]);
 
   const handleAskKbDocument = useCallback((doc: PrototypeKbDocument) => {
     const agent = getAgentById('agent-knowledge');
@@ -240,6 +281,29 @@ export function App() {
     }
   }, [handleInvokeAgent]);
 
+  const handleStartExpertTeam = useCallback(
+    (plan: ScenarioDemoPlan, fromIndex = 0) => {
+      if (!sessionsReady) {
+        useConversationStore.setState({ pushToast: '工作区加载中，请稍候再试' });
+        return;
+      }
+      if (plan.mode !== 'team' || !plan.steps.length) {
+        useConversationStore.setState({ pushToast: '该场景不是专家团模式' });
+        return;
+      }
+      const chatId = startExpertTeamRelay({
+        scenarioId: plan.scenarioId,
+        scenarioLabel: plan.scenarioLabel,
+        steps: plan.steps,
+        fromIndex,
+        autoApprove: true,
+      });
+      if (!chatId) return;
+      goToTaskWithTransit(`专家团 · ${plan.scenarioLabel}`, chatId);
+    },
+    [sessionsReady, startExpertTeamRelay, goToTaskWithTransit],
+  );
+
   const viewHandlers = useMemo(
     () => ({
       onSubmitTask: handleSubmitTask,
@@ -247,10 +311,19 @@ export function App() {
       onInvokeSkill: handleInvokeSkill,
       onAskKbDocument: handleAskKbDocument,
       onRunAutomation: handleRunAutomation,
+      onStartExpertTeam: handleStartExpertTeam,
       onOpenTaskChat: navigateToTaskChat,
       onWorkspaceSwitch: reloadAllStores,
     }),
-    [handleSubmitTask, handleInvokeAgent, handleInvokeSkill, handleAskKbDocument, handleRunAutomation, reloadAllStores],
+    [
+      handleSubmitTask,
+      handleInvokeAgent,
+      handleInvokeSkill,
+      handleAskKbDocument,
+      handleRunAutomation,
+      handleStartExpertTeam,
+      reloadAllStores,
+    ],
   );
 
   const commandHandlers = useMemo<AppCommandHandlers>(

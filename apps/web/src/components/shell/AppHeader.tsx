@@ -1,13 +1,16 @@
 import { MssZhishuMark } from '@/components/brand/MssZhishuMark';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
+import { writeAppRouteToLocation } from '@/domain/appRoute';
 import { ROLE_LABELS } from '@/domain/rbac';
 import { formatRolePerspective } from '@/domain/rolePerspective';
+import { ROUTE_PREFETCH } from '@/features/lazyPages';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useWorkspaceConfigStore } from '@/stores/workspaceConfigStore';
 import { WORKSPACE_LOCALE_LABELS } from '@/domain/workspaceConfig';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useCommandPaletteStore } from '@/stores/commandPaletteStore';
+import { useInboxStore } from '@/stores/inboxStore';
 import { useSessionStore } from '@/stores/sessionStore';
 
 interface AppHeaderProps {
@@ -17,10 +20,17 @@ interface AppHeaderProps {
 
 export function AppHeader({ apiConnected, onWorkspaceSwitch }: AppHeaderProps) {
   const { workspaceId, switchWorkspace, workspaceList } = useWorkspaceStore();
-  const { openSettings } = useAppViewStore();
+  const appView = useAppViewStore((s) => s.appView);
+  const openSettings = useAppViewStore((s) => s.openSettings);
+  const setAppView = useAppViewStore((s) => s.setAppView);
   const openPalette = useCommandPaletteStore((s) => s.openPalette);
   const user = useSessionStore((s) => s.user);
   const logout = useSessionStore((s) => s.logout);
+  const inboxMessages = useInboxStore((s) => s.messages);
+  const unreadMessages = useMemo(() => {
+    void inboxMessages;
+    return useInboxStore.getState().unreadCount(user?.id);
+  }, [inboxMessages, user?.id]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -143,6 +153,32 @@ export function AppHeader({ apiConnected, onWorkspaceSwitch }: AppHeaderProps) {
           title="Command Palette (⌘K)"
         >
           <i className="fa-solid fa-magnifying-glass text-[13px]" />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // 先写 hash 再切视图，避免任务深链同步把页面抢回去
+            writeAppRouteToLocation({ view: 'messages' });
+            setAppView('messages');
+          }}
+          onMouseEnter={() => ROUTE_PREFETCH.messages?.()}
+          className={cn(
+            'relative flex h-9 w-9 items-center justify-center rounded-lg transition',
+            appView === 'messages'
+              ? 'bg-zinc-100 text-zinc-900'
+              : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900',
+          )}
+          title="我的消息"
+          aria-label={unreadMessages > 0 ? `我的消息，${unreadMessages} 条未读` : '我的消息'}
+        >
+          <i className="fa-solid fa-bell text-[15px]" />
+          {unreadMessages > 0 ? (
+            <span className="absolute right-1 top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[#e0122f] px-1 text-[9px] font-semibold leading-none text-white">
+              {unreadMessages > 99 ? '99+' : unreadMessages}
+            </span>
+          ) : null}
         </button>
         <div className="relative" ref={userMenuRef}>
           <button

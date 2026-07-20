@@ -401,7 +401,7 @@ export interface ScenarioDef {
   matchTags: string[];
 }
 
-/** 领导演示 / 样板间固定场景包（仅此 8 个，不再从标签自动扩场景） */
+/** 领导演示 / 场景案例固定场景包（7 个业务场景；平台本身不作案例） */
 export const FEATURED_SCENARIOS: ScenarioDef[] = [
   {
     id: 'price-offer-monitor',
@@ -413,7 +413,7 @@ export const FEATURED_SCENARIOS: ScenarioDef[] = [
   {
     id: 'ecommerce-review',
     label: '电渠评论采集与分析',
-    desc: '电商渠道订单评论采集、多语种聚类与洞察',
+    desc: '评分采集 → 语种翻译（中英）→ 评论分析三段式专家链路',
     icon: 'fa-comments',
     matchTags: ['评论分析', '评论', '电商'],
   },
@@ -451,13 +451,6 @@ export const FEATURED_SCENARIOS: ScenarioDef[] = [
     desc: '组织与个人知识沉淀 · RAG 检索 · 文档归档',
     icon: 'fa-book-open',
     matchTags: ['知识', 'SOP', '客诉', '归档', '指南'],
-  },
-  {
-    id: 'mss-ai-platform',
-    label: 'MSS AI提效平台',
-    desc: 'MSS 智枢通用提效能力总览 · 办公与协作组合',
-    icon: 'fa-robot',
-    matchTags: ['办公提效', '编码助手', '通用对话', '企业协作', 'PPT', '会议', '平台'],
   },
 ];
 
@@ -562,7 +555,7 @@ export function buildScenarioBundles(input: BuildScenarioBundlesInput): Scenario
   const publishedSkills = skills.filter((s) => s.published);
   const publishedTools = tools.filter((t) => t.published);
 
-  // 仅展示固定 8 个样板间场景，不再从内容标签自动扩场景
+  // 仅展示固定业务场景，不再从内容标签自动扩场景
   const defs = FEATURED_SCENARIOS;
   const q = search.trim().toLowerCase();
 

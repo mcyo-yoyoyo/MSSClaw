@@ -11,9 +11,14 @@ export const HOME_CATEGORIES: { id: HomeCategory; label: string }[] = HQ_DEPTS.m
 export const HOME_BIZ_AGENTS: Record<DeptId, string[]> = {
   gtm: ['agent-price-monitor', 'agent-data-analysis', 'agent-ppt'],
   mkt: ['agent-launch-sentiment', 'agent-survey', 'agent-doc-review', 'agent-ppt'],
-  ecommerce: ['agent-review', 'agent-price-monitor', 'agent-retail-insight'],
+  ecommerce: [
+    'agent-review-collect',
+    'agent-review-translate',
+    'agent-review',
+    'agent-price-monitor',
+  ],
   retail: ['agent-retail-insight', 'agent-training', 'agent-retail-coach'],
-  service: ['agent-knowledge', 'agent-review', 'agent-launch-sentiment'],
+  service: ['agent-knowledge', 'agent-review', 'agent-review-collect', 'agent-launch-sentiment'],
   channel: ['agent-price-monitor', 'agent-retail-insight', 'agent-data-analysis'],
   hr: ['agent-hr-resume', 'agent-meeting', 'agent-file-organize'],
   finance: ['agent-data-analysis', 'agent-ppt', 'agent-knowledge'],
@@ -23,45 +28,85 @@ export const HOME_BIZ_AGENTS: Record<DeptId, string[]> = {
 /** 各一线区域关联的 Agent（演示：区域特色能力组合） */
 export const HOME_REGION_AGENTS: Record<RegionId, string[]> = {
   china: ['agent-retail-insight', 'agent-data-analysis', 'agent-knowledge', 'agent-ppt'],
-  apac: ['agent-review', 'agent-retail-coach', 'agent-training', 'agent-price-monitor'],
+  apac: [
+    'agent-review-collect',
+    'agent-review-translate',
+    'agent-review',
+    'agent-price-monitor',
+  ],
   mea: ['agent-price-monitor', 'agent-data-analysis', 'agent-knowledge'],
   latam: ['agent-price-monitor', 'agent-retail-insight', 'agent-data-analysis', 'agent-ppt'],
-  europe: ['agent-doc-review', 'agent-review', 'agent-launch-sentiment', 'agent-price-monitor'],
+  europe: [
+    'agent-doc-review',
+    'agent-review-translate',
+    'agent-review',
+    'agent-price-monitor',
+  ],
   eurasia: ['agent-price-monitor', 'agent-retail-insight', 'agent-knowledge'],
 };
 
-/** 各职能线下关联的 Skill */
+/** 各职能线下关联的 Skill（AI 助手「领域」推荐） */
 export const HOME_BIZ_SKILLS: Record<DeptId, string[]> = {
   gtm: ['skill-price-monitor', 'skill-so-report', 'skill-data-analysis', 'skill-ppt-gen'],
-  mkt: ['skill-launch-sentiment', 'skill-survey-insight', 'skill-doc-compliance', 'skill-ppt-gen', 'skill-doc-gen'],
-  ecommerce: ['skill-review-cluster', 'skill-price-monitor', 'skill-retail-insight', 'skill-data-analysis'],
+  mkt: ['skill-launch-sentiment', 'skill-survey-insight', 'skill-doc-compliance', 'skill-ppt-gen'],
+  ecommerce: [
+    'skill-review-collect',
+    'skill-review-translate',
+    'skill-review-cluster',
+    'skill-price-monitor',
+  ],
   retail: ['skill-retail-insight', 'skill-retail-coach', 'skill-training-gen', 'skill-so-report'],
-  service: ['skill-complaint-sop', 'skill-rag', 'skill-review-cluster', 'skill-launch-sentiment'],
+  service: [
+    'skill-complaint-sop',
+    'skill-rag',
+    'skill-review-cluster',
+    'skill-review-translate',
+  ],
   channel: ['skill-price-monitor', 'skill-so-report', 'skill-data-analysis', 'skill-retail-insight'],
   hr: ['skill-jd-parser', 'skill-resume-screen', 'skill-interview-analysis', 'skill-meeting-minutes'],
   finance: ['skill-data-analysis', 'skill-so-report', 'skill-ppt-gen', 'skill-doc-gen'],
   quality: ['skill-doc-compliance', 'skill-rag', 'skill-data-analysis', 'skill-doc-gen'],
 };
 
+/** 各一线区域关联的 Skill（AI 助手「区域」推荐） */
+export const HOME_REGION_SKILLS: Record<RegionId, string[]> = {
+  china: ['skill-retail-insight', 'skill-data-analysis', 'skill-rag', 'skill-ppt-gen'],
+  apac: [
+    'skill-review-collect',
+    'skill-review-translate',
+    'skill-review-cluster',
+    'skill-price-monitor',
+  ],
+  mea: ['skill-price-monitor', 'skill-data-analysis', 'skill-so-report', 'skill-rag'],
+  latam: ['skill-price-monitor', 'skill-retail-insight', 'skill-data-analysis', 'skill-ppt-gen'],
+  europe: [
+    'skill-doc-compliance',
+    'skill-review-translate',
+    'skill-review-cluster',
+    'skill-price-monitor',
+  ],
+  eurasia: ['skill-price-monitor', 'skill-retail-insight', 'skill-rag', 'skill-complaint-sop'],
+};
+
 export const HOME_SUGGESTIONS: Record<DeptId, string> = {
-  gtm: '@价格监测 Agent 输出本周 18 国价格与 offer 异动，/价格监测 /so报表',
-  mkt: '@舆情快报 Agent 生成本周发布会舆情快报，/舆情快报 /文档生成',
-  ecommerce: '@评论分析 Agent 聚类 Amazon/Lazada 近一周差评主题，/评论分析',
-  retail: '@零售洞察 Agent 输出门店 DOS 与转化洞察 π 报告，/零售洞察',
-  service: '@知识 Agent 检索电池过热客诉 SOP 并给出话术，/客诉 /检索',
-  channel: '@价格监测 Agent 对比渠道价差与代表处 SO，/价格监测 /so报表',
-  hr: '@简历筛选 Agent 按 JD 筛选本周简历并输出匹配报告，/简历筛选 /jd解析',
-  finance: '@数据分析 Agent 汇总本月区域返利与结算差异，输出财经周报，/数据分析 /so报表',
-  quality: '@文档解读 Agent 抽检本周营销物料医疗用语合规风险，/文档合规',
+  gtm: '/价格监测 输出本周 18 国价格与 offer 异动，并可接 /so报表',
+  mkt: '/舆情快报 生成本周发布会舆情快报，需要成稿时再 /文档生成',
+  ecommerce: '/评论采集 拉取 Amazon 3C 评论，再 /评论翻译 /评论分析 出洞察',
+  retail: '/零售洞察 输出门店 DOS 与转化洞察 π 报告',
+  service: '/客诉 检索电池过热 SOP 话术，必要时 /检索 补知识',
+  channel: '/价格监测 对比渠道价差，再用 /so报表 看代表处',
+  hr: '/简历筛选 按 JD 初筛本周简历；可先 /jd解析',
+  finance: '/数据分析 汇总区域返利与结算差异，输出财经周报',
+  quality: '/合规筛查 抽检本周营销物料医疗用语风险',
 };
 
 export const HOME_REGION_SUGGESTIONS: Record<RegionId, string> = {
-  china: '@零售洞察 Agent 输出中国区门店 DOS 与转化周报，/零售洞察 /数据分析',
-  apac: '@评论分析 Agent 聚类亚太电商近一周差评主题，/评论分析',
-  mea: '@价格监测 Agent 输出中东非重点市场本周价盘异动，/价格监测',
-  latam: '@价格监测 Agent 输出拉美 18 国价格与 offer 异动，/价格监测 /so报表',
-  europe: '@文档解读 Agent 核查 EU 准入与环保宣称合规，/文档合规',
-  eurasia: '@零售洞察 Agent 输出欧亚门店 DOS 与转化周报，/零售洞察',
+  china: '/零售洞察 输出中国区门店 DOS 与转化周报',
+  apac: '/评论采集 采集亚太电渠评论，再 /评论翻译 /评论分析',
+  mea: '/价格监测 输出中东非重点市场本周价盘异动',
+  latam: '/价格监测 输出拉美价格与 offer 异动',
+  europe: '/合规筛查 核查 EU 准入与环保宣称合规',
+  eurasia: '/零售洞察 输出欧亚门店 DOS 与转化周报',
 };
 
 export function getHomeSuggestion(category: HomeCategory): string {

@@ -39,6 +39,12 @@ export interface PrototypeAgentSeed {
   icon: string;
   color: string;
   systemPrompt?: string;
+  /** 调用时优先挂载的主 Skill */
+  primarySkillId?: string;
+  /** 专家中心「调用」演示任务（可覆盖 pack） */
+  demoPrompt?: string;
+  /** 多 Skill 编排计划步骤 */
+  planSteps?: string[];
   /** 归属机关职能（可多选；缺省回退 homeTag） */
   ownerDeptIds?: DeptId[];
   /** 相关一线区域（用于区域轴筛选） */
@@ -64,6 +70,10 @@ export interface PrototypeSkillSeed extends AssetOwnershipFields {
   invokes: number;
   icon: string;
   tags: string[];
+  /** 平台对话执行时注入的 Skill 正文（可 run） */
+  instructions?: string;
+  /** 挂载该 Skill 时的默认执行计划步骤 */
+  planSteps?: string[];
 }
 
 /**

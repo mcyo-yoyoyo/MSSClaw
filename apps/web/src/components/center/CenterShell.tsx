@@ -7,24 +7,44 @@ interface CenterModalProps {
   onClose: () => void;
   children: ReactNode;
   actions?: ReactNode;
+  /** 弹层宽度：编辑长文案时可用 wider */
+  size?: 'md' | 'lg';
+  /** 叠在其它弹层之上（如详情→编辑） */
+  elevate?: boolean;
 }
 
-export function CenterModal({ open, title, onClose, children, actions }: CenterModalProps) {
+export function CenterModal({
+  open,
+  title,
+  onClose,
+  children,
+  actions,
+  size = 'md',
+  elevate = false,
+}: CenterModalProps) {
   if (!open) return null;
 
   return (
     <div
-      className="modal-backdrop fixed inset-0 z-[100] flex items-center justify-center p-4"
+      className={cn(
+        'modal-backdrop fixed inset-0 flex items-center justify-center p-4',
+        elevate ? 'z-[120]' : 'z-[100]',
+      )}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="max-h-[85vh] w-full max-w-lg overflow-hidden rounded-2xl border border-black/5 bg-white shadow-apple-lg">
+      <div
+        className={cn(
+          'max-h-[85vh] w-full overflow-hidden rounded-2xl border border-black/5 bg-white shadow-apple-lg',
+          size === 'lg' ? 'max-w-2xl' : 'max-w-lg',
+        )}
+      >
         <div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-4">
           <h3 className="text-[15px] font-semibold text-[#1d1d1f]">{title}</h3>
           <button type="button" onClick={onClose} className="text-[#86868b] transition hover:text-[#1d1d1f]">
             <i className="fa-solid fa-xmark" />
           </button>
         </div>
-        <div className="max-h-[60vh] overflow-y-auto scroll-hidden p-5">{children}</div>
+        <div className="max-h-[60vh] overflow-y-auto p-5">{children}</div>
         {actions && (
           <div className="flex justify-end gap-2 border-t border-black/[0.06] bg-[#fafafa]/50 px-5 py-4">
             {actions}

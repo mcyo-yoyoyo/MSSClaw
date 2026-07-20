@@ -55,15 +55,19 @@ export function openPortalCard(card: PortalMapCard, handlers: PortalNavHandlers)
 
   if (action.type === 'agent') {
     const agent = market.agents.find((a) => a.id === action.agentId);
-    if (agent) handlers.onInvokeAgent(agent);
-    else toast('未找到对应 Agent');
+    if (agent) {
+      handlers.onInvokeAgent(agent);
+      toast(`单独调用专家：${agent.name}`);
+    } else toast('未找到对应专家');
     return;
   }
 
   if (action.type === 'skill') {
     const skill = market.skills.find((s) => s.id === action.skillId);
-    if (skill) handlers.onInvokeSkill(skill);
-    else toast('未找到对应 Skill');
+    if (skill) {
+      handlers.onInvokeSkill(skill);
+      toast(`已调用技能：${skill.name}（${skill.command}）`);
+    } else toast('未找到对应技能');
     return;
   }
 
@@ -92,7 +96,7 @@ export function openPortalCard(card: PortalMapCard, handlers: PortalNavHandlers)
   if (action.type === 'case') {
     if (!goOrWarn('ai-map', toast)) return;
     intent.focusCase(action.caseId);
-    toast(`场景地图 · 样板案例：${card.title}`);
+    toast(`打开场景案例：${card.title}`);
     return;
   }
 

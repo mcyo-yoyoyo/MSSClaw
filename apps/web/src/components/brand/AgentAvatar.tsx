@@ -18,6 +18,8 @@ const GRADIENTS: Record<string, { from: string; to: string; accent?: string }> =
   'agent-meeting': { from: '#a78bfa', to: '#6d28d9' },
   'agent-launch-sentiment': { from: '#fb7185', to: '#be123c' },
   'agent-survey': { from: '#22d3ee', to: '#0e7490' },
+  'agent-review-collect': { from: '#34d399', to: '#065f46' },
+  'agent-review-translate': { from: '#38bdf8', to: '#075985' },
   'agent-review': { from: '#fbbf24', to: '#b45309' },
   'agent-retail-insight': { from: '#4ade80', to: '#15803d' },
   'agent-price-monitor': { from: '#34d399', to: '#047857' },
@@ -118,6 +120,21 @@ const ICONS: Record<string, IconRenderer> = {
       <rect x="27" y="21" width="3.5" height="9" rx="1" fill="white" fillOpacity="0.7" />
       <path d="M11 30h20" stroke="white" strokeWidth="1.2" strokeLinecap="round" opacity="0.45" />
       <circle cx="20" cy="10" r="2.5" fill={`url(#${uid}-core)`} />
+    </>
+  ),
+  'agent-review-collect': () => (
+    <>
+      <path d="M20 10v14" stroke="white" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M14 18l6 6 6-6" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      <path d="M12 28h16" stroke="white" strokeWidth="1.3" strokeLinecap="round" opacity="0.55" />
+    </>
+  ),
+  'agent-review-translate': () => (
+    <>
+      <circle cx="15" cy="18" r="5.5" stroke="white" strokeWidth="1.3" fill="none" opacity="0.7" />
+      <circle cx="25" cy="22" r="5.5" stroke="white" strokeWidth="1.3" fill="white" fillOpacity="0.2" />
+      <path d="M12 18h6M15 15v6" stroke="white" strokeWidth="1.2" strokeLinecap="round" />
+      <path d="M22 22h6" stroke="white" strokeWidth="1.2" strokeLinecap="round" opacity="0.85" />
     </>
   ),
   'agent-review': (uid) => (

@@ -73,11 +73,20 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
       <input
         ref={importInputRef}
         type="file"
-        accept=".json,.skill.json,application/json"
+        accept=".zip,.skill.zip,.md,.skill.md,.json,.skill.json,application/zip,application/json,text/markdown"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) void importSkillFile(file);
+          if (!file) return;
+          void (async () => {
+            const imported = await importSkillFile(file);
+            if (imported[0]) {
+              // 导入是「新建」到列表，不是挂到某个已有技能下
+              setSkillScopeFilter('mine');
+              setSkillSearch(imported[0].name);
+              setDetail(imported[0]);
+            }
+          })();
           e.target.value = '';
         }}
       />
@@ -87,8 +96,8 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
           subtitle="能力资产 · 按职能/区域上架共享 · 团队调用"
           tip={
             <>
-              Skill 可按 NP 与区域归属上架。筛「我构建的 / 外部工具」快速定位自建与外链能力；输入{' '}
-              <code className="rounded bg-black/[0.04] px-1">/skill名</code> 在任务中心调用。
+              Skill 可按 NP 与区域归属上架。下载为 Skill 包（含 SKILL.md、reference、templates、assets）；也可导入
+              ZIP / SKILL.md / JSON。输入 <code className="rounded bg-black/[0.04] px-1">/skill名</code> 在任务中心调用。
             </>
           }
           actions={
@@ -123,21 +132,22 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
                         setMoreOpen(false);
                       }}
                       className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-zinc-700 hover:bg-zinc-50"
+                      title="导入为新技能（不挂到某个已有技能下），成功后打开详情"
                     >
                       <i className="fa-solid fa-file-import w-3.5 text-[10px] text-zinc-400" />
-                      导入 Skill
+                      导入 Skill 包
                     </button>
                     <button
                       type="button"
                       onClick={() => {
                         downloadAllSkillsFile(skills);
-                        showToast(`已导出 ${skills.length} 个 Skill`);
+                        showToast(`已导出 ${skills.length} 个 Skill 清单（JSON 备份）`);
                         setMoreOpen(false);
                       }}
                       className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-zinc-700 hover:bg-zinc-50"
                     >
                       <i className="fa-solid fa-file-export w-3.5 text-[10px] text-zinc-400" />
-                      导出全部
+                      导出全部清单
                     </button>
                   </div>
                 ) : null}
@@ -190,6 +200,11 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
                         外部
                       </span>
                     )}
+                    {s.instructions && (
+                      <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[9px] font-semibold text-sky-700">
+                        可对话执行
+                      </span>
+                    )}
                   </div>
                 </div>
                 <span className="text-[10px] font-semibold text-claw-600">{getEfficiencyLabel(s.category)}</span>
@@ -224,10 +239,10 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
                     type="button"
                     onClick={() => {
                       downloadSkillFile(s);
-                      showToast(`已下载 ${s.name}.skill.json`);
+                      showToast(`已下载 Skill 包 ${s.name}.skill.zip`);
                     }}
                     className="rounded-lg border border-black/8 px-2.5 py-1.5 text-[11px] font-medium transition hover:bg-black/[0.03]"
-                    title="下载"
+                    title="下载 Skill 包（SKILL.md + reference/templates/assets）"
                   >
                     <i className="fa-solid fa-download" />
                   </button>
@@ -297,6 +312,28 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
               {getEfficiencyLabel(detail.category)} · v{detail.version} · {detail.connector}
               {detail.ownerRegionId ? ` · ${getRegionLabel(detail.ownerRegionId)}` : ''}
             </p>
+            {detail.instructions ? (
+              <div className="rounded-xl border border-sky-100 bg-sky-50/50 p-3">
+                <p className="mb-1.5 text-[11px] font-semibold text-sky-800">Skill 正文（对话执行时注入）</p>
+                <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap text-[11px] leading-relaxed text-zinc-700">
+                  {detail.instructions}
+                </pre>
+              </div>
+            ) : (
+              <p className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-3 py-2 text-[11px] text-zinc-500">
+                尚未配置 Skill 正文。点击「编辑」可补充，保存后即可对话执行。
+              </p>
+            )}
+            {detail.planSteps?.length ? (
+              <div className="rounded-xl border border-zinc-100 bg-zinc-50/60 p-3">
+                <p className="mb-1.5 text-[11px] font-semibold text-zinc-700">默认执行计划</p>
+                <ol className="list-decimal space-y-1 pl-4 text-[11px] text-zinc-600">
+                  {detail.planSteps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
           </div>
         )}
       </CenterModal>

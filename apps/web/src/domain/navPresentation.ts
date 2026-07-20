@@ -23,6 +23,14 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   { id: 'home', label: '首页', subtitle: 'AI助手开工 · AI广场找场景与工具', icon: 'fa-house', section: 'workspace' },
   { id: 'task', label: '任务', subtitle: '当前会话 · 计划确认 · 交付物', icon: 'fa-list-check', section: 'workspace' },
   {
+    id: 'messages',
+    label: '我的消息',
+    subtitle: '推送通知 · 作战室与成员消息（顶栏铃铛入口）',
+    icon: 'fa-bell',
+    section: 'workspace',
+    hiddenFromSidebar: true,
+  },
+  {
     id: 'ai-map',
     label: '案例',
     subtitle: '样板间 · 可复制业务场景包',
@@ -83,7 +91,7 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
 export const NAV_PRESET_LABELS: Record<NavPresetId, { title: string; description: string }> = {
   customer: {
     title: 'MVP演示',
-    description: '首页 · 任务 · 案例 · 专家 · 技能 · 门户运营 · 快捷设置 · 组织权限',
+    description: '首页 · 任务 · 案例 · 专家 · 技能 · 门户运营 · 快捷设置 · 组织权限（消息见顶栏铃铛）',
   },
   standard: {
     title: '标准能力',
@@ -107,6 +115,7 @@ const MVP_ENABLED: Record<AppView, boolean> = {
   ...ALL_FALSE,
   home: true,
   task: true,
+  messages: true,
   'ai-map': true,
   agents: true,
   skills: true,
@@ -130,6 +139,7 @@ export const NAV_PRESET_ENABLED: Record<Exclude<NavPresetId, 'custom'>, Record<A
 export const NAV_FALLBACK_ORDER: AppView[] = [
   'home',
   'task',
+  'messages',
   'ai-map',
   'agents',
   'skills',

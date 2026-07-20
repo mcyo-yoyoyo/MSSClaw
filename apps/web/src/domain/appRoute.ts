@@ -36,10 +36,11 @@ export function readAppRouteFromLocation(): AppRouteParams {
 export function writeAppRouteToLocation(params: AppRouteParams, replace = false): void {
   const next = buildAppRoute(params);
   if (window.location.hash === next) return;
+  const url = `${window.location.pathname}${window.location.search}${next}`;
   if (replace) {
-    window.history.replaceState(null, '', next);
+    window.history.replaceState(null, '', url);
   } else {
-    window.history.pushState(null, '', next);
+    window.history.pushState(null, '', url);
   }
 }
 

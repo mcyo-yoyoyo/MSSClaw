@@ -19,6 +19,8 @@ export const SKILL_OWNERSHIP: Record<
   'skill-doc-parser': { ownerDeptIds: ['mkt', 'quality'], ownerRegionId: null },
   'skill-launch-sentiment': { ownerDeptIds: ['mkt', 'service'], ownerRegionId: 'europe' },
   'skill-survey-insight': { ownerDeptIds: ['mkt'], ownerRegionId: null },
+  'skill-review-collect': { ownerDeptIds: ['ecommerce', 'service'], ownerRegionId: 'apac' },
+  'skill-review-translate': { ownerDeptIds: ['ecommerce', 'mkt', 'service'], ownerRegionId: 'apac' },
   'skill-review-cluster': { ownerDeptIds: ['ecommerce', 'service'], ownerRegionId: 'apac' },
   'skill-retail-insight': { ownerDeptIds: ['retail'], ownerRegionId: 'latam' },
   'skill-price-monitor': { ownerDeptIds: ['gtm', 'channel', 'ecommerce'], ownerRegionId: 'latam' },

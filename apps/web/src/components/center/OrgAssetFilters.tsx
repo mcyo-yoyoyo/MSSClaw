@@ -11,15 +11,20 @@ import {
   EFFICIENCY_FILTER_OPTIONS,
 } from '@/domain/assetFilters';
 
+type ScenarioScopeFilter = 'related' | 'all';
+
 interface OrgAssetFilterBarProps {
   deptFilter: DeptFilter;
   regionFilter: RegionFilter;
   efficiencyFilter?: EfficiencyFilter;
   scopeFilter?: AssetScopeFilter;
+  /** 场景列表范围：与我相关 / 全部场景（案例样板间） */
+  scenarioFilter?: ScenarioScopeFilter;
   onDeptChange: (v: DeptFilter) => void;
   onRegionChange: (v: RegionFilter) => void;
   onEfficiencyChange?: (v: EfficiencyFilter) => void;
   onScopeChange?: (v: AssetScopeFilter) => void;
+  onScenarioFilterChange?: (v: ScenarioScopeFilter) => void;
   /** 是否展示「范围」行（外部/内部等），默认不展示 */
   showScope?: boolean;
   /** 默认折叠为摘要，点击展开双轴筛选 */
@@ -33,10 +38,12 @@ export function OrgAssetFilterBar({
   regionFilter,
   efficiencyFilter = 'all',
   scopeFilter = 'all',
+  scenarioFilter = 'all',
   onDeptChange,
   onRegionChange,
   onEfficiencyChange,
   onScopeChange,
+  onScenarioFilterChange,
   showScope = false,
   collapsible = true,
   extra,
@@ -45,6 +52,9 @@ export function OrgAssetFilterBar({
 
   const summary = useMemo(() => {
     const parts: string[] = [];
+    if (onScenarioFilterChange) {
+      parts.push(scenarioFilter === 'related' ? '与我相关' : '全部场景');
+    }
     if (deptFilter !== 'all') {
       parts.push(HQ_DEPTS.find((d) => d.id === deptFilter)?.label ?? deptFilter);
     }
@@ -65,13 +75,40 @@ export function OrgAssetFilterBar({
     regionFilter,
     efficiencyFilter,
     scopeFilter,
+    scenarioFilter,
     onEfficiencyChange,
+    onScenarioFilterChange,
     showScope,
     onScopeChange,
   ]);
 
   const filters = (
     <div className="space-y-2">
+      {onScenarioFilterChange ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-0.5 text-[10px] font-semibold text-zinc-400">场景</span>
+          <button
+            type="button"
+            onClick={() => onScenarioFilterChange('related')}
+            className={cn(
+              'filter-chip px-2.5 py-1 text-[11px] font-medium',
+              scenarioFilter === 'related' && 'active',
+            )}
+          >
+            与我相关
+          </button>
+          <button
+            type="button"
+            onClick={() => onScenarioFilterChange('all')}
+            className={cn(
+              'filter-chip px-2.5 py-1 text-[11px] font-medium',
+              scenarioFilter === 'all' && 'active',
+            )}
+          >
+            全部场景
+          </button>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="mr-0.5 text-[10px] font-semibold text-zinc-400">职能</span>

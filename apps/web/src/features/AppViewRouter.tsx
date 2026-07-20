@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { AppView } from '@/domain/appView';
 import { isAppViewPlaceholder } from '@/domain/appView';
 import type { PrototypeAgentSeed, PrototypeKbDocument, PrototypeSkillSeed } from '@/domain/prototype/types';
+import type { ScenarioDemoPlan } from '@/domain/scenarioPipeline';
 import { HomePage } from '@/features/home/HomePage';
 import { AppViewPlaceholder } from '@/components/shell/AppViewPlaceholder';
 import { ViewLoadingFallback } from '@/components/common/ViewLoadingFallback';
@@ -19,6 +20,7 @@ import {
   LazySettingsPage,
   LazySkillCenterPage,
   LazyTaskCenterPage,
+  LazyMyMessagesPage,
   LazyToolCenterPage,
   LazyWorkflowStudioPage,
 } from '@/features/lazyPages';
@@ -29,6 +31,7 @@ export interface AppViewRouterHandlers {
   onInvokeSkill: (skill: PrototypeSkillSeed) => void;
   onAskKbDocument: (doc: PrototypeKbDocument) => void;
   onRunAutomation: (automationId: string, agentId: string, name: string) => void;
+  onStartExpertTeam: (plan: ScenarioDemoPlan, fromIndex?: number) => void;
   onOpenTaskChat?: (chatId: string) => void;
   onWorkspaceSwitch?: (workspaceId: string) => void;
 }
@@ -40,6 +43,7 @@ interface AppViewRouterProps {
 
 const VIEW_LABELS: Partial<Record<AppView, string>> = {
   task: '任务',
+  messages: '我的消息',
   'ai-map': '案例',
   agents: '专家',
   'agent-studio': '专家',
@@ -86,6 +90,12 @@ export function AppViewRouter({ appView, handlers }: AppViewRouterProps) {
           <LazyTaskCenterPage onWorkspaceSwitch={handlers.onWorkspaceSwitch} />
         </LazyView>
       );
+    case 'messages':
+      return (
+        <LazyView label={label}>
+          <LazyMyMessagesPage />
+        </LazyView>
+      );
     case 'ai-map':
       return (
         <LazyView label={label}>
@@ -93,6 +103,7 @@ export function AppViewRouter({ appView, handlers }: AppViewRouterProps) {
             onInvokeAgent={handlers.onInvokeAgent}
             onInvokeSkill={handlers.onInvokeSkill}
             onAskKbDocument={handlers.onAskKbDocument}
+            onStartExpertTeam={handlers.onStartExpertTeam}
           />
         </LazyView>
       );
@@ -129,6 +140,7 @@ export function AppViewRouter({ appView, handlers }: AppViewRouterProps) {
             onInvokeAgent={handlers.onInvokeAgent}
             onInvokeSkill={handlers.onInvokeSkill}
             onAskKbDocument={handlers.onAskKbDocument}
+            onStartExpertTeam={handlers.onStartExpertTeam}
           />
         </LazyView>
       );

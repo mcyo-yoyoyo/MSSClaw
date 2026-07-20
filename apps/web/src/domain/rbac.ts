@@ -82,29 +82,226 @@ export const PERMISSION_CLASSES: Record<PermissionLevel, string> = {
   admin: 'bg-indigo-50 text-indigo-700',
 };
 
-/** 权限矩阵：role → module → level */
-export const RBAC_MATRIX: Record<PlatformRole, Record<ResourceModule, PermissionLevel>> = {
-  super_admin: {
-    chat: 'admin', prompt: 'admin', skill: 'admin', workflow: 'admin',
-    agent: 'admin', knowledge: 'admin', tool: 'admin', memory: 'admin', settings: 'admin',
-  },
-  workspace_admin: {
-    chat: 'admin', prompt: 'admin', skill: 'admin', workflow: 'admin',
-    agent: 'admin', knowledge: 'admin', tool: 'admin', memory: 'admin', settings: 'admin',
-  },
-  developer: {
-    chat: 'execute', prompt: 'write', skill: 'write', workflow: 'read',
-    agent: 'write', knowledge: 'read', tool: 'read', memory: 'read', settings: 'read',
-  },
-  business_user: {
-    chat: 'execute', prompt: 'read', skill: 'execute', workflow: 'execute',
-    agent: 'read', knowledge: 'read', tool: 'none', memory: 'read', settings: 'none',
-  },
-  viewer: {
-    chat: 'read', prompt: 'read', skill: 'read', workflow: 'read',
-    agent: 'read', knowledge: 'read', tool: 'read', memory: 'read', settings: 'read',
-  },
+export type RolePermissionMatrix = Record<PlatformRole, Record<ResourceModule, PermissionLevel>>;
+
+const FULL_ADMIN: Record<ResourceModule, PermissionLevel> = {
+  chat: 'admin',
+  prompt: 'admin',
+  skill: 'admin',
+  workflow: 'admin',
+  agent: 'admin',
+  knowledge: 'admin',
+  tool: 'admin',
+  memory: 'admin',
+  settings: 'admin',
 };
+
+function matrix(
+  developer: Record<ResourceModule, PermissionLevel>,
+  business_user: Record<ResourceModule, PermissionLevel>,
+  viewer: Record<ResourceModule, PermissionLevel>,
+): RolePermissionMatrix {
+  return {
+    super_admin: { ...FULL_ADMIN },
+    workspace_admin: { ...FULL_ADMIN },
+    developer,
+    business_user,
+    viewer,
+  };
+}
+
+/** 默认权限矩阵（自定义租户回退） */
+export const RBAC_MATRIX: RolePermissionMatrix = matrix(
+  {
+    chat: 'execute',
+    prompt: 'write',
+    skill: 'write',
+    workflow: 'read',
+    agent: 'write',
+    knowledge: 'read',
+    tool: 'read',
+    memory: 'read',
+    settings: 'read',
+  },
+  {
+    chat: 'execute',
+    prompt: 'read',
+    skill: 'execute',
+    workflow: 'execute',
+    agent: 'read',
+    knowledge: 'read',
+    tool: 'none',
+    memory: 'read',
+    settings: 'none',
+  },
+  {
+    chat: 'read',
+    prompt: 'read',
+    skill: 'read',
+    workflow: 'read',
+    agent: 'read',
+    knowledge: 'read',
+    tool: 'read',
+    memory: 'read',
+    settings: 'read',
+  },
+);
+
+/**
+ * 各数字空间（工作区）演示权限矩阵 — 切换工作区后「组织权限 → 权限矩阵」可见差异。
+ * 叙事：机关运营偏均衡；拉美一线偏执行；全球营销偏 Campaign/Agent；知识研发偏知识与记忆。
+ */
+export const RBAC_MATRIX_BY_WORKSPACE: Record<string, RolePermissionMatrix> = {
+  /** 机关全球营销运营：职能协同，开发可配 Tool，业务可跑 Agent */
+  'ws-cn-marketing': matrix(
+    {
+      chat: 'execute',
+      prompt: 'write',
+      skill: 'write',
+      workflow: 'write',
+      agent: 'write',
+      knowledge: 'write',
+      tool: 'write',
+      memory: 'read',
+      settings: 'read',
+    },
+    {
+      chat: 'execute',
+      prompt: 'execute',
+      skill: 'execute',
+      workflow: 'execute',
+      agent: 'execute',
+      knowledge: 'read',
+      tool: 'read',
+      memory: 'read',
+      settings: 'none',
+    },
+    {
+      chat: 'read',
+      prompt: 'read',
+      skill: 'read',
+      workflow: 'read',
+      agent: 'read',
+      knowledge: 'read',
+      tool: 'none',
+      memory: 'none',
+      settings: 'none',
+    },
+  ),
+  /** 拉美一线作战：强执行、弱配置；业务可跑 Skill/Workflow，Tool 一线可用 */
+  'ws-3c-latam': matrix(
+    {
+      chat: 'execute',
+      prompt: 'write',
+      skill: 'write',
+      workflow: 'execute',
+      agent: 'write',
+      knowledge: 'read',
+      tool: 'execute',
+      memory: 'read',
+      settings: 'none',
+    },
+    {
+      chat: 'execute',
+      prompt: 'read',
+      skill: 'execute',
+      workflow: 'execute',
+      agent: 'execute',
+      knowledge: 'execute',
+      tool: 'execute',
+      memory: 'read',
+      settings: 'none',
+    },
+    {
+      chat: 'read',
+      prompt: 'none',
+      skill: 'read',
+      workflow: 'read',
+      agent: 'read',
+      knowledge: 'read',
+      tool: 'read',
+      memory: 'none',
+      settings: 'none',
+    },
+  ),
+  /** 全球营销职能：Campaign / Prompt / Agent 更开放，Tool 收敛 */
+  'ws-global-marketing': matrix(
+    {
+      chat: 'execute',
+      prompt: 'admin',
+      skill: 'write',
+      workflow: 'write',
+      agent: 'admin',
+      knowledge: 'write',
+      tool: 'read',
+      memory: 'write',
+      settings: 'read',
+    },
+    {
+      chat: 'execute',
+      prompt: 'write',
+      skill: 'execute',
+      workflow: 'read',
+      agent: 'execute',
+      knowledge: 'read',
+      tool: 'none',
+      memory: 'read',
+      settings: 'none',
+    },
+    {
+      chat: 'read',
+      prompt: 'read',
+      skill: 'read',
+      workflow: 'none',
+      agent: 'read',
+      knowledge: 'read',
+      tool: 'none',
+      memory: 'read',
+      settings: 'none',
+    },
+  ),
+  /** 机关知识研发：Knowledge / Memory 最重，Workflow/Tool 偏只读 */
+  'ws-rd-knowledge': matrix(
+    {
+      chat: 'execute',
+      prompt: 'write',
+      skill: 'write',
+      workflow: 'read',
+      agent: 'write',
+      knowledge: 'admin',
+      tool: 'read',
+      memory: 'write',
+      settings: 'read',
+    },
+    {
+      chat: 'execute',
+      prompt: 'read',
+      skill: 'read',
+      workflow: 'none',
+      agent: 'read',
+      knowledge: 'execute',
+      tool: 'none',
+      memory: 'execute',
+      settings: 'none',
+    },
+    {
+      chat: 'read',
+      prompt: 'read',
+      skill: 'none',
+      workflow: 'none',
+      agent: 'none',
+      knowledge: 'read',
+      tool: 'none',
+      memory: 'read',
+      settings: 'none',
+    },
+  ),
+};
+
+/** 按数字空间取演示权限矩阵；未知空间回退默认矩阵 */
+export function getRbacMatrix(workspaceId: string): RolePermissionMatrix {
+  return RBAC_MATRIX_BY_WORKSPACE[workspaceId] ?? RBAC_MATRIX;
+}
 
 export const MODULE_LABELS: Record<ResourceModule, string> = {
   chat: 'Chat',
@@ -119,6 +316,52 @@ export const MODULE_LABELS: Record<ResourceModule, string> = {
 };
 
 export const MEMBERS_BY_WORKSPACE: Record<string, WorkspaceMember[]> = {
+  'ws-cn-marketing': [
+    {
+      id: 'c1',
+      name: 'Mcyo',
+      email: 'mcyo@company.com',
+      role: 'workspace_admin',
+      avatar: 'bg-indigo-600',
+      lastActive: '刚刚',
+      status: 'active',
+      deptIds: ['gtm', 'mkt'],
+      regionId: null,
+    },
+    {
+      id: 'c2',
+      name: 'Linda',
+      email: 'linda@company.com',
+      role: 'developer',
+      avatar: 'bg-teal-600',
+      lastActive: '1 小时前',
+      status: 'active',
+      deptIds: ['mkt', 'quality'],
+      regionId: null,
+    },
+    {
+      id: 'c3',
+      name: 'Owen',
+      email: 'owen@company.com',
+      role: 'business_user',
+      avatar: 'bg-amber-500',
+      lastActive: '今天',
+      status: 'active',
+      deptIds: ['gtm'],
+      regionId: 'china',
+    },
+    {
+      id: 'c4',
+      name: 'Nina',
+      email: 'nina@company.com',
+      role: 'viewer',
+      avatar: 'bg-slate-500',
+      lastActive: '2 天前',
+      status: 'active',
+      deptIds: ['mkt'],
+      regionId: null,
+    },
+  ],
   'ws-3c-latam': [
     {
       id: 'm1',
@@ -188,6 +431,28 @@ export const MEMBERS_BY_WORKSPACE: Record<string, WorkspaceMember[]> = {
       deptIds: ['gtm', 'mkt', 'quality'],
       regionId: 'latam',
     },
+    {
+      id: 'g3',
+      name: 'Chris',
+      email: 'chris@company.com',
+      role: 'business_user',
+      avatar: 'bg-rose-500',
+      lastActive: '3 小时前',
+      status: 'active',
+      deptIds: ['mkt'],
+      regionId: 'apac',
+    },
+    {
+      id: 'g4',
+      name: 'Eva',
+      email: 'eva@company.com',
+      role: 'viewer',
+      avatar: 'bg-zinc-500',
+      lastActive: '昨天',
+      status: 'active',
+      deptIds: ['service'],
+      regionId: 'europe',
+    },
   ],
   'ws-rd-knowledge': [
     {
@@ -211,6 +476,28 @@ export const MEMBERS_BY_WORKSPACE: Record<string, WorkspaceMember[]> = {
       status: 'active',
       deptIds: ['gtm', 'mkt', 'quality'],
       regionId: 'latam',
+    },
+    {
+      id: 'r3',
+      name: 'Helen',
+      email: 'helen@company.com',
+      role: 'developer',
+      avatar: 'bg-sky-600',
+      lastActive: '2 小时前',
+      status: 'active',
+      deptIds: ['quality'],
+      regionId: null,
+    },
+    {
+      id: 'r4',
+      name: 'Tom',
+      email: 'tom@company.com',
+      role: 'business_user',
+      avatar: 'bg-lime-600',
+      lastActive: '今天',
+      status: 'active',
+      deptIds: ['hr'],
+      regionId: 'china',
     },
   ],
 };

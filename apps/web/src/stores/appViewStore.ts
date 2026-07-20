@@ -50,6 +50,11 @@ export const useAppViewStore = create<AppViewState>((set, get) => ({
       set({ appView: view });
       return;
     }
+    // 我的消息走顶栏铃铛，不依赖侧栏菜单开关
+    if (view === 'messages') {
+      set({ appView: view });
+      return;
+    }
     // 案例库已并入场景地图样板间
     if (view === 'cases') {
       set({ appView: 'ai-map' });

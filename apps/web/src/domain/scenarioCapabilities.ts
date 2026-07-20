@@ -10,7 +10,7 @@ export const SCENARIO_CAPABILITY_CATEGORIES = [
 
 export type ScenarioCapabilityId = (typeof SCENARIO_CAPABILITY_CATEGORIES)[number]['id'];
 
-/** 发现页展示的 7 个业务场景（排除平台总览 mss-ai-platform） */
+/** 发现页 / 场景案例展示的 7 个业务场景 */
 export const DISCOVER_SCENARIO_IDS = [
   'price-offer-monitor',
   'ecommerce-review',
@@ -26,7 +26,7 @@ export type DiscoverScenarioId = (typeof DISCOVER_SCENARIO_IDS)[number];
 /** 场景 → 能力（主归属在前） */
 export const SCENARIO_CAPABILITY_MAP: Record<DiscoverScenarioId, ScenarioCapabilityId[]> = {
   'price-offer-monitor': ['collect', 'insight'],
-  'ecommerce-review': ['collect', 'insight'],
+  'ecommerce-review': ['collect', 'generate', 'insight'],
   'retail-training': ['generate'],
   'hr-interview': ['insight', 'execute'],
   'l10n-translation': ['generate'],

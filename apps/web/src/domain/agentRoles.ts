@@ -38,6 +38,7 @@ export const AGENT_ROLE_BY_ID: Record<string, AgentRoleId> = {
   // 侦察兵 · 外部信息洞察
   'agent-price-monitor': 'scout',
   'agent-launch-sentiment': 'scout',
+  'agent-review-collect': 'scout',
   'agent-review': 'scout',
   'agent-survey': 'scout',
   'agent-retail-insight': 'scout',
@@ -45,6 +46,7 @@ export const AGENT_ROLE_BY_ID: Record<string, AgentRoleId> = {
   'agent-data-analysis': 'advisor',
   'agent-doc-review': 'advisor',
   'agent-knowledge': 'advisor',
+  'agent-review-translate': 'advisor',
   // 数字员工 · 流程与自动化
   'agent-file-organize': 'digital_worker',
   'agent-ppt': 'digital_worker',

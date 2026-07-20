@@ -98,8 +98,8 @@ export const PORTAL_ASSET_TYPE_LABELS: Record<PortalAssetType, string> = {
   tool: '工具',
   agent: 'Agent',
   external_tool: '外部工具',
-  case: '案例',
-  insight: '洞察',
+  case: '场景案例',
+  insight: '前沿洞察',
   training: '培训赋能',
   news: '前沿洞察',
 };
