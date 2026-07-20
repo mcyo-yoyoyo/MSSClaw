@@ -3,7 +3,8 @@ import { DEMO_PASSWORD } from '@/domain/authAccounts';
 import { MssZhishuMark } from '@/components/brand/MssZhishuMark';
 import { useSessionStore } from '@/stores/sessionStore';
 
-const LOGIN_HERO = '/brand/login-hero.png';
+/** Pages 子路径部署时需带 base（如 /MSSClaw/）；Vercel 根路径则为 / */
+const LOGIN_HERO = `${import.meta.env.BASE_URL}brand/login-hero.png`.replace(/([^:]\/)\/+/g, '$1');
 
 const inputClass =
   'w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-[13px] text-zinc-900 placeholder:text-zinc-400 transition focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#e0122f]/15';
