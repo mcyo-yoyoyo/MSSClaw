@@ -36,6 +36,8 @@
 
 不要选 Branch = `main` / root：根目录没有站点入口，只会渲染 README。
 
+不要启用 GitHub 自动生成的 **Deploy Jekyll** 工作流（会覆盖成 README 站）；本仓库只需保留 `Deploy GitHub Pages`。
+
 ## 快速启动（React 前端 · 默认）
 
 ```powershell
