@@ -21,15 +21,20 @@
 4. **Output Directory**：`apps/web/dist`（Root 为仓库根时）或 `dist`（Root 为 `apps/web` 时）
 5. 不需要配置 Serverless / Database；原型前端可纯静态运行
 
-### 重要：Pages 必须用 GitHub Actions
+### 重要：GitHub Pages 发布源
 
-仓库根目录旧版静态 `index.html` 已移至 `docs/legacy-prototype/`，**不要**再把 Pages 设成 “Deploy from a branch / root”，否则会看到老页面。
+推送到 `main` 后，Actions 会构建 React 并写入 **`gh-pages` 分支**。请把 Pages 指到该分支，否则会看到仓库 README（Jekyll），而不是登录页。
 
-请确认：
+**推荐（Deploy from a branch）：**
 
-1. 仓库 **Settings → Pages → Build and deployment → Source** = **GitHub Actions**
-2. **Actions** 里 `Deploy GitHub Pages` 工作流为绿色成功
-3. 浏览器强刷或无痕打开演示地址
+1. 仓库 **Settings → Pages → Build and deployment → Source** = **Deploy from a branch**
+2. **Branch** = `gh-pages`，Folder = `/ (root)`，保存
+3. **Actions** 里 `Deploy GitHub Pages` 成功（会更新 `gh-pages`）
+4. 其他电脑用**无痕窗口**打开 https://mcyo-yoyoyo.github.io/MSSClaw/（避免旧缓存）
+
+**备选：** Source = **GitHub Actions**（同一工作流也会尝试 `deploy-pages`）。
+
+不要选 Branch = `main` / root：根目录没有站点入口，只会渲染 README。
 
 ## 快速启动（React 前端 · 默认）
 
