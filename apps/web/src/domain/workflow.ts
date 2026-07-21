@@ -118,14 +118,19 @@ const BUDGET_SIM: Workflow = {
   ],
 };
 
+const DEFAULT_WORKFLOWS = [Q3_ATTRIBUTION, BUDGET_SIM];
+
 export const WORKFLOW_CATALOG: Record<string, Workflow[]> = {
-  'ws-3c-latam': [Q3_ATTRIBUTION],
-  'ws-global-marketing': [BUDGET_SIM],
-  'ws-rd-knowledge': [],
+  'ws-cn-marketing': DEFAULT_WORKFLOWS,
+  'ws-apac': DEFAULT_WORKFLOWS,
+  'ws-3c-latam': DEFAULT_WORKFLOWS,
+  'ws-mea': DEFAULT_WORKFLOWS,
+  'ws-eurasia': DEFAULT_WORKFLOWS,
+  'ws-europe': DEFAULT_WORKFLOWS,
 };
 
 export function getWorkflowsByWorkspace(workspaceId: string): Workflow[] {
-  return WORKFLOW_CATALOG[workspaceId] ?? [];
+  return WORKFLOW_CATALOG[workspaceId] ?? DEFAULT_WORKFLOWS;
 }
 
 export function findWorkflowById(workspaceId: string, id: string): Workflow | undefined {

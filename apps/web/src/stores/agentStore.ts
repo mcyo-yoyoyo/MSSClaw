@@ -35,9 +35,9 @@ interface AgentState {
 }
 
 export const useAgentStore = create<AgentState>((set, get) => ({
-  workspaceId: 'ws-3c-latam',
-  agents: getAgentsByWorkspace('ws-3c-latam'),
-  selectedAgentId: getAgentsByWorkspace('ws-3c-latam')[0]?.id ?? null,
+  workspaceId: 'ws-cn-marketing',
+  agents: getAgentsByWorkspace('ws-cn-marketing'),
+  selectedAgentId: getAgentsByWorkspace('ws-cn-marketing')[0]?.id ?? null,
   statusFilter: 'all',
   testInput: '',
   testRunning: false,
@@ -91,7 +91,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const updated = nextAgents.find((a) => a.id === agentId);
       set({
         agents: nextAgents,
-        toast: updated ? `「${target.name}」已推进至 ${updated.status}` : `「${target.name}」已更新`,
+        toast: updated ? `�?{target.name}」已推进�?${updated.status}` : `�?{target.name}」已更新`,
       });
     })();
   },
@@ -106,7 +106,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     await new Promise((resolve) => setTimeout(resolve, 1200));
     set({
       testRunning: false,
-      toast: `「${agent.name}」测试通过 · 绑定 ${agent.bindings.skillIds.length} Skills · Latency 1.2s`,
+      toast: `�?{agent.name}」测试通过 · 绑定 ${agent.bindings.skillIds.length} Skills · Latency 1.2s`,
     });
   },
 

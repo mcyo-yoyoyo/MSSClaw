@@ -25,9 +25,9 @@ interface KnowledgeState {
 }
 
 export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
-  workspaceId: 'ws-3c-latam',
-  bases: getKnowledgeBasesByWorkspace('ws-3c-latam'),
-  selectedBaseId: getKnowledgeBasesByWorkspace('ws-3c-latam')[0]?.id ?? null,
+  workspaceId: 'ws-cn-marketing',
+  bases: getKnowledgeBasesByWorkspace('ws-cn-marketing'),
+  selectedBaseId: getKnowledgeBasesByWorkspace('ws-cn-marketing')[0]?.id ?? null,
   selectedDocumentId: null,
   pipelineRunning: false,
   toast: null,
@@ -87,7 +87,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     set({
       bases: nextBases,
       pipelineRunning: false,
-      toast: doc ? `「${doc.name}」索引完成 · 64 chunks` : 'Pipeline 完成',
+      toast: doc ? `�?{doc.name}」索引完�?· 64 chunks` : 'Pipeline 完成',
     });
   },
   dismissToast: () => set({ toast: null }),

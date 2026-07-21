@@ -326,14 +326,25 @@ const RD_RAG_SESSION: MemoryStore = {
   reflectionLogs: [],
 };
 
+const DEFAULT_MEMORIES = [
+  MARKETING_AGENT_MEMORY,
+  WARROOM_SESSION_MEMORY,
+  WORKSPACE_SHARED_MEMORY,
+  GLOBAL_CAMPAIGN_MEMORY,
+  RD_RAG_SESSION,
+];
+
 const MEMORY_BY_WORKSPACE: Record<string, MemoryStore[]> = {
-  'ws-3c-latam': [MARKETING_AGENT_MEMORY, WARROOM_SESSION_MEMORY, WORKSPACE_SHARED_MEMORY],
-  'ws-global-marketing': [GLOBAL_CAMPAIGN_MEMORY],
-  'ws-rd-knowledge': [RD_RAG_SESSION],
+  'ws-cn-marketing': DEFAULT_MEMORIES,
+  'ws-apac': DEFAULT_MEMORIES,
+  'ws-3c-latam': DEFAULT_MEMORIES,
+  'ws-mea': DEFAULT_MEMORIES,
+  'ws-eurasia': DEFAULT_MEMORIES,
+  'ws-europe': DEFAULT_MEMORIES,
 };
 
 export function getMemoryStoresByWorkspace(workspaceId: string): MemoryStore[] {
-  return MEMORY_BY_WORKSPACE[workspaceId] ?? [];
+  return MEMORY_BY_WORKSPACE[workspaceId] ?? DEFAULT_MEMORIES;
 }
 
 export function findMemoryStoreById(workspaceId: string, id: string): MemoryStore | undefined {

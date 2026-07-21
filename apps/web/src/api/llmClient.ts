@@ -278,6 +278,38 @@ export async function* llmExecutionStream(params: {
   };
 }
 
+/** 已配置 LLM 时，把长描述压成短任务名；失败返回空串 */
+export async function refineTaskTitleWithLlm(
+  description: string,
+  opts?: { agentName?: string; signal?: AbortSignal },
+): Promise<string> {
+  if (!isLlmConfigured()) return '';
+  const desc = description.trim().slice(0, 400);
+  if (!desc) return '';
+
+  const agentHint = opts?.agentName ? `绑定专家：${opts.agentName}\n` : '';
+  const content = await chatCompletion(
+    [
+      {
+        role: 'system',
+        content:
+          '你是任务标题助手。根据用户任务描述生成简洁中文标题：不超过16个字，不要引号，不要句号，不要「标题：」前缀，只输出标题本身。',
+      },
+      {
+        role: 'user',
+        content: `${agentHint}任务描述：\n${desc}`,
+      },
+    ],
+    { maxTokens: 32, temperature: 0.2, signal: opts?.signal },
+  );
+
+  return content
+    .replace(/^["'「『]|["'」』]$/g, '')
+    .replace(/^(标题|任务名)\s*[:：]\s*/u, '')
+    .split(/[\r\n]/)[0]
+    ?.trim() ?? '';
+}
+
 export async function testLlmConnection(
   config: Pick<LlmConfig, 'baseUrl' | 'apiKey' | 'model'>,
 ): Promise<LlmTestResult> {

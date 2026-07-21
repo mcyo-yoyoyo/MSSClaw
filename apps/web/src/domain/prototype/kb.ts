@@ -18,7 +18,7 @@ export const KB_COLLECTIONS: PrototypeKbCollection[] = [
 
 /** 来源：index.html DEFAULT_KB_DOCS */
 export const PROTOTYPE_KB_DOCS: PrototypeKbDocument[] = [
-  { id: 'kb-platform-guide', title: 'MSS Claw 平台使用指南', desc: '智能助理、Agent/Skill 挂载、任务中心与交付物流转说明', collection: 'public', type: 'PDF', size: '2.1 MB', pages: 42, clearance: 'L2', indexed: true, chunks: 186, tags: ['平台', '指南'], updatedAt: '2026-07-08', author: 'MSS AI变革' },
+  { id: 'kb-platform-guide', title: 'MSS Claw 平台使用指南', desc: 'AI任务、Agent/Skill 挂载、任务中心与交付物流转说明', collection: 'public', type: 'PDF', size: '2.1 MB', pages: 42, clearance: 'L2', indexed: true, chunks: 186, tags: ['平台', '指南'], updatedAt: '2026-07-08', author: 'MSS AI变革' },
   { id: 'kb-agent-playbook', title: 'Agent/Skill 配置与发布规范', desc: 'Agent 设计规范、Skill 挂载策略、审批与审计要求', collection: 'public', type: 'PDF', size: '1.8 MB', pages: 36, clearance: 'L2', indexed: true, chunks: 168, tags: ['Agent', 'Skill'], updatedAt: '2026-07-08', author: 'MSS AI变革' },
   { id: 'kb-gtm-launch', title: 'GTM 上市节奏 Playbook', desc: 'Mate/Pura 上市里程碑、区域准入与首销 KPI 模板', collection: 'gtm', type: 'PDF', size: '3.2 MB', pages: 54, clearance: 'L3', indexed: true, chunks: 412, tags: ['上市', 'GTM'], updatedAt: '2026-07-07', author: 'GTM 部' },
   { id: 'kb-latam-compliance', title: '拉美/EU 市场准入 Checklist', desc: 'ANATEL 认证、RoHS、环保参数与准入清单', collection: 'gtm', type: 'PDF', size: '3.6 MB', pages: 62, clearance: 'L3', indexed: true, chunks: 520, tags: ['拉美', '准入'], updatedAt: '2026-06-15', author: 'GTM 合规' },

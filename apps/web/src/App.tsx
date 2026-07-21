@@ -37,9 +37,16 @@ import { useCommandPaletteStore } from '@/stores/commandPaletteStore';
 import { useWorkspaceConfigStore } from '@/stores/workspaceConfigStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
+import { useShellPerspectiveStore } from '@/stores/shellPerspectiveStore';
+import { TaskGlobalModals } from '@/components/task/TaskGlobalModals';
+import { openAiAssistantForNewTask } from '@/domain/openNewTask';
+import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
+import { AccessDeniedPanel } from '@/components/shell/AccessDeniedPanel';
+import { cn } from '@/lib/utils';
 
 export function App() {
   const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
+  const shellPerspective = useShellPerspectiveStore((s) => s.perspective);
   const switchWorkspace = useWorkspaceStore((s) => s.switchWorkspace);
   const bootstrap = useWorkspaceStore((s) => s.bootstrap);
   const catalogReady = useWorkspaceStore((s) => s.catalogReady);
@@ -50,6 +57,8 @@ export function App() {
 
   const appView = useAppViewStore((s) => s.appView);
   const setAppView = useAppViewStore((s) => s.setAppView);
+  const blockedOpsView = useAppViewStore((s) => s.blockedOpsView);
+  const clearBlockedOpsView = useAppViewStore((s) => s.clearBlockedOpsView);
   const closeSettings = useAppViewStore((s) => s.closeSettings);
   const settingsOpen = useAppViewStore((s) => s.settingsOpen);
   const openSettings = useAppViewStore((s) => s.openSettings);
@@ -192,11 +201,14 @@ export function App() {
   }, [bootstrap]);
 
   const handleNewTask = useCallback(() => {
-    setAppView('task');
-    useTaskStore.getState().openCreateDialog();
-  }, [setAppView]);
+    openAiAssistantForNewTask();
+  }, []);
 
   const handleSubmitTask = useCallback((text: string, agent?: PrototypeAgentSeed | null) => {
+    if (!canExecuteChat()) {
+      useConversationStore.setState({ pushToast: READONLY_EXECUTE_HINT });
+      return;
+    }
     const trimmed = text.trim();
     if (!trimmed) {
       useConversationStore.setState({ pushToast: '请输入任务描述' });
@@ -207,9 +219,8 @@ export function App() {
       return;
     }
 
-    const title = trimmed.length > 28 ? `${trimmed.slice(0, 28)}…` : trimmed;
     const chatId = createAgentTaskSession({
-      title,
+      title: trimmed,
       agentName: agent?.name,
       agentIcon: agent?.icon,
       agentId: agent?.id,
@@ -223,6 +234,10 @@ export function App() {
   }, [createAgentTaskSession, goToTaskWithTransit, sessionsReady]);
 
   const handleInvokeAgent = useCallback((agent: PrototypeAgentSeed, prompt?: string) => {
+    if (!canExecuteChat()) {
+      useConversationStore.setState({ pushToast: READONLY_EXECUTE_HINT });
+      return;
+    }
     if (!sessionsReady) {
       useConversationStore.setState({ pushToast: '工作区加载中，请稍候再试' });
       return;
@@ -238,6 +253,10 @@ export function App() {
   }, [findOrCreateAgentSession, switchChat, goToTaskWithTransit, sessionsReady]);
 
   const handleInvokeSkill = useCallback((skill: PrototypeSkillSeed) => {
+    if (!canExecuteChat()) {
+      useConversationStore.setState({ pushToast: READONLY_EXECUTE_HINT });
+      return;
+    }
     if (!sessionsReady) {
       useConversationStore.setState({ pushToast: '工作区加载中，请稍候再试' });
       return;
@@ -251,7 +270,7 @@ export function App() {
           PROTOTYPE_AGENTS.find((a) => a.skillIds?.includes(skill.id) && a.published) ??
           reviewAgent;
     const initialMessage = buildSkillDemoPrompt(skill);
-    // 进入任务对话并自动发送，使 AI 助手链路挂载 Skill 正文后执行
+    // 进入任务对话并自动发送，使 AI任务链路挂载 Skill 正文后执行
     const chatId = createAgentTaskSession({
       title: skill.name,
       agentId: boundAgent?.id,
@@ -283,6 +302,10 @@ export function App() {
 
   const handleStartExpertTeam = useCallback(
     (plan: ScenarioDemoPlan, fromIndex = 0) => {
+      if (!canExecuteChat()) {
+        useConversationStore.setState({ pushToast: READONLY_EXECUTE_HINT });
+        return;
+      }
       if (!sessionsReady) {
         useConversationStore.setState({ pushToast: '工作区加载中，请稍候再试' });
         return;
@@ -338,12 +361,16 @@ export function App() {
         if (skill) handleInvokeSkill(skill);
       },
       openWarRoom: () => {
+        if (!canExecuteChat()) {
+          useConversationStore.setState({ pushToast: READONLY_EXECUTE_HINT });
+          return;
+        }
         setAppView('task');
         const warroom = Object.values(useConversationStore.getState().chats).find(
           (c) => c.sessionGroup === 'pinned',
         );
         if (warroom) switchChat(warroom.id);
-        else useTaskStore.getState().openCreateDialog('warroom');
+        else useTaskStore.getState().openCreateDialog();
       },
       newTask: handleNewTask,
       exportArtifact: () => {
@@ -404,7 +431,12 @@ export function App() {
       <AppHeader apiConnected={apiConnected} onWorkspaceSwitch={reloadAllStores} />
       <OfflineBanner onRetry={handleApiRetry} />
 
-      <div className="flex flex-1 overflow-hidden bg-[#fbfbfd]">
+      <div
+        className={cn(
+          'flex flex-1 overflow-hidden bg-[#fbfbfd]',
+          shellPerspective === 'ops' ? 'shell-ops-stage' : 'shell-business-stage',
+        )}
+      >
         <AppShellSidebar />
 
         <main className="main-stage relative flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -416,7 +448,11 @@ export function App() {
               </div>
             </div>
           )}
-          <AppViewRouter appView={appView} handlers={viewHandlers} />
+          {blockedOpsView ? (
+            <AccessDeniedPanel targetView={blockedOpsView} onBack={clearBlockedOpsView} />
+          ) : (
+            <AppViewRouter appView={appView} handlers={viewHandlers} />
+          )}
         </main>
       </div>
 
@@ -442,6 +478,7 @@ export function App() {
         </Suspense>
       )}
 
+      <TaskGlobalModals onWorkspaceSwitch={reloadAllStores} />
       <HomeToTaskTransit open={transit.open} summary={transit.summary} />
       <GlobalToastHost />
       <AssetApprovalModal />

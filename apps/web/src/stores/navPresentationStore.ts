@@ -1,75 +1,102 @@
 import { create } from 'zustand';
 import type { AppView } from '@/domain/appView';
-import { APP_VIEWS } from '@/domain/appView';
 import {
+  buildRoleNavPreset,
+  CONFIGURABLE_ROLES,
+  migrateLegacyEnabled,
   NAV_FALLBACK_ORDER,
-  NAV_PRESET_ENABLED,
   NAV_PRESENTATION_META,
+  NAV_SLOT_IDS,
   PRESENTATION_CONFIG_VIEW,
   type NavPresetId,
+  type NavSlotId,
+  type RoleNavMatrix,
 } from '@/domain/navPresentation';
 import { isSystemAdmin } from '@/domain/currentUser';
-import { WORKSPACE_CONFIG_VIEW } from '@/domain/workspaceConfig';
+import { canRoleAccessView } from '@/domain/navRbac';
+import type { PlatformRole } from '@/domain/rbac';
+import { useSessionStore } from '@/stores/sessionStore';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 
-/** v3：默认「MVP演示」；菜单范围按方案重切 */
-const LS_KEY = 'mssclaw_nav_presentation_v3';
+/** v4: per-role menu matrix including warroom slot */
+const LS_KEY = 'mssclaw_nav_presentation_v4';
 
 interface PersistedNavPresentation {
   preset: NavPresetId;
-  enabled: Record<AppView, boolean>;
+  roleEnabled: RoleNavMatrix;
 }
 
-function fullEnabled(): Record<AppView, boolean> {
-  return Object.fromEntries(APP_VIEWS.map((v) => [v, true])) as Record<AppView, boolean>;
-}
-
-function mvpEnabled(): Record<AppView, boolean> {
-  return { ...NAV_PRESET_ENABLED.customer };
+function defaultState(): PersistedNavPresentation {
+  return { preset: 'customer', roleEnabled: buildRoleNavPreset('customer') };
 }
 
 function loadPersisted(): PersistedNavPresentation {
   try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return { preset: 'customer', enabled: mvpEnabled() };
-    const parsed = JSON.parse(raw) as Partial<PersistedNavPresentation>;
-    const enabled = fullEnabled();
-    if (parsed.enabled && typeof parsed.enabled === 'object') {
-      APP_VIEWS.forEach((v) => {
-        if (typeof parsed.enabled![v] === 'boolean') enabled[v] = parsed.enabled![v];
-      });
+    const v4 = localStorage.getItem(LS_KEY);
+    if (v4) {
+      const parsed = JSON.parse(v4) as Partial<PersistedNavPresentation>;
+      const base = buildRoleNavPreset('customer');
+      if (parsed.roleEnabled) {
+        for (const role of CONFIGURABLE_ROLES) {
+          const row = parsed.roleEnabled[role];
+          if (!row) continue;
+          for (const id of NAV_SLOT_IDS) {
+            if (typeof row[id] === 'boolean') base[role][id] = row[id]!;
+          }
+        }
+      }
+      const preset =
+        parsed.preset === 'customer' ||
+        parsed.preset === 'standard' ||
+        parsed.preset === 'custom' ||
+        parsed.preset === 'full'
+          ? parsed.preset
+          : 'customer';
+      return { preset, roleEnabled: base };
     }
-    const preset =
-      parsed.preset === 'customer' ||
-      parsed.preset === 'standard' ||
-      parsed.preset === 'custom' ||
-      parsed.preset === 'full'
-        ? parsed.preset
-        : 'customer';
-    return { preset, enabled };
+
+    const v3 = localStorage.getItem('mssclaw_nav_presentation_v3');
+    if (v3) {
+      const parsed = JSON.parse(v3) as { preset?: NavPresetId; enabled?: Record<string, boolean> };
+      const roleEnabled = migrateLegacyEnabled(parsed.enabled ?? {});
+      const preset =
+        parsed.preset === 'customer' ||
+        parsed.preset === 'standard' ||
+        parsed.preset === 'custom' ||
+        parsed.preset === 'full'
+          ? parsed.preset
+          : 'customer';
+      const next = { preset, roleEnabled };
+      persist(next);
+      return next;
+    }
   } catch {
-    return { preset: 'customer', enabled: mvpEnabled() };
+    /* fallthrough */
   }
+  return defaultState();
 }
 
 function persist(state: PersistedNavPresentation) {
-  localStorage.setItem(
-    LS_KEY,
-    JSON.stringify({
-      preset: state.preset,
-      enabled: state.enabled,
-    }),
-  );
+  localStorage.setItem(LS_KEY, JSON.stringify(state));
+}
+
+function currentRole(): PlatformRole {
+  return useSessionStore.getState().user?.platformRole ?? 'viewer';
 }
 
 interface NavPresentationState extends PersistedNavPresentation {
+  editingRole: PlatformRole;
+  setEditingRole: (role: PlatformRole) => void;
+  isSlotEnabled: (slot: NavSlotId, role?: PlatformRole) => boolean;
   isViewEnabled: (view: AppView) => boolean;
   getFallbackView: (requested?: AppView) => AppView;
   applyPreset: (preset: Exclude<NavPresetId, 'custom'>) => void;
+  setSlotEnabled: (role: PlatformRole, slot: NavSlotId, enabled: boolean) => void;
   setViewEnabled: (view: AppView, enabled: boolean) => void;
   resetToFull: () => void;
   exportConfig: () => string;
   importConfig: (json: string) => boolean;
-  enabledCount: () => number;
+  enabledCount: (role?: PlatformRole) => number;
 }
 
 export const useNavPresentationStore = create<NavPresentationState>((set, get) => {
@@ -77,13 +104,28 @@ export const useNavPresentationStore = create<NavPresentationState>((set, get) =
 
   return {
     ...initial,
+    editingRole: 'business_user',
 
-    isViewEnabled: (view) => {
-      if (get().enabled[view] === false) return false;
-      // 租户配置 / 门户运营仍需系统管理员
-      if (view === WORKSPACE_CONFIG_VIEW || view === 'portal-ops') return isSystemAdmin();
+    setEditingRole: (editingRole) => set({ editingRole }),
+
+    isSlotEnabled: (slot, roleArg) => {
+      const role = roleArg ?? currentRole();
+      const meta = NAV_PRESENTATION_META.find((m) => m.id === slot);
+
+      if (meta?.adminOnly) {
+        return role === 'super_admin';
+      }
+
+      if (get().roleEnabled[role]?.[slot] !== true) return false;
+
+      if (slot !== 'warroom') {
+        const workspaceId = useWorkspaceStore.getState().workspaceId;
+        if (!canRoleAccessView(slot, role, workspaceId)) return false;
+      }
       return true;
     },
+
+    isViewEnabled: (view) => get().isSlotEnabled(view),
 
     getFallbackView: (requested) => {
       const { isViewEnabled } = get();
@@ -95,51 +137,78 @@ export const useNavPresentationStore = create<NavPresentationState>((set, get) =
     },
 
     applyPreset: (preset) => {
-      const enabled = { ...NAV_PRESET_ENABLED[preset] };
-      // 完整产品：管理员保留租户配置与门户运营入口
-      if (preset === 'full') {
-        enabled[PRESENTATION_CONFIG_VIEW] = true;
-        enabled[WORKSPACE_CONFIG_VIEW] = isSystemAdmin();
-        enabled['portal-ops'] = isSystemAdmin();
+      if (!isSystemAdmin()) return;
+      const next = { preset, roleEnabled: buildRoleNavPreset(preset) };
+      persist(next);
+      set(next);
+    },
+
+    setSlotEnabled: (role, slot, on) => {
+      if (!isSystemAdmin()) return;
+      const meta = NAV_PRESENTATION_META.find((m) => m.id === slot);
+      if (meta?.locked && slot === PRESENTATION_CONFIG_VIEW && !on) return;
+      if (meta?.adminOnly && role !== 'super_admin') return;
+
+      const roleEnabled: RoleNavMatrix = {
+        ...get().roleEnabled,
+        [role]: {
+          ...get().roleEnabled[role],
+          [slot]: on,
+        },
+      };
+      if (role !== 'super_admin') {
+        for (const m of NAV_PRESENTATION_META) {
+          if (m.adminOnly) roleEnabled[role][m.id] = false;
+        }
+      } else {
+        roleEnabled.super_admin[PRESENTATION_CONFIG_VIEW] = true;
       }
-      const next = { preset, enabled };
+
+      const next = { preset: 'custom' as NavPresetId, roleEnabled };
       persist(next);
       set(next);
     },
 
     setViewEnabled: (view, on) => {
-      if (view === PRESENTATION_CONFIG_VIEW && !on) {
-        // 展示配置可关，但完整产品下建议保留入口；允许自定义关闭
-      }
-      const enabled = {
-        ...get().enabled,
-        [view]: on,
-      };
-      const next = { preset: 'custom' as NavPresetId, enabled };
-      persist(next);
-      set(next);
+      get().setSlotEnabled(get().editingRole, view, on);
     },
 
     resetToFull: () => {
-      const next = { preset: 'full' as NavPresetId, enabled: fullEnabled() };
+      if (!isSystemAdmin()) return;
+      const next = { preset: 'full' as NavPresetId, roleEnabled: buildRoleNavPreset('full') };
       persist(next);
       set(next);
     },
 
     exportConfig: () => {
-      const { preset, enabled } = get();
-      return JSON.stringify({ preset, enabled }, null, 2);
+      const { preset, roleEnabled } = get();
+      return JSON.stringify({ version: 4, preset, roleEnabled }, null, 2);
     },
 
     importConfig: (json) => {
+      if (!isSystemAdmin()) return false;
       try {
-        const parsed = JSON.parse(json) as Partial<PersistedNavPresentation>;
-        const enabled = fullEnabled();
-        if (parsed.enabled) {
-          APP_VIEWS.forEach((v) => {
-            if (typeof parsed.enabled![v] === 'boolean') enabled[v] = parsed.enabled![v];
-          });
+        const parsed = JSON.parse(json) as {
+          preset?: NavPresetId;
+          roleEnabled?: RoleNavMatrix;
+          enabled?: Record<string, boolean>;
+        };
+        let roleEnabled: RoleNavMatrix;
+        if (parsed.roleEnabled) {
+          roleEnabled = buildRoleNavPreset('customer');
+          for (const role of CONFIGURABLE_ROLES) {
+            const row = parsed.roleEnabled[role];
+            if (!row) continue;
+            for (const id of NAV_SLOT_IDS) {
+              if (typeof row[id] === 'boolean') roleEnabled[role][id] = row[id]!;
+            }
+          }
+        } else if (parsed.enabled) {
+          roleEnabled = migrateLegacyEnabled(parsed.enabled);
+        } else {
+          return false;
         }
+        roleEnabled.super_admin[PRESENTATION_CONFIG_VIEW] = true;
         const preset =
           parsed.preset === 'customer' ||
           parsed.preset === 'standard' ||
@@ -147,7 +216,7 @@ export const useNavPresentationStore = create<NavPresentationState>((set, get) =
           parsed.preset === 'full'
             ? parsed.preset
             : 'custom';
-        const next = { preset, enabled };
+        const next = { preset, roleEnabled };
         persist(next);
         set(next);
         return true;
@@ -156,6 +225,11 @@ export const useNavPresentationStore = create<NavPresentationState>((set, get) =
       }
     },
 
-    enabledCount: () => NAV_PRESENTATION_META.filter((m) => get().isViewEnabled(m.id)).length,
+    enabledCount: (roleArg) => {
+      const role = roleArg ?? get().editingRole;
+      return NAV_PRESENTATION_META.filter(
+        (m) => !m.hiddenFromSidebar && get().isSlotEnabled(m.id, role),
+      ).length;
+    },
   };
 });

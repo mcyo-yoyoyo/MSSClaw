@@ -1,14 +1,33 @@
 import { z } from 'zod';
 import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
+import { PROTOTYPE_WORKSPACE_ID } from '@/domain/prototype/constants';
 
+/** 四角色：超管（含原空间管理）· 能力运营 · 业务用户 · 只读访客 */
 export const PlatformRoleSchema = z.enum([
   'super_admin',
-  'workspace_admin',
-  'developer',
+  'capability_ops',
   'business_user',
   'viewer',
 ]);
 export type PlatformRole = z.infer<typeof PlatformRoleSchema>;
+
+/** 兼容旧角色 id（成员表 / session localStorage） */
+export function normalizePlatformRole(raw: string | undefined | null): PlatformRole {
+  switch (raw) {
+    case 'super_admin':
+    case 'workspace_admin':
+      return 'super_admin';
+    case 'capability_ops':
+    case 'developer':
+      return 'capability_ops';
+    case 'business_user':
+      return 'business_user';
+    case 'viewer':
+      return 'viewer';
+    default:
+      return 'business_user';
+  }
+}
 
 export const PermissionLevelSchema = z.enum(['none', 'read', 'execute', 'write', 'admin']);
 export type PermissionLevel = z.infer<typeof PermissionLevelSchema>;
@@ -34,9 +53,7 @@ export const WorkspaceMemberSchema = z.object({
   avatar: z.string(),
   lastActive: z.string(),
   status: z.enum(['active', 'invited', 'suspended']),
-  /** 所属机关职能 */
   deptIds: z.array(z.string()).optional(),
-  /** 所属一线区域 */
   regionId: z.string().nullable().optional(),
 });
 export type WorkspaceMember = z.infer<typeof WorkspaceMemberSchema> & {
@@ -46,19 +63,24 @@ export type WorkspaceMember = z.infer<typeof WorkspaceMemberSchema> & {
 
 export const ROLE_LABELS: Record<PlatformRole, string> = {
   super_admin: '超级管理员',
-  workspace_admin: '工作区管理员',
-  developer: '开发者',
+  capability_ops: '能力运营',
   business_user: '业务用户',
   viewer: '只读访客',
 };
 
 export const ROLE_DESCRIPTIONS: Record<PlatformRole, string> = {
-  super_admin: '平台级全权限，可管理租户、菜单展示与跨工作区配置',
-  workspace_admin: '工作区内成员邀请、角色调整与资产治理',
-  developer: '可创建/编辑 Agent、Skill、Tool，并发布到团队',
-  business_user: '可在智能助理与任务中心执行，配置只读',
-  viewer: '只读浏览，不可执行或修改',
+  super_admin: '管人、管空间、管租户/门户/展示；拥有平台与本空间全部治理权',
+  capability_ops: '建能力：创建/编辑/发布 Agent、Skill、Tool 与知识编排',
+  business_user: '用 AI：广场发起、任务执行、浏览案例（群聊由展示配置按需开放）',
+  viewer: '只读浏览案例与任务结果，不可发起执行或修改配置',
 };
+
+/** 可邀请角色（超管由种子/白名单产生，不通过邀请下发） */
+export const INVITEABLE_ROLES: PlatformRole[] = [
+  'capability_ops',
+  'business_user',
+  'viewer',
+];
 
 export const MEMBER_STATUS_LABELS: Record<WorkspaceMember['status'], string> = {
   active: '已激活',
@@ -97,30 +119,29 @@ const FULL_ADMIN: Record<ResourceModule, PermissionLevel> = {
 };
 
 function matrix(
-  developer: Record<ResourceModule, PermissionLevel>,
-  business_user: Record<ResourceModule, PermissionLevel>,
+  capabilityOps: Record<ResourceModule, PermissionLevel>,
+  businessUser: Record<ResourceModule, PermissionLevel>,
   viewer: Record<ResourceModule, PermissionLevel>,
 ): RolePermissionMatrix {
   return {
     super_admin: { ...FULL_ADMIN },
-    workspace_admin: { ...FULL_ADMIN },
-    developer,
-    business_user,
+    capability_ops: capabilityOps,
+    business_user: businessUser,
     viewer,
   };
 }
 
-/** 默认权限矩阵（自定义租户回退） */
+/** 统一四角色矩阵（各数据空间共享；细粒度差异留给后续） */
 export const RBAC_MATRIX: RolePermissionMatrix = matrix(
   {
     chat: 'execute',
     prompt: 'write',
     skill: 'write',
-    workflow: 'read',
+    workflow: 'write',
     agent: 'write',
-    knowledge: 'read',
-    tool: 'read',
-    memory: 'read',
+    knowledge: 'write',
+    tool: 'write',
+    memory: 'write',
     settings: 'read',
   },
   {
@@ -130,7 +151,7 @@ export const RBAC_MATRIX: RolePermissionMatrix = matrix(
     workflow: 'execute',
     agent: 'read',
     knowledge: 'read',
-    tool: 'none',
+    tool: 'read',
     memory: 'read',
     settings: 'none',
   },
@@ -141,166 +162,16 @@ export const RBAC_MATRIX: RolePermissionMatrix = matrix(
     workflow: 'read',
     agent: 'read',
     knowledge: 'read',
-    tool: 'read',
-    memory: 'read',
-    settings: 'read',
+    tool: 'none',
+    memory: 'none',
+    settings: 'none',
   },
 );
 
-/**
- * 各数字空间（工作区）演示权限矩阵 — 切换工作区后「组织权限 → 权限矩阵」可见差异。
- * 叙事：机关运营偏均衡；拉美一线偏执行；全球营销偏 Campaign/Agent；知识研发偏知识与记忆。
- */
-export const RBAC_MATRIX_BY_WORKSPACE: Record<string, RolePermissionMatrix> = {
-  /** 机关全球营销运营：职能协同，开发可配 Tool，业务可跑 Agent */
-  'ws-cn-marketing': matrix(
-    {
-      chat: 'execute',
-      prompt: 'write',
-      skill: 'write',
-      workflow: 'write',
-      agent: 'write',
-      knowledge: 'write',
-      tool: 'write',
-      memory: 'read',
-      settings: 'read',
-    },
-    {
-      chat: 'execute',
-      prompt: 'execute',
-      skill: 'execute',
-      workflow: 'execute',
-      agent: 'execute',
-      knowledge: 'read',
-      tool: 'read',
-      memory: 'read',
-      settings: 'none',
-    },
-    {
-      chat: 'read',
-      prompt: 'read',
-      skill: 'read',
-      workflow: 'read',
-      agent: 'read',
-      knowledge: 'read',
-      tool: 'none',
-      memory: 'none',
-      settings: 'none',
-    },
-  ),
-  /** 拉美一线作战：强执行、弱配置；业务可跑 Skill/Workflow，Tool 一线可用 */
-  'ws-3c-latam': matrix(
-    {
-      chat: 'execute',
-      prompt: 'write',
-      skill: 'write',
-      workflow: 'execute',
-      agent: 'write',
-      knowledge: 'read',
-      tool: 'execute',
-      memory: 'read',
-      settings: 'none',
-    },
-    {
-      chat: 'execute',
-      prompt: 'read',
-      skill: 'execute',
-      workflow: 'execute',
-      agent: 'execute',
-      knowledge: 'execute',
-      tool: 'execute',
-      memory: 'read',
-      settings: 'none',
-    },
-    {
-      chat: 'read',
-      prompt: 'none',
-      skill: 'read',
-      workflow: 'read',
-      agent: 'read',
-      knowledge: 'read',
-      tool: 'read',
-      memory: 'none',
-      settings: 'none',
-    },
-  ),
-  /** 全球营销职能：Campaign / Prompt / Agent 更开放，Tool 收敛 */
-  'ws-global-marketing': matrix(
-    {
-      chat: 'execute',
-      prompt: 'admin',
-      skill: 'write',
-      workflow: 'write',
-      agent: 'admin',
-      knowledge: 'write',
-      tool: 'read',
-      memory: 'write',
-      settings: 'read',
-    },
-    {
-      chat: 'execute',
-      prompt: 'write',
-      skill: 'execute',
-      workflow: 'read',
-      agent: 'execute',
-      knowledge: 'read',
-      tool: 'none',
-      memory: 'read',
-      settings: 'none',
-    },
-    {
-      chat: 'read',
-      prompt: 'read',
-      skill: 'read',
-      workflow: 'none',
-      agent: 'read',
-      knowledge: 'read',
-      tool: 'none',
-      memory: 'read',
-      settings: 'none',
-    },
-  ),
-  /** 机关知识研发：Knowledge / Memory 最重，Workflow/Tool 偏只读 */
-  'ws-rd-knowledge': matrix(
-    {
-      chat: 'execute',
-      prompt: 'write',
-      skill: 'write',
-      workflow: 'read',
-      agent: 'write',
-      knowledge: 'admin',
-      tool: 'read',
-      memory: 'write',
-      settings: 'read',
-    },
-    {
-      chat: 'execute',
-      prompt: 'read',
-      skill: 'read',
-      workflow: 'none',
-      agent: 'read',
-      knowledge: 'execute',
-      tool: 'none',
-      memory: 'execute',
-      settings: 'none',
-    },
-    {
-      chat: 'read',
-      prompt: 'read',
-      skill: 'none',
-      workflow: 'none',
-      agent: 'none',
-      knowledge: 'read',
-      tool: 'none',
-      memory: 'read',
-      settings: 'none',
-    },
-  ),
-};
+export const RBAC_MATRIX_BY_WORKSPACE: Record<string, RolePermissionMatrix> = {};
 
-/** 按数字空间取演示权限矩阵；未知空间回退默认矩阵 */
-export function getRbacMatrix(workspaceId: string): RolePermissionMatrix {
-  return RBAC_MATRIX_BY_WORKSPACE[workspaceId] ?? RBAC_MATRIX;
+export function getRbacMatrix(_workspaceId: string): RolePermissionMatrix {
+  return RBAC_MATRIX;
 }
 
 export const MODULE_LABELS: Record<ResourceModule, string> = {
@@ -315,195 +186,70 @@ export const MODULE_LABELS: Record<ResourceModule, string> = {
   settings: 'Settings',
 };
 
-export const MEMBERS_BY_WORKSPACE: Record<string, WorkspaceMember[]> = {
-  'ws-cn-marketing': [
-    {
-      id: 'c1',
-      name: 'Mcyo',
-      email: 'mcyo@company.com',
-      role: 'workspace_admin',
-      avatar: 'bg-indigo-600',
-      lastActive: '刚刚',
-      status: 'active',
-      deptIds: ['gtm', 'mkt'],
-      regionId: null,
-    },
-    {
-      id: 'c2',
-      name: 'Linda',
-      email: 'linda@company.com',
-      role: 'developer',
-      avatar: 'bg-teal-600',
-      lastActive: '1 小时前',
-      status: 'active',
-      deptIds: ['mkt', 'quality'],
-      regionId: null,
-    },
-    {
-      id: 'c3',
-      name: 'Owen',
-      email: 'owen@company.com',
-      role: 'business_user',
-      avatar: 'bg-amber-500',
-      lastActive: '今天',
-      status: 'active',
-      deptIds: ['gtm'],
-      regionId: 'china',
-    },
-    {
-      id: 'c4',
-      name: 'Nina',
-      email: 'nina@company.com',
-      role: 'viewer',
-      avatar: 'bg-slate-500',
-      lastActive: '2 天前',
-      status: 'active',
-      deptIds: ['mkt'],
-      regionId: null,
-    },
-  ],
-  'ws-3c-latam': [
-    {
-      id: 'm1',
-      name: 'Mcyo',
-      email: 'mcyo@company.com',
-      role: 'workspace_admin',
-      avatar: 'bg-indigo-600',
-      lastActive: '刚刚',
-      status: 'active',
-      deptIds: ['gtm', 'mkt', 'quality'],
-      regionId: 'latam',
-    },
-    {
-      id: 'm2',
-      name: 'Bruce',
-      email: 'bruce@company.com',
-      role: 'developer',
-      avatar: 'bg-pink-500',
-      lastActive: '2 小时前',
-      status: 'active',
-      deptIds: ['ecommerce', 'channel'],
-      regionId: 'europe',
-    },
-    {
-      id: 'm3',
-      name: 'Jacky',
-      email: 'jacky@company.com',
-      role: 'business_user',
-      avatar: 'bg-orange-500',
-      lastActive: '昨天',
-      status: 'active',
-      deptIds: ['retail'],
-      regionId: 'latam',
-    },
-    {
-      id: 'm4',
-      name: 'Sarah',
-      email: 'sarah@company.com',
-      role: 'viewer',
-      avatar: 'bg-violet-500',
-      lastActive: '3 天前',
-      status: 'invited',
-      deptIds: ['mkt'],
-      regionId: 'europe',
-    },
-  ],
-  'ws-global-marketing': [
-    {
-      id: 'g1',
-      name: 'Sarah',
-      email: 'sarah@company.com',
-      role: 'workspace_admin',
-      avatar: 'bg-violet-500',
-      lastActive: '1 小时前',
-      status: 'active',
-      deptIds: ['mkt', 'service'],
-      regionId: 'europe',
-    },
-    {
-      id: 'g2',
-      name: 'Mcyo',
-      email: 'mcyo@company.com',
-      role: 'developer',
-      avatar: 'bg-indigo-600',
-      lastActive: '今天',
-      status: 'active',
-      deptIds: ['gtm', 'mkt', 'quality'],
-      regionId: 'latam',
-    },
-    {
-      id: 'g3',
-      name: 'Chris',
-      email: 'chris@company.com',
-      role: 'business_user',
-      avatar: 'bg-rose-500',
-      lastActive: '3 小时前',
-      status: 'active',
-      deptIds: ['mkt'],
-      regionId: 'apac',
-    },
-    {
-      id: 'g4',
-      name: 'Eva',
-      email: 'eva@company.com',
-      role: 'viewer',
-      avatar: 'bg-zinc-500',
-      lastActive: '昨天',
-      status: 'active',
-      deptIds: ['service'],
-      regionId: 'europe',
-    },
-  ],
-  'ws-rd-knowledge': [
-    {
-      id: 'r1',
-      name: 'RD-Team',
-      email: 'rd@company.com',
-      role: 'workspace_admin',
-      avatar: 'bg-cyan-600',
-      lastActive: '5 小时前',
-      status: 'active',
-      deptIds: ['hr', 'quality'],
-      regionId: 'apac',
-    },
-    {
-      id: 'r2',
-      name: 'Mcyo',
-      email: 'mcyo@company.com',
-      role: 'viewer',
-      avatar: 'bg-indigo-600',
-      lastActive: '上周',
-      status: 'active',
-      deptIds: ['gtm', 'mkt', 'quality'],
-      regionId: 'latam',
-    },
-    {
-      id: 'r3',
-      name: 'Helen',
-      email: 'helen@company.com',
-      role: 'developer',
-      avatar: 'bg-sky-600',
-      lastActive: '2 小时前',
-      status: 'active',
-      deptIds: ['quality'],
-      regionId: null,
-    },
-    {
-      id: 'r4',
-      name: 'Tom',
-      email: 'tom@company.com',
-      role: 'business_user',
-      avatar: 'bg-lime-600',
-      lastActive: '今天',
-      status: 'active',
-      deptIds: ['hr'],
-      regionId: 'china',
-    },
-  ],
-};
+/** 全数据空间共用的四位种子成员（清除旧预设） */
+export const SEED_MEMBERS: WorkspaceMember[] = [
+  {
+    id: 'u-mcyo',
+    name: 'Mcyo',
+    email: 'mcyo@company.com',
+    role: 'super_admin',
+    avatar: 'bg-indigo-600',
+    lastActive: '刚刚',
+    status: 'active',
+    deptIds: ['quality'],
+    regionId: null,
+  },
+  {
+    id: 'u-jacky',
+    name: 'Jacky',
+    email: 'jacky@company.com',
+    role: 'capability_ops',
+    avatar: 'bg-teal-600',
+    lastActive: '1 小时前',
+    status: 'active',
+    deptIds: ['quality'],
+    regionId: null,
+  },
+  {
+    id: 'u-dickson',
+    name: 'Dickson',
+    email: 'dickson@company.com',
+    role: 'business_user',
+    avatar: 'bg-amber-500',
+    lastActive: '今天',
+    status: 'active',
+    deptIds: ['gtm'],
+    regionId: 'apac',
+  },
+  {
+    id: 'u-somebody',
+    name: 'Somebody',
+    email: 'somebody@company.com',
+    role: 'viewer',
+    avatar: 'bg-slate-500',
+    lastActive: '昨天',
+    status: 'active',
+    deptIds: ['mkt'],
+    regionId: 'europe',
+  },
+];
+
+/** 内置数据空间 id → 成员表（均指向同一套种子） */
+export const BUILTIN_WORKSPACE_IDS = [
+  PROTOTYPE_WORKSPACE_ID,
+  'ws-apac',
+  'ws-3c-latam',
+  'ws-mea',
+  'ws-eurasia',
+  'ws-europe',
+] as const;
+
+export const MEMBERS_BY_WORKSPACE: Record<string, WorkspaceMember[]> = Object.fromEntries(
+  BUILTIN_WORKSPACE_IDS.map((id) => [id, SEED_MEMBERS.map((m) => ({ ...m, deptIds: [...(m.deptIds ?? [])] }))]),
+);
 
 export function getMembersByWorkspace(workspaceId: string): WorkspaceMember[] {
-  return MEMBERS_BY_WORKSPACE[workspaceId] ?? [];
+  return MEMBERS_BY_WORKSPACE[workspaceId] ?? SEED_MEMBERS.map((m) => ({ ...m }));
 }
 
 /** @deprecated 请使用 getCurrentPlatformRole()（domain/currentUser） */
@@ -512,8 +258,7 @@ export const CURRENT_USER_PLATFORM_ROLE: PlatformRole = 'super_admin';
 export function getRoleBadgeClass(role: PlatformRole) {
   const classes: Record<PlatformRole, string> = {
     super_admin: 'bg-red-50 text-red-700 border-red-200',
-    workspace_admin: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-    developer: 'bg-blue-50 text-blue-700 border-blue-200',
+    capability_ops: 'bg-blue-50 text-blue-700 border-blue-200',
     business_user: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     viewer: 'bg-slate-100 text-slate-600 border-slate-200',
   };

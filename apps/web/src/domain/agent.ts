@@ -52,71 +52,15 @@ const PROTOTYPE_AGENT_LIST = getPrototypeAgentsAsDomain();
 
 export const AGENT_CATALOG: Record<string, Agent[]> = {
   [PROTOTYPE_WORKSPACE_ID]: PROTOTYPE_AGENT_LIST,
+  'ws-apac': PROTOTYPE_AGENT_LIST,
   'ws-3c-latam': PROTOTYPE_AGENT_LIST,
-  'ws-global-marketing': [
-    {
-      id: 'agent-insight',
-      name: '洞察 Agent',
-      description: '跨区域 Campaign 效果洞察与预算模拟',
-      icon: 'fa-lightbulb',
-      color: 'amber',
-      persona: `你是全球营销中台的洞察分析师。
-职责：ROI 对比、渠道漏斗诊断、预算模拟建议。`,
-      llm: { model: 'Shield-70B-Chat', temperature: 0.3, maxTokens: 4096 },
-      bindings: {
-        promptId: 'prompt-campaign-brief',
-        promptName: 'CAMPAIGN_BRIEF_GENERATOR',
-        workflowIds: ['wf-budget-sim'],
-        workflowNames: ['预算模拟流'],
-        skillIds: ['skill-roi-compare'],
-        skillNames: ['ROI_Compare'],
-        knowledgeIds: ['kb-campaign-playbook'],
-        knowledgeNames: ['global_campaign_playbook'],
-        toolIds: ['tool-ga4'],
-        toolNames: ['GA4_Reporting_API'],
-      },
-      status: 'online',
-      version: 'v1.2',
-      updatedAt: '2026-06-10',
-      author: 'Sarah',
-      chatId: 'insight_agent',
-      tags: ['global', 'campaign', 'roi'],
-    },
-  ],
-  'ws-rd-knowledge': [
-    {
-      id: 'agent-rd-rag',
-      name: '研发 RAG Agent',
-      description: '研发规格书、测试报告与 SOP 检索',
-      icon: 'fa-flask',
-      color: 'cyan',
-      persona: `你是研发知识库 Agent，服务硬件与软件研发团队。
-职责：规格对比、测试报告检索、SOP 查询。`,
-      llm: { model: 'Shield-70B-Chat', temperature: 0.1, maxTokens: 8192 },
-      bindings: {
-        promptId: 'prompt-spec-compare',
-        promptName: 'SPEC_COMPARE_STRICT',
-        workflowIds: [],
-        workflowNames: [],
-        skillIds: ['skill-spec-search'],
-        skillNames: ['Spec_Search'],
-        knowledgeIds: ['kb-rd-spec'],
-        knowledgeNames: ['rd_spec_library'],
-        toolIds: ['tool-milvus'],
-        toolNames: ['Milvus_gRPC'],
-      },
-      status: 'published',
-      version: 'v1.0',
-      updatedAt: '2026-05-30',
-      author: 'RD-Team',
-      chatId: 'rd_rag',
-      tags: ['rd', 'spec', 'rag'],
-    },
-  ],
+  'ws-mea': PROTOTYPE_AGENT_LIST,
+  'ws-eurasia': PROTOTYPE_AGENT_LIST,
+  'ws-europe': PROTOTYPE_AGENT_LIST,
 };
 
 export function getAgentsByWorkspace(workspaceId: string): Agent[] {
-  return AGENT_CATALOG[workspaceId] ?? AGENT_CATALOG['ws-3c-latam'];
+  return AGENT_CATALOG[workspaceId] ?? PROTOTYPE_AGENT_LIST;
 }
 
 export function findAgentById(workspaceId: string, id: string): Agent | undefined {

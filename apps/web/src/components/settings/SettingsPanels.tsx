@@ -6,6 +6,7 @@ import {
   MODULE_LABELS,
   PERMISSION_CLASSES,
   PERMISSION_LABELS,
+  INVITEABLE_ROLES,
   PlatformRoleSchema,
   ROLE_DESCRIPTIONS,
   ROLE_LABELS,
@@ -228,8 +229,6 @@ function RolesPanel() {
   );
 }
 
-const INVITE_ROLES = PlatformRoleSchema.options.filter((r) => r !== 'super_admin');
-
 function MembersPanel({
   members,
   onUpdateRole,
@@ -249,13 +248,11 @@ function MembersPanel({
   onRemove: (id: string) => void;
 }) {
   const currentUser = useSessionStore((s) => s.user);
-  const canManage =
-    currentUser?.platformRole === 'super_admin' ||
-    currentUser?.platformRole === 'workspace_admin';
+  const canManage = currentUser?.platformRole === 'super_admin';
 
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
-  const [role, setRole] = useState<PlatformRole>('developer');
+  const [role, setRole] = useState<PlatformRole>('business_user');
   const [deptId, setDeptId] = useState<DeptId | ''>('');
   const [regionId, setRegionId] = useState<RegionId | ''>('');
   const [activateNow, setActivateNow] = useState(true);
@@ -269,7 +266,7 @@ function MembersPanel({
         </p>
         {!canManage ? (
           <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
-            当前账号无成员管理权限（需工作区管理员及以上），仅可查看。
+            当前账号无成员管理权限（需超级管理员），仅可查看。
           </p>
         ) : (
           <div className="space-y-2 rounded-xl border border-zinc-200 bg-white p-4">
@@ -295,7 +292,7 @@ function MembersPanel({
                 onChange={(e) => setRole(e.target.value as PlatformRole)}
                 className="rounded-lg border border-black/[0.06] px-3 py-2 text-sm"
               >
-                {INVITE_ROLES.map((r) => (
+                {INVITEABLE_ROLES.map((r) => (
                   <option key={r} value={r}>
                     {ROLE_LABELS[r]}
                   </option>
@@ -450,7 +447,7 @@ function MembersPanel({
                     >
                       {(member.role === 'super_admin'
                         ? PlatformRoleSchema.options
-                        : INVITE_ROLES
+                        : INVITEABLE_ROLES
                       ).map((r) => (
                         <option key={r} value={r}>
                           {ROLE_LABELS[r]}

@@ -81,7 +81,7 @@ function buildPlanMd(skill: PrototypeSkillSeed): string {
 function buildDemoTemplate(skill: PrototypeSkillSeed): string {
   const pack = getSkillPack(skill.id);
   const prompt = pack?.demoPrompt?.trim() || `${skill.command} `;
-  return `# 演示提示词模板\n\n在 AI 助手或任务对话中发送：\n\n\`\`\`\n${prompt}\n\`\`\`\n`;
+  return `# 演示提示词模板\n\n在 AI任务或任务对话中发送：\n\n\`\`\`\n${prompt}\n\`\`\`\n`;
 }
 
 function buildReadme(skill: PrototypeSkillSeed, folder: string): string {

@@ -34,9 +34,9 @@ interface MemoryState {
 }
 
 export const useMemoryStore = create<MemoryState>((set, get) => ({
-  workspaceId: 'ws-3c-latam',
-  stores: getMemoryStoresByWorkspace('ws-3c-latam'),
-  selectedStoreId: getMemoryStoresByWorkspace('ws-3c-latam')[0]?.id ?? null,
+  workspaceId: 'ws-cn-marketing',
+  stores: getMemoryStoresByWorkspace('ws-cn-marketing'),
+  selectedStoreId: getMemoryStoresByWorkspace('ws-cn-marketing')[0]?.id ?? null,
   selectedLayer: 'session',
   scopeFilter: 'all',
   reflectionRunning: false,
@@ -72,7 +72,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
       const nextStores = await patchMemoryLayerPolicyApi(workspaceId, storeId, layer, patch, stores);
       set({
         stores: nextStores,
-        toast: `${layer} 层 Retention 策略已更新`,
+        toast: `${layer} �?Retention 策略已更新`,
       });
     })();
   },
@@ -95,8 +95,8 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
       stores: nextStores,
       reflectionRunning: false,
       toast: newLog
-        ? `「${store.name}」Reflection 完成 · 晋升 ${newLog.promoted} / 清理 ${newLog.pruned}`
-        : `「${store.name}」Reflection 完成`,
+        ? `�?{store.name}」Reflection 完成 · 晋升 ${newLog.promoted} / 清理 ${newLog.pruned}`
+        : `�?{store.name}」Reflection 完成`,
     });
   },
 

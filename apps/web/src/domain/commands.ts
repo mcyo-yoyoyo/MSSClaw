@@ -26,16 +26,30 @@ export interface AppCommandMarketplace {
 }
 
 const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
-  { id: 'goto-home', label: '打开首页', icon: 'fa-house', view: 'home', run: () => h.goto('home') },
+  {
+    id: 'goto-home',
+    label: '逛广场',
+    icon: 'fa-house',
+    keywords: '广场 home 发现 开工',
+    view: 'home',
+    run: () => h.goto('home'),
+  },
   {
     id: 'goto-ai-map',
-    label: '打开案例',
+    label: '学案例',
     icon: 'fa-map',
     keywords: 'portal map 门户 场景 案例 样板 场景库',
     view: 'ai-map',
     run: () => h.goto('ai-map'),
   },
-  { id: 'goto-task', label: '打开任务', icon: 'fa-list-check', view: 'task', run: () => h.goto('task') },
+  {
+    id: 'goto-task',
+    label: '做任务',
+    icon: 'fa-list-check',
+    keywords: '任务 task 执行',
+    view: 'task',
+    run: () => h.goto('task'),
+  },
   { id: 'goto-agents', label: '打开专家', icon: 'fa-robot', view: 'agents', run: () => h.goto('agents') },
   {
     id: 'goto-agent-studio',
@@ -93,7 +107,7 @@ const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
     run: () => h.goto('portal-ops'),
   },
   { id: 'goto-warroom', label: '打开 WarRoom', icon: 'fa-users', run: () => h.openWarRoom() },
-  { id: 'new-session', label: '新建任务', icon: 'fa-plus', view: 'task', run: () => h.newTask() },
+  { id: 'new-session', label: '新建任务', icon: 'fa-plus', view: 'home', run: () => h.newTask() },
   { id: 'export', label: '导出交付物', icon: 'fa-file-export', run: () => h.exportArtifact() },
   {
     id: 'goto-messages',
@@ -104,34 +118,49 @@ const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
     run: () => h.goto('messages'),
   },
   { id: 'push', label: '推送交付物', icon: 'fa-paper-plane', run: () => h.pushToGroup() },
-  { id: 'settings', label: '打开快捷设置', icon: 'fa-gear', keywords: '设置 偏好 settings 快捷', run: () => h.openSettings() },
+  { id: 'settings', label: '打开偏好设置', icon: 'fa-gear', keywords: '设置 偏好 settings 快捷', run: () => h.openSettings() },
 ];
+
+const EXECUTE_COMMAND_IDS = new Set([
+  'new-session',
+  'goto-warroom',
+  'export',
+  'push',
+]);
 
 export function buildAppCommands(
   h: AppCommandHandlers,
   market?: AppCommandMarketplace,
-  options?: { isViewEnabled?: (view: AppView) => boolean },
+  options?: { isViewEnabled?: (view: AppView) => boolean; canExecute?: boolean },
 ): AppCommand[] {
   const allow = options?.isViewEnabled ?? (() => true);
-  const nav = NAV_COMMANDS(h).filter((c) => !c.view || allow(c.view));
+  const canExecute = options?.canExecute ?? true;
+  const nav = NAV_COMMANDS(h).filter((c) => {
+    if (c.view && !allow(c.view)) return false;
+    if (!canExecute && EXECUTE_COMMAND_IDS.has(c.id)) return false;
+    return true;
+  });
 
-  const agentCommands: AppCommand[] = (market?.agents ?? []).slice(0, 12).map((a) => ({
-    id: `agent-${a.id}`,
-    label: `调用 ${a.name}`,
-    icon: a.icon || 'fa-robot',
-    keywords: `${a.name} agent`,
-    run: () => h.invokeAgentById(a.id),
-  }));
-
-  const skillCommands: AppCommand[] = h.invokeSkillById
-    ? (market?.skills ?? []).slice(0, 15).map((s) => ({
-        id: `skill-${s.id}`,
-        label: `${s.command} · ${s.name}`,
-        icon: 'fa-cube',
-        keywords: `${s.name} ${s.command} skill`,
-        run: () => h.invokeSkillById!(s.id),
+  const agentCommands: AppCommand[] = canExecute
+    ? (market?.agents ?? []).slice(0, 12).map((a) => ({
+        id: `agent-${a.id}`,
+        label: `调用 ${a.name}`,
+        icon: a.icon || 'fa-robot',
+        keywords: `${a.name} agent`,
+        run: () => h.invokeAgentById(a.id),
       }))
     : [];
+
+  const skillCommands: AppCommand[] =
+    canExecute && h.invokeSkillById
+      ? (market?.skills ?? []).slice(0, 15).map((s) => ({
+          id: `skill-${s.id}`,
+          label: `${s.command} · ${s.name}`,
+          icon: 'fa-cube',
+          keywords: `${s.name} ${s.command} skill`,
+          run: () => h.invokeSkillById!(s.id),
+        }))
+      : [];
 
   return [...nav, ...agentCommands, ...skillCommands];
 }

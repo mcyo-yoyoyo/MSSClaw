@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   HOME_BIZ_SKILLS,
@@ -16,6 +16,7 @@ import {
   getVisibleHomeRegions,
 } from '@/domain/rolePerspective';
 import { canViewAsset } from '@/domain/assetVisibility';
+import { canExecuteChat } from '@/domain/permissions';
 import { SKILL_ROLE_BY_ID, SKILL_ROLE_CATEGORIES, type SkillRoleId } from '@/domain/skillRoles';
 import { HomeCommandBox } from '@/components/home/HomeCommandBox';
 import { HomeScenePortal } from '@/components/home/HomeScenePortal';
@@ -32,7 +33,7 @@ interface HomePageProps {
   onAskKbDocument?: (doc: PrototypeKbDocument) => void;
 }
 
-/** AI助手 Tab：对齐场景库的高频意图（偏 Skill 命令） */
+/** AI任务 Tab：对齐场景库的高频意图（偏 Skill 命令） */
 const INTENT_PROMPTS = [
   '/价格监测 分析本周竞品价格异动',
   '/评论分析 聚类本周电渠差评并给建议',
@@ -69,6 +70,7 @@ export function HomePage({
   } = useHomeStore();
   const skills = useMarketplaceStore((s) => s.skills);
   const user = useSessionStore((s) => s.user);
+  const executeAllowed = canExecuteChat(user?.platformRole);
   const [orgBrowseOpen, setOrgBrowseOpen] = useState(true);
 
   const affiliation = useMemo(
@@ -87,6 +89,12 @@ export function HomePage({
     () => getVisibleHomeRegions(affiliation, user?.platformRole),
     [affiliation, user?.platformRole],
   );
+
+  useEffect(() => {
+    if (!executeAllowed && homeMode === 'assistant') {
+      setHomeMode('portal');
+    }
+  }, [executeAllowed, homeMode, setHomeMode]);
 
   useEffect(() => {
     if (!user) return;
@@ -159,33 +167,39 @@ export function HomePage({
           </p>
         </header>
 
-        <div className="mb-4 flex justify-center">
-          <div className="inline-flex gap-1 rounded-full bg-zinc-100/90 p-1">
-            {(
-              [
-                { id: 'portal' as const, label: 'AI广场', icon: 'fa-compass' },
-                { id: 'assistant' as const, label: 'AI助手', icon: 'fa-comment-dots' },
-              ] as const
-            ).map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setHomeMode(tab.id)}
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full px-5 py-1.5 text-[12px] font-semibold transition',
-                  homeMode === tab.id
-                    ? 'bg-white text-zinc-900 shadow-sm'
-                    : 'text-zinc-500 hover:text-zinc-700',
-                )}
-              >
-                <i className={cn('fa-solid text-[10px]', tab.icon)} />
-                {tab.label}
-              </button>
-            ))}
+        {executeAllowed ? (
+          <div className="mb-4 flex justify-center">
+            <div className="inline-flex gap-1 rounded-full bg-zinc-100/90 p-1">
+              {(
+                [
+                  { id: 'portal' as const, label: 'AI广场', icon: 'fa-compass' },
+                  { id: 'assistant' as const, label: 'AI任务', icon: 'fa-comment-dots' },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setHomeMode(tab.id)}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-full px-5 py-1.5 text-[12px] font-semibold transition',
+                    homeMode === tab.id
+                      ? 'bg-white text-zinc-900 shadow-sm'
+                      : 'text-zinc-500 hover:text-zinc-700',
+                  )}
+                >
+                  <i className={cn('fa-solid text-[10px]', tab.icon)} />
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="mb-4 rounded-lg border border-amber-200/80 bg-amber-50 px-3 py-2 text-center text-[11px] leading-relaxed text-amber-900">
+            当前为只读访客：可浏览案例与任务结果，不可发起执行
+          </div>
+        )}
 
-        {homeMode === 'assistant' ? (
+        {executeAllowed && homeMode === 'assistant' ? (
           <>
             <HomeCommandBox
               onSubmit={(text) =>

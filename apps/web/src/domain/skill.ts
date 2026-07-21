@@ -46,55 +46,15 @@ const PROTOTYPE_SKILL_LIST = getPrototypeSkillsAsDomain();
 
 export const SKILL_CATALOG: Record<string, Skill[]> = {
   [PROTOTYPE_WORKSPACE_ID]: PROTOTYPE_SKILL_LIST,
+  'ws-apac': PROTOTYPE_SKILL_LIST,
   'ws-3c-latam': PROTOTYPE_SKILL_LIST,
-  'ws-global-marketing': [
-    {
-      id: 'skill-roi-compare',
-      name: 'ROI_Compare',
-      displayName: 'ROI Compare',
-      description: '跨区域 Campaign ROI 对比与漏斗诊断。',
-      version: 'v1.0',
-      lifecycle: 'debug',
-      updatedAt: '2026-07-07',
-      author: 'Sarah',
-      toolNames: ['GA4_Reporting_API'],
-      inputSchema: '{ regions[], days }',
-      outputSchema: '{ comparison_table, insights[] }',
-      retry: 1,
-      timeoutMs: 10000,
-      memoryPolicy: 'none',
-      usedByAgents: ['洞察 Agent'],
-      usedByWorkflows: ['预算模拟流'],
-      dependsOn: [],
-      tags: ['roi', 'analytics'],
-    },
-  ],
-  'ws-rd-knowledge': [
-    {
-      id: 'skill-spec-search',
-      name: 'Spec_Search',
-      displayName: 'Spec Search',
-      description: '研发规格书与测试报告语义检索。',
-      version: 'v1.0',
-      lifecycle: 'online',
-      updatedAt: '2026-05-30',
-      author: 'RD-Team',
-      toolNames: ['Milvus_gRPC'],
-      inputSchema: '{ query, spec_type }',
-      outputSchema: '{ documents[], scores[] }',
-      retry: 2,
-      timeoutMs: 6000,
-      memoryPolicy: 'none',
-      usedByAgents: ['研发 RAG Agent'],
-      usedByWorkflows: [],
-      dependsOn: [],
-      tags: ['rd', 'spec'],
-    },
-  ],
+  'ws-mea': PROTOTYPE_SKILL_LIST,
+  'ws-eurasia': PROTOTYPE_SKILL_LIST,
+  'ws-europe': PROTOTYPE_SKILL_LIST,
 };
 
 export function getSkillsByWorkspace(workspaceId: string): Skill[] {
-  return SKILL_CATALOG[workspaceId] ?? [];
+  return SKILL_CATALOG[workspaceId] ?? PROTOTYPE_SKILL_LIST;
 }
 
 export function findSkillById(workspaceId: string, id: string): Skill | undefined {

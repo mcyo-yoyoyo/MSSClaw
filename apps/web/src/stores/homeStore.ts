@@ -18,12 +18,15 @@ interface HomeState {
   category: HomeCategory;
   regionId: RegionId;
   draftText: string;
+  /** ???????????????????? */
+  composerFocusKey: number;
   setHomeMode: (mode: 'assistant' | 'portal') => void;
   setExpertAxis: (axis: ExpertBrowseAxis) => void;
   setAgentRoleId: (id: AgentRoleId) => void;
   setCategory: (cat: HomeCategory) => void;
   setRegionId: (id: RegionId) => void;
   setDraftText: (text: string) => void;
+  requestComposerFocus: () => void;
   fillPrompt: (label: string) => void;
   applyUserOrgDefaults: (aff: OrgAffiliation, role?: PlatformRole) => void;
   getFeaturedAgents: () => PrototypeAgentSeed[];
@@ -37,6 +40,7 @@ export const useHomeStore = create<HomeState>((set, get) => ({
   category: 'ecommerce',
   regionId: 'latam',
   draftText: '',
+  composerFocusKey: 0,
 
   setHomeMode: (homeMode) => set({ homeMode }),
   setExpertAxis: (expertAxis) => set({ expertAxis }),
@@ -44,6 +48,7 @@ export const useHomeStore = create<HomeState>((set, get) => ({
   setCategory: (cat) => set({ expertAxis: 'dept', category: cat }),
   setRegionId: (id) => set({ expertAxis: 'region', regionId: id }),
   setDraftText: (text) => set({ draftText: text }),
+  requestComposerFocus: () => set((s) => ({ composerFocusKey: s.composerFocusKey + 1 })),
 
   fillPrompt: (label) => set({ draftText: buildHomePrompt(label) }),
 
@@ -94,7 +99,7 @@ export const useHomeStore = create<HomeState>((set, get) => ({
 
 export function buildHomePrompt(label: string): string {
   if (label.includes('SOP') || label.includes('??') || label.includes('??')) {
-    return `${label} · /?? `;
+    return `${label} ï¿?/?? `;
   }
   if (label.includes('??') || label.includes('??') || label.includes('??')) {
     return `${label}?????????`;

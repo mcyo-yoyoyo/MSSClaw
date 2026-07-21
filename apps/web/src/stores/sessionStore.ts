@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { authenticate, buildLoginAccounts, type LoginAccount } from '@/domain/authAccounts';
-import type { PlatformRole } from '@/domain/rbac';
+import { normalizePlatformRole, type PlatformRole } from '@/domain/rbac';
 import {
   normalizeOrgAffiliation,
   type DeptId,
@@ -39,7 +39,7 @@ function persist(user: SessionUser | null) {
   localStorage.setItem(LS_KEY, JSON.stringify(user));
 }
 
-/** 旧 session 无归属时，从账号目录补齐（免强制重登） */
+/** ? session ??????????????????? */
 function enrichOrgFromDirectory(user: SessionUser): SessionUser {
   if (user.deptIds.length > 0 || user.regionId) return user;
   const account = buildLoginAccounts().find(
@@ -76,15 +76,29 @@ function loadSession(): SessionUser | null {
         id: parsed.id,
         name: parsed.name,
         email: parsed.email,
-        platformRole: parsed.platformRole as PlatformRole,
+        platformRole: normalizePlatformRole(parsed.platformRole),
         avatar: typeof parsed.avatar === 'string' ? parsed.avatar : 'bg-zinc-900',
         deptIds: aff.deptIds,
         regionId: aff.regionId ?? null,
       };
-      const enriched = enrichOrgFromDirectory(base);
+      const directory = buildLoginAccounts().find(
+        (a) => a.email.toLowerCase() === base.email.toLowerCase(),
+      );
+      const withDirectory: SessionUser = directory
+        ? {
+            ...base,
+            platformRole: directory.platformRole,
+            name: directory.name,
+            deptIds: directory.deptIds,
+            regionId: directory.regionId,
+          }
+        : base;
+      const enriched = enrichOrgFromDirectory(withDirectory);
       const changed =
-        enriched.deptIds.join(',') !== base.deptIds.join(',') ||
-        enriched.regionId !== base.regionId;
+        enriched.platformRole !== (parsed.platformRole as string) ||
+        enriched.deptIds.join(',') !== (Array.isArray(parsed.deptIds) ? parsed.deptIds.join(',') : '') ||
+        enriched.regionId !== ((parsed.regionId as RegionId | null | undefined) ?? null) ||
+        enriched.name !== base.name;
       if (changed) persist(enriched);
       return enriched;
     }

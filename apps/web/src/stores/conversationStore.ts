@@ -42,11 +42,19 @@ import {
   type ModuleId,
   type WarRoomMember,
   canUseWarRoomAi,
+  LEGACY_DEFAULT_CHAT_IDS,
   isUserCreatedTask,
   isWarRoom,
   isWarRoomAdmin,
 } from '@/domain/chat';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
+import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
+import {
+  clampTitle,
+  deriveTaskTitle,
+  isUsableAiTaskTitle,
+  TASK_TITLE_MAX_LEN,
+} from '@/domain/taskTitle';
 import { useSessionStore } from '@/stores/sessionStore';
 
 interface PendingTaskSubmit {
@@ -148,7 +156,7 @@ interface ConversationState {
   consumePendingTaskSubmit: () => PendingTaskSubmit | null;
   findOrCreateAgentSession: (agentId: string, agentName: string, agentIcon: string) => string;
   deleteTaskSession: (chatId: string) => boolean;
-  renameTaskSession: (chatId: string, title: string) => boolean;
+  renameTaskSession: (chatId: string, title: string, opts?: { silent?: boolean }) => boolean;
   runTaskExample: (type: 'marketing' | 'knowledge' | 'warroom') => void;
   dismissChatPrompt: (prompt: string) => void;
   dismissAllChatPrompts: () => void;
@@ -485,7 +493,7 @@ async function runApprovedPipeline(get: () => ConversationState, set: StoreSet) 
 export const useConversationStore = create<ConversationState>((set, get) => ({
   activeModule: 'chat',
   currentChatId: 'marketing',
-  chats: structuredClone(useWorkspaceStore.getState().getCatalog('ws-3c-latam').chats),
+  chats: structuredClone(useWorkspaceStore.getState().getCatalog('ws-cn-marketing').chats),
   isAgentTyping: false,
   streamStatus: null,
   abortController: null,
@@ -511,34 +519,24 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     const catalog = useWorkspaceStore.getState().getCatalog(workspaceId);
     const baseChats = structuredClone(catalog.chats);
     const merged = persistedChats ? { ...baseChats, ...persistedChats } : baseChats;
-    // 移除已下线的默认拉美 WarRoom；同步知识 Agent 展示名
+    // 移除已下线 WarRoom、Smoke/营销/知识等历史默认会话
     const { group_q3: _removedDefaultWarroom, ...withoutLegacy } = merged;
     const chats = Object.fromEntries(
-      Object.entries(withoutLegacy).map(([id, chat]) => {
-        if (id === 'knowledge' || chat.agentId === 'agent-knowledge') {
-          return [
-            id,
-            {
-              ...chat,
-              title: chat.title === '知识检索 Agent' ? '知识 Agent' : chat.title,
-              history: chat.history.map((m) =>
-                m.name === '知识检索 Agent' ? { ...m, name: '知识 Agent' } : m,
-              ),
-            },
-          ];
-        }
-        return [id, chat];
+      Object.entries(withoutLegacy).filter(([id, chat]) => {
+        if (LEGACY_DEFAULT_CHAT_IDS.has(id)) return false;
+        if (/^smoke\b/i.test(chat.title) || /smoke\s*test/i.test(chat.title)) return false;
+        return true;
       }),
     ) as Record<string, ChatConfig>;
 
     // 保留水合期间内存里新建的任务，避免刚创建就被异步 loadWorkspace 冲掉
     for (const [id, chat] of Object.entries(prev.chats)) {
-      if (!chats[id] && isUserCreatedTask(chat)) {
+      if (!chats[id] && isUserCreatedTask(chat) && !LEGACY_DEFAULT_CHAT_IDS.has(id)) {
         chats[id] = chat;
       }
     }
 
-    let chatId = chats[defaultChatId] ? defaultChatId : Object.keys(chats)[0] ?? defaultChatId;
+    let chatId = defaultChatId && chats[defaultChatId] ? defaultChatId : Object.keys(chats)[0] ?? '';
     if (pending?.chatId && chats[pending.chatId]) {
       chatId = pending.chatId;
     } else if (prev.currentChatId && chats[prev.currentChatId] && isUserCreatedTask(chats[prev.currentChatId])) {
@@ -558,6 +556,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       // 保留 pendingTaskSubmit，供任务页自动投递
       ...resetSandboxState(),
     });
+    schedulePersistFromState(get);
   },
 
   switchChat: (chatId) => {
@@ -595,6 +594,11 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     const trimmed = text.trim();
     const { currentChatId, chats, isAgentTyping, pendingPipeline } = get();
     if (!trimmed || isAgentTyping) return;
+
+    if (!canExecuteChat()) {
+      set({ pushToast: READONLY_EXECUTE_HINT });
+      return;
+    }
 
     if (pendingPipeline) {
       set({ pushToast: '请先「确认执行」或「调整计划」' });
@@ -959,11 +963,23 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     autoSend = true,
     switchTo = true,
   }) => {
+    if (!canExecuteChat()) {
+      set({ pushToast: READONLY_EXECUTE_HINT });
+      return '';
+    }
     const id = `task_${Date.now()}`;
     const agent = agentId ? getAgentById(agentId) : null;
+    const titleTrim = title.trim();
+    const msgTrim = (initialMessage || '').trim();
+    const sourceText = msgTrim || titleTrim;
+    // 标题与正文不同：视为显式命名（技能名 / 专家团等）；否则从描述提炼
+    const hasExplicitTitle = Boolean(titleTrim && msgTrim && titleTrim !== msgTrim);
+    const resolvedTitle = hasExplicitTitle
+      ? clampTitle(titleTrim, 22)
+      : deriveTaskTitle(sourceText, { agentName });
     const newChat: ChatConfig = {
       id,
-      title,
+      title: resolvedTitle,
       type: 'bot',
       icon: agentIcon,
       color: 'claw',
@@ -979,8 +995,8 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
           role: 'agent',
           name: agentName || '任务助理',
           text: agentName
-            ? `任务「${title}」已创建，已绑定 ${agentName}。请描述目标或使用 Skill 指令。`
-            : `任务「${title}」已创建。请 @ Agent 或 / 调用 Skill，确认计划后执行。`,
+            ? `任务「${resolvedTitle}」已创建，已绑定 ${agentName}。请描述目标或使用 Skill 指令。`
+            : `任务「${resolvedTitle}」已创建。请 @ Agent 或 / 调用 Skill，确认计划后执行。`,
         },
       ],
       prompts: [],
@@ -1003,6 +1019,23 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     }));
 
     schedulePersistFromState(get);
+
+    // 规则标题来自长描述时，若已配置模型则异步精炼（不覆盖显式标题）
+    if (!hasExplicitTitle && sourceText.length > TASK_TITLE_MAX_LEN) {
+      void (async () => {
+        try {
+          const { isLlmConfigured, refineTaskTitleWithLlm } = await import('@/api/llmClient');
+          if (!isLlmConfigured()) return;
+          const aiTitle = await refineTaskTitleWithLlm(sourceText, { agentName });
+          if (!isUsableAiTaskTitle(aiTitle)) return;
+          if (!get().chats[id]) return;
+          get().renameTaskSession(id, clampTitle(aiTitle), { silent: true });
+        } catch {
+          /* keep rule title */
+        }
+      })();
+    }
+
     return id;
   },
 
@@ -1092,6 +1125,10 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   },
 
   createWarRoomSession: (title) => {
+    if (!canExecuteChat()) {
+      set({ pushToast: READONLY_EXECUTE_HINT });
+      return '';
+    }
     const id = `warroom_${Date.now()}`;
     const userId = getCurrentUserId();
     const userName = getCurrentUserName();
@@ -1256,6 +1293,10 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   },
 
   deleteTaskSession: (chatId) => {
+    if (!canExecuteChat()) {
+      set({ pushToast: READONLY_EXECUTE_HINT });
+      return false;
+    }
     const chat = get().chats[chatId];
     if (!chat || !isUserCreatedTask(chat)) {
       set({ pushToast: '该任务不可删除' });
@@ -1307,16 +1348,20 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     return true;
   },
 
-  renameTaskSession: (chatId, title) => {
+  renameTaskSession: (chatId, title, opts) => {
+    if (!canExecuteChat()) {
+      set({ pushToast: READONLY_EXECUTE_HINT });
+      return false;
+    }
     const chat = get().chats[chatId];
     const nextTitle = title.trim();
     if (!chat || !nextTitle) {
-      set({ pushToast: '任务名称不能为空' });
+      if (!opts?.silent) set({ pushToast: '任务名称不能为空' });
       return false;
     }
     // 仅允许重命名用户创建的 Agent 任务
     if (!chat.id.startsWith('task_')) {
-      set({ pushToast: '仅支持重命名创建的 Agent 任务' });
+      if (!opts?.silent) set({ pushToast: '仅支持重命名创建的 Agent 任务' });
       return false;
     }
     if (chat.title === nextTitle) return true;
@@ -1326,7 +1371,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         ...get().chats,
         [chatId]: { ...chat, title: nextTitle },
       },
-      pushToast: `已重命名为「${nextTitle}」`,
+      ...(opts?.silent ? {} : { pushToast: `已重命名为「${nextTitle}」` }),
     });
     schedulePersistFromState(get);
     return true;

@@ -3,10 +3,12 @@ import { useEffect, useMemo, useRef } from 'react';
 import { cn } from '@/lib/utils';
 
 import { buildAppCommands, filterAppCommands, type AppCommandHandlers } from '@/domain/commands';
+import { canExecuteChat } from '@/domain/permissions';
 
 import { useCommandPaletteStore } from '@/stores/commandPaletteStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
+import { useSessionStore } from '@/stores/sessionStore';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 
 interface CommandPaletteProps {
@@ -20,6 +22,8 @@ export function CommandPalette({ handlers }: CommandPaletteProps) {
   const agents = useMarketplaceStore((s) => s.agents);
   const skills = useMarketplaceStore((s) => s.skills);
   const isViewEnabled = useNavPresentationStore((s) => s.isViewEnabled);
+  const platformRole = useSessionStore((s) => s.user?.platformRole);
+  const canExecute = canExecuteChat(platformRole);
 
   const commands = useMemo(
     () =>
@@ -29,9 +33,9 @@ export function CommandPalette({ handlers }: CommandPaletteProps) {
           agents: agents.filter((a) => a.published).map((a) => ({ id: a.id, name: a.name, icon: a.icon })),
           skills: skills.filter((s) => s.published).map((s) => ({ id: s.id, name: s.name, command: s.command })),
         },
-        { isViewEnabled },
+        { isViewEnabled, canExecute },
       ),
-    [handlers, agents, skills, isViewEnabled],
+    [handlers, agents, skills, isViewEnabled, canExecute],
   );
 
   const inputRef = useRef<HTMLInputElement>(null);

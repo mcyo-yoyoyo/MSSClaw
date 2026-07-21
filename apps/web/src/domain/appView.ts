@@ -40,11 +40,11 @@ export interface AppViewNavItem {
 }
 
 export const APP_VIEW_NAV: AppViewNavItem[] = [
-  { id: 'home', label: '首页', subtitle: 'AI助手开工 · AI广场找场景与工具', icon: 'fa-house', section: 'workspace' },
-  { id: 'task', label: '任务', subtitle: '当前会话 · 计划确认 · 交付物', icon: 'fa-list-check', section: 'workspace' },
+  { id: 'home', label: '逛广场', subtitle: '找场景 · 开工（AI任务 / AI广场）', icon: 'fa-house', section: 'workspace' },
+  { id: 'task', label: '做任务', subtitle: '计划确认 · 执行 · 交付物', icon: 'fa-list-check', section: 'workspace' },
   {
     id: 'ai-map',
-    label: '案例',
+    label: '学案例',
     subtitle: '样板间 · 可复制业务场景包',
     icon: 'fa-map',
     section: 'platform',

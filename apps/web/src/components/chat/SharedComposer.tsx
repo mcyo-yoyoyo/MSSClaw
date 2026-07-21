@@ -1,12 +1,14 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { appendAttachmentReference } from '@/lib/attachment';
+import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
 import { getHomeRegionSuggestion, getHomeSuggestion } from '@/domain/prototype/home';
 import type { HomeCategory } from '@/domain/prototype/types';
 import { getAgentById } from '@/domain/plan';
 import { getSlashQuery, useHomeStore } from '@/stores/homeStore';
 import { useLlmConfigStore } from '@/stores/llmConfigStore';
 import { useConversationStore } from '@/stores/conversationStore';
+import { useSessionStore } from '@/stores/sessionStore';
 import { useSpeechInput } from '@/hooks/useSpeechInput';
 import { HomeSlashMenu } from '@/components/home/HomeSlashMenu';
 import { HomePickerModal } from '@/components/home/HomePickerModal';
@@ -43,8 +45,12 @@ export function SharedComposer({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const composerFocusKey = useHomeStore((s) => s.composerFocusKey);
   const currentChatId = useConversationStore((s) => s.currentChatId);
   const chats = useConversationStore((s) => s.chats);
+  const platformRole = useSessionStore((s) => s.user?.platformRole);
+  const executeAllowed = canExecuteChat(platformRole);
+  const inputDisabled = disabled || !executeAllowed;
   const config = useLlmConfigStore((s) => s.config);
   const selectModel = useLlmConfigStore((s) => s.selectModel);
   const modelOptions = useLlmConfigStore((s) => s.modelOptions);
@@ -64,6 +70,12 @@ export function SharedComposer({
   }, notify);
 
   const maxGrow = landing ? 140 : 140;
+
+  useEffect(() => {
+    if (!landing || composerFocusKey <= 0) return;
+    const t = window.setTimeout(() => textareaRef.current?.focus(), 50);
+    return () => window.clearTimeout(t);
+  }, [landing, composerFocusKey]);
 
   const autoGrow = (el: HTMLTextAreaElement) => {
     el.style.height = 'auto';
@@ -102,7 +114,11 @@ export function SharedComposer({
 
   const handleSubmit = () => {
     const trimmed = value.trim();
-    if (!trimmed || disabled) return;
+    if (!trimmed || inputDisabled) return;
+    if (!executeAllowed) {
+      notify(READONLY_EXECUTE_HINT);
+      return;
+    }
     onSubmit(trimmed);
     onChange('');
     setSlashOpen(false);
@@ -149,11 +165,13 @@ export function SharedComposer({
     textareaRef.current?.focus();
   };
 
-  const defaultPlaceholder = landing
-    ? '描述你想完成的事… @ 选专家，/ 调技能'
-    : '继续对话… @ 专家 · / 技能 · Enter 发送';
+  const defaultPlaceholder = !executeAllowed
+    ? '只读模式：可浏览结果，不可发送执行'
+    : landing
+      ? '描述你想完成的事… @ 选专家，/ 调技能'
+      : '继续对话… @ 专家 · / 技能 · Enter 发送';
 
-  const slashMenu = slashOpen ? (
+  const slashMenu = slashOpen && executeAllowed ? (
     <HomeSlashMenu
       mode={slashMode}
       query={getSlashQuery(value, slashMode)}
@@ -168,6 +186,11 @@ export function SharedComposer({
       <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} />
 
       <div className={cn('relative w-full', !landing && 'shared-composer-workspace')}>
+        {!executeAllowed ? (
+          <div className="mb-2 rounded-lg border border-amber-200/80 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
+            {READONLY_EXECUTE_HINT}
+          </div>
+        ) : null}
         {menuPlacement === 'above' && slashOpen ? (
           <div className="absolute bottom-full left-0 right-0 z-40 mb-1">{slashMenu}</div>
         ) : null}
@@ -177,7 +200,8 @@ export function SharedComposer({
             ref={textareaRef}
             rows={landing ? 3 : 2}
             value={value}
-            disabled={disabled}
+            disabled={inputDisabled}
+            readOnly={!executeAllowed}
             onChange={(e) => {
               handleInput(e.target.value, e.target.selectionStart ?? e.target.value.length);
               autoGrow(e.target);
@@ -213,7 +237,7 @@ export function SharedComposer({
               <button
                 type="button"
                 onClick={() => setPicker('skill')}
-                disabled={disabled}
+                disabled={inputDisabled}
                 className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-60"
               >
                 <i className="fa-solid fa-cube mr-1 text-[10px] text-zinc-500" />
@@ -222,7 +246,7 @@ export function SharedComposer({
               <button
                 type="button"
                 onClick={() => setPicker('agent')}
-                disabled={disabled}
+                disabled={inputDisabled}
                 className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-60"
               >
                 <i className="fa-solid fa-robot mr-1 text-[10px] text-zinc-500" />
@@ -238,7 +262,7 @@ export function SharedComposer({
                   }
                   selectModel(v);
                 }}
-                disabled={disabled}
+                disabled={inputDisabled}
                 className="max-w-[168px] rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] text-zinc-800 disabled:opacity-60"
                 title="选择模型 · 可配置 API"
               >
@@ -270,7 +294,7 @@ export function SharedComposer({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={disabled}
+                disabled={inputDisabled}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600 disabled:opacity-60"
                 title="添加附件引用"
               >
@@ -280,7 +304,7 @@ export function SharedComposer({
                 <button
                   type="button"
                   onClick={applySuggestion}
-                  disabled={disabled}
+                  disabled={inputDisabled}
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 disabled:opacity-60"
                   title="智能建议"
                 >
@@ -290,7 +314,7 @@ export function SharedComposer({
               <button
                 type="button"
                 onClick={toggleVoice}
-                disabled={disabled}
+                disabled={inputDisabled}
                 className={cn(
                   'flex h-8 w-8 items-center justify-center rounded-lg transition disabled:opacity-60',
                   listening
@@ -304,7 +328,7 @@ export function SharedComposer({
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={disabled}
+                disabled={inputDisabled}
                 className="apple-btn-primary flex h-8 w-8 items-center justify-center rounded-lg text-white disabled:opacity-50"
               >
                 <i className="fa-solid fa-arrow-up text-[13px]" />

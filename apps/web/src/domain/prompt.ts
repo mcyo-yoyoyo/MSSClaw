@@ -209,7 +209,12 @@ export const PROMPT_CATALOG: Record<string, Prompt[]> = {
 };
 
 export function getPromptsByWorkspace(workspaceId: string): Prompt[] {
-  return PROMPT_CATALOG[workspaceId] ?? PROMPT_CATALOG['ws-3c-latam'];
+  return (
+    PROMPT_CATALOG[workspaceId] ??
+    PROMPT_CATALOG['ws-cn-marketing'] ??
+    PROMPT_CATALOG['ws-3c-latam'] ??
+    []
+  );
 }
 
 export function findPromptByName(workspaceId: string, name: string): Prompt | undefined {

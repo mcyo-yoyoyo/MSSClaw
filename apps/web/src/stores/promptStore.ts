@@ -29,9 +29,9 @@ interface PromptState {
 }
 
 export const usePromptStore = create<PromptState>((set, get) => ({
-  workspaceId: 'ws-3c-latam',
-  prompts: getPromptsByWorkspace('ws-3c-latam'),
-  selectedPromptId: getPromptsByWorkspace('ws-3c-latam')[0]?.id ?? null,
+  workspaceId: 'ws-cn-marketing',
+  prompts: getPromptsByWorkspace('ws-cn-marketing'),
+  selectedPromptId: getPromptsByWorkspace('ws-cn-marketing')[0]?.id ?? null,
   lifecycleFilter: 'all',
   toast: null,
 
@@ -74,7 +74,7 @@ export const usePromptStore = create<PromptState>((set, get) => ({
       const updated = nextPrompts.find((p) => p.id === promptId);
       set({
         prompts: nextPrompts,
-        toast: updated ? `「${target.name}」已推进至 ${updated.lifecycle}` : `「${target.name}」已更新`,
+        toast: updated ? `�?{target.name}」已推进�?${updated.lifecycle}` : `�?{target.name}」已更新`,
       });
     })();
   },

@@ -6,9 +6,8 @@ const LS_ARTIFACT = 'mssclaw_artifact_collapsed';
 
 /**
  * 进入任务中心「对话专注」：
- * - 仅收起 App 侧栏（留出对话宽度）
+ * - 仅收起 App 侧栏（留出对话宽度；展开侧栏即可在「任务 / 群聊」切换历史）
  * - 交付物默认收起，有结果后再提示展开
- * - 会话列表保持可用，避免用户找不到历史
  * - 展示一次性专注提示条
  */
 export function enterTaskChatFocusMode() {

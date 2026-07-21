@@ -2,22 +2,23 @@ import { create } from 'zustand';
 import {
   getMembersByWorkspace,
   MEMBER_STATUS_LABELS,
+  normalizePlatformRole,
   ROLE_LABELS,
   type PlatformRole,
   type SettingsTab,
   type WorkspaceMember,
 } from '@/domain/rbac';
 import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
-import { DEMO_PASSWORD } from '@/domain/authAccounts';
-
-const MEMBERS_LS_PREFIX = 'mssclaw_members_';
+import { DEMO_PASSWORD, MEMBERS_LS_PREFIX } from '@/domain/authAccounts';
+import { PROTOTYPE_WORKSPACE_ID } from '@/domain/prototype/constants';
 
 function loadMembers(workspaceId: string): WorkspaceMember[] {
   const raw = localStorage.getItem(`${MEMBERS_LS_PREFIX}${workspaceId}`);
   if (!raw) return getMembersByWorkspace(workspaceId);
   try {
     const parsed = JSON.parse(raw) as WorkspaceMember[];
-    return Array.isArray(parsed) && parsed.length ? parsed : getMembersByWorkspace(workspaceId);
+    if (!Array.isArray(parsed) || !parsed.length) return getMembersByWorkspace(workspaceId);
+    return parsed.map((m) => ({ ...m, role: normalizePlatformRole(m.role as string) }));
   } catch {
     return getMembersByWorkspace(workspaceId);
   }
@@ -57,9 +58,9 @@ interface SettingsState {
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
-  workspaceId: 'ws-3c-latam',
+  workspaceId: PROTOTYPE_WORKSPACE_ID,
   activeTab: 'members',
-  members: loadMembers('ws-3c-latam'),
+  members: loadMembers(PROTOTYPE_WORKSPACE_ID),
   toast: null,
 
   loadWorkspace: (workspaceId) => {
@@ -112,7 +113,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   inviteMember: (input, roleArg) => {
     const payload: InviteMemberInput =
       typeof input === 'string'
-        ? { email: input, role: roleArg ?? 'developer' }
+        ? { email: input, role: roleArg ?? 'business_user' }
         : input;
 
     const trimmed = payload.email.trim();
@@ -131,11 +132,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       ...get().members,
       {
         id,
-        name: payload.name?.trim() || trimmed.split('@')[0],
+        name: payload.name?.trim() || trimmed.split('@')[0] || '新成员',
         email: trimmed,
-        role: payload.role,
-        avatar: 'bg-slate-500',
-        lastActive: status === 'active' ? '刚刚' : '—',
+        role: normalizePlatformRole(payload.role),
+        avatar: 'bg-zinc-700',
+        lastActive: '刚刚',
         status,
         deptIds: payload.deptIds ?? [],
         regionId: payload.regionId ?? null,

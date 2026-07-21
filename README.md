@@ -46,7 +46,7 @@ npm install
 npm run dev
 ```
 
-浏览器打开 **`http://localhost:5173`**，即为完整 React 工程（智能助理 / 任务中心 / Agent·Skill·知识库 / 命令面板）。
+浏览器打开 **`http://localhost:5173`**，即为完整 React 工程（逛广场·AI任务 / 做任务 / Agent·Skill·知识库 / 命令面板）。
 
 
 

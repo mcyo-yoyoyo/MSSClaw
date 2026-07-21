@@ -623,13 +623,186 @@
 
 
 
+.wb-nav-item-nested {
+
+  padding-left: 1.75rem;
+
+  gap: 0.4rem;
+
+  font-size: 12px;
+
+  color: var(--text-muted);
+
+}
+
+
+
+.wb-nav-item-nested .nav-label {
+
+  font-weight: 400;
+
+}
+
+
+
+.app-sidebar.sidebar-collapsed .wb-nav-item-nested {
+
+  display: none;
+
+}
+
+
+
+
+
+
+.sidebar-task-group-header {
+
+  display: flex;
+
+  width: 100%;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  padding: 0.35rem 0.5rem;
+
+  font-size: 10px;
+
+  font-weight: 600;
+
+  color: #86868b;
+
+  text-align: left;
+
+}
+
+
+
+.sidebar-task-group.collapsed .sidebar-task-group-body {
+
+  display: none;
+
+}
+
+
+
+.sidebar-task-group.collapsed .sidebar-task-group-header i {
+
+  transform: rotate(-90deg);
+
+}
+
+
+
+.sidebar-task-item {
+
+  position: relative;
+
+}
+
+
+
+.sidebar-task-actions {
+
+  position: absolute;
+
+  right: 0.25rem;
+
+  top: 50%;
+
+  z-index: 2;
+
+  display: none;
+
+  transform: translateY(-50%);
+
+  gap: 2px;
+
+}
+
+
+
+.sidebar-task-item:hover .sidebar-task-actions,
+
+.sidebar-task-item.active .sidebar-task-actions {
+
+  display: flex;
+
+}
+
+
+
+.sidebar-task-action-btn {
+
+  display: flex;
+
+  height: 20px;
+
+  width: 20px;
+
+  align-items: center;
+
+  justify-content: center;
+
+  border-radius: 6px;
+
+  color: #86868b;
+
+  background: #fff;
+
+  border: 1px solid rgba(0, 0, 0, 0.06);
+
+}
+
+
+
+.sidebar-task-action-btn:hover {
+
+  color: #18181b;
+
+  background: #f4f4f5;
+
+}
+
+
+
+.sidebar-task-action-btn.danger:hover {
+
+  color: #b91c1c;
+
+  background: #fef2f2;
+
+}
+
+
+
+/* ── 业务 / 运营双壳视觉区分 ── */
+
+.app-sidebar.shell-ops {
+
+  box-shadow: inset 3px 0 0 0 #6366f1;
+
+}
+
+
+
+.shell-ops-stage .main-stage {
+
+  background-color: #f8f8fc;
+
+}
+
+
+
 /* ── 侧栏分组折叠 ── */
 
 
 
 .app-sidebar {
 
-  width: 192px;
+  width: 288px;
 
   transition: width 0.22s ease;
 
@@ -821,7 +994,7 @@
 
 
 
-/* ── 智能助理首页 ── */
+/* ── 逛广场首页（AI任务 / AI广场）── */
 
 
 
@@ -1222,92 +1395,6 @@
   backdrop-filter: var(--apple-blur);
 
   -webkit-backdrop-filter: var(--apple-blur);
-
-}
-
-
-
-.task-list-panel {
-
-  width: 272px;
-
-  transition:
-
-    width 0.22s ease,
-
-    min-width 0.22s ease,
-
-    opacity 0.18s ease;
-
-  overflow: hidden;
-
-}
-
-
-
-.task-list-panel.collapsed {
-
-  width: 0 !important;
-
-  min-width: 0 !important;
-
-  border-right-width: 0;
-
-  opacity: 0;
-
-  pointer-events: none;
-
-}
-
-
-
-.task-list-expand-tab {
-
-  display: none;
-
-  position: absolute;
-
-  left: 0;
-
-  top: 50%;
-
-  transform: translateY(-50%);
-
-  z-index: 35;
-
-  width: 28px;
-
-  height: 72px;
-
-  background: white;
-
-  border: 1px solid rgba(0, 0, 0, 0.08);
-
-  border-left: none;
-
-  border-radius: 0 12px 12px 0;
-
-  box-shadow: 4px 0 12px rgba(0, 0, 0, 0.06);
-
-  color: var(--text-muted);
-
-}
-
-
-
-.task-list-expand-tab.visible {
-
-  display: flex;
-
-}
-
-
-
-.task-list-expand-tab:hover {
-
-  color: var(--accent);
-
-  border-color: rgba(0, 0, 0, 0.1);
 
 }
 

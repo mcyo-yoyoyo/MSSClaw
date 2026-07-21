@@ -45,6 +45,7 @@ import {
   useContentEngagementStore,
 } from '@/stores/contentEngagementStore';
 import { isNewScenario } from '@/domain/contentBadges';
+import { openResourceWithReturn } from '@/domain/openResourceNav';
 
 interface HomeScenePortalProps {
   onInvokeAgent: (agent: PrototypeAgentSeed, prompt?: string) => void;
@@ -469,7 +470,7 @@ export function HomeScenePortal({ onInvokeAgent, onInvokeSkill }: HomeScenePorta
     const caseId = resolvePrimaryCaseIdForScenario(scenarioId);
     focusScenario(scenarioId);
     if (caseId) focusCase(caseId);
-    setAppView('ai-map');
+    openResourceWithReturn('ai-map');
   };
 
   const linkBtnClass =
@@ -547,7 +548,11 @@ export function HomeScenePortal({ onInvokeAgent, onInvokeSkill }: HomeScenePorta
                 onChange={setRankMode}
                 options={[...RANK_MODE_OPTIONS]}
               />
-              <button type="button" onClick={() => setAppView('ai-map')} className={linkBtnClass}>
+              <button
+                type="button"
+                onClick={() => openResourceWithReturn('ai-map')}
+                className={linkBtnClass}
+              >
                 更多
               </button>
             </>

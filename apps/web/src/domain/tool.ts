@@ -187,7 +187,7 @@ export const TOOL_CATALOG: Record<string, PlatformTool[]> = {
 };
 
 export function getToolsByWorkspace(workspaceId: string): PlatformTool[] {
-  return TOOL_CATALOG[workspaceId] ?? [];
+  return TOOL_CATALOG[workspaceId] ?? TOOL_CATALOG['ws-3c-latam'] ?? [];
 }
 
 export function findToolById(workspaceId: string, id: string): PlatformTool | undefined {

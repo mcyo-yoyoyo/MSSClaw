@@ -256,11 +256,11 @@
       "locked": false,
       "fontSize": 18,
       "fontFamily": 5,
-      "text": "L3  Features（业务页面）\n首页 AI助手 / AI广场 · 任务 · 案例 · 专家 · 技能 · 工具 · 知识\n记忆 · 提示词 · 自动化 · 工作流 · 门户运营 · 展示配置 · 租户配置\napps/web/src/features/* · AppViewRouter",
+      "text": "L3  Features（业务页面）\n首页 AI任务 / AI广场 · 任务 · 案例 · 专家 · 技能 · 工具 · 知识\n记忆 · 提示词 · 自动化 · 工作流 · 门户运营 · 展示配置 · 租户配置\napps/web/src/features/* · AppViewRouter",
       "textAlign": "left",
       "verticalAlign": "top",
       "containerId": null,
-      "originalText": "L3  Features（业务页面）\n首页 AI助手 / AI广场 · 任务 · 案例 · 专家 · 技能 · 工具 · 知识\n记忆 · 提示词 · 自动化 · 工作流 · 门户运营 · 展示配置 · 租户配置\napps/web/src/features/* · AppViewRouter",
+      "originalText": "L3  Features（业务页面）\n首页 AI任务 / AI广场 · 任务 · 案例 · 专家 · 技能 · 工具 · 知识\n记忆 · 提示词 · 自动化 · 工作流 · 门户运营 · 展示配置 · 租户配置\napps/web/src/features/* · AppViewRouter",
       "autoResize": true,
       "lineHeight": 1.3
     },

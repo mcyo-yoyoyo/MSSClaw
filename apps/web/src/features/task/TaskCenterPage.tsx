@@ -1,8 +1,5 @@
-﻿import { useEffect, useRef, useState } from 'react';
-import { TaskListPanel } from '@/components/task/TaskListPanel';
-import { CreateTaskDialog } from '@/components/task/CreateTaskDialog';
+import { useEffect, useRef, useState } from 'react';
 import { WarRoomMembersModal } from '@/components/task/WarRoomMembersModal';
-import { TaskResourceExplorer } from '@/components/task/TaskResourceExplorer';
 import { TaskChatPanel } from '@/components/chat/TaskChatPanel';
 import { ArtifactPanel } from '@/components/artifact/ArtifactPanel';
 import { PushDeliverableModal } from '@/components/artifact/PushDeliverableModal';
@@ -11,38 +8,28 @@ import { useConversationStore } from '@/stores/conversationStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useTaskStore } from '@/stores/taskStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
-import { useAppViewStore } from '@/stores/appViewStore';
-import { useHomeStore } from '@/stores/homeStore';
 import { getAgentById } from '@/domain/plan';
 import { buildAppRoute } from '@/domain/appRoute';
 import { canUseWarRoomAi, isWarRoom } from '@/domain/chat';
+import { openAiAssistantForNewTask } from '@/domain/openNewTask';
 import { getMembersByWorkspace } from '@/domain/rbac';
 
 interface TaskCenterPageProps {
   onWorkspaceSwitch?: (workspaceId: string) => void;
 }
 
-export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
+export function TaskCenterPage(_props: TaskCenterPageProps) {
   const workspaceId = useWorkspaceStore((s) => s.workspaceId);
-  const setAppView = useAppViewStore((s) => s.setAppView);
-  const setHomeMode = useHomeStore((s) => s.setHomeMode);
   const [pushOpen, setPushOpen] = useState(false);
   const {
-    taskListCollapsed,
     artifactPanelCollapsed,
     focusBannerVisible,
-    toggleTaskList,
     toggleArtifactPanel,
     dismissFocusBanner,
-    createDialogOpen,
-    openCreateDialog,
-    closeCreateDialog,
-    toggleResourceExplorer,
   } = useTaskStore();
 
   const chats = useConversationStore((s) => s.chats);
   const currentChatId = useConversationStore((s) => s.currentChatId);
-  const switchChat = useConversationStore((s) => s.switchChat);
   const sendMessage = useConversationStore((s) => s.sendMessage);
   const approvePlan = useConversationStore((s) => s.approvePlan);
   const savePlanSteps = useConversationStore((s) => s.savePlanSteps);
@@ -66,10 +53,7 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
   const pendingTaskSubmit = useConversationStore((s) => s.pendingTaskSubmit);
   const expertTeamRelay = useConversationStore((s) => s.expertTeamRelay);
   const consumePendingTaskSubmit = useConversationStore((s) => s.consumePendingTaskSubmit);
-  const createAgentTaskSession = useConversationStore((s) => s.createAgentTaskSession);
-  const createWarRoomSession = useConversationStore((s) => s.createWarRoomSession);
   const deleteTaskSession = useConversationStore((s) => s.deleteTaskSession);
-  const renameTaskSession = useConversationStore((s) => s.renameTaskSession);
   const runTaskExample = useConversationStore((s) => s.runTaskExample);
   const addWarRoomMember = useConversationStore((s) => s.addWarRoomMember);
   const removeWarRoomMember = useConversationStore((s) => s.removeWarRoomMember);
@@ -105,7 +89,6 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
     }
   }, [currentChatId, pendingTaskSubmit, consumePendingTaskSubmit, sendMessage, workspaceId]);
 
-  // 交付物就绪时轻提示打开预览
   useEffect(() => {
     if (sandboxReady && !prevReadyRef.current && artifactPanelCollapsed) {
       useConversationStore.setState({
@@ -138,17 +121,14 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
         <div className="absolute left-1/2 top-3 z-30 flex max-w-[min(92vw,520px)] -translate-x-1/2 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 shadow-md">
           <i className="fa-solid fa-comments text-[12px] text-zinc-500" />
           <p className="min-w-0 flex-1 text-[11px] leading-snug text-zinc-600">
-            已进入对话专注：侧栏已收起，会话列表可切换历史；交付件就绪后可打开右侧预览。
+            已进入对话专注：可在左侧「任务 / 群聊」切换历史；交付件就绪后可打开右侧预览。
           </p>
           <button
             type="button"
-            onClick={() => {
-              if (taskListCollapsed) toggleTaskList();
-              dismissFocusBanner();
-            }}
+            onClick={dismissFocusBanner}
             className="shrink-0 rounded-lg bg-zinc-900 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-zinc-800"
           >
-            {taskListCollapsed ? '展开会话' : '知道了'}
+            知道了
           </button>
           <button
             type="button"
@@ -160,18 +140,6 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
           </button>
         </div>
       ) : null}
-
-      <TaskListPanel
-        chats={chats}
-        currentChatId={currentChatId}
-        onSwitch={switchChat}
-        onCreate={openCreateDialog}
-        onOpenResources={toggleResourceExplorer}
-        collapsed={taskListCollapsed}
-        onToggleCollapse={toggleTaskList}
-        onDelete={(id) => deleteTaskSession(id)}
-        onRename={(id, title) => renameTaskSession(id, title)}
-      />
 
       {chat ? (
         <>
@@ -233,28 +201,14 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
         </>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-[#86868b]">
-          <p>从工作台发起对话，或展开左侧会话列表新建</p>
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setHomeMode('assistant');
-                setAppView('home');
-              }}
-              className="rounded-lg bg-zinc-900 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-zinc-800"
-            >
-              回工作台
-            </button>
-            {taskListCollapsed ? (
-              <button
-                type="button"
-                onClick={toggleTaskList}
-                className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-[12px] font-medium text-zinc-700 hover:bg-zinc-50"
-              >
-                展开会话列表
-              </button>
-            ) : null}
-          </div>
+          <p>在「AI任务」描述需求即可新建，或从左侧打开已有任务 / 群聊</p>
+          <button
+            type="button"
+            onClick={() => openAiAssistantForNewTask()}
+            className="rounded-lg bg-zinc-900 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-zinc-800"
+          >
+            去「AI任务」新建
+          </button>
         </div>
       )}
 
@@ -266,23 +220,6 @@ export function TaskCenterPage({ onWorkspaceSwitch }: TaskCenterPageProps) {
           closeKbPreview();
           setCitationSnippet('');
           setCitationIndex(undefined);
-        }}
-      />
-
-      {onWorkspaceSwitch && <TaskResourceExplorer onWorkspaceSwitch={onWorkspaceSwitch} />}
-
-      <CreateTaskDialog
-        open={createDialogOpen}
-        onClose={closeCreateDialog}
-        onCreateWarRoom={(title) => createWarRoomSession(title)}
-        onCreateAgent={(title, agentId) => {
-          const agent = agentId ? getAgentById(agentId) : null;
-          createAgentTaskSession({
-            title,
-            agentName: agent?.name,
-            agentIcon: agent?.icon,
-            agentId: agent?.id,
-          });
         }}
       />
 

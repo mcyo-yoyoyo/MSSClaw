@@ -40,9 +40,9 @@ const MOCK_TRACE: SkillTraceStep[] = [
 ];
 
 export const useSkillStore = create<SkillState>((set, get) => ({
-  workspaceId: 'ws-3c-latam',
-  skills: getSkillsByWorkspace('ws-3c-latam'),
-  selectedSkillId: getSkillsByWorkspace('ws-3c-latam')[0]?.id ?? null,
+  workspaceId: 'ws-cn-marketing',
+  skills: getSkillsByWorkspace('ws-cn-marketing'),
+  selectedSkillId: getSkillsByWorkspace('ws-cn-marketing')[0]?.id ?? null,
   lifecycleFilter: 'all',
   traceRunning: false,
   liveTrace: [],
@@ -88,7 +88,7 @@ export const useSkillStore = create<SkillState>((set, get) => ({
       const updated = nextSkills.find((s) => s.id === skillId);
       set({
         skills: nextSkills,
-        toast: updated ? `「${target.displayName}」已推进至 ${updated.lifecycle}` : `「${target.displayName}」已更新`,
+        toast: updated ? `�?{target.displayName}」已推进�?${updated.lifecycle}` : `�?{target.displayName}」已更新`,
       });
     })();
   },
@@ -106,7 +106,7 @@ export const useSkillStore = create<SkillState>((set, get) => ({
 
     set({
       traceRunning: false,
-      toast: `「${skill.displayName}」Trace 完成 · 总耗时 ~915ms`,
+      toast: `�?{skill.displayName}」Trace 完成 · 总耗时 ~915ms`,
     });
   },
 

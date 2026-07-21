@@ -42,7 +42,7 @@ export const useAssetApprovalStore = create<AssetApprovalState>((set, get) => ({
         assetId: input.assetId,
         assetName: input.assetName,
         submitterName: input.submitterName || getCurrentUserName() || '当前用户',
-        stepIndex: 1, // 提交人已完成，进入业务主管
+        stepIndex: 1, // 提交人已完成，进入业务主�?
         createdAt: Date.now(),
       },
     });

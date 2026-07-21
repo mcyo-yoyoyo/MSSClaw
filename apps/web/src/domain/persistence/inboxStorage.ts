@@ -1,6 +1,6 @@
 import type { InboxMessage } from '@/domain/inbox';
 
-const VERSION = 'v1-inbox';
+const VERSION = 'v3-inbox';
 
 function versionKey(workspaceId: string) {
   return `mssclaw_inbox_ver_${workspaceId}`;

@@ -56,8 +56,8 @@ export function MyMessagesPage() {
       <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-4 py-4 md:px-6">
         <CenterPageHeader
           title="我的消息"
-          subtitle="接收成员推送、作战室通知与系统提醒"
-          tip={<>任务预览中「推送」可选作战室或成员；成员侧在此查收交付物通知。</>}
+          subtitle="MSS AI提效作战平台 · 交付推送、作战室通知与系统提醒"
+          tip={<>任务预览中「推送」可选作战室或成员；对方在此查收并可回到任务中心继续跟进。</>}
           actions={
             <>
               <CenterSearchInput value={search} onChange={setSearch} placeholder="搜索消息…" />

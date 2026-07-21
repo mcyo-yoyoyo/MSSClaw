@@ -29,9 +29,9 @@ interface ToolState {
 }
 
 export const useToolStore = create<ToolState>((set, get) => ({
-  workspaceId: 'ws-3c-latam',
-  tools: getToolsByWorkspace('ws-3c-latam'),
-  selectedToolId: getToolsByWorkspace('ws-3c-latam')[0]?.id ?? null,
+  workspaceId: 'ws-cn-marketing',
+  tools: getToolsByWorkspace('ws-cn-marketing'),
+  selectedToolId: getToolsByWorkspace('ws-cn-marketing')[0]?.id ?? null,
   typeFilter: 'all',
   statusFilter: 'all',
   testRunning: false,
@@ -69,7 +69,7 @@ export const useToolStore = create<ToolState>((set, get) => ({
     await new Promise((r) => setTimeout(r, 1100));
     set({
       testRunning: false,
-      toast: `「${tool.displayName}」连接成功 · ${tool.endpoint} · ${tool.rateLimit}`,
+      toast: `�?{tool.displayName}」连接成�?· ${tool.endpoint} · ${tool.rateLimit}`,
     });
   },
 

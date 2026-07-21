@@ -1,4 +1,5 @@
 import { WORKSPACE_CATALOG, WORKSPACE_LIST, type Workspace } from '@/domain/workspace';
+import { PROTOTYPE_WORKSPACE_ID } from '@/domain/prototype/constants';
 import type { WorkspaceLocale } from '@/domain/workspaceLocale';
 
 /** 租户配置页路由 id（兼容原 workspace-config） */
@@ -25,10 +26,12 @@ export const WORKSPACE_LOCALE_LABELS: Record<WorkspaceLocale, string> = {
 };
 
 const DEFAULT_LOCALE_BY_ID: Record<string, WorkspaceLocale> = {
-  'ws-cn-marketing': 'zh-CN',
+  [PROTOTYPE_WORKSPACE_ID]: 'zh-CN',
+  'ws-apac': 'en',
   'ws-3c-latam': 'es',
-  'ws-global-marketing': 'en',
-  'ws-rd-knowledge': 'zh-CN',
+  'ws-mea': 'en',
+  'ws-eurasia': 'en',
+  'ws-europe': 'en',
 };
 
 /** 从内置 catalog 生成默认租户配置 */
@@ -92,16 +95,19 @@ export function slugifyTenantId(name: string): string {
   return ascii.startsWith('ws-') ? ascii : `ws-${ascii}`;
 }
 
-const LS_WORKSPACE_CONFIG = 'mssclaw_workspace_config';
+/** v5：六大战区数据空间 + 四角色成员种子，强制刷新旧配置 */
+export const LS_WORKSPACE_CONFIG = 'mssclaw_workspace_config_v5';
 
 /** 启动时读取默认租户（避免 store 循环依赖） */
 export function getInitialWorkspaceId(): string {
   try {
     const raw = localStorage.getItem(LS_WORKSPACE_CONFIG);
-    if (!raw) return 'ws-3c-latam';
+    if (!raw) return PROTOTYPE_WORKSPACE_ID;
     const parsed = JSON.parse(raw) as { defaultWorkspaceId?: string };
-    return typeof parsed.defaultWorkspaceId === 'string' ? parsed.defaultWorkspaceId : 'ws-3c-latam';
+    return typeof parsed.defaultWorkspaceId === 'string'
+      ? parsed.defaultWorkspaceId
+      : PROTOTYPE_WORKSPACE_ID;
   } catch {
-    return 'ws-3c-latam';
+    return PROTOTYPE_WORKSPACE_ID;
   }
 }

@@ -1,12 +1,15 @@
 import { WORKSPACE_LIST } from '@/domain/workspace';
+import { PROTOTYPE_WORKSPACE_ID } from '@/domain/prototype/constants';
 
 export type WorkspaceLocale = 'zh-CN' | 'en' | 'es';
 
 const LOCALE_BY_WORKSPACE: Record<string, WorkspaceLocale> = {
-  'ws-cn-marketing': 'zh-CN',
+  [PROTOTYPE_WORKSPACE_ID]: 'zh-CN',
+  'ws-apac': 'en',
   'ws-3c-latam': 'es',
-  'ws-oversea-channel': 'en',
-  'ws-service-ops': 'zh-CN',
+  'ws-mea': 'en',
+  'ws-eurasia': 'en',
+  'ws-europe': 'en',
 };
 
 const LOCALE_LABELS: Record<WorkspaceLocale, string> = {

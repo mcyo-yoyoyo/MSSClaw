@@ -45,7 +45,7 @@ export const HOME_REGION_AGENTS: Record<RegionId, string[]> = {
   eurasia: ['agent-price-monitor', 'agent-retail-insight', 'agent-knowledge'],
 };
 
-/** 各职能线下关联的 Skill（AI 助手「领域」推荐） */
+/** 各职能线下关联的 Skill（AI任务「领域」推荐） */
 export const HOME_BIZ_SKILLS: Record<DeptId, string[]> = {
   gtm: ['skill-price-monitor', 'skill-so-report', 'skill-data-analysis', 'skill-ppt-gen'],
   mkt: ['skill-launch-sentiment', 'skill-survey-insight', 'skill-doc-compliance', 'skill-ppt-gen'],
@@ -68,7 +68,7 @@ export const HOME_BIZ_SKILLS: Record<DeptId, string[]> = {
   quality: ['skill-doc-compliance', 'skill-rag', 'skill-data-analysis', 'skill-doc-gen'],
 };
 
-/** 各一线区域关联的 Skill（AI 助手「区域」推荐） */
+/** 各一线区域关联的 Skill（AI任务「区域」推荐） */
 export const HOME_REGION_SKILLS: Record<RegionId, string[]> = {
   china: ['skill-retail-insight', 'skill-data-analysis', 'skill-rag', 'skill-ppt-gen'],
   apac: [

@@ -1,15 +1,18 @@
 import { create } from 'zustand';
 import type { AppView, NavSection } from '@/domain/appView';
 import { NAV_SECTIONS } from '@/domain/appView';
-import { getNavMetaLabel, PRESENTATION_CONFIG_VIEW } from '@/domain/navPresentation';
+import { getNavMetaLabel } from '@/domain/navPresentation';
+import { opsBlockedToast, roleNavDisabledToast } from '@/domain/permissions';
+import { isOpsOnlyView } from '@/domain/shellPerspective';
 import { useConversationStore } from '@/stores/conversationStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
+import { useShellPerspectiveStore } from '@/stores/shellPerspectiveStore';
+
 const LS_SIDEBAR = 'mssclaw_sidebar_collapsed';
 const LS_NAV_SECTIONS = 'mssclaw_nav_sections_v4';
 
 function loadNavSections(): Record<NavSection, boolean> {
-  // MVP 默认：系统设置收起（隐藏门户运营 / 快捷设置 / 组织权限等子项）
   const defaults = Object.fromEntries(NAV_SECTIONS.map((s) => [s, s === 'system'])) as Record<
     NavSection,
     boolean
@@ -27,10 +30,13 @@ function loadNavSections(): Record<NavSection, boolean> {
 
 interface AppViewState {
   appView: AppView;
+  /** Target view when business shell hits an ops-only page (shows AccessDeniedPanel). */
+  blockedOpsView: string | null;
   sidebarCollapsed: boolean;
   navSectionsCollapsed: Record<NavSection, boolean>;
   settingsOpen: boolean;
   setAppView: (view: AppView) => void;
+  clearBlockedOpsView: () => void;
   toggleSidebar: () => void;
   toggleNavSection: (section: NavSection) => void;
   setNavSectionCollapsed: (section: NavSection, collapsed: boolean) => void;
@@ -40,48 +46,58 @@ interface AppViewState {
 
 export const useAppViewStore = create<AppViewState>((set, get) => ({
   appView: 'home',
+  blockedOpsView: null,
   sidebarCollapsed: localStorage.getItem(LS_SIDEBAR) === '1',
   navSectionsCollapsed: loadNavSections(),
   settingsOpen: false,
 
   setAppView: (view) => {
-    // 展示配置始终可进，便于从系统设置恢复菜单方案
-    if (view === PRESENTATION_CONFIG_VIEW) {
-      set({ appView: view });
-      return;
-    }
-    // 我的消息走顶栏铃铛，不依赖侧栏菜单开关
     if (view === 'messages') {
-      set({ appView: view });
+      set({ appView: view, blockedOpsView: null });
       return;
     }
-    // 案例库已并入场景地图样板间
     if (view === 'cases') {
-      set({ appView: 'ai-map' });
+      set({ appView: 'ai-map', blockedOpsView: null });
       return;
     }
-    // Agent Studio 已并入专家页
     if (view === 'agent-studio') {
-      set({ appView: 'agents' });
+      get().setAppView('agents');
       return;
     }
+
+    const perspective = useShellPerspectiveStore.getState().perspective;
+    if (perspective === 'business' && isOpsOnlyView(view)) {
+      set({ appView: 'home', blockedOpsView: view });
+      useConversationStore.setState({
+        pushToast: opsBlockedToast(getNavMetaLabel(view)),
+      });
+      return;
+    }
+
     const nav = useNavPresentationStore.getState();
     if (!nav.isViewEnabled(view)) {
-      // 目标页未启用：清掉对应深链，避免下次误开详情
       const intent = useNavigationIntentStore.getState();
       if (view === 'tools') intent.clearTool();
       else if (view === 'kb') intent.clearKb();
       const fallback = nav.getFallbackView();
       if (fallback !== view) {
         useConversationStore.setState({
-          pushToast: `「${getNavMetaLabel(view)}」未启用，已跳转到${getNavMetaLabel(fallback)}`,
+          pushToast: roleNavDisabledToast(
+            getNavMetaLabel(view),
+            getNavMetaLabel(fallback),
+          ),
         });
       }
-      set({ appView: fallback });
+      useShellPerspectiveStore.getState().ensureOpsForView(fallback);
+      set({ appView: fallback, blockedOpsView: null });
       return;
     }
-    set({ appView: view });
+
+    useShellPerspectiveStore.getState().ensureOpsForView(view);
+    set({ appView: view, blockedOpsView: null });
   },
+
+  clearBlockedOpsView: () => set({ blockedOpsView: null, appView: 'home' }),
 
   toggleSidebar: () => {
     const next = !get().sidebarCollapsed;

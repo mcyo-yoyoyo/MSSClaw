@@ -97,9 +97,23 @@ export function canUseWarRoomAi(chat: ChatConfig, userId?: string): boolean {
   return Boolean(member?.canUseAi !== false);
 }
 
-/** 用户通过「新建任务」创建的会话（可删除） */
-export function isUserCreatedTask(chat: Pick<ChatConfig, 'id'>): boolean {
-  return chat.id.startsWith('task_') || chat.id.startsWith('warroom_');
+/** 历史/验收遗留的默认会话 id（加载时剔除，且允许删除） */
+export const LEGACY_DEFAULT_CHAT_IDS = new Set([
+  'marketing',
+  'knowledge',
+  'smoke_task',
+  'test_task',
+]);
+
+/** 可删除的任务/群聊：用户新建，或历史默认 Agent 会话 */
+export function isUserCreatedTask(
+  chat: Pick<ChatConfig, 'id'> & Partial<Pick<ChatConfig, 'type' | 'sessionGroup'>>,
+): boolean {
+  if (chat.id.startsWith('task_') || chat.id.startsWith('warroom_')) return true;
+  if (LEGACY_DEFAULT_CHAT_IDS.has(chat.id)) return true;
+  // 允许删除侧栏「任务」下的 Agent 会话（含营销/知识等旧默认）
+  if (chat.sessionGroup === 'agents' || (!chat.sessionGroup && chat.type === 'bot')) return true;
+  return false;
 }
 
 export const ModuleIdSchema = z.enum([
@@ -123,55 +137,5 @@ export const ExecutionStepSchema = z.object({
 });
 export type ExecutionStep = z.infer<typeof ExecutionStepSchema>;
 
-export const INITIAL_CHATS: Record<string, ChatConfig> = {
-  marketing: {
-    id: 'marketing',
-    title: '营销 Agent',
-    type: 'bot',
-    icon: 'fa-chart-pie',
-    color: 'claw',
-    iconBg: 'bg-gradient-to-br from-[#18181b] to-[#18181b]',
-    badge: '营销',
-    sessionGroup: 'agents',
-    actionType: 'marketing',
-    status: '已接入 PSI、GFK & ISRP等多系统数据',
-    createdAt: 1,
-    history: [
-      {
-        role: 'agent',
-        name: '营销 Agent',
-        text: '您好！我是华为营销服数据分析 Agent。基于 ISRP/零售/电商多源数据，我可以为您执行深度的异动归因与预测推演。',
-      },
-    ],
-    prompts: [
-      '近一周欧洲穿戴产品销售趋势分析，/数据分析',
-      '各代表处25年累计SO总量排名，剔除IoT，/so报表',
-      '3月各代表处DOS分析，/零售洞察',
-    ],
-  },
-  knowledge: {
-    id: 'knowledge',
-    title: '知识 Agent',
-    type: 'bot',
-    icon: 'fa-book-open',
-    color: 'claw',
-    iconBg: 'bg-gradient-to-br from-teal-500 to-cyan-600',
-    badge: '知识',
-    sessionGroup: 'agents',
-    actionType: 'knowledge',
-    status: '已挂载企业知识库 · RAG 溯源',
-    createdAt: 2,
-    history: [
-      {
-        role: 'agent',
-        name: '知识 Agent',
-        text: '您好！我是企业 RAG 知识助手。已加载产品白皮书、合规标准及各部门 SOP。支持带引用的文献溯源问答。',
-      },
-    ],
-    prompts: [
-      '检索可穿戴医疗用语合规检查清单，/检索',
-      '查询拉美/EU 市场准入 Checklist，/检索',
-      '客诉 SOP 电池过热标准话术，/客诉',
-    ],
-  },
-};
+/** 工作区默认不预置任何 Agent 任务；由用户新建或调用专家时创建 */
+export const INITIAL_CHATS: Record<string, ChatConfig> = {};

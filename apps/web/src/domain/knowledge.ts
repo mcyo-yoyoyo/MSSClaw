@@ -60,13 +60,15 @@ const PROTOTYPE_KB_LIST = getPrototypeKnowledgeBasesAsDomain();
 
 export const KNOWLEDGE_CATALOG: Record<string, KnowledgeBase[]> = {
   [PROTOTYPE_WORKSPACE_ID]: PROTOTYPE_KB_LIST,
+  'ws-apac': PROTOTYPE_KB_LIST,
   'ws-3c-latam': PROTOTYPE_KB_LIST,
-  'ws-global-marketing': PROTOTYPE_KB_LIST,
-  'ws-rd-knowledge': PROTOTYPE_KB_LIST,
+  'ws-mea': PROTOTYPE_KB_LIST,
+  'ws-eurasia': PROTOTYPE_KB_LIST,
+  'ws-europe': PROTOTYPE_KB_LIST,
 };
 
 export function getKnowledgeBasesByWorkspace(workspaceId: string): KnowledgeBase[] {
-  return KNOWLEDGE_CATALOG[workspaceId] ?? [];
+  return KNOWLEDGE_CATALOG[workspaceId] ?? PROTOTYPE_KB_LIST;
 }
 
 export function findKnowledgeBaseById(workspaceId: string, id: string): KnowledgeBase | undefined {
