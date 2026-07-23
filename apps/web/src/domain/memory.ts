@@ -108,7 +108,7 @@ const MARKETING_AGENT_MEMORY: MemoryStore = {
       id: 'e1',
       layer: 'session',
       content: '用户关注拉美 Wearable 品类 Q3 同比 -12%，需归因到竞品促销与渠道结构',
-      source: 'WarRoom 群聊',
+      source: '协作空间',
       importance: 0.92,
       decayScore: 0.15,
       tokenCount: 42,
@@ -174,7 +174,7 @@ const MARKETING_AGENT_MEMORY: MemoryStore = {
 const WARROOM_SESSION_MEMORY: MemoryStore = {
   id: 'mem-warroom-session',
   name: 'warroom_session_ctx',
-  description: 'WarRoom 群聊 Session 记忆 · 多 Agent 协作上下文',
+  description: '协作空间 Session 记忆 · 多 Agent 协作上下文',
   scope: 'session',
   status: 'active',
   boundChatId: 'chat-warroom',

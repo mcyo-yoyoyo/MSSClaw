@@ -26,7 +26,7 @@ interface TaskChatPanelProps {
   onDeleteChat?: () => void;
   onClearSandbox: () => void;
   onManageMembers?: () => void;
-  /** WarRoom 内是否允许当前用户使用 AI */
+  /** 协作空间内是否允许当前用户使用 AI */
   aiAllowed?: boolean;
   /** 右侧交付件预览已收起时，聊天区占满剩余宽度 */
   previewCollapsed?: boolean;
@@ -174,19 +174,6 @@ export function TaskChatPanel({
           </button>
           {menuOpen && (
             <div className="absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-xl border border-black/8 bg-white py-1 shadow-apple-lg">
-              {warroom && onManageMembers && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onManageMembers();
-                    setMenuOpen(false);
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[12px] text-[#1d1d1f] hover:bg-black/[0.04]"
-                >
-                  <i className="fa-solid fa-user-plus w-4 text-[#86868b]" />
-                  管理成员
-                </button>
-              )}
               <button
                 type="button"
                 onClick={() => {
@@ -343,7 +330,7 @@ export function TaskChatPanel({
       <div className="relative shrink-0 border-t border-zinc-200/80 bg-white p-3">
         {!aiAllowed ? (
           <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-5 text-center">
-            <p className="text-[12px] font-medium text-zinc-700">无法在本 WarRoom 使用 AI</p>
+            <p className="text-[12px] font-medium text-zinc-700">无法在本协作空间使用 AI</p>
             <p className="mt-1 text-[11px] text-zinc-500">请联系管理员将你加入成员，或开启 AI 权限</p>
             {onManageMembers && (
               <button

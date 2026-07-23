@@ -11,8 +11,11 @@ import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { getAgentById } from '@/domain/plan';
 import { buildAppRoute } from '@/domain/appRoute';
 import { canUseWarRoomAi, isWarRoom } from '@/domain/chat';
-import { openAiAssistantForNewTask } from '@/domain/openNewTask';
+import { openUseSkills } from '@/domain/openHomeJourney';
+import { listVisibleBusinessScenarioCategories } from '@/domain/businessScenarios';
 import { getMembersByWorkspace } from '@/domain/rbac';
+import { canExecuteChat } from '@/domain/permissions';
+import { useSessionStore } from '@/stores/sessionStore';
 
 interface TaskCenterPageProps {
   onWorkspaceSwitch?: (workspaceId: string) => void;
@@ -20,12 +23,16 @@ interface TaskCenterPageProps {
 
 export function TaskCenterPage(_props: TaskCenterPageProps) {
   const workspaceId = useWorkspaceStore((s) => s.workspaceId);
+  const platformRole = useSessionStore((s) => s.user?.platformRole);
+  const executeAllowed = canExecuteChat(platformRole);
   const [pushOpen, setPushOpen] = useState(false);
   const {
     artifactPanelCollapsed,
     focusBannerVisible,
     toggleArtifactPanel,
     dismissFocusBanner,
+    taskLanding,
+    openCreateDialog,
   } = useTaskStore();
 
   const chats = useConversationStore((s) => s.chats);
@@ -67,6 +74,9 @@ export function TaskCenterPage(_props: TaskCenterPageProps) {
   const kbDocs = useMarketplaceStore((s) => s.kbDocs);
 
   const chat = chats[currentChatId];
+  const collabMode = taskLanding === 'collab';
+  const showCollabEmpty = collabMode && (!chat || !isWarRoom(chat));
+  const showTaskPanel = Boolean(chat) && !showCollabEmpty;
   const previewDoc = kbPreviewDocId ? kbDocs.find((d) => d.id === kbPreviewDocId) ?? null : null;
   const aiAllowed = chat ? canUseWarRoomAi(chat) : false;
   /** 无交付物时强制收起预览，聊天全宽 */
@@ -121,7 +131,7 @@ export function TaskCenterPage(_props: TaskCenterPageProps) {
         <div className="absolute left-1/2 top-3 z-30 flex max-w-[min(92vw,520px)] -translate-x-1/2 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 shadow-md">
           <i className="fa-solid fa-comments text-[12px] text-zinc-500" />
           <p className="min-w-0 flex-1 text-[11px] leading-snug text-zinc-600">
-            已进入对话专注：可在左侧「任务 / 群聊」切换历史；交付件就绪后可打开右侧预览。
+            已进入对话专注：可在左侧「任务记录 / 协作空间」切换历史；交付件就绪后可打开右侧预览。
           </p>
           <button
             type="button"
@@ -130,18 +140,10 @@ export function TaskCenterPage(_props: TaskCenterPageProps) {
           >
             知道了
           </button>
-          <button
-            type="button"
-            onClick={dismissFocusBanner}
-            className="shrink-0 rounded-lg p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
-            aria-label="关闭提示"
-          >
-            <i className="fa-solid fa-xmark text-[11px]" />
-          </button>
         </div>
       ) : null}
 
-      {chat ? (
+      {showTaskPanel && chat ? (
         <>
           <TaskChatPanel
             chat={chat}
@@ -199,16 +201,58 @@ export function TaskCenterPage(_props: TaskCenterPageProps) {
             onRunExample={runTaskExample}
           />
         </>
+      ) : showCollabEmpty ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-sm text-[#86868b]">
+          <div className="text-center">
+            <p className="text-[14px] font-medium text-zinc-700">协作空间</p>
+            <p className="mx-auto mt-1 max-w-sm text-[12px] leading-relaxed text-zinc-400">
+              多人协作会话：邀请成员、在对话中调用技能/专家，交付物也可推送到此。
+            </p>
+          </div>
+          {executeAllowed ? (
+            <button
+              type="button"
+              onClick={() => openCreateDialog()}
+              className="rounded-lg bg-zinc-900 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-zinc-800"
+            >
+              新建协作空间
+            </button>
+          ) : (
+            <p className="text-[11px] text-zinc-400">当前为只读访客，可从左侧查看已有协作空间</p>
+          )}
+        </div>
       ) : (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-[#86868b]">
-          <p>在「AI任务」描述需求即可新建，或从左侧打开已有任务 / 群聊</p>
-          <button
-            type="button"
-            onClick={() => openAiAssistantForNewTask()}
-            className="rounded-lg bg-zinc-900 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-zinc-800"
-          >
-            去「AI任务」新建
-          </button>
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-sm text-[#86868b]">
+          <div className="text-center">
+            <p className="text-[14px] font-medium text-zinc-700">还没有任务</p>
+            <p className="mt-1 text-[12px] text-zinc-400">
+              按业务场景选一类，从「做任务」进入干 · 做任务开工；或打开已有记录
+            </p>
+          </div>
+          {executeAllowed ? (
+            <div className="flex max-w-md flex-wrap justify-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => openUseSkills({ businessId: 'all', focusComposer: false })}
+                className="rounded-full border border-zinc-900 bg-zinc-900 px-3 py-1.5 text-[11px] font-medium text-white transition hover:bg-zinc-800"
+              >
+                全部场景
+              </button>
+              {listVisibleBusinessScenarioCategories().map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  title={c.blurb}
+                  onClick={() => openUseSkills({ businessId: c.id, focusComposer: false })}
+                  className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-[11px] font-medium text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50"
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[11px] text-zinc-400">当前为只读访客，可从左侧查看已有任务结果</p>
+          )}
         </div>
       )}
 

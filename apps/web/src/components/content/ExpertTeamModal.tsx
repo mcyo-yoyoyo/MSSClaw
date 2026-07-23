@@ -1,4 +1,3 @@
-import { cn } from '@/lib/utils';
 import {
   resolvePipelineStepTargets,
   type ScenarioDemoPlan,
@@ -51,7 +50,7 @@ export function ExpertTeamModal({
       <div className="space-y-3 text-left">
         <p className="text-[12px] leading-relaxed text-zinc-600">
           本场景需要 <span className="font-semibold text-zinc-900">{plan.steps.length}</span>{' '}
-          位专家协作。启动后将在同一任务对话中顺序接力（计划自动确认）；也可单独调用某一步。
+          位专家协作。启动后将在同一任务对话中顺序接力（计划自动确认）。
         </p>
         <ol className="space-y-2">
           {plan.steps.map((step, idx) => {
@@ -75,17 +74,14 @@ export function ExpertTeamModal({
                   <p className="mt-1 font-mono text-[10px] text-claw-700">
                     {step.command || skill?.command || '—'}
                   </p>
+                  <button
+                    type="button"
+                    onClick={() => onInvokeStep(step)}
+                    className="mt-1.5 text-[10px] font-medium text-zinc-400 underline-offset-2 transition hover:text-zinc-600 hover:underline"
+                  >
+                    只跑此步
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onInvokeStep(step)}
-                  className={cn(
-                    'shrink-0 rounded-lg border border-black/8 bg-white px-2.5 py-1.5 text-[11px] font-medium text-zinc-700',
-                    'transition hover:bg-zinc-50',
-                  )}
-                >
-                  单独调用
-                </button>
               </li>
             );
           })}

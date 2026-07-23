@@ -10,6 +10,8 @@ import {
 import { OwnershipFormFields } from '@/components/center/OrgAssetFilters';
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import type { AssetSourceType, AssetVisibility, DeptId, RegionId } from '@/domain/orgTaxonomy';
+import { FIND_CASES_FEATURED_HINT } from '@/domain/capabilityShelf';
+import { resolveToolFeaturedInFindCases } from '@/domain/plazaToolPicks';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
@@ -59,7 +61,11 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
       return;
     }
     const existing = tools.find((t) => t.id === target);
-    setForm(existing ? { ...existing } : emptyTool(false));
+    setForm(
+      existing
+        ? { ...existing, featuredInFindCases: resolveToolFeaturedInFindCases(existing) }
+        : emptyTool(false),
+    );
   }, [target, tools]);
 
   if (!target) return null;
@@ -200,7 +206,22 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
             checked={form.published}
             onChange={(e) => setForm({ ...form, published: e.target.checked })}
           />
-          <span className="text-[13px]">提交上架审批</span>
+          <span className="text-[13px]">提交上架审批（能力上架）</span>
+        </label>
+
+        <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-3 py-2.5">
+          <input
+            type="checkbox"
+            className="mt-0.5 accent-claw-600"
+            checked={Boolean(form.featuredInFindCases)}
+            onChange={(e) => setForm({ ...form, featuredInFindCases: e.target.checked })}
+          />
+          <span>
+            <span className="block text-[13px] font-medium text-zinc-800">精选露出到「找案例 · 场景工具」</span>
+            <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500">
+              {FIND_CASES_FEATURED_HINT}
+            </span>
+          </span>
         </label>
       </div>
     </CenterModal>

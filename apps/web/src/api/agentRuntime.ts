@@ -11,7 +11,7 @@ import { getAgentPack } from '@/domain/agents/catalog';
 import { getAgentMockReport } from '@/domain/agents/runtime';
 
 const MARKETING_STEPS: ExecutionStep[] = [
-  { skill: 'Intent_Parser', time: '120ms', label: '多模态意图识别', detail: '解析群聊上下文，提取实体与 Action。' },
+  { skill: 'Intent_Parser', time: '120ms', label: '多模态意图识别', detail: '解析协作空间上下文，提取实体与 Action。' },
   { skill: 'SQL_Generator', time: '850ms', label: '自动路由与取数', detail: '通过 OData 并发拉取 SAP 与 Salesforce 明细。' },
   { skill: 'Data_Sanitizer', time: '45ms', label: '隐私合规脱敏', detail: '触发 GDPR 数据护栏，屏蔽 PII。' },
   { skill: 'Python_Sandbox', time: '2.1s', label: '执行归因算法容器', detail: 'SHAPAnalyzer 输出特征权重。' },

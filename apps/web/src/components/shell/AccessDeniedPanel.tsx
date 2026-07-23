@@ -21,7 +21,7 @@ export function AccessDeniedPanel({ targetView, onBack }: AccessDeniedPanelProps
           「{label}」不可用
         </h2>
         <p className="text-[13px] leading-relaxed text-zinc-500">
-          {OPS_ONLY_HINT}。你当前使用的是业务工作台；如需配置专家、技能或治理项，请使用具备运营权限的账号。
+          {OPS_ONLY_HINT}。你当前使用的是业务工作台；如需「配置专家 / 配置技能 / 配置工具」或治理项，请使用具备运营权限的账号。业务侧从「做任务 / 找案例」使用已上架且精选露出的能力。
         </p>
       </div>
       <button
@@ -29,7 +29,7 @@ export function AccessDeniedPanel({ targetView, onBack }: AccessDeniedPanelProps
         onClick={onBack}
         className="rounded-lg bg-zinc-900 px-4 py-2 text-[13px] font-medium text-white transition hover:bg-zinc-800"
       >
-        返回广场
+        返回首页
       </button>
     </div>
   );

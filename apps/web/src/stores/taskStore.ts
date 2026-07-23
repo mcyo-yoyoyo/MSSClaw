@@ -13,6 +13,9 @@ function loadSessionGroups(): Record<string, boolean> {
   }
 }
 
+/** 任务区空态/高亮：任务记录 vs 协作空间 */
+export type TaskLanding = 'tasks' | 'collab';
+
 interface TaskState {
   artifactPanelCollapsed: boolean;
   /** 从 AI任务 进入时的专注提示条 */
@@ -21,11 +24,14 @@ interface TaskState {
   sessionSearch: string;
   createDialogOpen: boolean;
   resourceExplorerOpen: boolean;
+  /** 侧栏点「任务记录」或「协作空间」后的落地上下文 */
+  taskLanding: TaskLanding;
+  setTaskLanding: (landing: TaskLanding) => void;
   toggleArtifactPanel: () => void;
   dismissFocusBanner: () => void;
   toggleSessionGroup: (group: string) => void;
   setSessionSearch: (q: string) => void;
-  /** 仅打开「新建群聊」弹窗；Agent 任务请用 openAiAssistantForNewTask */
+  /** 仅打开「新建协作空间」弹窗；Agent 任务请用 openAiAssistantForNewTask */
   openCreateDialog: () => void;
   closeCreateDialog: () => void;
   toggleResourceExplorer: () => void;
@@ -39,6 +45,9 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   sessionSearch: '',
   createDialogOpen: false,
   resourceExplorerOpen: false,
+  taskLanding: 'tasks',
+
+  setTaskLanding: (taskLanding) => set({ taskLanding }),
 
   toggleArtifactPanel: () => {
     const next = !get().artifactPanelCollapsed;

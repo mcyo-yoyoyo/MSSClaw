@@ -11,6 +11,12 @@ import {
 import { OwnershipFormFields } from '@/components/center/OrgAssetFilters';
 import type { EfficiencyCategory, PrototypeSkillSeed } from '@/domain/prototype/types';
 import type { AssetSourceType, AssetVisibility, DeptId, RegionId } from '@/domain/orgTaxonomy';
+import {
+  BUSINESS_SCENARIO_CATEGORIES,
+  type BusinessScenarioId,
+} from '@/domain/businessScenarios';
+import { DO_TASK_FEATURED_HINT } from '@/domain/capabilityShelf';
+import { resolveSkillBusinessScenario, resolveSkillFeaturedInDoTask } from '@/domain/skillBusinessScenarios';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
@@ -52,6 +58,8 @@ function normalizeSkillForm(skill: PrototypeSkillSeed): PrototypeSkillSeed {
     instructions: skill.instructions ?? '',
     planSteps: Array.isArray(skill.planSteps) ? skill.planSteps : [],
     ownerDeptIds: Array.isArray(skill.ownerDeptIds) ? skill.ownerDeptIds : [],
+    featuredInDoTask: resolveSkillFeaturedInDoTask(skill),
+    businessScenarioId: resolveSkillBusinessScenario(skill) ?? undefined,
   };
 }
 
@@ -86,6 +94,10 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     }
     if (form.sourceType === 'external' && !form.homepageUrl?.trim()) {
       showToast('外部 Skill/工具请填写链接');
+      return;
+    }
+    if (form.featuredInDoTask && !form.businessScenarioId) {
+      showToast('精选露出到做任务时请选择业务场景篮子');
       return;
     }
     const prev = !isNew ? skills.find((s) => s.id === target) : null;
@@ -282,8 +294,45 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
             checked={form.published}
             onChange={(e) => setForm({ ...form, published: e.target.checked })}
           />
-          <span className="text-[13px]">提交上架审批</span>
+          <span className="text-[13px]">提交上架审批（能力上架）</span>
         </label>
+
+        <div className="rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-3 py-2.5 space-y-2">
+          <label className="flex cursor-pointer items-start gap-2">
+            <input
+              type="checkbox"
+              className="mt-0.5 accent-claw-600"
+              checked={Boolean(form.featuredInDoTask)}
+              onChange={(e) => setForm({ ...form, featuredInDoTask: e.target.checked })}
+            />
+            <span>
+              <span className="block text-[13px] font-medium text-zinc-800">精选露出到「做任务」</span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500">
+                {DO_TASK_FEATURED_HINT}
+              </span>
+            </span>
+          </label>
+          {form.featuredInDoTask ? (
+            <FormField label="业务场景篮子">
+              <FormSelect
+                value={form.businessScenarioId ?? ''}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    businessScenarioId: (e.target.value || undefined) as BusinessScenarioId | undefined,
+                  })
+                }
+              >
+                <option value="">— 请选择场景 —</option>
+                {BUSINESS_SCENARIO_CATEGORIES.filter((c) => c.tabVisible).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </FormSelect>
+            </FormField>
+          ) : null}
+        </div>
       </div>
     </CenterModal>
   );

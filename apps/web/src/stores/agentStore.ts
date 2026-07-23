@@ -91,7 +91,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const updated = nextAgents.find((a) => a.id === agentId);
       set({
         agents: nextAgents,
-        toast: updated ? `�?{target.name}」已推进�?${updated.status}` : `�?{target.name}」已更新`,
+        toast: updated ? `�?{target.name}」已推进�?${updated.status}` : `�?{target.name}」已更新`,
       });
     })();
   },
@@ -106,7 +106,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     await new Promise((resolve) => setTimeout(resolve, 1200));
     set({
       testRunning: false,
-      toast: `�?{agent.name}」测试通过 · 绑定 ${agent.bindings.skillIds.length} Skills · Latency 1.2s`,
+      toast: `�?{agent.name}」测试通过 · 绑定 ${agent.bindings.skillIds.length} Skills · Latency 1.2s`,
     });
   },
 

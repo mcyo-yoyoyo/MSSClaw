@@ -43,6 +43,7 @@ import { useAppViewStore } from '@/stores/appViewStore';
 import { useHomeStore } from '@/stores/homeStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { returnFromResource } from '@/domain/openResourceNav';
+import { canExecuteChat } from '@/domain/permissions';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { ExpertTeamModal } from '@/components/content/ExpertTeamModal';
 
@@ -311,6 +312,19 @@ export function AiMapPage({
     openPortalCard(card, { onInvokeAgent, onInvokeSkill, onAskKbDocument, showToast });
   };
 
+  /** 能力组合：专家/技能仅展示挂载，不开任务；工具/知识仍可打开 */
+  const handleCapabilityCard = (card: PortalMapCard) => {
+    if (card.action.type === 'agent' || card.action.type === 'skill') {
+      showToast(
+        card.action.type === 'agent'
+          ? `本场景挂载专家「${card.title}」· 请用上方「一键打样」开任务`
+          : `本场景挂载技能「${card.title}」· 请用上方「一键打样」开任务`,
+      );
+      return;
+    }
+    handleCard(card);
+  };
+
   const invokePipelineStep = (plan: ScenarioDemoPlan, step: ScenarioPipelineStep, stepIndex: number) => {
     const { agent, skill } = resolvePipelineStepTargets(step);
     const total = plan.steps.length;
@@ -336,7 +350,7 @@ export function AiMapPage({
   const startScenario = (bundle: ScenarioBundle) => {
     const plan = resolveScenarioDemoPlan(bundle);
     if (!plan) {
-      showToast('该场景尚无可用专家或技能');
+      showToast('该场景暂无可打样的技能或能力');
       return;
     }
     if (plan.mode === 'team') {
@@ -345,15 +359,15 @@ export function AiMapPage({
     }
     if (plan.soloSkill) {
       onInvokeSkill(plan.soloSkill);
-      showToast(`已启动主能力（单专家）：${plan.label}`);
+      showToast(`已启动打样：${plan.label}`);
       return;
     }
     if (plan.soloAgent) {
       onInvokeAgent(plan.soloAgent);
-      showToast(`已启动主专家：${plan.soloAgent.name}`);
+      showToast(`已启动打样：${plan.soloAgent.name}`);
       return;
     }
-    showToast('该场景尚无可用专家或技能');
+    showToast('该场景暂无可打样的技能或能力');
   };
 
   const selectedDemoPlan = selected ? resolveScenarioDemoPlan(selected) : null;
@@ -387,10 +401,10 @@ export function AiMapPage({
       <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-4 py-4 md:px-6">
         <CenterPageHeader
           title="场景案例"
-          subtitle="多专家场景走专家团打样 · 单专家场景走主能力 · 也可单独调用某位专家"
+          subtitle="下载案例包 · 一键打样开任务（多步场景走接力，无需进入专家库）"
           tip={
             <>
-              3 分钟演示：选场景 → 打开金案例成效卡 →「立即打样」调用金牌 Skill。首页「AI广场」是橱窗，这里是完整案例库。
+              3 分钟演示：选场景 → 打开成效卡 →「一键打样」开任务。首页「学 · 找案例」是橱窗，这里是完整案例库。
             </>
           }
           actions={
@@ -410,7 +424,7 @@ export function AiMapPage({
                 }}
                 className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03]"
               >
-                回AI广场（橱窗）
+                返回找案例
               </button>
               {canEditCase ? (
                 <button
@@ -526,8 +540,10 @@ export function AiMapPage({
                       能力齐套 {selected.completeness}/4
                       {selected.related ? ' · 与你相关' : ''}
                       {selectedDemoPlan?.mode === 'team'
-                        ? ` · 专家团 ${selectedDemoPlan.steps.length} 步`
-                        : ' · 单专家主能力'}
+                        ? ` · 多步接力 ${selectedDemoPlan.steps.length} 步`
+                        : selectedDemoPlan
+                          ? ' · 可一键打样'
+                          : ''}
                       {selected.matchTags.length
                         ? ` · ${selected.matchTags.map((t) => `#${t}`).join(' ')}`
                         : ''}
@@ -542,15 +558,22 @@ export function AiMapPage({
                       <i className="fa-solid fa-download mr-1 text-[10px]" />
                       一键下载案例包
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => startScenario(selected)}
-                      className="rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-800"
-                    >
-                      {selectedDemoPlan?.mode === 'team'
-                        ? '一键打样（专家团）'
-                        : '一键打样（专家）'}
-                    </button>
+                    {canExecuteChat() && selectedDemoPlan ? (
+                      <button
+                        type="button"
+                        onClick={() => startScenario(selected)}
+                        className="rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-800"
+                        title={
+                          selectedDemoPlan.mode === 'team'
+                            ? '按场景步骤在任务中接力打样（无需进入专家库）'
+                            : '用本场景主能力直接开任务打样'
+                        }
+                      >
+                        {selectedDemoPlan.mode === 'team'
+                          ? '一键打样 · 多步接力'
+                          : '一键打样'}
+                      </button>
+                    ) : null}
                   </div>
                 </div>
 
@@ -661,22 +684,22 @@ export function AiMapPage({
                   {capsOpen ? (
                     <div className="grid grid-cols-1 gap-3 border-t border-zinc-100 p-3 sm:grid-cols-3">
                       <Quadrant
-                        title="专家（单独调用）"
+                        title="专家（本场景挂载）"
                         emptyHint="待建设 · 可挂载业务专家"
                         cards={selected.agents}
-                        onCard={handleCard}
+                        onCard={handleCapabilityCard}
                       />
                       <Quadrant
                         title="技能 / 工具"
                         emptyHint="待建设 · 可挂载工具或 Skill"
                         cards={selected.tools}
-                        onCard={handleCard}
+                        onCard={handleCapabilityCard}
                       />
                       <Quadrant
                         title="相关知识"
                         emptyHint="待建设 · 可关联知识库文档"
                         cards={selected.knowledge}
-                        onCard={handleCard}
+                        onCard={handleCapabilityCard}
                       />
                     </div>
                   ) : null}
@@ -729,25 +752,16 @@ export function AiMapPage({
             card={narrativeOutcome}
             skillLabel={narrativeSkill?.name}
             agentLabel={narrativeAgent?.name}
-            onInvokeSkill={
-              narrativeSkill
+            onDemoCase={
+              narrativeSkill || narrativeAgent
                 ? () => {
-                    onInvokeSkill(narrativeSkill);
-                    setNarrativeCard(null);
-                    showToast(`已调用金牌能力：${narrativeSkill.name}`);
-                  }
-                : narrativeAgent
-                  ? () => {
+                    if (narrativeSkill) {
+                      onInvokeSkill(narrativeSkill);
+                      showToast(`已按案例打样：${narrativeSkill.name}`);
+                    } else if (narrativeAgent) {
                       onInvokeAgent(narrativeAgent);
-                      setNarrativeCard(null);
-                      showToast(`已调用专家：${narrativeAgent.name}`);
+                      showToast(`已按案例打样：${narrativeAgent.name}`);
                     }
-                  : undefined
-            }
-            onInvokeAgent={
-              narrativeAgent && narrativeSkill
-                ? () => {
-                    onInvokeAgent(narrativeAgent);
                     setNarrativeCard(null);
                   }
                 : undefined

@@ -87,7 +87,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     set({
       bases: nextBases,
       pipelineRunning: false,
-      toast: doc ? `�?{doc.name}」索引完�?· 64 chunks` : 'Pipeline 完成',
+      toast: doc ? `�?{doc.name}」索引完�?· 64 chunks` : 'Pipeline 完成',
     });
   },
   dismissToast: () => set({ toast: null }),

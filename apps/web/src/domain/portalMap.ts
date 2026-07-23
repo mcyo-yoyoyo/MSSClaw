@@ -401,7 +401,7 @@ export interface ScenarioDef {
   matchTags: string[];
 }
 
-/** 领导演示 / 场景案例固定场景包（7 个业务场景；平台本身不作案例） */
+/** 领导演示 / 场景案例固定场景包（与业务场景篮对齐；平台本身不作案例） */
 export const FEATURED_SCENARIOS: ScenarioDef[] = [
   {
     id: 'price-offer-monitor',
@@ -418,20 +418,6 @@ export const FEATURED_SCENARIOS: ScenarioDef[] = [
     matchTags: ['评论分析', '评论', '电商'],
   },
   {
-    id: 'retail-training',
-    label: '零售培训内容制作调优',
-    desc: '门店培训内容生成、调优、陪练与考核',
-    icon: 'fa-graduation-cap',
-    matchTags: ['培训', '门店', 'Nova'],
-  },
-  {
-    id: 'hr-interview',
-    label: '招聘人岗速评面试分析',
-    desc: 'JD 解析 · 人岗匹配 · 面试分析协同',
-    icon: 'fa-user-check',
-    matchTags: ['招聘', 'HR', '面试', '简历', 'JD'],
-  },
-  {
     id: 'l10n-translation',
     label: '小语种本地化翻译',
     desc: '小语种内容本地化翻译与质检提效',
@@ -439,18 +425,46 @@ export const FEATURED_SCENARIOS: ScenarioDef[] = [
     matchTags: ['翻译', '本地化', '小语种'],
   },
   {
+    id: 'retail-training',
+    label: '门店话术陪练与培训',
+    desc: '门店培训内容、卖点陪练与考核反馈',
+    icon: 'fa-handshake',
+    matchTags: ['培训', '门店', 'Nova', '陪练'],
+  },
+  {
+    id: 'customer-service',
+    label: '客诉服务与一线话术',
+    desc: '客诉 SOP 检索、话术推荐与满意度运营',
+    icon: 'fa-headset',
+    matchTags: ['客诉', '服务', '工单'],
+  },
+  {
+    id: 'ops-analytics',
+    label: '经营分析与 SO 报表',
+    desc: '多源数据分析、代表处 SO/SI 排名与归因',
+    icon: 'fa-chart-column',
+    matchTags: ['数据分析', 'SO', '代表处', '经营'],
+  },
+  {
     id: 'fulfillment-settlement',
     label: '综履结算核验验收提效',
     desc: '综合履约结算核验、验收与对账提效',
     icon: 'fa-file-invoice-dollar',
-    matchTags: ['综履', '结算', '核验', '验收', '返利', 'SO'],
+    matchTags: ['综履', '结算', '核验', '验收', '合规'],
   },
   {
     id: 'knowledge-deposit',
     label: '组织及个人知识沉淀',
     desc: '组织与个人知识沉淀 · RAG 检索 · 文档归档',
     icon: 'fa-book-open',
-    matchTags: ['知识', 'SOP', '客诉', '归档', '指南'],
+    matchTags: ['知识', '归档', '指南', 'RAG'],
+  },
+  {
+    id: 'hr-interview',
+    label: '招聘人岗速评面试分析',
+    desc: 'JD 解析 · 人岗匹配 · 面试分析协同',
+    icon: 'fa-user-check',
+    matchTags: ['招聘', 'HR', '面试', '简历', 'JD'],
   },
 ];
 

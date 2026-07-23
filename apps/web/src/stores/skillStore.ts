@@ -88,7 +88,7 @@ export const useSkillStore = create<SkillState>((set, get) => ({
       const updated = nextSkills.find((s) => s.id === skillId);
       set({
         skills: nextSkills,
-        toast: updated ? `�?{target.displayName}」已推进�?${updated.lifecycle}` : `�?{target.displayName}」已更新`,
+        toast: updated ? `�?{target.displayName}」已推进�?${updated.lifecycle}` : `�?{target.displayName}」已更新`,
       });
     })();
   },
@@ -106,7 +106,7 @@ export const useSkillStore = create<SkillState>((set, get) => ({
 
     set({
       traceRunning: false,
-      toast: `�?{skill.displayName}」Trace 完成 · 总耗时 ~915ms`,
+      toast: `�?{skill.displayName}」Trace 完成 · 总耗时 ~915ms`,
     });
   },
 

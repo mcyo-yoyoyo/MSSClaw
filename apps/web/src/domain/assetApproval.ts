@@ -41,7 +41,7 @@ export const ASSET_APPROVAL_KIND_LABELS: Record<AssetApprovalKind, string> = {
   skill: '技能',
   tool: '工具',
   kb: '知识文档',
-  automation: '自动化',
+  automation: '自动化设置',
 };
 
 export interface AssetApprovalRequest {

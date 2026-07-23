@@ -52,7 +52,7 @@ export function toCaseOutcomeCard(
       ? item.steps
       : item.steps?.length
         ? item.steps.slice(0, 5)
-        : ['在案例样板间打开本案例', '点击「立即打样 / 调用技能」', '在任务中心确认计划并查看交付物'];
+        : ['在案例样板间打开本案例', '点击「一键打样」或「按此案例打样」', '在任务中心确认计划并查看交付物'];
   const depts =
     (item.ownerDeptIds ?? []).map(getDeptLabel).filter(Boolean).join('、') || '相关职能';
   const region = item.ownerRegionId ? ` · ${getRegionLabel(item.ownerRegionId)}` : '';
@@ -126,21 +126,24 @@ export function resolveScenarioCaseItems(bundle: ScenarioBundle): PortalContentI
   return [...related].sort((a, b) => Number(Boolean(b.isGold)) - Number(Boolean(a.isGold)));
 }
 
-/** 首页橱窗点击：取场景下优先打开的案例（金案例 > type=case > 其余） */
-export function resolvePrimaryCaseIdForScenario(scenarioId: string): string | null {
+function scoreScenarioCaseItem(item: PortalContentItem): number {
+  return (item.isGold ? 4 : 0) + (item.type === 'case' ? 2 : 0) + (item.type === 'training' ? 1 : 0);
+}
+
+/** 首页橱窗下载：场景标签命中的全部门户内容（金案例优先） */
+export function resolveCaseItemsForScenarioId(scenarioId: string): PortalContentItem[] {
   const portal = usePortalContentStore.getState().getPublishedItems();
   const def = FEATURED_SCENARIOS.find((s) => s.id === scenarioId);
-  if (!def) return null;
+  if (!def) return [];
   const matched = portal.filter((item) =>
     (item.scenarioTags ?? []).some((t) => def.matchTags.includes(t)),
   );
-  if (!matched.length) return null;
-  const ranked = [...matched].sort((a, b) => {
-    const score = (i: (typeof matched)[number]) =>
-      (i.isGold ? 4 : 0) + (i.type === 'case' ? 2 : 0) + (i.type === 'training' ? 1 : 0);
-    return score(b) - score(a);
-  });
-  return ranked[0]?.id ?? null;
+  return [...matched].sort((a, b) => scoreScenarioCaseItem(b) - scoreScenarioCaseItem(a));
+}
+
+/** 首页橱窗点击：取场景下优先打开的案例（金案例 > type=case > 其余） */
+export function resolvePrimaryCaseIdForScenario(scenarioId: string): string | null {
+  return resolveCaseItemsForScenarioId(scenarioId)[0]?.id ?? null;
 }
 
 /** 场景「一键打样」：优先金牌案例的主 Skill / Agent */

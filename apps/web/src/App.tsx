@@ -97,6 +97,7 @@ export function App() {
   const goToTaskWithTransit = useCallback((summary: string, chatId?: string) => {
     if (transitTimerRef.current) clearTimeout(transitTimerRef.current);
     const preview = summary.trim().length > 48 ? `${summary.trim().slice(0, 48)}…` : summary.trim();
+    useTaskStore.getState().setTaskLanding('tasks');
     setTransit({ open: true, summary: preview });
     enterTaskChatFocusMode();
     transitTimerRef.current = setTimeout(() => {
@@ -361,16 +362,13 @@ export function App() {
         if (skill) handleInvokeSkill(skill);
       },
       openWarRoom: () => {
-        if (!canExecuteChat()) {
-          useConversationStore.setState({ pushToast: READONLY_EXECUTE_HINT });
-          return;
-        }
+        useTaskStore.getState().setTaskLanding('collab');
         setAppView('task');
-        const warroom = Object.values(useConversationStore.getState().chats).find(
-          (c) => c.sessionGroup === 'pinned',
-        );
-        if (warroom) switchChat(warroom.id);
-        else useTaskStore.getState().openCreateDialog();
+        const rooms = Object.values(useConversationStore.getState().chats)
+          .filter((c) => c.sessionGroup === 'pinned' || c.type === 'group')
+          .sort((a, b) => (b.pinnedAt ?? b.createdAt ?? 0) - (a.pinnedAt ?? a.createdAt ?? 0));
+        if (rooms[0]) switchChat(rooms[0].id);
+        else useConversationStore.setState({ currentChatId: '' });
       },
       newTask: handleNewTask,
       exportArtifact: () => {

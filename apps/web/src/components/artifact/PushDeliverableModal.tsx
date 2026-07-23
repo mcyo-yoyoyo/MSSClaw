@@ -72,13 +72,13 @@ export function PushDeliverableModal({
     >
       <div className="space-y-3 text-left">
         <p className="text-[11px] leading-relaxed text-zinc-500">
-          选择作战室或成员接收交付物通知。作战室将写入群聊记录；成员将收到「我的消息」。
+          选择协作空间或成员接收交付物通知。协作空间将写入会话记录；成员将收到「我的消息」。
         </p>
 
         <div className="inline-flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5">
           {(
             [
-              ['warroom', '作战室'],
+              ['warroom', '协作空间'],
               ['members', '成员'],
             ] as const
           ).map(([id, label]) => (
@@ -100,7 +100,7 @@ export function PushDeliverableModal({
           <ul className="max-h-[40vh] space-y-1.5 overflow-y-auto">
             {rooms.length === 0 ? (
               <li className="rounded-xl border border-dashed border-zinc-200 px-3 py-8 text-center text-[12px] text-zinc-400">
-                暂无作战室，请先在任务中心创建 WarRoom
+                暂无协作空间，请先在侧栏「协作空间」中新建
               </li>
             ) : (
               rooms.map((room) => {

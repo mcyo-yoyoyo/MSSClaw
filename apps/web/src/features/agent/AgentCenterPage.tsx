@@ -82,8 +82,8 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
 
       <div className="mx-auto max-w-6xl">
         <CenterPageHeader
-          title="专家"
-          subtitle="可对话编排 Skill · Persona + 主 Skill + 演示任务"
+          title="配置专家"
+          subtitle="能力上架进目录；勾选精选露出后出现在业务「做任务 · 场景专家」"
           tip={
             <>
               「调用」将自动发送演示任务并挂载主 Skill；可下载/导入 .agent.zip（含 AGENT.md）。配置 LLM

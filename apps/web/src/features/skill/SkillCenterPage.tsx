@@ -92,8 +92,8 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
       />
       <div className="mx-auto max-w-6xl">
         <CenterPageHeader
-          title="技能"
-          subtitle="能力资产 · 按职能/区域上架共享 · 团队调用"
+          title="配置技能"
+          subtitle="能力上架进目录；勾选精选露出并指定场景后出现在业务「做任务 · 场景技能」"
           tip={
             <>
               Skill 可按 NP 与区域归属上架。下载为 Skill 包（含 SKILL.md、reference、templates、assets）；也可导入

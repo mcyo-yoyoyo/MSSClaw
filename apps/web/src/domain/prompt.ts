@@ -115,13 +115,13 @@ export const PROMPT_CATALOG: Record<string, Prompt[]> = {
       id: 'prompt-warroom-summary',
       name: 'WARROOM_DAILY_SUMMARY',
       version: 'v2',
-      description: '联合作战 WarRoom 日报摘要 Prompt。',
-      template: `汇总以下群聊与 Agent 输出，生成 WarRoom 日报：
+      description: '协作空间日报摘要 Prompt。',
+      template: `汇总以下协作空间与 Agent 输出，生成协作日报：
 
 <messages>{{messages}}</messages>
 
 格式：风险 / 进展 / 待决策 / 明日动作`,
-      variables: [{ name: 'messages', type: 'string', required: true, description: '群聊消息聚合' }],
+      variables: [{ name: 'messages', type: 'string', required: true, description: '协作空间消息聚合' }],
       lifecycle: 'testing',
       updatedAt: '2026-07-05',
       author: 'Jacky',

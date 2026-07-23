@@ -125,7 +125,7 @@ interface ConversationState {
   clearSandbox: () => void;
   openKbPreview: (docId: string) => void;
   closeKbPreview: () => void;
-  /** 推送交付物到作战室和/或成员（成员走「我的消息」） */
+  /** 推送交付物到协作空间和/或成员（成员走「我的消息」） */
   pushToGroup: (target?: {
     warroomIds?: string[];
     memberIds?: string[];
@@ -139,6 +139,11 @@ interface ConversationState {
     initialMessage?: string;
     autoSend?: boolean;
     switchTo?: boolean;
+    /** 静默元数据：场景 / 来源（侧栏暂不消费） */
+    taskSource?: import('@/domain/taskMeta').TaskSource;
+    businessScenarioId?: import('@/domain/businessScenarios').BusinessScenarioId | 'all' | null;
+    skillId?: string;
+    discoverScenarioId?: string;
   }) => string;
   /** 专家团同会话接力：建一个任务，从 fromIndex 起自动顺序跑完 */
   startExpertTeamRelay: (opts: {
@@ -611,8 +616,8 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     if (isWarRoom(chat) && !canUseWarRoomAi(chat)) {
       set({
         pushToast: isWarRoom(chat) && !chat.members?.some((m) => m.id === getCurrentUserId())
-          ? '你不是本 WarRoom 成员，无法使用 AI。请联系管理员邀请。'
-          : '管理员已关闭你在本 WarRoom 的 AI 权限',
+          ? '你不是本协作空间成员，无法使用 AI。请联系管理员邀请。'
+          : '管理员已关闭你在本协作空间的 AI 权限',
       });
       return;
     }
@@ -835,7 +840,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     const memberIds = target?.memberIds ?? [];
 
     if (!warroomIds.length && !memberIds.length) {
-      set({ pushToast: '请选择作战室或成员' });
+      set({ pushToast: '请选择协作空间或成员' });
       return;
     }
 
@@ -862,7 +867,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
       const pushMsg: ChatMessage = {
         role: 'system',
-        text: `📦 ${fromName} 从「${chatTitle}」推送了一份交付物到本作战室`,
+        text: `📦 ${fromName} 从「${chatTitle}」推送了一份交付物到本协作空间`,
       };
       set((state) => ({
         chats: {
@@ -881,7 +886,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       if (recipientIds.length) {
         inbox.pushToUsers(recipientIds, {
           kind: 'deliverable',
-          title: `作战室「${targetGroup}」收到交付物`,
+          title: `协作空间「${targetGroup}」收到交付物`,
           body: `${fromName} 推送了「${chatTitle}」的分析交付物${sandboxQuery ? `（${sandboxQuery}）` : ''}。可在任务中心查看。`,
           fromUserId,
           fromName,
@@ -914,7 +919,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     schedulePersistFromState(get);
 
     const parts: string[] = [];
-    if (pushedRooms) parts.push(`${pushedRooms} 个作战室`);
+    if (pushedRooms) parts.push(`${pushedRooms} 个协作空间`);
     if (memberIds.length) parts.push(`${memberIds.length} 位成员（我的消息）`);
     set({
       pushToast: parts.length
@@ -1148,7 +1153,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       icon: 'fa-users',
       color: 'orange',
       iconBg: 'bg-gradient-to-br from-amber-400 to-orange-600',
-      badge: 'WarRoom',
+      badge: '协作',
       sessionGroup: 'pinned',
       actionType: 'marketing',
       status: `管理员 ${userName} · 1 位成员 · AI 仅成员可用`,
@@ -1158,7 +1163,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       history: [
         {
           role: 'system',
-          text: `WarRoom「${title}」已创建。你是管理员，可邀请成员；成员均可在本室对话框中 @ Agent、/ Skill 调用 AI。`,
+          text: `协作空间「${title}」已创建。你是管理员，可邀请成员；成员均可在本空间对话框中 @ Agent、/ Skill 调用 AI。`,
         },
       ],
       prompts: [],
@@ -1169,7 +1174,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       currentChatId: id,
       pendingPipeline: null,
       ...resetSandboxState(),
-      pushToast: '已创建 WarRoom',
+      pushToast: '已创建协作空间',
     }));
 
     schedulePersistFromState(get);
@@ -1179,7 +1184,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   addWarRoomMember: (chatId, member) => {
     const chat = get().chats[chatId];
     if (!chat || !isWarRoom(chat)) {
-      set({ pushToast: '仅 WarRoom 可添加成员' });
+      set({ pushToast: '仅协作空间可添加成员' });
       return false;
     }
     if (!isWarRoomAdmin(chat)) {
@@ -1187,14 +1192,14 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       return false;
     }
     if (chat.members?.some((m) => m.id === member.id)) {
-      set({ pushToast: '该成员已在 WarRoom 中' });
+      set({ pushToast: '该成员已在协作空间中' });
       return false;
     }
 
     const members = [...(chat.members ?? []), { ...member, role: 'member' as const, canUseAi: member.canUseAi !== false }];
     const systemMsg: ChatMessage = {
       role: 'system',
-      text: `${getCurrentUserName()} 邀请 ${member.name} 加入 WarRoom · 可在本室 @ Agent、/ Skill 调用 AI`,
+      text: `${getCurrentUserName()} 邀请 ${member.name} 加入协作空间 · 可在本空间 @ Agent、/ Skill 调用 AI`,
     };
 
     set((state) => ({
@@ -1227,7 +1232,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     const members = (chat.members ?? []).filter((m) => m.id !== memberId);
     const systemMsg: ChatMessage = {
       role: 'system',
-      text: `${removed?.name ?? memberId} 已移出 WarRoom`,
+      text: `${removed?.name ?? memberId} 已移出协作空间`,
     };
 
     set((state) => ({

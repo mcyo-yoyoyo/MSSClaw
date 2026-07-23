@@ -31,7 +31,7 @@ export function WorkflowListPanel({
 }: WorkflowListPanelProps) {
   return (
     <aside className="studio-list-panel">
-      <StudioListPanelHeader title="工作流" subtitle="LangGraph · 专家编排" />
+      <StudioListPanelHeader title="工作流设置" subtitle="LangGraph · 专家编排" />
 
       <div className="border-b border-black/[0.05] px-3 py-3">
         <div className="flex flex-wrap gap-1.5">

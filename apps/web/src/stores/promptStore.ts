@@ -74,7 +74,7 @@ export const usePromptStore = create<PromptState>((set, get) => ({
       const updated = nextPrompts.find((p) => p.id === promptId);
       set({
         prompts: nextPrompts,
-        toast: updated ? `�?{target.name}」已推进�?${updated.lifecycle}` : `�?{target.name}」已更新`,
+        toast: updated ? `�?{target.name}」已推进�?${updated.lifecycle}` : `�?{target.name}」已更新`,
       });
     })();
   },

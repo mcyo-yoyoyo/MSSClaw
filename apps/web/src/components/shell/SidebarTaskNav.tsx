@@ -9,7 +9,6 @@ import {
 } from '@/domain/taskUiStatus';
 import { ROUTE_PREFETCH } from '@/features/lazyPages';
 import { cn } from '@/lib/utils';
-import { openAiAssistantForNewTask } from '@/domain/openNewTask';
 import { canExecuteChat } from '@/domain/permissions';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useConversationStore } from '@/stores/conversationStore';
@@ -68,7 +67,7 @@ function SidebarSessionItem({
   const handleDelete = (e: MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     if (!onDelete) return;
-    const label = isWarRoom(chat) ? '群聊' : '任务';
+    const label = isWarRoom(chat) ? '协作空间' : '任务';
     const ok = window.confirm(`确定删除${label}「${chat.title}」？\n删除后对话记录将无法恢复。`);
     if (ok) onDelete(chat.id);
   };
@@ -170,7 +169,7 @@ function SidebarSessionItem({
 
 interface SidebarTaskNavProps {
   kind: SidebarChatKind;
-  /** 一级菜单文案：做任务 / 群聊 */
+  /** 一级菜单文案：任务记录 / 协作空间 */
   label: string;
   /** 折叠侧栏 / tooltip 用短名 */
   shortLabel?: string;
@@ -192,9 +191,10 @@ export function SidebarTaskNav({
   const switchChat = useConversationStore((s) => s.switchChat);
   const deleteTaskSession = useConversationStore((s) => s.deleteTaskSession);
   const renameTaskSession = useConversationStore((s) => s.renameTaskSession);
-  const openCreateDialog = useTaskStore((s) => s.openCreateDialog);
+  const setTaskLanding = useTaskStore((s) => s.setTaskLanding);
+  const taskLanding = useTaskStore((s) => s.taskLanding);
   const platformRole = useSessionStore((s) => s.user?.platformRole);
-  const canCreate = canExecuteChat(platformRole);
+  const canManage = canExecuteChat(platformRole);
   const [showAll, setShowAll] = useState(false);
 
   const allItems = useMemo(() => {
@@ -221,16 +221,23 @@ export function SidebarTaskNav({
   const current = chats[currentChatId];
   const kindActive =
     appView === 'task' &&
-    current &&
-    (kind === 'warrooms' ? isWarRoom(current) || current.sessionGroup === 'pinned' : !isWarRoom(current));
+    (kind === 'warrooms'
+      ? taskLanding === 'collab' ||
+        Boolean(current && (isWarRoom(current) || current.sessionGroup === 'pinned'))
+      : taskLanding === 'tasks' || Boolean(current && !isWarRoom(current)));
 
   const tip = shortLabel ?? label;
 
   const openChat = (chatId?: string) => {
+    const landing = kind === 'warrooms' ? 'collab' : 'tasks';
+    setTaskLanding(landing);
     if (chatId) {
       switchChat(chatId);
-    } else if (visible[0] || allItems[0]) {
-      switchChat((visible[0] ?? allItems[0]).id);
+    } else if (allItems[0]) {
+      switchChat(allItems[0]!.id);
+    } else {
+      // 空列表：进入任务区对应空态，不自动弹新建
+      useConversationStore.setState({ currentChatId: '' });
     }
     setAppView('task');
   };
@@ -264,18 +271,6 @@ export function SidebarTaskNav({
           <span className="nav-label">{label}</span>
           <span className="nav-label ml-auto text-[10px] font-normal text-zinc-400">{total}</span>
         </button>
-        {canCreate ? (
-          <button
-            type="button"
-            onClick={() =>
-              kind === 'warrooms' ? openCreateDialog() : openAiAssistantForNewTask()
-            }
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900"
-            title={kind === 'warrooms' ? '新建群聊' : '新建任务'}
-          >
-            <i className="fa-solid fa-plus text-[11px]" />
-          </button>
-        ) : null}
       </div>
 
       {visible.length > 0 && (
@@ -286,9 +281,9 @@ export function SidebarTaskNav({
               chat={c}
               active={appView === 'task' && currentChatId === c.id}
               onClick={() => openChat(c.id)}
-              onDelete={canCreate ? (id) => deleteTaskSession(id) : undefined}
+              onDelete={canManage ? (id) => deleteTaskSession(id) : undefined}
               onRename={
-                canCreate && kind === 'agents' && c.id.startsWith('task_')
+                canManage && kind === 'agents' && c.id.startsWith('task_')
                   ? (id, title) => renameTaskSession(id, title)
                   : undefined
               }

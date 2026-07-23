@@ -70,9 +70,9 @@ export const ROLE_LABELS: Record<PlatformRole, string> = {
 
 export const ROLE_DESCRIPTIONS: Record<PlatformRole, string> = {
   super_admin: '管人、管空间、管租户/门户/展示；拥有平台与本空间全部治理权',
-  capability_ops: '建能力：创建/编辑/发布 Agent、Skill、Tool 与知识编排',
-  business_user: '用 AI：广场发起、任务执行、浏览案例（群聊由展示配置按需开放）',
-  viewer: '只读浏览案例与任务结果，不可发起执行或修改配置',
+  capability_ops: '运营壳：工作平台 + 能力配置（专家/技能/工具等）；完整产品能力在此配置',
+  business_user: '业务壳：仅工作平台（找案例/做任务/任务记录；协作空间在完整产品可开）',
+  viewer: '业务壳：工作平台仅找案例，不可发起执行或修改配置',
 };
 
 /** 可邀请角色（超管由种子/白名单产生，不通过邀请下发） */

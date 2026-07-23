@@ -8,11 +8,13 @@ import {
 } from '@/domain/appView';
 import { isAppViewSlot, NAV_PRESENTATION_META } from '@/domain/navPresentation';
 import { ROLE_LABELS } from '@/domain/rbac';
-import { openResourceWithReturn } from '@/domain/openResourceNav';
+import { openFindCases, openUseSkills } from '@/domain/openHomeJourney';
+import { canExecuteChat } from '@/domain/permissions';
 import { SidebarTaskNav } from '@/components/shell/SidebarTaskNav';
 import { ROUTE_PREFETCH } from '@/features/lazyPages';
 import { cn } from '@/lib/utils';
 import { useAppViewStore } from '@/stores/appViewStore';
+import { useHomeStore } from '@/stores/homeStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useShellPerspectiveStore } from '@/stores/shellPerspectiveStore';
@@ -69,6 +71,12 @@ export function AppShellSidebar() {
     return acc;
   }, [isViewEnabled]);
 
+  /** 能力配置：历史 platform + ops 槽位合并展示（全角色同一一级类） */
+  const capabilityItems = useMemo(() => {
+    const merge = [...itemsBySection.platform, ...itemsBySection.ops];
+    return merge.filter((i) => i.id !== 'ai-map' && i.id !== 'home');
+  }, [itemsBySection.platform, itemsBySection.ops]);
+
   const systemNavNodes = useMemo(() => {
     const byId = new Map(itemsBySection.system.map((i) => [i.id, i]));
     const renderItem = (item: (typeof APP_VIEW_NAV)[number]) => (
@@ -84,25 +92,27 @@ export function AppShellSidebar() {
         <span className="nav-label">{item.label}</span>
       </button>
     );
-    const settingsBtn = (
-      <button
-        key="quick-settings"
-        type="button"
-        onClick={openSettings}
-        className="wb-nav-item"
-        title="偏好设置"
-      >
-        <i className="fa-solid fa-gear w-5 text-center text-[15px]" />
-        <span className="nav-label">偏好设置</span>
-      </button>
-    );
     const nodes: ReactNode[] = [];
     const portal = byId.get('portal-ops');
     if (portal) nodes.push(renderItem(portal));
-    nodes.push(settingsBtn);
     for (const id of ['admin', 'presentation', 'workspace-config'] as AppView[]) {
       const item = byId.get(id);
       if (item) nodes.push(renderItem(item));
+    }
+    // 偏好设置：有系统治理项时一并放在「系统设置」，与底栏入口并存
+    if (nodes.length > 0) {
+      nodes.push(
+        <button
+          key="quick-settings"
+          type="button"
+          onClick={openSettings}
+          className="wb-nav-item"
+          title="偏好设置"
+        >
+          <i className="fa-solid fa-gear w-5 text-center text-[15px]" />
+          <span className="nav-label">偏好设置</span>
+        </button>,
+      );
     }
     return nodes;
   }, [itemsBySection.system, appView, setAppView, openSettings]);
@@ -112,8 +122,101 @@ export function AppShellSidebar() {
   const isBusiness = perspective === 'business';
   const showTaskNav = isViewEnabled('task');
   const showWarroomNav = isSlotEnabled('warroom');
-  const taskNavLabel = user?.platformRole === 'viewer' ? '任务结果' : '做任务';
-  const taskNavShort = user?.platformRole === 'viewer' ? '任务' : '任务';
+  const showHomeNav = isViewEnabled('home');
+  const executeAllowed = canExecuteChat(user?.platformRole);
+  const homeMode = useHomeStore((s) => s.homeMode);
+  const findCasesActive = (appView === 'home' && homeMode === 'portal') || appView === 'ai-map';
+  const doTaskActive = appView === 'home' && homeMode === 'assistant';
+  const previewPlazaActive =
+    (appView === 'home' && homeMode === 'portal') || appView === 'ai-map';
+
+  const hasWorkspaceBody = showHomeNav || showTaskNav || showWarroomNav;
+  const hasCapabilityBody = capabilityItems.length > 0;
+  const hasSystemBody = systemNavNodes.length > 0;
+
+  const taskAndWarroomNav = (
+    <>
+      {showTaskNav && (
+        <SidebarTaskNav
+          kind="agents"
+          label="任务记录"
+          shortLabel="记录"
+          icon="fa-list-check"
+          compact={sidebarCollapsed}
+        />
+      )}
+      {showWarroomNav && (
+        <SidebarTaskNav
+          kind="warrooms"
+          label="协作空间"
+          icon="fa-comments"
+          compact={sidebarCollapsed}
+        />
+      )}
+    </>
+  );
+
+  /** 工作平台 · 业务壳二级 */
+  const businessWorkspaceNav = (
+    <>
+      {showHomeNav ? (
+        <button
+          type="button"
+          onClick={() => openFindCases()}
+          onMouseEnter={() => ROUTE_PREFETCH.home?.()}
+          className={cn('wb-nav-item', findCasesActive && 'active')}
+          title={sidebarCollapsed ? '案例' : '找案例 · 进入学 · 找案例'}
+        >
+          <i className="fa-solid fa-compass w-5 text-center text-[15px]" />
+          <span className="nav-label">找案例</span>
+        </button>
+      ) : null}
+      {showHomeNav && executeAllowed ? (
+        <button
+          type="button"
+          onClick={() => openUseSkills({ focusComposer: false })}
+          onMouseEnter={() => ROUTE_PREFETCH.home?.()}
+          className={cn('wb-nav-item', doTaskActive && 'active')}
+          title={sidebarCollapsed ? '做任务' : '做任务 · 进入干 · 做任务（场景技能）'}
+        >
+          <i className="fa-solid fa-cube w-5 text-center text-[15px]" />
+          <span className="nav-label">做任务</span>
+        </button>
+      ) : null}
+      {taskAndWarroomNav}
+    </>
+  );
+
+  /** 工作平台 · 运营壳二级 */
+  const opsWorkspaceNav = (
+    <>
+      {showHomeNav ? (
+        <button
+          type="button"
+          onClick={() => openFindCases()}
+          onMouseEnter={() => ROUTE_PREFETCH.home?.()}
+          className={cn('wb-nav-item', previewPlazaActive && 'active')}
+          title={sidebarCollapsed ? '预览' : '预览广场 · 以业务视角预览学 · 找案例'}
+        >
+          <i className="fa-solid fa-store w-5 text-center text-[15px]" />
+          <span className="nav-label">预览广场</span>
+        </button>
+      ) : null}
+      {showHomeNav && executeAllowed ? (
+        <button
+          type="button"
+          onClick={() => openUseSkills({ focusComposer: false })}
+          onMouseEnter={() => ROUTE_PREFETCH.home?.()}
+          className={cn('wb-nav-item', doTaskActive && 'active')}
+          title={sidebarCollapsed ? '做任务' : '做任务（业务视角）· 场景技能/专家橱窗'}
+        >
+          <i className="fa-solid fa-cube w-5 text-center text-[15px]" />
+          <span className="nav-label">做任务</span>
+        </button>
+      ) : null}
+      {taskAndWarroomNav}
+    </>
+  );
 
   return (
     <aside
@@ -141,150 +244,59 @@ export function AppShellSidebar() {
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto scroll-hidden px-3 py-3">
-        {isBusiness ? (
-          <div className="space-y-0.5">
+        {/* 全角色同一套一级分类：工作平台 → 能力配置 → 系统设置（空类不渲染） */}
+        {hasWorkspaceBody && (
+          <div
+            className={cn(
+              'nav-section-group',
+              navSectionsCollapsed.workspace && !sidebarCollapsed && 'collapsed',
+            )}
+          >
             <button
               type="button"
-              onClick={() => setAppView('home')}
-              onMouseEnter={() => ROUTE_PREFETCH.home?.()}
-              className={cn('wb-nav-item', appView === 'home' && 'active')}
-              title={sidebarCollapsed ? '广场' : '逛广场 · 找场景开工'}
+              className="nav-section-header"
+              onClick={() => toggleNavSection('workspace')}
             >
-              <i className="fa-solid fa-house w-5 text-center text-[15px]" />
-              <span className="nav-label">逛广场</span>
+              <span>{NAV_SECTION_LABELS.workspace}</span>
+              <i className="fa-solid fa-chevron-down nav-section-chevron" />
             </button>
-
-            {showTaskNav && (
-              <SidebarTaskNav
-                kind="agents"
-                label={taskNavLabel}
-                shortLabel={taskNavShort}
-                icon="fa-list-check"
-                compact={sidebarCollapsed}
-              />
-            )}
-            {showWarroomNav && (
-              <SidebarTaskNav
-                kind="warrooms"
-                label="群聊"
-                icon="fa-comments"
-                compact={sidebarCollapsed}
-              />
-            )}
-
-            {isViewEnabled('ai-map') && (
-              <button
-                type="button"
-                onClick={() => openResourceWithReturn('ai-map')}
-                onMouseEnter={() => ROUTE_PREFETCH['ai-map']?.()}
-                className={cn('wb-nav-item', appView === 'ai-map' && 'active')}
-                title={sidebarCollapsed ? '案例' : '学案例 · 复制样板间'}
-              >
-                <i className="fa-solid fa-map w-5 text-center text-[15px]" />
-                <span className="nav-label">学案例</span>
-              </button>
-            )}
-          </div>
-        ) : (
-          <>
-            {(['workspace', 'platform', 'ops'] as NavSection[]).map((section) => {
-              if (section === 'workspace') {
-                const homeItem = itemsBySection.workspace.find((i) => i.id === 'home');
-                const hasWorkspaceBody =
-                  Boolean(homeItem) || showTaskNav || showWarroomNav || isViewEnabled('ai-map');
-                if (!hasWorkspaceBody) return null;
-                return (
-                  <div
-                    key={section}
-                    className={cn(
-                      'nav-section-group',
-                      navSectionsCollapsed[section] && !sidebarCollapsed && 'collapsed',
-                    )}
-                  >
-                    <button
-                      type="button"
-                      className="nav-section-header"
-                      onClick={() => toggleNavSection(section)}
-                    >
-                      <span>{NAV_SECTION_LABELS[section]}</span>
-                      <i className="fa-solid fa-chevron-down nav-section-chevron" />
-                    </button>
-                    <div className="nav-section-body">
-                      {homeItem && (
-                        <button
-                          type="button"
-                          onClick={() => setAppView('home')}
-                          onMouseEnter={() => ROUTE_PREFETCH.home?.()}
-                          className={cn('wb-nav-item', appView === 'home' && 'active')}
-                          title={sidebarCollapsed ? '广场' : '逛广场 · 找场景开工'}
-                        >
-                          <i className="fa-solid fa-house w-5 text-center text-[15px]" />
-                          <span className="nav-label">逛广场</span>
-                        </button>
-                      )}
-                      {showTaskNav && (
-                        <SidebarTaskNav
-                          kind="agents"
-                          label={taskNavLabel}
-                          shortLabel={taskNavShort}
-                          icon="fa-list-check"
-                          compact={sidebarCollapsed}
-                        />
-                      )}
-                      {showWarroomNav && (
-                        <SidebarTaskNav
-                          kind="warrooms"
-                          label="群聊"
-                          icon="fa-comments"
-                          compact={sidebarCollapsed}
-                        />
-                      )}
-                      {isViewEnabled('ai-map') && (
-                        <button
-                          type="button"
-                          onClick={() => openResourceWithReturn('ai-map')}
-                          onMouseEnter={() => ROUTE_PREFETCH['ai-map']?.()}
-                          className={cn('wb-nav-item', appView === 'ai-map' && 'active')}
-                          title={sidebarCollapsed ? '案例' : '学案例 · 复制样板间'}
-                        >
-                          <i className="fa-solid fa-map w-5 text-center text-[15px]" />
-                          <span className="nav-label">学案例</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              }
-
-              // 案例已并入工作平台，避免运营台重复
-              const items =
-                section === 'platform'
-                  ? itemsBySection[section].filter((i) => i.id !== 'ai-map')
-                  : itemsBySection[section];
-
-              return items.length > 0 ? (
-                <NavSectionGroup
-                  key={section}
-                  section={section}
-                  label={NAV_SECTION_LABELS[section]}
-                  collapsed={navSectionsCollapsed[section]}
-                  onToggle={() => toggleNavSection(section)}
-                  items={items}
-                  activeView={appView}
-                  onSelect={setAppView}
-                  sidebarCollapsed={sidebarCollapsed}
-                />
-              ) : null;
-            })}
-
-            <div className={cn('nav-section-group mt-1', navSectionsCollapsed.system && 'collapsed')}>
-              <button type="button" className="nav-section-header" onClick={() => toggleNavSection('system')}>
-                <span>{NAV_SECTION_LABELS.system}</span>
-                <i className="fa-solid fa-chevron-down nav-section-chevron" />
-              </button>
-              <div className="nav-section-body">{systemNavNodes}</div>
+            <div className="nav-section-body">
+              {isBusiness ? businessWorkspaceNav : opsWorkspaceNav}
             </div>
-          </>
+          </div>
+        )}
+
+        {/* 业务壳只渲染工作平台；能力配置/系统设置仅运营壳 */}
+        {!isBusiness && hasCapabilityBody && (
+          <NavSectionGroup
+            section="platform"
+            label={NAV_SECTION_LABELS.platform}
+            collapsed={navSectionsCollapsed.platform}
+            onToggle={() => toggleNavSection('platform')}
+            items={capabilityItems}
+            activeView={appView}
+            onSelect={setAppView}
+            sidebarCollapsed={sidebarCollapsed}
+          />
+        )}
+
+        {!isBusiness && hasSystemBody && (
+          <div
+            className={cn(
+              'nav-section-group mt-1',
+              navSectionsCollapsed.system && !sidebarCollapsed && 'collapsed',
+            )}
+          >
+            <button
+              type="button"
+              className="nav-section-header"
+              onClick={() => toggleNavSection('system')}
+            >
+              <span>{NAV_SECTION_LABELS.system}</span>
+              <i className="fa-solid fa-chevron-down nav-section-chevron" />
+            </button>
+            <div className="nav-section-body">{systemNavNodes}</div>
+          </div>
         )}
       </nav>
 

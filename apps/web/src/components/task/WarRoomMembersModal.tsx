@@ -65,7 +65,7 @@ export function WarRoomMembersModal({
       >
         <div className="flex items-center justify-between border-b border-black/[0.05] px-5 py-4">
           <div>
-            <h3 className="text-sm font-bold text-[#1d1d1f]">WarRoom 成员</h3>
+            <h3 className="text-sm font-bold text-[#1d1d1f]">协作空间成员</h3>
             <p className="mt-0.5 text-[11px] text-[#86868b]">
               {chat.title} · AI 仅对本室成员开放
             </p>
@@ -183,7 +183,7 @@ export function WarRoomMembersModal({
 
           {!isAdmin && (
             <p className="rounded-xl bg-zinc-50 px-3 py-2 text-[11px] text-zinc-500">
-              仅 WarRoom 管理员可添加或移除成员。
+              仅协作空间管理员可添加或移除成员。
             </p>
           )}
         </div>

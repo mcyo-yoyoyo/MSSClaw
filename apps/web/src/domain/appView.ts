@@ -40,31 +40,45 @@ export interface AppViewNavItem {
 }
 
 export const APP_VIEW_NAV: AppViewNavItem[] = [
-  { id: 'home', label: '逛广场', subtitle: '找场景 · 开工（AI任务 / AI广场）', icon: 'fa-house', section: 'workspace' },
-  { id: 'task', label: '做任务', subtitle: '计划确认 · 执行 · 交付物', icon: 'fa-list-check', section: 'workspace' },
+  {
+    id: 'home',
+    label: '首页',
+    subtitle: '业务：找案例 · 做任务；运营：预览广场（学/干）',
+    icon: 'fa-house',
+    section: 'workspace',
+  },
+  { id: 'task', label: '任务记录', subtitle: '进度 · 结果 · 历史会话', icon: 'fa-list-check', section: 'workspace' },
   {
     id: 'ai-map',
-    label: '学案例',
-    subtitle: '样板间 · 可复制业务场景包',
+    label: '案例样板间',
+    subtitle: '完整案例库 · 由找案例/场景卡进入',
     icon: 'fa-map',
     section: 'platform',
   },
-  { id: 'agents', label: '专家', subtitle: '配置 · 发布 · 调用', icon: 'fa-robot', section: 'platform' },
-  { id: 'skills', label: '技能', subtitle: '能力资产 · 挂载编排', icon: 'fa-cube', section: 'platform' },
-  { id: 'tools', label: '工具', subtitle: '连接器 · 外部 API', icon: 'fa-plug', section: 'platform' },
-  { id: 'memory', label: '记忆', subtitle: 'Agent 长期记忆 · Reflection', icon: 'fa-brain', section: 'platform' },
-  { id: 'kb', label: '知识', subtitle: '企业文档 · RAG · 溯源', icon: 'fa-book-open', section: 'platform' },
-  { id: 'prompts', label: '提示词', subtitle: '版本 · 审批 · 生命周期', icon: 'fa-file-code', section: 'platform' },
-  { id: 'automation', label: '自动化', subtitle: '定时 · 告警 · 周报', icon: 'fa-bolt', section: 'ops' },
-  { id: 'workflow', label: '工作流', subtitle: 'LangGraph · 专家编排', icon: 'fa-diagram-project', section: 'ops' },
+  { id: 'agents', label: '配置专家', subtitle: '上架 · 发布 · 编排（运营）', icon: 'fa-robot', section: 'platform' },
+  { id: 'skills', label: '配置技能', subtitle: '上架 · 挂载 · 导出（运营）', icon: 'fa-cube', section: 'platform' },
+  { id: 'tools', label: '配置工具', subtitle: '连接器 · 外部 API · 上架', icon: 'fa-plug', section: 'platform' },
+  { id: 'kb', label: '管理知识', subtitle: '企业文档 · RAG · 溯源治理', icon: 'fa-book-open', section: 'platform' },
+  { id: 'memory', label: '管理记忆', subtitle: 'Agent 长期记忆 · Reflection', icon: 'fa-brain', section: 'platform' },
+  { id: 'prompts', label: '提示词', subtitle: '暂不开放 · 草稿/审批资产库（保留）', icon: 'fa-file-code', section: 'platform' },
+  { id: 'automation', label: '自动化设置', subtitle: '定时 · 告警 · 周报', icon: 'fa-bolt', section: 'platform' },
+  { id: 'workflow', label: '工作流设置', subtitle: 'LangGraph · 专家编排', icon: 'fa-diagram-project', section: 'platform' },
 ];
 
+/**
+ * 全角色统一的一级分类（侧栏与展示配置共用）：
+ * 工作平台 → 能力配置 → 系统设置。
+ * `ops` 仅保留兼容旧折叠状态，不再作为独立一级菜单。
+ */
 export const NAV_SECTION_LABELS: Record<NavSection, string> = {
   workspace: '工作平台',
-  platform: '能力沉淀',
-  ops: '运营编排',
+  platform: '能力配置',
+  ops: '能力配置',
   system: '系统设置',
 };
+
+/** 侧栏实际渲染的一级分类顺序（全角色一致） */
+export const SIDEBAR_NAV_SECTIONS = ['workspace', 'platform', 'system'] as const satisfies readonly NavSection[];
 
 /** AppView 占位页（尚未实现的视图） */
 export const APP_VIEW_PLACEHOLDERS: Partial<

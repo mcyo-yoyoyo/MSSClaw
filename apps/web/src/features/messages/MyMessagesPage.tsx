@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   CenterPageHeader,
@@ -7,8 +7,10 @@ import {
 } from '@/components/center/CenterShell';
 import { inboxKindLabel } from '@/domain/inbox';
 import { getCurrentUserId } from '@/domain/currentUser';
+import { ensureStationAnnouncementInbox } from '@/domain/stationAnnouncements';
 import { useInboxStore } from '@/stores/inboxStore';
 import { useAppViewStore } from '@/stores/appViewStore';
+import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 
 type Filter = 'all' | 'unread' | 'deliverable' | 'system' | 'user';
 
@@ -19,10 +21,23 @@ export function MyMessagesPage() {
   const markAllRead = useInboxStore((s) => s.markAllRead);
   const remove = useInboxStore((s) => s.remove);
   const setAppView = useAppViewStore((s) => s.setAppView);
+  const consumeMessageId = useNavigationIntentStore((s) => s.consumeMessageId);
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    ensureStationAnnouncementInbox();
+  }, []);
+
+  useEffect(() => {
+    const id = consumeMessageId();
+    if (!id) return;
+    setSelectedId(id);
+    setFilter('all');
+    markRead(id);
+  }, [consumeMessageId, markRead, messages.length]);
 
   const mine = useMemo(() => {
     void messages;

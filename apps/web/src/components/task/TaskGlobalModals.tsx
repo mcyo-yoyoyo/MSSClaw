@@ -8,7 +8,7 @@ interface TaskGlobalModalsProps {
   onWorkspaceSwitch?: (workspaceId: string) => void;
 }
 
-/** 侧栏「新建群聊 / 资源」入口：挂在 App 级；Agent 新建走 AI任务页 */
+/** 侧栏「新建协作空间」入口：挂在 App 级；Agent 新建走做任务页 */
 export function TaskGlobalModals({ onWorkspaceSwitch }: TaskGlobalModalsProps) {
   const createDialogOpen = useTaskStore((s) => s.createDialogOpen);
   const closeCreateDialog = useTaskStore((s) => s.closeCreateDialog);
@@ -23,6 +23,7 @@ export function TaskGlobalModals({ onWorkspaceSwitch }: TaskGlobalModalsProps) {
         onClose={closeCreateDialog}
         onCreateWarRoom={(title) => {
           createWarRoomSession(title);
+          useTaskStore.getState().setTaskLanding('collab');
           setAppView('task');
         }}
       />

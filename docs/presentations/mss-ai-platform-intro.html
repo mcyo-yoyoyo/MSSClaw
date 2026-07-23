@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSS AI提效作战平台 · 项目介绍</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f6f5f3;
+      --panel: #ffffff;
+      --ink: #18181b;
+      --muted: #71717a;
+      --line: rgba(24, 24, 27, 0.08);
+      --accent: #cf0a2c;
+      --accent-soft: #fff1f2;
+      --ops: #1e293b;
+      --business: #0f766e;
+      --shadow: 0 18px 50px -28px rgba(24, 24, 27, 0.35);
+      --radius: 18px;
+      --font: "Noto Sans SC", "PingFang SC", sans-serif;
+      --display: "Source Serif 4", "Noto Serif SC", serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #0a0a0b;
+      color: var(--ink);
+      font-family: var(--font);
+      overflow: hidden;
+    }
+
+    .deck {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: none;
+      padding: clamp(28px, 4vw, 56px) clamp(32px, 5vw, 72px);
+      background:
+        radial-gradient(1200px 600px at 100% -10%, rgba(207, 10, 44, 0.08), transparent 55%),
+        radial-gradient(900px 500px at -10% 110%, rgba(15, 118, 110, 0.06), transparent 50%),
+        var(--bg);
+      overflow: hidden;
+    }
+    .slide.is-active { display: flex; flex-direction: column; }
+
+    .slide-inner {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      max-width: 1180px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .kicker {
+      margin: 0 0 10px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .h1 {
+      margin: 0;
+      font-family: var(--display);
+      font-size: clamp(36px, 4.6vw, 56px);
+      font-weight: 600;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+    }
+
+    .h2 {
+      margin: 0;
+      font-family: var(--display);
+      font-size: clamp(28px, 3.4vw, 40px);
+      font-weight: 600;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+    }
+
+    .lede {
+      margin: 14px 0 0;
+      max-width: 46ch;
+      font-size: clamp(15px, 1.4vw, 18px);
+      line-height: 1.65;
+      color: var(--muted);
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: auto;
+      padding-top: 18px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .brand-mark {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .brand-mark i {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: inline-block;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: clamp(16px, 2vw, 28px);
+      margin-top: clamp(22px, 3vw, 36px);
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-top: clamp(20px, 2.5vw, 32px);
+    }
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: clamp(18px, 2.4vw, 28px);
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px 18px 16px;
+      box-shadow: var(--shadow);
+    }
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: 15px;
+      font-weight: 650;
+    }
+    .card p, .card li {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+    .card ul {
+      margin: 8px 0 0;
+      padding-left: 1.1em;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .flow {
+      display: flex;
+      align-items: stretch;
+      gap: 8px;
+      margin-top: 22px;
+      flex-wrap: wrap;
+    }
+    .flow-step {
+      flex: 1;
+      min-width: 140px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 14px 12px;
+      position: relative;
+    }
+    .flow-step .n {
+      font-family: var(--display);
+      font-size: 22px;
+      color: var(--accent);
+      font-weight: 600;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+    .flow-step strong {
+      display: block;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+    .flow-step span {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .flow-arrow {
+      align-self: center;
+      color: var(--muted);
+      font-size: 18px;
+      opacity: 0.55;
+    }
+
+    .arch-stack {
+      display: grid;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .arch-row {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 12px;
+      align-items: stretch;
+    }
+    .arch-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: #fff;
+      background: var(--ops);
+    }
+    .arch-label.l2 { background: #334155; }
+    .arch-label.l3 { background: var(--business); }
+    .arch-label.l4 { background: var(--accent); }
+    .arch-body {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px;
+    }
+    .chip {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #f4f4f5;
+      font-size: 12px;
+      font-weight: 500;
+      color: #3f3f46;
+    }
+
+    .role-card {
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .role-card .role {
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .role-card .shell {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--business);
+    }
+    .role-card.ops .shell { color: #475569; }
+    .role-card .path {
+      margin-top: auto;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      color: var(--ink);
+      line-height: 1.5;
+      font-weight: 500;
+    }
+
+    .hero-aside {
+      background: linear-gradient(160deg, #18181b 0%, #27272a 100%);
+      color: #fafafa;
+      border-radius: calc(var(--radius) + 4px);
+      padding: 22px 20px;
+      box-shadow: var(--shadow);
+    }
+    .hero-aside h3 {
+      margin: 0 0 12px;
+      font-size: 15px;
+      font-weight: 650;
+    }
+    .hero-aside li {
+      margin: 0 0 10px;
+      font-size: 13px;
+      line-height: 1.5;
+      color: rgba(250, 250, 250, 0.78);
+    }
+    .hero-aside li strong { color: #fff; font-weight: 600; }
+
+    .hint-bar {
+      position: fixed;
+      left: 50%;
+      bottom: 14px;
+      transform: translateX(-50%);
+      z-index: 20;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(24, 24, 27, 0.82);
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 11px;
+      backdrop-filter: blur(10px);
+      opacity: 0.85;
+      transition: opacity .2s;
+    }
+    .hint-bar:hover { opacity: 1; }
+    .hint-bar kbd {
+      display: inline-block;
+      min-width: 18px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.12);
+      font-family: inherit;
+      text-align: center;
+    }
+
+    .notes {
+      display: none;
+    }
+
+    @media (max-width: 960px) {
+      .grid-2, .grid-3, .grid-4, .arch-row {
+        grid-template-columns: 1fr;
+      }
+      .flow-arrow { display: none; }
+    }
+
+    @media print {
+      body { overflow: visible; background: #fff; }
+      .deck { height: auto; }
+      .slide {
+        position: relative;
+        display: flex !important;
+        page-break-after: always;
+        min-height: 100vh;
+      }
+      .hint-bar { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck" id="deck">
+
+    <!-- 1. 平台定位 -->
+    <section class="slide is-active" data-title="平台定位">
+      <div class="slide-inner">
+        <div class="brand-mark"><i></i>MSS · AI EFFICIENCY</div>
+        <p class="kicker" style="margin-top:18px">01 · 平台定位</p>
+        <h1 class="h1">MSS AI提效作战平台</h1>
+        <p class="lede">
+          企业级 AI Employee Operating System —— 不是又一个聊天窗口，
+          而是把「说目标 → 做任务 → 出交付 → 沉淀能力」跑通的提效作战系统。
+        </p>
+
+        <div class="grid-2">
+          <div>
+            <div class="grid-3" style="margin-top:0">
+              <div class="card">
+                <span class="pill">好学</span>
+                <h3 style="margin-top:12px">逛广场找场景</h3>
+                <p>AI广场按业务场景发现案例与工具；AI任务一句话开工。</p>
+              </div>
+              <div class="card">
+                <span class="pill">好用</span>
+                <h3 style="margin-top:12px">做任务出结果</h3>
+                <p>计划确认、对话执行、交付物预览与推送，形成闭环。</p>
+              </div>
+              <div class="card">
+                <span class="pill">可沉淀</span>
+                <h3 style="margin-top:12px">学案例可复制</h3>
+                <p>个人行动沉淀为组织资产：专家、技能、案例可复用。</p>
+              </div>
+            </div>
+            <p class="lede" style="max-width:none;margin-top:18px;font-size:14px">
+              一句话：<strong style="color:var(--ink)">让个人提效看得见，让组织能力用得上。</strong>
+            </p>
+          </div>
+          <aside class="hero-aside">
+            <h3>今天不讲「模型多强」</h3>
+            <ul style="margin:0;padding-left:1.1em">
+              <li><strong>讲清楚它是什么</strong>：数字员工作战系统</li>
+              <li><strong>怎么分层设计</strong>：业务壳 / 运营壳 + 能力平台</li>
+              <li><strong>能干什么</strong>：意图 → 计划 → 交付 → 推送</li>
+              <li><strong>谁怎么用</strong>：四类角色各走一条主路径</li>
+            </ul>
+          </aside>
+        </div>
+
+        <div class="footer">
+          <span>面向团队分享 · 产品介绍</span>
+          <span>1 / 4</span>
+        </div>
+      </div>
+      <aside class="notes">
+        开场先对齐预期：这不是 ChatGPT 套壳，而是 MSS 场景下的提效作战平台。
+        强调三词：好学、好用、可沉淀。随后四页按「定位 → 架构 → 能力 → 角色」讲完。
+      </aside>
+    </section>
+
+    <!-- 2. 产品架构 -->
+    <section class="slide" data-title="产品架构">
+      <div class="slide-inner">
+        <p class="kicker">02 · 产品架构设计</p>
+        <h2 class="h2">双壳导航 × 能力平台 × 执行闭环</h2>
+        <p class="lede" style="max-width:52ch">
+          按角色自动进入业务工作台或平台运营台；复杂能力沉到运营侧，业务侧保持「逛 / 做 / 学」简洁。
+        </p>
+
+        <div class="arch-stack">
+          <div class="arch-row">
+            <div class="arch-label">体验层</div>
+            <div class="arch-body">
+              <span class="chip">逛广场 · AI任务 / AI广场</span>
+              <span class="chip">做任务 · 计划 / 对话 / 交付</span>
+              <span class="chip">学案例</span>
+              <span class="chip">我的消息</span>
+              <span class="chip">群聊（可配置）</span>
+            </div>
+          </div>
+          <div class="arch-row">
+            <div class="arch-label l2">能力层</div>
+            <div class="arch-body">
+              <span class="chip">专家 Agent</span>
+              <span class="chip">技能 Skill</span>
+              <span class="chip">工具 Tool</span>
+              <span class="chip">知识 RAG</span>
+              <span class="chip">记忆 Memory</span>
+              <span class="chip">提示词 / 工作流 / 自动化</span>
+            </div>
+          </div>
+          <div class="arch-row">
+            <div class="arch-label l3">治理层</div>
+            <div class="arch-body">
+              <span class="chip">展示配置（按角色菜单）</span>
+              <span class="chip">组织权限</span>
+              <span class="chip">租户 / 数据空间</span>
+              <span class="chip">门户运营</span>
+            </div>
+          </div>
+          <div class="arch-row">
+            <div class="arch-label l4">运行层</div>
+            <div class="arch-body">
+              <span class="chip">Plan 确认</span>
+              <span class="chip">执行流 / Mock·真实 LLM</span>
+              <span class="chip">交付物预览</span>
+              <span class="chip">推送作战室 / 成员</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-top:16px">
+          <div class="card">
+            <h3>业务工作台</h3>
+            <p>业务用户、只读访客默认进入。主路径：逛广场 → 做任务 → 学案例。不暴露专家配置与治理菜单。</p>
+          </div>
+          <div class="card">
+            <h3>平台运营台</h3>
+            <p>超级管理员、能力运营默认进入。在业务路径之上，增加专家 / 技能发布与（超管）组织·租户·展示配置。</p>
+          </div>
+        </div>
+
+        <div class="footer">
+          <span>架构原则：导航保持短，能力按角色显隐</span>
+          <span>2 / 4</span>
+        </div>
+      </div>
+      <aside class="notes">
+        用「四层」讲：体验给一线用，能力给运营建，治理给超管控，运行层把任务真正跑起来。
+        强调双壳不是两套产品，而是同一平台按角色裁剪后的两种工作面。
+      </aside>
+    </section>
+
+    <!-- 3. 核心功能 -->
+    <section class="slide" data-title="核心功能">
+      <div class="slide-inner">
+        <p class="kicker">03 · 核心功能特性</p>
+        <h2 class="h2">一条提效闭环，打穿日常工作</h2>
+        <p class="lede">从发现到交付，尽量少跳转；侧栏只保留「最近在办」，避免会话列表变成聊天垃圾桶。</p>
+
+        <div class="flow">
+          <div class="flow-step">
+            <div class="n">01</div>
+            <strong>逛 · 发现与开工</strong>
+            <span>AI广场找场景/工具；AI任务描述目标、@专家、/技能</span>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step">
+            <div class="n">02</div>
+            <strong>做 · 计划与执行</strong>
+            <span>自动提炼短任务名；Plan 确认后执行；状态可读</span>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step">
+            <div class="n">03</div>
+            <strong>交 · 预览与推送</strong>
+            <span>交付物面板预览；推送到作战室或「我的消息」</span>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step">
+            <div class="n">04</div>
+            <strong>学 · 复制与沉淀</strong>
+            <span>案例样板间一键复用；专家/技能持续上架</span>
+          </div>
+        </div>
+
+        <div class="grid-3">
+          <div class="card">
+            <h3>场景驱动，而非工具堆叠</h3>
+            <ul>
+              <li>广场按能力/场景分类引导</li>
+              <li>案例可复制进任务</li>
+              <li>专家团可同会话接力</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>任务体验轻量可控</h3>
+            <ul>
+              <li>侧栏默认最近活跃 ≤8</li>
+              <li>规则 + AI 生成短标题</li>
+              <li>双击可手动重命名</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>权限与展示可治理</h3>
+            <ul>
+              <li>四角色 RBAC 矩阵</li>
+              <li>按角色配置侧栏菜单</li>
+              <li>只读访客不可执行</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="footer">
+          <span>核心承诺：说得出 → 做得完 → 推得出 → 学得会</span>
+          <span>3 / 4</span>
+        </div>
+      </div>
+      <aside class="notes">
+        这一页用闭环串功能，避免变成功能清单。若听众追问技术，可补充：前端 React 工作台，
+        可选接 API/LLM；无 Key 时 Mock 演示，有 Key 时走真实模型。
+      </aside>
+    </section>
+
+    <!-- 4. 用户视角 -->
+    <section class="slide" data-title="用户视角">
+      <div class="slide-inner">
+        <p class="kicker">04 · 四类用户视角</p>
+        <h2 class="h2">同一平台，四条清晰主路径</h2>
+        <p class="lede">登录即按角色进入对应壳层；菜单与权限一致，避免「看得见却点不动」。</p>
+
+        <div class="grid-4">
+          <div class="card role-card">
+            <div class="role">业务用户</div>
+            <div class="shell">业务工作台</div>
+            <p>用 AI 干活的主力人群</p>
+            <ul>
+              <li>逛广场 · AI任务开工</li>
+              <li>做任务跟进交付</li>
+              <li>学案例复制打样</li>
+              <li>收消息 / 可选群聊</li>
+            </ul>
+            <div class="path">主路径：逛 → 做 → 交</div>
+          </div>
+
+          <div class="card role-card">
+            <div class="role">只读访客</div>
+            <div class="shell">业务工作台</div>
+            <p>旁观与学习，不可执行</p>
+            <ul>
+              <li>浏览广场与案例</li>
+              <li>查看任务结果</li>
+              <li>输入框只读禁用</li>
+              <li>不可新建 / 改模型配置</li>
+            </ul>
+            <div class="path">主路径：看 → 学</div>
+          </div>
+
+          <div class="card role-card ops">
+            <div class="role">能力运营</div>
+            <div class="shell">平台运营台</div>
+            <p>建能力、发布、编排</p>
+            <ul>
+              <li>专家 / 技能配置发布</li>
+              <li>保留任务与群聊</li>
+              <li>工具 / 知识可扩展</li>
+              <li>无组织治理菜单</li>
+            </ul>
+            <div class="path">主路径：建 → 发 → 被调用</div>
+          </div>
+
+          <div class="card role-card ops">
+            <div class="role">超级管理员</div>
+            <div class="shell">平台运营台</div>
+            <p>管人、管空间、管展示</p>
+            <ul>
+              <li>展示配置按角色裁剪</li>
+              <li>组织权限 / 成员</li>
+              <li>租户与数据空间</li>
+              <li>门户内容运营</li>
+            </ul>
+            <div class="path">主路径：治理 → 赋能一线</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:14px;padding:14px 18px">
+          <p style="margin:0;font-size:14px;line-height:1.55;color:var(--ink)">
+            <strong>演示建议：</strong>
+            先用业务用户走通「AI任务 → 做任务 → 推送消息」；
+            再切换能力运营展示「专家/技能上架」；
+            最后用超管打开「展示配置」说明菜单如何按角色裁剪。
+          </p>
+        </div>
+
+        <div class="footer">
+          <span>谢谢 · 欢迎试用与反馈</span>
+          <span>4 / 4</span>
+        </div>
+      </div>
+      <aside class="notes">
+        收尾用角色叙事：业务用户是日常英雄，访客是观察者，运营是造武器的人，超管是定规则的人。
+        邀请大家按自己角色登录体验；收集「哪一步还不顺」作为下一轮迭代输入。
+      </aside>
+    </section>
+  </div>
+
+  <div class="hint-bar" id="hint">
+    <span><kbd>←</kbd><kbd>→</kbd> 翻页</span>
+    <span><kbd>F</kbd> 全屏</span>
+    <span><kbd>N</kbd> 讲稿</span>
+    <span id="progress">1 / 4</span>
+  </div>
+
+  <script>
+    (function () {
+      const slides = Array.from(document.querySelectorAll('.slide'));
+      let idx = 0;
+      const progress = document.getElementById('progress');
+
+      function show(i) {
+        idx = Math.max(0, Math.min(slides.length - 1, i));
+        slides.forEach((s, n) => s.classList.toggle('is-active', n === idx));
+        progress.textContent = (idx + 1) + ' / ' + slides.length;
+        const note = slides[idx].querySelector('.notes');
+        if (window.__notesOpen) {
+          alert((note && note.textContent.trim()) || '（本页无讲稿）');
+          window.__notesOpen = false;
+        }
+      }
+
+      function next() { show(idx + 1); }
+      function prev() { show(idx - 1); }
+
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+          e.preventDefault();
+          next();
+        } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+          e.preventDefault();
+          prev();
+        } else if (e.key.toLowerCase() === 'f') {
+          if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+          else document.exitFullscreen?.();
+        } else if (e.key.toLowerCase() === 'n') {
+          const note = slides[idx].querySelector('.notes');
+          alert((note && note.textContent.trim()) || '（本页无讲稿）');
+        } else if (e.key === 'Home') {
+          show(0);
+        } else if (e.key === 'End') {
+          show(slides.length - 1);
+        }
+      });
+
+      let touchX = null;
+      window.addEventListener('touchstart', (e) => {
+        touchX = e.changedTouches[0].screenX;
+      }, { passive: true });
+      window.addEventListener('touchend', (e) => {
+        if (touchX == null) return;
+        const dx = e.changedTouches[0].screenX - touchX;
+        if (Math.abs(dx) > 40) (dx < 0 ? next : prev)();
+        touchX = null;
+      }, { passive: true });
+
+      show(0);
+    })();
+  </script>
+</body>
+</html>

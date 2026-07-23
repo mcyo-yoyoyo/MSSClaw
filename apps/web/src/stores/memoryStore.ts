@@ -72,7 +72,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
       const nextStores = await patchMemoryLayerPolicyApi(workspaceId, storeId, layer, patch, stores);
       set({
         stores: nextStores,
-        toast: `${layer} �?Retention 策略已更新`,
+        toast: `${layer} �?Retention 策略已更新`,
       });
     })();
   },
@@ -95,8 +95,8 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
       stores: nextStores,
       reflectionRunning: false,
       toast: newLog
-        ? `�?{store.name}」Reflection 完成 · 晋升 ${newLog.promoted} / 清理 ${newLog.pruned}`
-        : `�?{store.name}」Reflection 完成`,
+        ? `�?{store.name}」Reflection 完成 · 晋升 ${newLog.promoted} / 清理 ${newLog.pruned}`
+        : `�?{store.name}」Reflection 完成`,
     });
   },
 

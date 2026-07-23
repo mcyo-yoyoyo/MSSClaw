@@ -83,7 +83,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       const updated = nextWorkflows.find((w) => w.id === workflowId);
       set({
         workflows: nextWorkflows,
-        toast: updated ? `�?{target.name}」已推进�?${updated.status}` : `�?{target.name}」已更新`,
+        toast: updated ? `�?{target.name}」已推进�?${updated.status}` : `�?{target.name}」已更新`,
       });
     })();
   },
@@ -92,19 +92,19 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     const wf = get().workflows.find((w) => w.id === workflowId);
     if (!wf || get().debugRunning) return;
 
-    set({ debugRunning: true, debugTrace: ['�?启动 Workflow Debug...'] });
+    set({ debugRunning: true, debugTrace: ['�?启动 Workflow Debug...'] });
 
     for (const node of wf.nodes) {
       await new Promise((r) => setTimeout(r, 400));
       set((state) => ({
         selectedNodeId: node.id,
-        debugTrace: [...state.debugTrace, `�?${node.label} (${node.type})`],
+        debugTrace: [...state.debugTrace, `�?${node.label} (${node.type})`],
       }));
     }
 
     set({
       debugRunning: false,
-      toast: `�?{wf.name}」Debug 完成 · ${wf.nodes.length} nodes`,
+      toast: `�?{wf.name}」Debug 完成 · ${wf.nodes.length} nodes`,
     });
   },
 

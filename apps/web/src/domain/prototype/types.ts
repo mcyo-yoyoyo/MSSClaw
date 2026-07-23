@@ -1,5 +1,6 @@
 /** 与根目录 index.html 设计稿对齐的原始种子类型（单一数据源） */
 
+import type { BusinessScenarioId } from '@/domain/businessScenarios';
 import type {
   AssetSourceType,
   AssetVisibility,
@@ -32,7 +33,13 @@ export interface PrototypeAgentSeed {
   bizLine: string;
   homeTag: HomeCategory;
   author: string;
+  /** 能力上架：通过审批后可供调用（目录可见） */
   published: boolean;
+  /**
+   * 精选露出：出现在业务「做任务 · 场景专家」。
+   * 未设置时回退短名单（营销/知识门面专家）。
+   */
+  featuredInDoTask?: boolean;
   invokes: number;
   skillIds: string[];
   chatId: string;
@@ -66,7 +73,15 @@ export interface PrototypeSkillSeed extends AssetOwnershipFields {
   author: string;
   version: string;
   connector: string;
+  /** 能力上架：通过审批后可供调用（目录可见） */
   published: boolean;
+  /**
+   * 精选露出：出现在业务「做任务 · 场景技能」。
+   * 未设置时回退静态 HOME_BUSINESS_SKILLS 白名单。
+   */
+  featuredInDoTask?: boolean;
+  /** 做任务场景篮子（精选露出时用于筛选；缺省回退静态映射表） */
+  businessScenarioId?: BusinessScenarioId;
   invokes: number;
   icon: string;
   tags: string[];
@@ -87,7 +102,13 @@ export interface PrototypeToolSeed extends AssetOwnershipFields {
   /** 展示用分类标签 */
   category: 'connector' | 'external' | 'platform';
   author: string;
+  /** 能力上架：进入工具目录 / 可被技能挂载 */
   published: boolean;
+  /**
+   * 精选露出：可出现在找案例「场景工具」。
+   * 未设置时回退 PLAZA_TOOL_PICKS 静态精选。
+   */
+  featuredInFindCases?: boolean;
   invokes: number;
   icon: string;
   /** 官方/品牌 Logo URL（业界 SaaS） */

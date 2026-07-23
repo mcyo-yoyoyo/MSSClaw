@@ -15,7 +15,7 @@ export function AutomationCenterPage({ onRun }: AutomationCenterPageProps) {
     <div className="center-surface center-page scroll-hidden flex-1 overflow-y-auto">
       <div className="mx-auto max-w-4xl">
         <CenterPageHeader
-          title="自动化"
+          title="自动化设置"
           subtitle="定时任务 · 告警触发 · 周报生成 · Workflow 调度"
           tip={
             <>

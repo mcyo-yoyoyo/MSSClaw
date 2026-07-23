@@ -1,30 +1,50 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
-import {
-  HOME_BIZ_SKILLS,
-  HOME_CATEGORIES,
-  HOME_REGION_SKILLS,
-} from '@/domain/prototype/home';
 import type {
   PrototypeAgentSeed,
   PrototypeKbDocument,
   PrototypeSkillSeed,
 } from '@/domain/prototype/types';
-import { REGIONS } from '@/domain/orgTaxonomy';
-import {
-  getVisibleHomeDepts,
-  getVisibleHomeRegions,
-} from '@/domain/rolePerspective';
 import { canViewAsset } from '@/domain/assetVisibility';
 import { canExecuteChat } from '@/domain/permissions';
-import { SKILL_ROLE_BY_ID, SKILL_ROLE_CATEGORIES, type SkillRoleId } from '@/domain/skillRoles';
+import type { BusinessScenarioId } from '@/domain/businessScenarios';
+import { BusinessScenarioFilterBar } from '@/components/home/BusinessScenarioFilterBar';
+import {
+  getSkillBusinessLabel,
+  listFeaturedDoTaskSkillIds,
+} from '@/domain/skillBusinessScenarios';
+import { listDoTaskSceneExperts } from '@/domain/agentBusinessScenarios';
+import { buildAgentDemoPrompt } from '@/domain/agents/runtime';
+import { isDoTaskSceneExpertsVisible } from '@/domain/homeCapabilityFlags';
+import {
+  emptyOrgPerspectiveSelection,
+  getSkillOrgAxisTags,
+  isOrgPerspectiveEmpty,
+  skillMatchesOrgPerspectiveSelection,
+  type OrgPerspectiveSelection,
+} from '@/domain/orgAxisTags';
 import { HomeCommandBox } from '@/components/home/HomeCommandBox';
-import { HomeScenePortal } from '@/components/home/HomeScenePortal';
-import { SkillAvatar } from '@/components/brand/SkillAvatar';
-import { useHomeStore, type ExpertBrowseAxis } from '@/stores/homeStore';
+import { HomeScenePortal, SectionToolbar } from '@/components/home/HomeScenePortal';
+import { SceneExpertPanel } from '@/components/home/SceneExpertPanel';
+import {
+  CardPageCarousel,
+  HOME_SECONDARY_PANEL_H,
+  HomeFeedCard,
+} from '@/components/home/CardPageCarousel';
+import { OrgPerspectiveFilter } from '@/components/home/OrgPerspectiveFilter';
+import { StationAnnounceBanner } from '@/components/home/StationAnnounceBanner';
+import { useHomeStore } from '@/stores/homeStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
+import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
+import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useSessionStore } from '@/stores/sessionStore';
+import {
+  ensureEngagementSeeds,
+  useContentEngagementStore,
+} from '@/stores/contentEngagementStore';
+import { heatScore } from '@/domain/contentEngagement';
 import { isNewSkill } from '@/domain/contentBadges';
+import { downloadSkillFile } from '@/domain/skillExport';
 
 interface HomePageProps {
   onSubmitTask: (text: string, agent?: PrototypeAgentSeed | null) => void;
@@ -33,45 +53,54 @@ interface HomePageProps {
   onAskKbDocument?: (doc: PrototypeKbDocument) => void;
 }
 
-/** AI任务 Tab：对齐场景库的高频意图（偏 Skill 命令） */
-const INTENT_PROMPTS = [
-  '/价格监测 分析本周竞品价格异动',
-  '/评论分析 聚类本周电渠差评并给建议',
-  '/培训内容 生成门店话术并准备陪练',
-] as const;
-
-const ASK_SUBTITLE = '说出来就干活 · 输入需求或点选技能，在对话框里直接调用';
-const DISCOVER_SUBTITLE = '按业务场景找案例与工具 · 一键打样跑通专家团或主能力';
-
-const SKILL_AXIS_TABS: { id: ExpertBrowseAxis; label: string }[] = [
-  { id: 'agent', label: '全球' },
-  { id: 'region', label: '区域' },
-  { id: 'dept', label: '领域' },
-];
+const ASK_SUBTITLE_SKILLS = '选场景技能 · 再补充意图 · 对话到执行';
+const ASK_SUBTITLE_WITH_EXPERTS =
+  '选场景技能，或选营销 / 知识专家 · 点选填入 · 补充意图后执行';
+const DISCOVER_SUBTITLE = '看场景案例 · 学样板做法 · 再到做任务';
 
 export function HomePage({
   onSubmitTask,
   onInvokeAgent,
-  onInvokeSkill,
+  onInvokeSkill: _onInvokeSkill,
 }: HomePageProps) {
   const {
     homeMode,
     setHomeMode,
-    expertAxis,
-    agentRoleId,
-    category,
-    regionId,
-    setExpertAxis,
-    setAgentRoleId,
-    setCategory,
-    setRegionId,
     setDraftText,
+    requestComposerFocus,
     applyUserOrgDefaults,
   } = useHomeStore();
   const skills = useMarketplaceStore((s) => s.skills);
+  const agents = useMarketplaceStore((s) => s.agents);
+  const showToast = useMarketplaceStore((s) => s.showToast);
   const user = useSessionStore((s) => s.user);
   const executeAllowed = canExecuteChat(user?.platformRole);
-  const [orgBrowseOpen, setOrgBrowseOpen] = useState(true);
+  const roleEnabled = useNavPresentationStore((s) => s.roleEnabled);
+  const engagementOf = useContentEngagementStore((s) => s.get);
+  const engagementById = useContentEngagementStore((s) => s.byId);
+  const [businessFilter, setBusinessFilter] = useState<BusinessScenarioId | 'all'>('all');
+  const pendingBusinessScenario = useNavigationIntentStore((s) => s.pendingBusinessScenario);
+  const consumeBusinessScenario = useNavigationIntentStore((s) => s.consumeBusinessScenario);
+  const [orgSelection, setOrgSelection] = useState<OrgPerspectiveSelection>(
+    emptyOrgPerspectiveSelection,
+  );
+  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+
+  const showSceneExperts = useMemo(() => {
+    void roleEnabled;
+    return isDoTaskSceneExpertsVisible();
+  }, [roleEnabled]);
+
+  useEffect(() => {
+    if (homeMode !== 'assistant' || !pendingBusinessScenario) return;
+    const id = consumeBusinessScenario();
+    if (id) {
+      setBusinessFilter(id);
+      setSelectedSkillId(null);
+      setSelectedAgentId(null);
+    }
+  }, [homeMode, pendingBusinessScenario, consumeBusinessScenario]);
 
   const affiliation = useMemo(
     () => ({
@@ -81,13 +110,14 @@ export function HomePage({
     [user?.deptIds, user?.regionId],
   );
 
-  const visibleDepts = useMemo(
-    () => getVisibleHomeDepts(affiliation, user?.platformRole),
-    [affiliation, user?.platformRole],
-  );
-  const visibleRegions = useMemo(
-    () => getVisibleHomeRegions(affiliation, user?.platformRole),
-    [affiliation, user?.platformRole],
+  const orgResetKey = useMemo(
+    () =>
+      [
+        orgSelection.global.join(','),
+        orgSelection.region.join(','),
+        orgSelection.dept.join(','),
+      ].join('|'),
+    [orgSelection],
   );
 
   useEffect(() => {
@@ -108,29 +138,16 @@ export function HomePage({
   }, [user?.id, user?.deptIds?.join(','), user?.regionId, user?.platformRole, applyUserOrgDefaults]);
 
   useEffect(() => {
-    if (!visibleDepts.includes(category) && visibleDepts[0]) {
-      setCategory(visibleDepts[0]);
+    if (!showSceneExperts && selectedAgentId) {
+      setSelectedAgentId(null);
     }
-  }, [visibleDepts, category, setCategory]);
-
-  useEffect(() => {
-    if (!visibleRegions.includes(regionId) && visibleRegions[0]) {
-      useHomeStore.setState({ regionId: visibleRegions[0] });
-    }
-  }, [visibleRegions, regionId]);
+  }, [showSceneExperts, selectedAgentId]);
 
   const featuredSkills = useMemo(() => {
-    const byId = new Map(skills.filter((s) => s.published).map((s) => [s.id, s]));
-    const ids: string[] =
-      expertAxis === 'agent'
-        ? Object.entries(SKILL_ROLE_BY_ID)
-            .filter(([, role]) => role === agentRoleId)
-            .map(([id]) => id)
-        : expertAxis === 'region'
-          ? (HOME_REGION_SKILLS[regionId] ?? [])
-          : (HOME_BIZ_SKILLS[category] ?? []);
+    const byId = new Map(skills.map((s) => [s.id, s]));
+    const ids = listFeaturedDoTaskSkillIds(skills, businessFilter, 24);
 
-    const list = ids
+    return ids
       .map((id) => byId.get(id))
       .filter((s): s is PrototypeSkillSeed => Boolean(s))
       .filter((s) =>
@@ -140,30 +157,92 @@ export function HomePage({
           affiliation,
           role: user?.platformRole,
         }),
-      );
+      )
+      .filter((s) => skillMatchesOrgPerspectiveSelection(s, orgSelection));
+  }, [skills, businessFilter, orgSelection, user, affiliation]);
 
-    return expertAxis === 'agent' ? list.slice(0, 9) : list.slice(0, 3);
-  }, [skills, expertAxis, agentRoleId, category, regionId, user, affiliation]);
+  const featuredAgents = useMemo(() => {
+    if (!showSceneExperts) return [];
+    // 场景专家为全域门面：只按上架/精选/ACL，不按区域·领域·数字员工过滤
+    return listDoTaskSceneExperts(agents).filter((a) =>
+      canViewAsset(a, {
+        userId: user?.id,
+        userName: user?.name,
+        affiliation,
+        role: user?.platformRole,
+      }),
+    );
+  }, [agents, user, affiliation, showSceneExperts]);
+
+  useEffect(() => {
+    ensureEngagementSeeds(featuredSkills.map((s) => s.id));
+  }, [featuredSkills]);
+
+  useEffect(() => {
+    if (featuredAgents.length) ensureEngagementSeeds(featuredAgents.map((a) => a.id));
+  }, [featuredAgents]);
+
+  const hotSkillIds = useMemo(() => {
+    void engagementById;
+    return [...featuredSkills]
+      .sort(
+        (a, b) =>
+          heatScore({ ...engagementOf(b.id), uses: engagementOf(b.id).uses + (b.invokes ?? 0) }) -
+          heatScore({ ...engagementOf(a.id), uses: engagementOf(a.id).uses + (a.invokes ?? 0) }),
+      )
+      .slice(0, 3)
+      .map((s) => s.id);
+  }, [featuredSkills, engagementOf, engagementById]);
+
+  useEffect(() => {
+    if (selectedSkillId && !featuredSkills.some((s) => s.id === selectedSkillId)) {
+      setSelectedSkillId(null);
+    }
+  }, [featuredSkills, selectedSkillId]);
+
+  useEffect(() => {
+    if (selectedAgentId && !featuredAgents.some((a) => a.id === selectedAgentId)) {
+      setSelectedAgentId(null);
+    }
+  }, [featuredAgents, selectedAgentId]);
+
+  const selectSkill = (skill: PrototypeSkillSeed) => {
+    setSelectedSkillId(skill.id);
+    setSelectedAgentId(null);
+    setDraftText(`${skill.command} `);
+    requestComposerFocus();
+  };
+
+  const selectAgent = (agent: PrototypeAgentSeed) => {
+    setSelectedAgentId(agent.id);
+    setSelectedSkillId(null);
+    setDraftText(`${buildAgentDemoPrompt(agent)} `);
+    requestComposerFocus();
+  };
 
   const emptyHint =
-    expertAxis === 'agent'
-      ? '该角色暂无相关技能'
-      : expertAxis === 'region'
-        ? '该区域暂无相关技能'
-        : '该领域暂无相关技能';
+    businessFilter !== 'all' && !featuredSkills.length
+      ? '该业务场景暂无场景技能（建设中）'
+      : !isOrgPerspectiveEmpty(orgSelection)
+        ? '当前视角下暂无匹配技能'
+        : '暂无场景技能';
 
-  const deptChips = HOME_CATEGORIES.filter((c) => visibleDepts.includes(c.id));
-  const regionChips = REGIONS.filter((r) => visibleRegions.includes(r.id));
+  const agentEmptyHint = '暂无精选专家，可先用上方场景技能';
+
+  const selectedSkill = featuredSkills.find((s) => s.id === selectedSkillId) ?? null;
+  const selectedAgent = featuredAgents.find((a) => a.id === selectedAgentId) ?? null;
+  const composerTarget = selectedSkill ?? selectedAgent;
+  const askSubtitle = showSceneExperts ? ASK_SUBTITLE_WITH_EXPERTS : ASK_SUBTITLE_SKILLS;
 
   return (
     <div className="home-surface flex min-h-0 flex-1 flex-col overflow-y-auto scroll-hidden">
-      <div className="mx-auto flex w-full max-w-[960px] flex-1 flex-col px-5 py-4 md:px-6 md:py-5">
+      <div className="mx-auto flex w-full max-w-[960px] flex-1 flex-col overflow-x-visible px-8 py-4 md:px-11 md:py-5">
         <header className="mb-3 text-center">
           <h1 className="home-slogan-art">
             <span className="home-slogan-gradient">MSS AI提效作战平台，好学又好用！</span>
           </h1>
           <p className="mx-auto mt-2 max-w-xl text-[12px] leading-relaxed text-zinc-500">
-            {homeMode === 'assistant' ? ASK_SUBTITLE : DISCOVER_SUBTITLE}
+            {homeMode === 'assistant' ? askSubtitle : DISCOVER_SUBTITLE}
           </p>
         </header>
 
@@ -172,8 +251,8 @@ export function HomePage({
             <div className="inline-flex gap-1 rounded-full bg-zinc-100/90 p-1">
               {(
                 [
-                  { id: 'portal' as const, label: 'AI广场', icon: 'fa-compass' },
-                  { id: 'assistant' as const, label: 'AI任务', icon: 'fa-comment-dots' },
+                  { id: 'portal' as const, label: '学 · 找案例', icon: 'fa-compass' },
+                  { id: 'assistant' as const, label: '干 · 做任务', icon: 'fa-list-check' },
                 ] as const
               ).map((tab) => (
                 <button
@@ -195,163 +274,130 @@ export function HomePage({
           </div>
         ) : (
           <div className="mb-4 rounded-lg border border-amber-200/80 bg-amber-50 px-3 py-2 text-center text-[11px] leading-relaxed text-amber-900">
-            当前为只读访客：可浏览案例与任务结果，不可发起执行
+            当前为只读访客：可浏览案例，不可发起执行
           </div>
         )}
 
         {executeAllowed && homeMode === 'assistant' ? (
-          <>
-            <HomeCommandBox
-              onSubmit={(text) =>
-                onSubmitTask(text, useHomeStore.getState().resolveAgentFromText(text))
-              }
-            />
+          <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-x-visible pb-2">
+            <StationAnnounceBanner className="border-b border-zinc-100/90 pb-2" />
 
-            <div className="mt-3 flex flex-wrap justify-center gap-1.5">
-              {INTENT_PROMPTS.map((prompt) => (
-                <button
-                  key={prompt}
-                  type="button"
-                  onClick={() => setDraftText(prompt)}
-                  className="rounded-full border border-zinc-200/90 bg-white px-3 py-1 text-[11px] font-medium text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-900"
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
+            <section className="overflow-x-visible">
+              <SectionToolbar
+                title="场景技能"
+                filters={
+                  <BusinessScenarioFilterBar value={businessFilter} onChange={setBusinessFilter} />
+                }
+                trailing={<OrgPerspectiveFilter value={orgSelection} onChange={setOrgSelection} />}
+              />
 
-            <section className="mt-8">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-[12px] font-semibold text-zinc-800">推荐技能</h2>
-                <button
-                  type="button"
-                  onClick={() => setOrgBrowseOpen((v) => !v)}
-                  className="rounded-lg px-2 py-1 text-[11px] font-medium text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700"
-                >
-                  {orgBrowseOpen ? '收起' : '筛选'}
-                  <i
-                    className={cn(
-                      'fa-solid fa-chevron-down ml-1 text-[9px] transition',
-                      orgBrowseOpen && 'rotate-180',
-                    )}
-                  />
-                </button>
-              </div>
+              <CardPageCarousel
+                items={featuredSkills}
+                getKey={(s) => s.id}
+                resetKey={`${businessFilter}-${orgResetKey}`}
+                emptyText={emptyHint}
+                renderCard={(skill) => {
+                  const orgTags = getSkillOrgAxisTags(skill);
+                  const bizLabel = getSkillBusinessLabel(skill);
+                  const titleTags =
+                    orgTags.length > 0
+                      ? orgTags
+                      : bizLabel
+                        ? [{ axis: 'dept', id: 'biz', label: bizLabel }]
+                        : [];
+                  return (
+                    <HomeFeedCard
+                      title={skill.name}
+                      tags={titleTags}
+                      description={skill.desc}
+                      active={selectedSkillId === skill.id}
+                      onClick={() => selectSkill(skill)}
+                      contentId={skill.id}
+                      baseUses={skill.invokes ?? 0}
+                      isNew={isNewSkill(skill.id)}
+                      isHot={hotSkillIds.includes(skill.id)}
+                      onDownload={() => {
+                        downloadSkillFile(skill);
+                        showToast(`已下载技能包：${skill.name}`);
+                      }}
+                      onAfterAction={(action) => {
+                        if (action === 'dislike') showToast('已反馈，运营将关注优化');
+                      }}
+                    />
+                  );
+                }}
+              />
+            </section>
 
-              {orgBrowseOpen ? (
-                <div className="mb-3 space-y-2 rounded-xl border border-zinc-200/60 bg-zinc-50/60 p-2.5">
-                  <div className="flex justify-center gap-1 rounded-full bg-zinc-100/80 p-1">
-                    {SKILL_AXIS_TABS.map((tab) => (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => setExpertAxis(tab.id)}
-                        className={cn(
-                          'rounded-full px-3.5 py-1 text-[12px] font-medium transition',
-                          expertAxis === tab.id
-                            ? 'bg-white text-zinc-900 shadow-sm'
-                            : 'text-zinc-500 hover:text-zinc-700',
-                        )}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap justify-center gap-1.5">
-                    {expertAxis === 'agent'
-                      ? SKILL_ROLE_CATEGORIES.map((role) => {
-                          const active = agentRoleId === role.id;
-                          return (
-                            <button
-                              key={role.id}
-                              type="button"
-                              title={role.blurb}
-                              onClick={() => setAgentRoleId(role.id as SkillRoleId)}
-                              className={cn(
-                                'subcat-chip inline-flex items-center gap-1 px-3 py-1 text-[11px] font-medium',
-                                active && 'subcat-chip-active',
-                              )}
-                            >
-                              <i className={cn('fa-solid text-[9px]', role.icon)} />
-                              {role.label}
-                            </button>
-                          );
-                        })
-                      : (expertAxis === 'dept' ? deptChips : regionChips).map((item) => {
-                          const id = item.id;
-                          const active =
-                            expertAxis === 'dept' ? category === id : regionId === id;
-                          return (
-                            <button
-                              key={id}
-                              type="button"
-                              onClick={() =>
-                                expertAxis === 'dept'
-                                  ? setCategory(id as typeof category)
-                                  : setRegionId(id as typeof regionId)
-                              }
-                              className={cn(
-                                'subcat-chip px-3 py-1 text-[11px] font-medium',
-                                active && 'subcat-chip-active',
-                              )}
-                            >
-                              {item.label}
-                            </button>
-                          );
-                        })}
-                  </div>
-                </div>
-              ) : null}
+            {showSceneExperts ? (
+              <SceneExpertPanel
+                agents={featuredAgents}
+                selectedId={selectedAgentId}
+                onSelect={selectAgent}
+                emptyText={agentEmptyHint}
+              />
+            ) : null}
 
-              {featuredSkills.length === 0 ? (
-                <p className="py-4 text-center text-[12px] text-zinc-400">{emptyHint}</p>
-              ) : (
+            {/* 选中技能或专家后出现；置于场景专家下方，高度对齐场景工具 */}
+            {composerTarget ? (
+              <section>
+                <SectionToolbar
+                  title="补充意图"
+                  align="center"
+                  filters={
+                    <p className="truncate leading-none text-[11px] text-zinc-500">
+                      已选{' '}
+                      <span className="font-medium text-zinc-700">
+                        {selectedSkill?.name ?? selectedAgent?.name}
+                      </span>
+                      {selectedAgent ? (
+                        <span className="text-zinc-400"> · 专家</span>
+                      ) : (
+                        <span className="text-zinc-400"> · 技能</span>
+                      )}
+                    </p>
+                  }
+                  trailing={
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedSkillId(null);
+                        setSelectedAgentId(null);
+                        setDraftText('');
+                      }}
+                      className="text-[11px] font-medium leading-none text-zinc-400 transition hover:text-zinc-700"
+                    >
+                      取消
+                    </button>
+                  }
+                />
                 <div
                   className={cn(
-                    'grid grid-cols-1 gap-2',
-                    featuredSkills.length >= 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2',
+                    'overflow-hidden rounded-xl border border-zinc-200/80 bg-white',
+                    HOME_SECONDARY_PANEL_H,
                   )}
                 >
-                  {featuredSkills.map((skill) => (
-                    <button
-                      key={skill.id}
-                      type="button"
-                      onClick={() => onInvokeSkill(skill)}
-                      className="relative flex items-start gap-2.5 rounded-xl border border-zinc-200/70 bg-white/80 p-2.5 text-left transition hover:border-zinc-300"
-                    >
-                      {isNewSkill(skill.id) ? (
-                        <span
-                          className="pointer-events-none absolute right-2 top-2 z-10 rounded px-1 py-px text-[9px] font-bold uppercase tracking-wide text-white"
-                          style={{ backgroundColor: '#C8102E' }}
-                          title="新品"
-                          aria-label="New"
-                        >
-                          New
-                        </span>
-                      ) : null}
-                      <SkillAvatar
-                        skillId={skill.id}
-                        icon={skill.icon}
-                        size={32}
-                        title={skill.name}
-                      />
-                      <div className="min-w-0 flex-1 pr-8">
-                        <p className="truncate text-[12px] font-semibold text-zinc-900">
-                          {skill.name}
-                        </p>
-                        <p className="mt-0.5 font-mono text-[10px] text-claw-700">{skill.command}</p>
-                        <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-zinc-500">
-                          {skill.desc}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
+                  <HomeCommandBox
+                    compact
+                    placeholder={
+                      selectedSkill
+                        ? `补充意图，例如：${selectedSkill.command} 本周重点市场…`
+                        : `补充意图后发送，将调用专家「${selectedAgent?.name ?? ''}」`
+                    }
+                    onSubmit={(text) => {
+                      if (selectedAgent) {
+                        onSubmitTask(text, selectedAgent);
+                        return;
+                      }
+                      onSubmitTask(text, useHomeStore.getState().resolveAgentFromText(text));
+                    }}
+                  />
                 </div>
-              )}
-            </section>
-          </>
+              </section>
+            ) : null}
+          </div>
         ) : (
-          <HomeScenePortal onInvokeAgent={onInvokeAgent} onInvokeSkill={onInvokeSkill} />
+          <HomeScenePortal onInvokeAgent={onInvokeAgent} onInvokeSkill={_onInvokeSkill} />
         )}
       </div>
     </div>

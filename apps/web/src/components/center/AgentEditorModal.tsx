@@ -11,6 +11,8 @@ import {
 } from '@/components/center/CenterFormFields';
 import { getEfficiencyLabel } from '@/domain/prototype/constants';
 import type { EfficiencyCategory, PrototypeAgentSeed } from '@/domain/prototype/types';
+import { resolveAgentFeaturedInDoTask } from '@/domain/agentBusinessScenarios';
+import { DO_TASK_FEATURED_HINT } from '@/domain/capabilityShelf';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
@@ -50,6 +52,7 @@ function normalizeAgent(agent: PrototypeAgentSeed): PrototypeAgentSeed {
     planSteps: Array.isArray(agent.planSteps) ? agent.planSteps : [],
     systemPrompt: agent.systemPrompt ?? '',
     demoPrompt: agent.demoPrompt ?? '',
+    featuredInDoTask: resolveAgentFeaturedInDoTask(agent),
   };
 }
 
@@ -271,7 +274,22 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
             checked={form.published}
             onChange={(e) => setForm({ ...form, published: e.target.checked })}
           />
-          <span className="text-[13px]">提交上架审批</span>
+          <span className="text-[13px]">提交上架审批（能力上架）</span>
+        </label>
+
+        <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-3 py-2.5">
+          <input
+            type="checkbox"
+            className="mt-0.5 accent-claw-600"
+            checked={Boolean(form.featuredInDoTask)}
+            onChange={(e) => setForm({ ...form, featuredInDoTask: e.target.checked })}
+          />
+          <span>
+            <span className="block text-[13px] font-medium text-zinc-800">精选露出到「做任务 · 场景专家」</span>
+            <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500">
+              {DO_TASK_FEATURED_HINT}
+            </span>
+          </span>
         </label>
       </div>
     </CenterModal>

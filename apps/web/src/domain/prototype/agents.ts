@@ -1,8 +1,32 @@
 import type { PrototypeAgentSeed } from '@/domain/prototype/types';
 import { getAgentPack } from '@/domain/agents/catalog';
 
-/** 来源：index.html DEFAULT_AGENTS（Phase1 打样 14 Agent）+ 组织归属字段 */
+/** 来源：index.html DEFAULT_AGENTS（Phase1 打样）+ 业务橱窗门面专家 + 组织归属字段 */
 const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
+  {
+    id: 'agent-marketing',
+    name: '营销 Agent',
+    desc: '【业务专家】AI 问数、问报告与智能分析：销售/渠道/零售数据洞察与行动建议（编排多技能）',
+    category: 'manage',
+    bizLine: 'GTM/MKT/渠道',
+    homeTag: 'gtm',
+    ownerDeptIds: ['gtm', 'mkt', 'channel', 'retail', 'ecommerce'],
+    ownerRegionIds: ['china', 'apac', 'mea', 'latam', 'europe', 'eurasia'],
+    author: '华为 MSS',
+    published: true,
+    invokes: 5200,
+    skillIds: [
+      'skill-data-analysis',
+      'skill-so-report',
+      'skill-retail-insight',
+      'skill-price-monitor',
+      'skill-work-summary',
+    ],
+    chatId: 'marketing',
+    icon: 'fa-chart-line',
+    color: 'from-zinc-800 to-zinc-950',
+    scenarioTags: ['问数', '报表', '分析', '营销', 'SO'],
+  },
   {
     id: 'agent-data-analysis',
     name: '数据分析 Agent',
@@ -251,20 +275,26 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
   {
     id: 'agent-knowledge',
     name: '知识 Agent',
-    desc: '【体验提升】企业 RAG 问答，带引用的文献溯源与 SOP 检索（可对话编排 Skill）',
+    desc: '【业务专家】知识问答与知识陪练：制度/SOP/案例检索问答，并可开展话术与培训陪练（编排多技能）',
     category: 'experience',
-    bizLine: '服务/质量与运营',
+    bizLine: '服务/质量与运营/零售',
     homeTag: 'service',
-    ownerDeptIds: ['service', 'quality'],
-    ownerRegionIds: ['mea', 'eurasia'],
+    ownerDeptIds: ['service', 'quality', 'retail', 'hr'],
+    ownerRegionIds: ['china', 'apac', 'mea', 'latam', 'europe', 'eurasia'],
     author: '华为 MSS',
     published: true,
     invokes: 3520,
-    skillIds: ['skill-rag', 'skill-rerank', 'skill-complaint-sop'],
+    skillIds: [
+      'skill-rag',
+      'skill-rerank',
+      'skill-complaint-sop',
+      'skill-retail-coach',
+      'skill-training-gen',
+    ],
     chatId: 'knowledge',
     icon: 'fa-book-open',
     color: 'from-zinc-600 to-zinc-800',
-    scenarioTags: ['知识', 'SOP', '客诉', '指南'],
+    scenarioTags: ['知识问答', '陪练', 'SOP', '检索'],
   },
   {
     id: 'agent-retail-coach',

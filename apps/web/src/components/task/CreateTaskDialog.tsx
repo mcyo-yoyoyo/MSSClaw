@@ -7,7 +7,7 @@ interface CreateTaskDialogProps {
   onCreateWarRoom: (title: string) => void;
 }
 
-/** 仅用于新建群聊；Agent 任务统一走首页 AI任务 */
+/** 仅用于新建协作空间；Agent 任务统一走首页做任务 */
 export function CreateTaskDialog({ open, onClose, onCreateWarRoom }: CreateTaskDialogProps) {
   const [title, setTitle] = useState('');
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -22,7 +22,7 @@ export function CreateTaskDialog({ open, onClose, onCreateWarRoom }: CreateTaskD
   if (!open) return null;
 
   const handleSubmit = () => {
-    onCreateWarRoom(title.trim() || '新协作室');
+    onCreateWarRoom(title.trim() || '新协作空间');
     setTitle('');
     onClose();
   };
@@ -39,7 +39,7 @@ export function CreateTaskDialog({ open, onClose, onCreateWarRoom }: CreateTaskD
       >
         <div className="flex items-center justify-between border-b border-black/[0.05] px-5 py-4">
           <h3 id="create-task-title" className="text-sm font-bold text-[#1d1d1f]">
-            新建群聊
+            新建协作空间
           </h3>
           <button type="button" onClick={onClose} className="text-[#aeaeb2] hover:text-[#6e6e73]">
             <i className="fa-solid fa-xmark" />
@@ -47,7 +47,7 @@ export function CreateTaskDialog({ open, onClose, onCreateWarRoom }: CreateTaskD
         </div>
         <div className="space-y-4 p-5">
           <div>
-            <label className="mb-1 block text-[11px] font-semibold text-[#86868b]">群聊标题</label>
+            <label className="mb-1 block text-[11px] font-semibold text-[#86868b]">协作空间标题</label>
             <input
               type="text"
               value={title}
@@ -58,13 +58,13 @@ export function CreateTaskDialog({ open, onClose, onCreateWarRoom }: CreateTaskD
                   handleSubmit();
                 }
               }}
-              placeholder="例如：Q3 拉美 Campaign 作战室"
+              placeholder="例如：Q3 拉美 Campaign 协作空间"
               className="w-full rounded-xl border border-black/8 px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-claw-500/20"
               autoFocus
             />
           </div>
           <p className="rounded-xl bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-800">
-            创建后你将成为管理员，可邀请成员进入本协作室；AI 能力仅对本室成员开放。
+            创建后你将成为管理员，可邀请成员进入本协作空间；AI 能力仅对本空间成员开放。
           </p>
         </div>
         <div className="flex justify-end gap-2 border-t border-black/[0.05] px-5 py-4">

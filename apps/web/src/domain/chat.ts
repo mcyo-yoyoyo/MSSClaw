@@ -44,6 +44,15 @@ export const ChatConfigSchema = z.object({
   badge: z.string().optional(),
   agentId: z.string().optional(),
   actionType: z.enum(['marketing', 'knowledge']).optional(),
+  /**
+   * 任务来源（静默打标，侧栏暂不分组）
+   * skill | expert | case_demo | embedded | other
+   */
+  taskSource: z.enum(['skill', 'expert', 'case_demo', 'embedded', 'other']).optional(),
+  /** 业务场景 S1–S8（来自做任务筛选 / 技能或专家映射） */
+  businessScenarioId: z.enum(['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8']).optional(),
+  /** 若由场景技能开工，记录 skill id */
+  skillId: z.string().optional(),
   createdAt: z.number().optional(),
   pinnedAt: z.number().optional(),
   /** WarRoom 管理员用户 id */
@@ -105,7 +114,7 @@ export const LEGACY_DEFAULT_CHAT_IDS = new Set([
   'test_task',
 ]);
 
-/** 可删除的任务/群聊：用户新建，或历史默认 Agent 会话 */
+/** 可删除的任务/协作空间：用户新建，或历史默认 Agent 会话 */
 export function isUserCreatedTask(
   chat: Pick<ChatConfig, 'id'> & Partial<Pick<ChatConfig, 'type' | 'sessionGroup'>>,
 ): boolean {

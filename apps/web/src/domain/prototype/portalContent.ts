@@ -200,7 +200,7 @@ export const PROTOTYPE_PORTAL_CONTENT: PortalContentItem[] = [
     primarySkillId: 'skill-retail-coach',
     kbDocId: 'kb-nova-training',
     publishedAt: '2026-07-07',
-    scenarioTags: ['门店', '培训', 'Nova'],
+    scenarioTags: ['门店', '培训', 'Nova', '陪练'],
     painPoint: '门店卖点脚本更新慢，陪练资源不足。',
     impactMetric: '新品话术上岗周期 −40%',
     steps: ['进入培训课', '调用零售陪练 Skill', '发起陪练并查看考核'],
@@ -248,7 +248,7 @@ export const PROTOTYPE_PORTAL_CONTENT: PortalContentItem[] = [
     primarySkillId: 'skill-so-report',
     toolId: 'tool-isrp',
     publishedAt: '2026-07-06',
-    scenarioTags: ['SO', '代表处', '返利', '结算'],
+    scenarioTags: ['SO', '代表处', '数据分析', '经营'],
   },
   {
     id: 'portal-case-service-sop',
@@ -263,7 +263,7 @@ export const PROTOTYPE_PORTAL_CONTENT: PortalContentItem[] = [
     primarySkillId: 'skill-complaint-sop',
     kbDocId: 'kb-sop-complaint',
     publishedAt: '2026-07-04',
-    scenarioTags: ['客诉', 'SOP', '知识'],
+    scenarioTags: ['客诉', '服务', '工单', 'SOP'],
     painPoint: '一线检索 SOP 路径长，话术口径漂移。',
     impactMetric: '一线话术一致性抽检通过率 +18%',
     steps: [
@@ -325,7 +325,7 @@ export const PROTOTYPE_PORTAL_CONTENT: PortalContentItem[] = [
     toolId: 'tool-isrp',
     kbDocId: 'kb-rebate-q3',
     publishedAt: '2026-07-02',
-    scenarioTags: ['返利', '代表处', 'SO', '结算'],
+    scenarioTags: ['返利', '代表处', 'SO', '数据分析', '经营'],
     painPoint: '代表处返利异常依赖月度人工对账，难以及时纠偏。',
     impactMetric: '异常周清；对账人工工时 −45%',
     steps: [

@@ -69,7 +69,7 @@ export const useToolStore = create<ToolState>((set, get) => ({
     await new Promise((r) => setTimeout(r, 1100));
     set({
       testRunning: false,
-      toast: `�?{tool.displayName}」连接成�?· ${tool.endpoint} · ${tool.rateLimit}`,
+      toast: `�?{tool.displayName}」连接成�?· ${tool.endpoint} · ${tool.rateLimit}`,
     });
   },
 

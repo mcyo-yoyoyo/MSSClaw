@@ -2,7 +2,11 @@ import { create } from 'zustand';
 import type { AppView } from '@/domain/appView';
 import {
   buildRoleNavPreset,
+  clampBusinessShellSlots,
   CONFIGURABLE_ROLES,
+  isBusinessShellRole,
+  isBusinessShellSlot,
+  isSlotConfiguredOn,
   migrateLegacyEnabled,
   NAV_FALLBACK_ORDER,
   NAV_PRESENTATION_META,
@@ -12,14 +16,18 @@ import {
   type NavSlotId,
   type RoleNavMatrix,
 } from '@/domain/navPresentation';
+import { listConfigurableSidebarSlots } from '@/domain/navPresetMatrix';
 import { isSystemAdmin } from '@/domain/currentUser';
 import { canRoleAccessView } from '@/domain/navRbac';
 import type { PlatformRole } from '@/domain/rbac';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
-/** v4: per-role menu matrix including warroom slot */
-const LS_KEY = 'mssclaw_nav_presentation_v4';
+/** v7: 业务壳仅工作平台可配；完整能力在运营/超管角色上配置 */
+const LS_KEY = 'mssclaw_nav_presentation_v7';
+const LS_KEY_V6 = 'mssclaw_nav_presentation_v6';
+const LS_KEY_V5 = 'mssclaw_nav_presentation_v5';
+const LS_KEY_V4 = 'mssclaw_nav_presentation_v4';
 
 interface PersistedNavPresentation {
   preset: NavPresetId;
@@ -30,21 +38,33 @@ function defaultState(): PersistedNavPresentation {
   return { preset: 'customer', roleEnabled: buildRoleNavPreset('customer') };
 }
 
+function mergeRoleEnabled(parsed: Partial<RoleNavMatrix> | undefined): RoleNavMatrix {
+  const base = buildRoleNavPreset('customer');
+  if (!parsed) return base;
+  for (const role of CONFIGURABLE_ROLES) {
+    const row = parsed[role];
+    if (!row) continue;
+    for (const id of NAV_SLOT_IDS) {
+      if (typeof row[id] === 'boolean') base[role][id] = row[id]!;
+    }
+  }
+  return base;
+}
+
+function normalizePersisted(preset: NavPresetId, roleEnabled: RoleNavMatrix): PersistedNavPresentation {
+  // 命名预设以代码矩阵为准（避免旧 localStorage 卡住超管精简菜单）
+  if (preset === 'customer' || preset === 'standard' || preset === 'full') {
+    return { preset, roleEnabled: buildRoleNavPreset(preset) };
+  }
+  // custom：保留勾选；业务壳永远只保留工作平台槽位
+  return { preset, roleEnabled: clampBusinessShellSlots(roleEnabled) };
+}
+
 function loadPersisted(): PersistedNavPresentation {
   try {
-    const v4 = localStorage.getItem(LS_KEY);
-    if (v4) {
-      const parsed = JSON.parse(v4) as Partial<PersistedNavPresentation>;
-      const base = buildRoleNavPreset('customer');
-      if (parsed.roleEnabled) {
-        for (const role of CONFIGURABLE_ROLES) {
-          const row = parsed.roleEnabled[role];
-          if (!row) continue;
-          for (const id of NAV_SLOT_IDS) {
-            if (typeof row[id] === 'boolean') base[role][id] = row[id]!;
-          }
-        }
-      }
+    const v7 = localStorage.getItem(LS_KEY);
+    if (v7) {
+      const parsed = JSON.parse(v7) as Partial<PersistedNavPresentation>;
       const preset =
         parsed.preset === 'customer' ||
         parsed.preset === 'standard' ||
@@ -52,7 +72,52 @@ function loadPersisted(): PersistedNavPresentation {
         parsed.preset === 'full'
           ? parsed.preset
           : 'customer';
-      return { preset, roleEnabled: base };
+      return normalizePersisted(preset, mergeRoleEnabled(parsed.roleEnabled));
+    }
+
+    const v6 = localStorage.getItem(LS_KEY_V6);
+    if (v6) {
+      const parsed = JSON.parse(v6) as Partial<PersistedNavPresentation>;
+      const preset =
+        parsed.preset === 'customer' ||
+        parsed.preset === 'standard' ||
+        parsed.preset === 'custom' ||
+        parsed.preset === 'full'
+          ? parsed.preset
+          : 'customer';
+      const next = normalizePersisted(preset, mergeRoleEnabled(parsed.roleEnabled));
+      persist(next);
+      return next;
+    }
+
+    const v5 = localStorage.getItem(LS_KEY_V5);
+    if (v5) {
+      const parsed = JSON.parse(v5) as Partial<PersistedNavPresentation>;
+      const preset =
+        parsed.preset === 'customer' ||
+        parsed.preset === 'standard' ||
+        parsed.preset === 'custom' ||
+        parsed.preset === 'full'
+          ? parsed.preset
+          : 'customer';
+      const next = normalizePersisted(preset, mergeRoleEnabled(parsed.roleEnabled));
+      persist(next);
+      return next;
+    }
+
+    const v4 = localStorage.getItem(LS_KEY_V4);
+    if (v4) {
+      const parsed = JSON.parse(v4) as Partial<PersistedNavPresentation>;
+      const preset =
+        parsed.preset === 'customer' ||
+        parsed.preset === 'standard' ||
+        parsed.preset === 'custom' ||
+        parsed.preset === 'full'
+          ? parsed.preset
+          : 'customer';
+      const next = normalizePersisted(preset, mergeRoleEnabled(parsed.roleEnabled));
+      persist(next);
+      return next;
     }
 
     const v3 = localStorage.getItem('mssclaw_nav_presentation_v3');
@@ -66,7 +131,7 @@ function loadPersisted(): PersistedNavPresentation {
         parsed.preset === 'full'
           ? parsed.preset
           : 'customer';
-      const next = { preset, roleEnabled };
+      const next = normalizePersisted(preset, roleEnabled);
       persist(next);
       return next;
     }
@@ -146,8 +211,20 @@ export const useNavPresentationStore = create<NavPresentationState>((set, get) =
     setSlotEnabled: (role, slot, on) => {
       if (!isSystemAdmin()) return;
       const meta = NAV_PRESENTATION_META.find((m) => m.id === slot);
-      if (meta?.locked && slot === PRESENTATION_CONFIG_VIEW && !on) return;
+      // locked 治理项不可关闭
+      if (meta?.locked && !on) return;
       if (meta?.adminOnly && role !== 'super_admin') return;
+      // 业务壳只能配工作平台；能力配置请改「能力运营/超管」
+      if (isBusinessShellRole(role) && !isBusinessShellSlot(slot) && on) {
+        return;
+      }
+      // 业务壳首页是找案例/做任务总闸，不可关
+      if (isBusinessShellRole(role) && slot === 'home' && !on) {
+        return;
+      }
+      if (role === 'viewer' && (slot === 'task' || slot === 'warroom') && on) {
+        return;
+      }
 
       const roleEnabled: RoleNavMatrix = {
         ...get().roleEnabled,
@@ -161,10 +238,17 @@ export const useNavPresentationStore = create<NavPresentationState>((set, get) =
           if (m.adminOnly) roleEnabled[role][m.id] = false;
         }
       } else {
+        // 超管 locked 治理项保持开启
+        for (const m of NAV_PRESENTATION_META) {
+          if (m.locked && m.adminOnly) roleEnabled.super_admin[m.id] = true;
+        }
         roleEnabled.super_admin[PRESENTATION_CONFIG_VIEW] = true;
       }
 
-      const next = { preset: 'custom' as NavPresetId, roleEnabled };
+      const next = {
+        preset: 'custom' as NavPresetId,
+        roleEnabled: clampBusinessShellSlots(roleEnabled),
+      };
       persist(next);
       set(next);
     },
@@ -182,7 +266,7 @@ export const useNavPresentationStore = create<NavPresentationState>((set, get) =
 
     exportConfig: () => {
       const { preset, roleEnabled } = get();
-      return JSON.stringify({ version: 4, preset, roleEnabled }, null, 2);
+      return JSON.stringify({ version: 5, preset, roleEnabled }, null, 2);
     },
 
     importConfig: (json) => {
@@ -216,7 +300,7 @@ export const useNavPresentationStore = create<NavPresentationState>((set, get) =
           parsed.preset === 'full'
             ? parsed.preset
             : 'custom';
-        const next = { preset, roleEnabled };
+        const next = normalizePersisted(preset, roleEnabled);
         persist(next);
         set(next);
         return true;
@@ -227,8 +311,9 @@ export const useNavPresentationStore = create<NavPresentationState>((set, get) =
 
     enabledCount: (roleArg) => {
       const role = roleArg ?? get().editingRole;
-      return NAV_PRESENTATION_META.filter(
-        (m) => !m.hiddenFromSidebar && get().isSlotEnabled(m.id, role),
+      const matrix = get().roleEnabled;
+      return listConfigurableSidebarSlots(role).filter((id) =>
+        isSlotConfiguredOn(matrix, role, id),
       ).length;
     },
   };

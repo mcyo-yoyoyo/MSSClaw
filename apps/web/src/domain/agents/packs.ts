@@ -4,8 +4,37 @@ function pack(p: RunnableAgentPack): RunnableAgentPack {
   return p;
 }
 
-/** 14 个 Phase1 专家的可运行演示包 */
+/** Phase1 专家可运行演示包 + 业务橱窗门面专家 */
 export const AGENT_PACKS: RunnableAgentPack[] = [
+  pack({
+    id: 'agent-marketing',
+    primarySkillId: 'skill-data-analysis',
+    agentType: 'marketing',
+    systemPrompt:
+      '你是 MSS 营销 Agent，面向业务的问数、问报告与智能分析专家。优先编排：多源数据分析 → SO/零售洞察 → 价格与异动解释 → 行动建议与简报。口径不清时先声明假设。标注演示样例。',
+    demoPrompt:
+      '@营销 Agent 请基于演示样例做一次智能分析：近一周欧洲穿戴销售趋势、代表处排名异动，并输出可进例会的简报与三条行动建议（可衔接 /数据分析、/so报表）。',
+    planSteps: [
+      '澄清问数/问报告目标与口径',
+      '挂载数据分析并汇总关键指标（/数据分析）',
+      '对齐 SO/零售报表并标注异常（/so报表、零售洞察）',
+      '输出洞察结论、风险与行动建议简报',
+    ],
+    mockReport: `✅ **营销 Agent 完成**（演示样例）
+
+### 问数结论
+欧洲穿戴周 SO 环比偏正；DE/UK 领跑；南欧库存效率待改善。
+
+### 报告要点
+- 渠道：UK 高转化素材可复用
+- 价格：关注促销 ROI 回落 SKU
+- 库存：南欧畅销 SKU 需补货
+
+### 行动
+1. 补齐南欧畅销 SKU  
+2. 复用 UK 高转化素材  
+3. 下周复盘促销 ROI`,
+  }),
   pack({
     id: 'agent-data-analysis',
     primarySkillId: 'skill-data-analysis',
@@ -276,18 +305,22 @@ UK 第三方 -4% 需核实授权促销；建议核对价盘并同步活动日历
     primarySkillId: 'skill-rag',
     agentType: 'knowledge',
     systemPrompt:
-      '你是企业知识 Agent。编排：检索 → 重排 →（如客诉）SOP 匹配。回答必须带引用，未命中时诚实说明。',
+      '你是 MSS 知识 Agent，面向业务的知识问答与知识陪练专家。编排：检索 → 重排 → SOP/话术；需要演练时衔接培训与陪练。回答必须带引用，未命中时诚实说明。',
     demoPrompt:
-      '@知识 Agent /检索 请基于演示样例回答：欧洲门店 DOS 过高应按什么 SOP 处理？并做重排说明。',
+      '@知识 Agent 请基于演示样例完成：1）回答「欧洲门店 DOS 过高应按什么 SOP 处理？」并给出引用；2）给出一轮相关话术陪练要点。',
     planSteps: [
-      '提问重写与分区检索（/检索）',
-      '候选重排 Top-K（/rerank）',
-      '生成带引用回答',
-      '如涉客诉则匹配 SOP 话术',
+      '澄清是知识问答还是陪练演练',
+      '分区检索与重排（/检索、/rerank）',
+      '生成带引用回答或匹配 SOP',
+      '如需陪练则给出场景脚本与评分要点',
     ],
     mockReport: `✅ **知识 Agent 完成**（演示样例）
 
-命中《DOS 异常处置 SOP》；流程：核对口径 → 识别缺货/滞销 → 调拨/促销 → 培训跟进。`,
+### 知识问答
+命中《DOS 异常处置 SOP》；流程：核对口径 → 识别缺货/滞销 → 调拨/促销 → 培训跟进。
+
+### 陪练要点
+场景：库存异议解释；先对齐口径再给动作；话术完整性建议 4/5。`,
   }),
   pack({
     id: 'agent-retail-coach',

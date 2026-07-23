@@ -7,8 +7,8 @@ import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 
 interface CaseOutcomePanelProps {
   card: CaseOutcomeCard;
-  onInvokeSkill?: () => void;
-  onInvokeAgent?: () => void;
+  /** 按此案例打样（技能或专家二选一主转化） */
+  onDemoCase?: () => void;
   onDownload?: () => void;
   onEdit?: () => void;
   skillLabel?: string;
@@ -20,8 +20,7 @@ interface CaseOutcomePanelProps {
 
 export function CaseOutcomePanel({
   card,
-  onInvokeSkill,
-  onInvokeAgent,
+  onDemoCase,
   onDownload,
   onEdit,
   skillLabel,
@@ -31,7 +30,6 @@ export function CaseOutcomePanel({
 }: CaseOutcomePanelProps) {
   return (
     <div className={cn('space-y-4 text-left', className)}>
-      {/* 文档预览置顶：上传的 PDF / PPT / Office */}
       {card.previewFile ? (
         <CaseDocumentPreview file={card.previewFile} />
       ) : showDocumentSlot ? (
@@ -148,22 +146,13 @@ export function CaseOutcomePanel({
       )}
 
       <div className="flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-3">
-        {onInvokeSkill ? (
+        {onDemoCase ? (
           <button
             type="button"
-            onClick={onInvokeSkill}
+            onClick={onDemoCase}
             className="rounded-xl bg-zinc-900 px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-800"
           >
-            调用技能
-          </button>
-        ) : null}
-        {onInvokeAgent ? (
-          <button
-            type="button"
-            onClick={onInvokeAgent}
-            className="rounded-xl border border-black/8 px-3.5 py-2 text-[12px] font-medium transition hover:bg-black/[0.03]"
-          >
-            单独调用此专家
+            按此案例打样
           </button>
         ) : null}
         {onEdit ? (
@@ -192,7 +181,7 @@ export function CaseOutcomePanel({
         <EngagementActions
           contentId={card.id}
           className="ml-auto"
-          onDownload={onDownload}
+          showDownload={!onDownload}
         />
       </div>
     </div>

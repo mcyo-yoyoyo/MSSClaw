@@ -23,6 +23,10 @@ export interface SharedComposerProps {
   placeholder?: string;
   /** workspace：斜杠菜单向上弹出 */
   slashPlacement?: 'inside' | 'above';
+  /** AI任务着陆：隐藏 @ Agent，突出 Skill */
+  hideAgent?: boolean;
+  /** 压缩高度：对齐 AI广场「场景工具」卡片区 */
+  compact?: boolean;
 }
 
 /**
@@ -36,9 +40,13 @@ export function SharedComposer({
   disabled = false,
   placeholder,
   slashPlacement,
+  hideAgent = false,
+  compact = false,
 }: SharedComposerProps) {
   const landing = variant === 'landing';
   const menuPlacement = slashPlacement ?? (landing ? 'inside' : 'above');
+  const skillOnly = hideAgent || landing;
+  const compactLanding = landing && compact;
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashMode, setSlashMode] = useState<'/' | '@'>('/');
   const [picker, setPicker] = useState<'agent' | 'skill' | null>(null);
@@ -69,7 +77,7 @@ export function SharedComposer({
     textareaRef.current?.focus();
   }, notify);
 
-  const maxGrow = landing ? 140 : 140;
+  const maxGrow = compactLanding ? 48 : landing ? 140 : 140;
 
   useEffect(() => {
     if (!landing || composerFocusKey <= 0) return;
@@ -88,7 +96,7 @@ export function SharedComposer({
     if (before.match(/\/[^\s]*$/)) {
       setSlashMode('/');
       setSlashOpen(true);
-    } else if (before.match(/@[^\s]*$/)) {
+    } else if (!skillOnly && before.match(/@[^\s]*$/)) {
       setSlashMode('@');
       setSlashOpen(true);
     } else {
@@ -168,7 +176,7 @@ export function SharedComposer({
   const defaultPlaceholder = !executeAllowed
     ? '只读模式：可浏览结果，不可发送执行'
     : landing
-      ? '描述你想完成的事… @ 选专家，/ 调技能'
+      ? '补充你的意图… / 调技能 · Enter 发送'
       : '继续对话… @ 专家 · / 技能 · Enter 发送';
 
   const slashMenu = slashOpen && executeAllowed ? (
@@ -185,7 +193,13 @@ export function SharedComposer({
     <>
       <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} />
 
-      <div className={cn('relative w-full', !landing && 'shared-composer-workspace')}>
+      <div
+        className={cn(
+          'relative w-full',
+          !landing && 'shared-composer-workspace',
+          compactLanding && 'h-full',
+        )}
+      >
         {!executeAllowed ? (
           <div className="mb-2 rounded-lg border border-amber-200/80 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
             {READONLY_EXECUTE_HINT}
@@ -195,10 +209,16 @@ export function SharedComposer({
           <div className="absolute bottom-full left-0 right-0 z-40 mb-1">{slashMenu}</div>
         ) : null}
 
-        <div className={cn('wb-command-box overflow-hidden', !landing && 'wb-command-box--workspace')}>
+        <div
+          className={cn(
+            'wb-command-box overflow-hidden',
+            !landing && 'wb-command-box--workspace',
+            compactLanding && 'flex h-full min-h-0 flex-col border-0 shadow-none',
+          )}
+        >
           <textarea
             ref={textareaRef}
-            rows={landing ? 3 : 2}
+            rows={compactLanding ? 1 : landing ? 3 : 2}
             value={value}
             disabled={inputDisabled}
             readOnly={!executeAllowed}
@@ -218,9 +238,11 @@ export function SharedComposer({
             }}
             className={cn(
               'w-full resize-none bg-transparent text-zinc-900 placeholder:text-zinc-400 focus:outline-none disabled:opacity-60',
-              landing
-                ? 'min-h-[74px] px-5 pb-1 pt-3 text-[14px] leading-relaxed md:text-[15px]'
-                : 'min-h-[52px] px-4 pb-1 pt-2.5 text-[13px] leading-relaxed',
+              compactLanding
+                ? 'min-h-0 flex-1 px-3 pb-0.5 pt-2 text-[12px] leading-snug'
+                : landing
+                  ? 'min-h-[74px] px-5 pb-1 pt-3 text-[14px] leading-relaxed md:text-[15px]'
+                  : 'min-h-[52px] px-4 pb-1 pt-2.5 text-[13px] leading-relaxed',
             )}
             placeholder={placeholder ?? defaultPlaceholder}
           />
@@ -229,29 +251,50 @@ export function SharedComposer({
 
           <div
             className={cn(
-              'flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200/80 bg-zinc-50/80',
-              landing ? 'px-4 py-2' : 'px-3 py-1.5',
+              'flex items-center justify-between gap-2 border-t border-zinc-200/80 bg-zinc-50/80',
+              compactLanding
+                ? 'h-[28px] shrink-0 flex-nowrap px-1.5 py-0'
+                : landing
+                  ? 'flex-wrap px-4 py-2'
+                  : 'flex-wrap px-3 py-1.5',
             )}
           >
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div
+              className={cn(
+                'flex items-center',
+                compactLanding ? 'min-w-0 flex-nowrap gap-1 overflow-hidden' : 'flex-wrap gap-1.5',
+              )}
+            >
               <button
                 type="button"
                 onClick={() => setPicker('skill')}
                 disabled={inputDisabled}
-                className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-60"
+                className={cn(
+                  'rounded-md border border-zinc-200 bg-white font-medium text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-60',
+                  compactLanding
+                    ? 'h-5 shrink-0 px-1.5 text-[9px] leading-none'
+                    : 'rounded-lg px-2.5 py-1.5 text-[11px]',
+                )}
               >
-                <i className="fa-solid fa-cube mr-1 text-[10px] text-zinc-500" />
+                <i
+                  className={cn(
+                    'fa-solid fa-cube text-zinc-500',
+                    compactLanding ? 'mr-0.5 text-[8px]' : 'mr-1 text-[10px]',
+                  )}
+                />
                 / Skill
               </button>
-              <button
-                type="button"
-                onClick={() => setPicker('agent')}
-                disabled={inputDisabled}
-                className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-60"
-              >
-                <i className="fa-solid fa-robot mr-1 text-[10px] text-zinc-500" />
-                @ Agent
-              </button>
+              {!skillOnly ? (
+                <button
+                  type="button"
+                  onClick={() => setPicker('agent')}
+                  disabled={inputDisabled}
+                  className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-60"
+                >
+                  <i className="fa-solid fa-robot mr-1 text-[10px] text-zinc-500" />
+                  @ Agent
+                </button>
+              ) : null}
               <select
                 value={config.model}
                 onChange={(e) => {
@@ -263,7 +306,12 @@ export function SharedComposer({
                   selectModel(v);
                 }}
                 disabled={inputDisabled}
-                className="max-w-[168px] rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] text-zinc-800 disabled:opacity-60"
+                className={cn(
+                  'border border-zinc-200 bg-white text-zinc-800 disabled:opacity-60',
+                  compactLanding
+                    ? 'h-5 max-w-[112px] shrink rounded-md px-1 text-[9px] leading-none'
+                    : 'max-w-[168px] rounded-lg px-2.5 py-1.5 text-[11px]',
+                )}
                 title="选择模型 · 可配置 API"
               >
                 <optgroup label="默认模型">
@@ -290,15 +338,18 @@ export function SharedComposer({
               </select>
             </div>
 
-            <div className="flex items-center gap-1">
+            <div className={cn('flex shrink-0 items-center', compactLanding ? 'gap-0' : 'gap-0.5')}>
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={inputDisabled}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600 disabled:opacity-60"
+                className={cn(
+                  'flex items-center justify-center text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600 disabled:opacity-60',
+                  compactLanding ? 'h-5 w-5 rounded' : 'h-8 w-8 rounded-lg',
+                )}
                 title="添加附件引用"
               >
-                <i className="fa-solid fa-paperclip text-[13px]" />
+                <i className={cn('fa-solid fa-paperclip', compactLanding ? 'text-[10px]' : 'text-[13px]')} />
               </button>
               {!landing ? (
                 <button
@@ -316,22 +367,26 @@ export function SharedComposer({
                 onClick={toggleVoice}
                 disabled={inputDisabled}
                 className={cn(
-                  'flex h-8 w-8 items-center justify-center rounded-lg transition disabled:opacity-60',
+                  'flex items-center justify-center transition disabled:opacity-60',
+                  compactLanding ? 'h-5 w-5 rounded' : 'h-8 w-8 rounded-lg',
                   listening
-                    ? 'bg-zinc-100 text-zinc-800 ring-2 ring-zinc-300/60'
+                    ? 'bg-zinc-100 text-zinc-800 ring-1 ring-zinc-300/60'
                     : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600',
                 )}
                 title={listening ? '停止语音输入' : '语音输入'}
               >
-                <i className="fa-solid fa-microphone text-[13px]" />
+                <i className={cn('fa-solid fa-microphone', compactLanding ? 'text-[10px]' : 'text-[13px]')} />
               </button>
               <button
                 type="button"
                 onClick={handleSubmit}
                 disabled={inputDisabled}
-                className="apple-btn-primary flex h-8 w-8 items-center justify-center rounded-lg text-white disabled:opacity-50"
+                className={cn(
+                  'apple-btn-primary flex items-center justify-center text-white disabled:opacity-50',
+                  compactLanding ? 'h-5 w-5 rounded' : 'h-8 w-8 rounded-lg',
+                )}
               >
-                <i className="fa-solid fa-arrow-up text-[13px]" />
+                <i className={cn('fa-solid fa-arrow-up', compactLanding ? 'text-[10px]' : 'text-[13px]')} />
               </button>
             </div>
           </div>
@@ -342,9 +397,9 @@ export function SharedComposer({
                 {status.text}
               </span>
             </div>
-          ) : (
+          ) : compactLanding ? null : (
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 px-4 py-1.5 text-[10px] text-zinc-400">
-              <span>Enter 发送 · @ Agent · / Skill</span>
+              <span>{skillOnly ? 'Enter 发送 · / Skill' : 'Enter 发送 · @ Agent · / Skill'}</span>
               <span className={cn(status.configured && 'font-medium text-emerald-600/90')}>{status.text}</span>
             </div>
           )}

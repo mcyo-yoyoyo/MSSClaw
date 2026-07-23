@@ -74,12 +74,12 @@ export function ToolCenterPage() {
   }, [tools]);
 
   const handleOpen = (tool: PrototypeToolSeed) => {
-    bumpToolInvokes(tool.id);
     if (openTool(tool)) {
+      bumpToolInvokes(tool.id);
       showToast(`已打开外部工具：${tool.name}`);
       return;
     }
-    showToast(`已记录调用：${tool.name}（内部连接器）`);
+    setDetail(tool);
   };
 
   return (
@@ -87,7 +87,7 @@ export function ToolCenterPage() {
       <div className="mx-auto max-w-6xl">
         <CenterPageHeader
           title="工具"
-          subtitle="连接器与外部工具上架 · 按 NP / 区域发现与托管"
+          subtitle="能力上架进目录；勾选精选露出后出现在找案例「场景工具」（连接器多由技能调用）"
           tip={
             <>
               各 NP 与区域可将内外部工具登记上架。可见性：全员 / 本组织（有区域则同区域）/ 仅发布方。欧洲账号默认看不到拉美「本组织」工具，但可看到全员公开工具。
@@ -195,7 +195,7 @@ export function ToolCenterPage() {
                     onClick={() => handleOpen(t)}
                     className="apple-btn-primary flex-1 rounded-lg py-1.5 text-[11px] font-semibold text-white transition"
                   >
-                    {t.sourceType === 'external' ? '打开' : '调用'}
+                    {t.sourceType === 'external' ? '打开' : '查看说明'}
                   </button>
                   <button
                     type="button"
@@ -227,16 +227,18 @@ export function ToolCenterPage() {
         actions={
           detail && (
             <>
-              <button
-                type="button"
-                onClick={() => {
-                  handleOpen(detail);
-                  setDetail(null);
-                }}
-                className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white"
-              >
-                {detail.sourceType === 'external' ? '打开链接' : '调用'}
-              </button>
+              {detail.sourceType === 'external' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleOpen(detail);
+                    setDetail(null);
+                  }}
+                  className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white"
+                >
+                  打开链接
+                </button>
+              ) : null}
               <button type="button" onClick={() => setDetail(null)} className="rounded-xl border border-black/8 px-4 py-2 text-[12px]">
                 关闭
               </button>

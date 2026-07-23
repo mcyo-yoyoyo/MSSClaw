@@ -7,10 +7,12 @@ import type {
   PrototypeToolSeed,
 } from '@/domain/prototype/types';
 import { getNavMetaLabel } from '@/domain/navPresentation';
+import { defaultShellPerspective } from '@/domain/shellPerspective';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
+import { useSessionStore } from '@/stores/sessionStore';
 
 export interface PortalNavHandlers {
   onInvokeAgent: (agent: PrototypeAgentSeed, prompt?: string) => void;
@@ -79,9 +81,24 @@ export function openPortalCard(card: PortalMapCard, handlers: PortalNavHandlers)
       toast(`已打开：${tool.name}`);
       return;
     }
-    if (!goOrWarn('tools', toast)) return;
-    intent.focusTool(action.toolId);
-    toast(`Tool 中心：${card.title}`);
+    // 配置工具为运营壳；业务侧不跳转，避免 AccessDenied 死链
+    const role = useSessionStore.getState().user?.platformRole;
+    if (defaultShellPerspective(role) === 'ops') {
+      if (!goOrWarn('tools', toast)) return;
+      intent.focusTool(action.toolId);
+      toast(`配置工具：${card.title}`);
+      return;
+    }
+    if (tool?.homepageUrl) {
+      window.open(tool.homepageUrl, '_blank', 'noopener,noreferrer');
+      toast(`已打开：${tool.name}`);
+      return;
+    }
+    toast(
+      tool
+        ? `「${tool.name}」已上架；业务侧由技能/专家调用，或使用找案例中带外链的精选工具`
+        : '该工具暂不支持在业务侧直接打开',
+    );
     return;
   }
 

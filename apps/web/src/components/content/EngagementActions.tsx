@@ -13,6 +13,8 @@ interface EngagementActionsProps {
   onAfterAction?: (action: 'like' | 'dislike' | 'download') => void;
   /** 提供时：计数后执行真实下载（如案例包） */
   onDownload?: () => void;
+  /** 已有独立「下载案例包」按钮时可关闭，避免双下载入口 */
+  showDownload?: boolean;
 }
 
 export function EngagementActions({
@@ -22,6 +24,7 @@ export function EngagementActions({
   className,
   onAfterAction,
   onDownload,
+  showDownload = true,
 }: EngagementActionsProps) {
   const byId = useContentEngagementStore((s) => s.byId);
   const userVotes = useContentEngagementStore((s) => s.userVotes);
@@ -89,20 +92,27 @@ export function EngagementActions({
         <i className={cn('fa-solid fa-thumbs-down', compact ? 'text-[8px]' : 'text-[9px]')} />
         {e.dislikes}
       </button>
-      <button
-        type="button"
-        title={onDownload ? '下载案例包' : '下载 / 收藏副本'}
-        onClick={(ev) => {
-          stop(ev);
-          bumpDownload(contentId);
-          onDownload?.();
-          onAfterAction?.('download');
-        }}
-        className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-zinc-400 transition hover:text-zinc-700"
-      >
-        <i className={cn('fa-solid fa-download', compact ? 'text-[8px]' : 'text-[9px]')} />
-        {e.downloads}
-      </button>
+      {showDownload ? (
+        <button
+          type="button"
+          title={onDownload ? '下载' : '下载 / 收藏副本'}
+          onClick={(ev) => {
+            stop(ev);
+            bumpDownload(contentId);
+            onDownload?.();
+            onAfterAction?.('download');
+          }}
+          className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-zinc-400 transition hover:text-zinc-700"
+        >
+          <i className={cn('fa-solid fa-download', compact ? 'text-[8px]' : 'text-[9px]')} />
+          {e.downloads}
+        </button>
+      ) : (
+        <span className="inline-flex items-center gap-0.5 px-1 py-0.5 tabular-nums text-zinc-400" title="下载量">
+          <i className={cn('fa-solid fa-download', compact ? 'text-[8px]' : 'text-[9px]')} />
+          {e.downloads}
+        </span>
+      )}
     </div>
   );
 }
