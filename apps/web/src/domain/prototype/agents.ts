@@ -61,7 +61,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     chatId: 'knowledge',
     icon: 'fa-file-shield',
     color: 'from-stone-500 to-zinc-700',
-    scenarioTags: ['办公提效', '平台', '翻译', '本地化'],
+    scenarioTags: ['办公提效', '平台', '合规', '质量与运营'],
   },
   {
     id: 'agent-file-organize',
@@ -294,7 +294,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     chatId: 'knowledge',
     icon: 'fa-book-open',
     color: 'from-zinc-600 to-zinc-800',
-    scenarioTags: ['知识问答', '陪练', 'SOP', '检索'],
+    scenarioTags: ['知识', '归档', 'RAG', 'SOP', '检索', '客诉'],
   },
   {
     id: 'agent-retail-coach',
@@ -312,7 +312,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     chatId: 'knowledge',
     icon: 'fa-headset',
     color: 'from-zinc-700 to-zinc-900',
-    scenarioTags: ['门店', '培训'],
+    scenarioTags: ['门店', '培训', 'Nova', '陪练'],
   },
 ];
 

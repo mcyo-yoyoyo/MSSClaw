@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { AppView } from '@/domain/appView';
 import type { BusinessScenarioId } from '@/domain/businessScenarios';
 
-type PortalOpsType = 'case' | 'news' | 'training';
+type PortalOpsType = 'case' | 'playbook' | 'news' | 'training';
 
 export interface NavReturnTarget {
   view: AppView;

@@ -1,7 +1,20 @@
 import { strToU8, zipSync, unzipSync, strFromU8 } from 'fflate';
 import type { PortalContentItem } from '@/domain/prototype/portalContent';
-import { PORTAL_CONTENT_TYPE_LABELS } from '@/domain/prototype/portalContent';
-import { toCaseOutcomeCard } from '@/domain/portalCase';
+import {
+  isThoughtLayerType,
+  PORTAL_CONTENT_TYPE_LABELS,
+} from '@/domain/prototype/portalContent';
+import { sortThoughtLayerItems, toCaseOutcomeCard } from '@/domain/portalCase';
+import {
+  formatScenarioEnvLearnSection,
+  isScenarioEnvFilled,
+  type ScenarioEnv,
+} from '@/domain/scenarioEnv';
+import {
+  ARCHITECTURE_DOC_KIND_LABELS,
+  type ScenarioArchitectureDoc,
+} from '@/domain/scenarioArchitecture';
+import type { PortalMapCard } from '@/domain/portalMap';
 
 export function caseSlug(item: Pick<PortalContentItem, 'id' | 'title'>): string {
   const raw = item.title || item.id || 'case';
@@ -121,9 +134,41 @@ export function buildCasePackageFiles(item: PortalContentItem): Record<string, s
           ),
         }
       : {}),
-    [`${folder}/README.md`]: `# ${item.title} Case Package\n\n含 CASE.md、成效卡、打样计划与 mssclaw.manifest.json，可导回 MSSClaw 样板间。\n`,
+    [`${folder}/README.md`]: `# ${item.title}\n\n类型：${PORTAL_CONTENT_TYPE_LABELS[item.type]}\n\n含 CASE.md、成效卡、学习/打样说明与 mssclaw.manifest.json，可导回 MSSClaw。\n`,
     [`${folder}/mssclaw.manifest.json`]: JSON.stringify(caseManifest(item), null, 2),
   };
+}
+
+/** 场景学习包目录：思想层优先清单 + 工具层环境 */
+export function buildScenarioLearnMd(
+  scenarioLabel: string,
+  items: PortalContentItem[],
+  env?: ScenarioEnv | null,
+): string {
+  const ordered = sortThoughtLayerItems(items.filter((i) => isThoughtLayerType(i.type)));
+  const lines = ordered.map((item, idx) => {
+    const link = item.homepageUrl ? ` · [外链](${item.homepageUrl})` : '';
+    const preview = item.previewFile ? ` · 含预览：${item.previewFile.name}` : '';
+    return `${idx + 1}. **${PORTAL_CONTENT_TYPE_LABELS[item.type]}** · ${item.title}${link}${preview}`;
+  });
+  return [
+    `# ${scenarioLabel} · 学习包`,
+    '',
+    '> 思想层优先：场景方案 / 培训案例 / 前沿洞察；工具层为环境了解；场景案例附带可打样挂载说明。',
+    '',
+    '## 学习清单',
+    '',
+    ...(lines.length ? lines : ['（暂无思想层内容）']),
+    '',
+    formatScenarioEnvLearnSection(env),
+    '## 建议路径',
+    '',
+    '1. 先读「场景方案」与「前沿洞察」，对齐业务口径',
+    '2. 对照工具层硬件 / Coding / 模型清单准备环境',
+    '3. 完成「培训案例」或外链授课',
+    '4. 需要上手时回到平台「一键打样」执行能力层',
+    '',
+  ].join('\n');
 }
 
 function downloadBinary(filename: string, data: Uint8Array, mime: string) {
@@ -149,34 +194,156 @@ export function downloadCaseFile(item: PortalContentItem) {
   downloadBinary(`${caseSlug(item)}.case.zip`, bytes, 'application/zip');
 }
 
-/** 下载场景下多个案例为一个汇总包；仅 1 条时仍导出单案例 .case.zip */
-export function downloadScenarioCasePack(
-  scenarioLabel: string,
-  items: PortalContentItem[],
-) {
-  if (!items.length) return;
-  if (items.length === 1) {
-    downloadCaseFile(items[0]!);
-    return;
-  }
-  const zipped: Record<string, Uint8Array> = {};
-  for (const item of items) {
-    const files = buildCasePackageFiles(item);
-    for (const [path, content] of Object.entries(files)) {
-      zipped[path] = strToU8(content);
-    }
-  }
-  const slug =
-    scenarioLabel
+function scenarioSlug(label: string): string {
+  return (
+    label
       .toLowerCase()
       .replace(/[^\w\u4e00-\u9fff-]+/g, '-')
       .replace(/^-+|-+$/g, '')
-      .slice(0, 40) || 'scenario';
+      .slice(0, 40) || 'scenario'
+  );
+}
+
+/** 学习包条目：优先方案/培训/洞察；若无则回落含场景案例 */
+function pickLearnPackItems(items: PortalContentItem[]): PortalContentItem[] {
+  const narrative = items.filter(
+    (i) =>
+      i.type === 'playbook' ||
+      i.type === 'training' ||
+      i.type === 'news' ||
+      i.type === 'insight',
+  );
+  const base = narrative.length ? narrative : items.filter((i) => isThoughtLayerType(i.type));
+  return sortThoughtLayerItems(base);
+}
+
+/** 下载场景学习包（思想层 + 工具层环境）；不含架构打样卷 */
+export function downloadScenarioCasePack(
+  scenarioLabel: string,
+  items: PortalContentItem[],
+  env?: ScenarioEnv | null,
+) {
+  const packItems = pickLearnPackItems(items);
+  if (!packItems.length && !isScenarioEnvFilled(env)) return;
+
+  const slug = scenarioSlug(scenarioLabel);
+  const zipped: Record<string, Uint8Array> = {};
+  for (const item of packItems) {
+    const files = buildCasePackageFiles(item);
+    for (const [path, content] of Object.entries(files)) {
+      zipped[`learn/${path}`] = strToU8(content);
+    }
+  }
+  zipped[`${slug}/LEARN.md`] = strToU8(buildScenarioLearnMd(scenarioLabel, packItems, env));
   zipped[`${slug}/README.md`] = strToU8(
-    `# ${scenarioLabel} · 场景案例包\n\n含 ${items.length} 个案例包，可分别导入 MSSClaw 样板间。\n`,
+    [
+      `# ${scenarioLabel} · 场景学习包`,
+      '',
+      '本卷为**学习包**（思想层 + 工具层环境）。',
+      '可执行打样与架构 md 请另下「打样包」`.demo.zip`。',
+      '',
+      `- 思想层内容：${packItems.length} 个`,
+      `- 入口：先读 LEARN.md`,
+      '',
+    ].join('\n'),
   );
   const bytes = zipSync(zipped, { level: 6 });
-  downloadBinary(`${slug}.cases.zip`, bytes, 'application/zip');
+  downloadBinary(`${slug}.learn.zip`, bytes, 'application/zip');
+}
+
+export interface ScenarioDemoPackInput {
+  scenarioId: string;
+  scenarioLabel: string;
+  agents: PortalMapCard[];
+  skills: PortalMapCard[];
+  tools: PortalMapCard[];
+  architectureDocs: ScenarioArchitectureDoc[];
+  /** 可打样场景案例（type=case） */
+  caseItems: PortalContentItem[];
+}
+
+function buildScenarioDemoMd(input: ScenarioDemoPackInput): string {
+  const agentLines = input.agents.map((a) => `- Agent · ${a.title}`);
+  const skillLines = input.skills.map((s) => `- Skill · ${s.title}${s.meta ? ` (\`${s.meta}\`)` : ''}`);
+  const toolLines = input.tools.map((t) => `- Tool · ${t.title}`);
+  const archLines = input.architectureDocs.map(
+    (d) => `- ${ARCHITECTURE_DOC_KIND_LABELS[d.kind]} · ${d.title} → \`architecture/${d.id}.md\``,
+  );
+  const caseLines = input.caseItems.map(
+    (c) =>
+      `- ${c.isGold ? '【金】' : ''}${c.title} · Skill \`${c.primarySkillId || c.skillId || '—'}\` / Agent \`${c.agentId || '—'}\``,
+  );
+  return [
+    `# ${input.scenarioLabel} · 打样包`,
+    '',
+    '> 本卷为**能力层打样包**：挂载清单、架构 md、可打样案例。学习材料请另下 `.learn.zip`。',
+    '',
+    '## 挂载能力',
+    '',
+    '### Agent',
+    ...(agentLines.length ? agentLines : ['- （无）']),
+    '',
+    '### Skill',
+    ...(skillLines.length ? skillLines : ['- （无）']),
+    '',
+    '### Tool',
+    ...(toolLines.length ? toolLines : ['- （无）']),
+    '',
+    '## 架构文件',
+    '',
+    ...(archLines.length ? archLines : ['- （无）']),
+    '',
+    '## 可打样案例',
+    '',
+    ...(caseLines.length ? caseLines : ['- （无 type=case 案例）']),
+    '',
+    '## 建议执行',
+    '',
+    '1. 阅读 `architecture/` 下设计与执行方案',
+    '2. 回到平台对本场景点「一键打样」',
+    '3. 或导入 `cases/` 下金牌案例包后按 templates/demo-invoke.md 调用',
+    '',
+  ].join('\n');
+}
+
+/** 下载场景打样包：架构 md + 能力挂载清单 + type=case 案例 */
+export function downloadScenarioDemoPack(input: ScenarioDemoPackInput) {
+  const hasCaps =
+    input.agents.length +
+      input.skills.length +
+      input.tools.length +
+      input.architectureDocs.length +
+      input.caseItems.length >
+    0;
+  if (!hasCaps) return;
+
+  const slug = scenarioSlug(input.scenarioLabel);
+  const zipped: Record<string, Uint8Array> = {};
+  zipped[`${slug}/DEMO.md`] = strToU8(buildScenarioDemoMd(input));
+  zipped[`${slug}/README.md`] = strToU8(
+    [
+      `# ${input.scenarioLabel} · 场景打样包`,
+      '',
+      '本卷为**打样包**（能力层）。学习内容请另下 `.learn.zip`。',
+      '',
+      '入口：先读 DEMO.md，再打开 architecture/ 与 cases/。',
+      '',
+    ].join('\n'),
+  );
+
+  for (const d of input.architectureDocs) {
+    zipped[`${slug}/architecture/${d.id}.md`] = strToU8(d.markdown);
+  }
+
+  for (const item of input.caseItems) {
+    const files = buildCasePackageFiles(item);
+    for (const [path, content] of Object.entries(files)) {
+      zipped[`${slug}/cases/${path}`] = strToU8(content);
+    }
+  }
+
+  const bytes = zipSync(zipped, { level: 6 });
+  downloadBinary(`${slug}.demo.zip`, bytes, 'application/zip');
 }
 
 function asStringArray(v: unknown): string[] | undefined {
@@ -197,7 +364,7 @@ export function parseCaseImport(raw: unknown): PortalContentItem | null {
   if (!title) return null;
 
   const typeRaw = typeof o.type === 'string' ? o.type : 'case';
-  const type = (['case', 'insight', 'training', 'news'] as const).includes(
+  const type = (['case', 'playbook', 'insight', 'training', 'news'] as const).includes(
     typeRaw as PortalContentItem['type'],
   )
     ? (typeRaw as PortalContentItem['type'])
@@ -222,6 +389,12 @@ export function parseCaseImport(raw: unknown): PortalContentItem | null {
         ? (o.ownerRegionId as PortalContentItem['ownerRegionId'])
         : null,
     publisher: typeof o.publisher === 'string' ? o.publisher : 'Imported',
+    homepageUrl:
+      typeof o.homepageUrl === 'string' && o.homepageUrl.trim()
+        ? o.homepageUrl.trim()
+        : undefined,
+    sourceType:
+      o.sourceType === 'external' || o.sourceType === 'internal' ? o.sourceType : undefined,
     agentId: typeof o.agentId === 'string' && o.agentId ? o.agentId : undefined,
     skillId: typeof o.skillId === 'string' && o.skillId ? o.skillId : undefined,
     primarySkillId:

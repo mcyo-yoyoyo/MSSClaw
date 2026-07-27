@@ -24,6 +24,15 @@ import {
   PORTAL_CONTENT_TYPE_LABELS,
   type PortalContentItem,
 } from '@/domain/prototype/portalContent';
+import {
+  getScenarioEnv,
+  isScenarioEnvFilled,
+  type ScenarioEnv,
+} from '@/domain/scenarioEnv';
+import {
+  getScenarioArchitectureDocs,
+  type ScenarioArchitectureDoc,
+} from '@/domain/scenarioArchitecture';
 
 export type PortalShelfId = 'related' | 'mine' | 'latest';
 
@@ -63,7 +72,13 @@ export interface PortalMapCard {
 }
 
 function kindLabel(kind: PortalAssetType): string {
-  if (kind === 'case' || kind === 'insight' || kind === 'training' || kind === 'news') {
+  if (
+    kind === 'case' ||
+    kind === 'playbook' ||
+    kind === 'insight' ||
+    kind === 'training' ||
+    kind === 'news'
+  ) {
     return PORTAL_CONTENT_TYPE_LABELS[kind];
   }
   return PORTAL_ASSET_TYPE_LABELS[kind] ?? kind;
@@ -150,7 +165,7 @@ function fromTool(t: PrototypeToolSeed): PortalMapCard {
 }
 
 function fromPortalContent(item: PortalContentItem): PortalMapCard {
-  const caseKinds = new Set(['case', 'insight', 'training', 'news']);
+  const caseKinds = new Set(['case', 'playbook', 'insight', 'training', 'news']);
   let action: PortalCardAction;
 
   if (caseKinds.has(item.type)) {
@@ -450,7 +465,7 @@ export const FEATURED_SCENARIOS: ScenarioDef[] = [
     label: '综履结算核验验收提效',
     desc: '综合履约结算核验、验收与对账提效',
     icon: 'fa-file-invoice-dollar',
-    matchTags: ['综履', '结算', '核验', '验收', '合规'],
+    matchTags: ['综履', '结算', '核验', '验收', '对账'],
   },
   {
     id: 'knowledge-deposit',
@@ -468,6 +483,13 @@ export const FEATURED_SCENARIOS: ScenarioDef[] = [
   },
 ];
 
+/** 场景三层齐套：思想（学）/ 工具（配）/ 能力（跑） */
+export interface ScenarioLayerFlags {
+  thought: boolean;
+  toolkit: boolean;
+  capability: boolean;
+}
+
 export interface ScenarioBundle {
   id: string;
   label: string;
@@ -475,12 +497,23 @@ export interface ScenarioBundle {
   icon: string;
   matchTags: string[];
   agents: PortalMapCard[];
+  /** 能力层 · Skill */
+  skills: PortalMapCard[];
+  /** 能力层 · 内部连接器 Tool */
   tools: PortalMapCard[];
+  /** 工具层 · 外部/SaaS 等了解项（与场景环境清单并列） */
+  envTools: PortalMapCard[];
+  /** 工具层 · 硬件 / AI Coding / 大模型环境清单 */
+  env: ScenarioEnv | null;
+  /** 能力层 · 架构 / AI 执行方案 md */
+  architectureDocs: ScenarioArchitectureDoc[];
   knowledge: PortalMapCard[];
   cases: PortalMapCard[];
   /** 与当前登录人职能/区域相关 */
   related: boolean;
-  /** 四宫格已填充数 0–4 */
+  /** 三层齐套标记 */
+  layers: ScenarioLayerFlags;
+  /** 三层已填充数 0–3 */
   completeness: number;
   ownerDeptIds: DeptId[];
   ownerRegionIds: RegionId[];
@@ -494,7 +527,7 @@ export interface OrgCoverageRow {
   label: string;
   scenarioCount: number;
   assetCount: number;
-  /** 缺任一象限的场景名 */
+  /** 三层未齐套的场景名 */
   gapLabels: string[];
   strength: 'strong' | 'partial' | 'empty';
 }
@@ -546,7 +579,7 @@ export interface BuildScenarioBundlesInput {
   efficiencyFilter?: 'all' | 'office' | 'manage' | 'process';
 }
 
-/** 按场景标签聚合 Agent / Tool·Skill / 知识 / 案例 */
+/** 按场景标签聚合：思想层案例 + 工具层环境项 + 能力层 Agent/Skill/Tool */
 export function buildScenarioBundles(input: BuildScenarioBundlesInput): ScenarioBundle[] {
   const {
     agents,
@@ -645,11 +678,22 @@ export function buildScenarioBundles(input: BuildScenarioBundlesInput): Scenario
     const agentsVisible = uniqCards(
       visibleCards(agentCards, affiliation, userId, userName, role),
     );
-    const toolsVisible = uniqCards(
-      visibleCards([...toolCards, ...skillCards], affiliation, userId, userName, role),
+    const skillsVisible = uniqCards(
+      visibleCards(skillCards, affiliation, userId, userName, role),
     );
+    const allToolCards = uniqCards(
+      visibleCards(toolCards, affiliation, userId, userName, role),
+    );
+    const envToolsVisible = allToolCards.filter((c) => c.kind === 'external_tool');
+    const toolsVisible = allToolCards.filter((c) => c.kind !== 'external_tool');
 
-    const allCards = [...agentsVisible, ...toolsVisible, ...knowledge, ...casesAll];
+    const allCards = [
+      ...agentsVisible,
+      ...skillsVisible,
+      ...allToolCards,
+      ...knowledge,
+      ...casesAll,
+    ];
     const axes = collectOwnerAxes(allCards);
     const related =
       !affiliation.deptIds.length && !affiliation.regionId
@@ -658,11 +702,19 @@ export function buildScenarioBundles(input: BuildScenarioBundlesInput): Scenario
           axes.ownerDeptIds.some((d) => affiliation.deptIds.includes(d)) ||
           (!!affiliation.regionId && axes.ownerRegionIds.includes(affiliation.regionId));
 
+    const env = getScenarioEnv(def.id);
+    const architectureDocs = getScenarioArchitectureDocs(def.id);
+    const layers: ScenarioLayerFlags = {
+      thought: casesAll.length > 0 || knowledge.length > 0,
+      toolkit: isScenarioEnvFilled(env) || envToolsVisible.length > 0,
+      capability:
+        agentsVisible.length > 0 ||
+        skillsVisible.length > 0 ||
+        toolsVisible.length > 0 ||
+        architectureDocs.length > 0,
+    };
     const completeness =
-      (agentsVisible.length ? 1 : 0) +
-      (toolsVisible.length ? 1 : 0) +
-      (knowledge.length ? 1 : 0) +
-      (casesAll.length ? 1 : 0);
+      (layers.thought ? 1 : 0) + (layers.toolkit ? 1 : 0) + (layers.capability ? 1 : 0);
 
     return {
       id: def.id,
@@ -671,10 +723,15 @@ export function buildScenarioBundles(input: BuildScenarioBundlesInput): Scenario
       icon: def.icon,
       matchTags: def.matchTags,
       agents: agentsVisible,
+      skills: skillsVisible,
       tools: toolsVisible,
+      envTools: envToolsVisible,
+      env,
+      architectureDocs,
       knowledge,
       cases: casesAll,
       related,
+      layers,
       completeness,
       ownerDeptIds: axes.ownerDeptIds,
       ownerRegionIds: axes.ownerRegionIds,
@@ -715,10 +772,17 @@ export function buildOrgCoverage(bundles: ScenarioBundle[]): OrgCoverageRow[] {
   for (const d of HQ_DEPTS) {
     const hit = bundles.filter((b) => b.ownerDeptIds.includes(d.id));
     const assetCount = hit.reduce(
-      (n, b) => n + b.agents.length + b.tools.length + b.knowledge.length + b.cases.length,
+      (n, b) =>
+        n +
+        b.agents.length +
+        b.skills.length +
+        b.tools.length +
+        b.envTools.length +
+        b.knowledge.length +
+        b.cases.length,
       0,
     );
-    const gapLabels = hit.filter((b) => b.completeness < 4).map((b) => b.label);
+    const gapLabels = hit.filter((b) => b.completeness < 3).map((b) => b.label);
     const strength: OrgCoverageRow['strength'] =
       hit.length === 0 ? 'empty' : gapLabels.length === 0 && hit.length >= 2 ? 'strong' : 'partial';
     rows.push({
@@ -735,10 +799,17 @@ export function buildOrgCoverage(bundles: ScenarioBundle[]): OrgCoverageRow[] {
   for (const r of REGIONS) {
     const hit = bundles.filter((b) => b.ownerRegionIds.includes(r.id));
     const assetCount = hit.reduce(
-      (n, b) => n + b.agents.length + b.tools.length + b.knowledge.length + b.cases.length,
+      (n, b) =>
+        n +
+        b.agents.length +
+        b.skills.length +
+        b.tools.length +
+        b.envTools.length +
+        b.knowledge.length +
+        b.cases.length,
       0,
     );
-    const gapLabels = hit.filter((b) => b.completeness < 4).map((b) => b.label);
+    const gapLabels = hit.filter((b) => b.completeness < 3).map((b) => b.label);
     const strength: OrgCoverageRow['strength'] =
       hit.length === 0 ? 'empty' : gapLabels.length === 0 ? 'strong' : 'partial';
     rows.push({

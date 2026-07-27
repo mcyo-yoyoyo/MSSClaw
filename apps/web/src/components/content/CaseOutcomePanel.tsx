@@ -11,11 +11,22 @@ interface CaseOutcomePanelProps {
   onDemoCase?: () => void;
   onDownload?: () => void;
   onEdit?: () => void;
+  /** 打开外部信源 / 授课 / 方案链接 */
+  onOpenLink?: () => void;
   skillLabel?: string;
   agentLabel?: string;
   className?: string;
   /** 无附件时是否展示「暂未上传」占位，默认 true */
   showDocumentSlot?: boolean;
+  /**
+   * 只读浏览提示（场景详情方案 A：下载/打样走顶栏）
+   * 有值时展示顶栏引导条；不自动隐藏打样/下载，由调用方不传对应回调
+   */
+  viewOnlyHint?: string;
+}
+
+function isLearnFocused(type: CaseOutcomeCard['type']): boolean {
+  return type === 'playbook' || type === 'training' || type === 'news' || type === 'insight';
 }
 
 export function CaseOutcomePanel({
@@ -23,31 +34,64 @@ export function CaseOutcomePanel({
   onDemoCase,
   onDownload,
   onEdit,
+  onOpenLink,
   skillLabel,
   agentLabel,
   className,
   showDocumentSlot = true,
+  viewOnlyHint,
 }: CaseOutcomePanelProps) {
+  const learnFocused = isLearnFocused(card.type);
+  const hasLink = Boolean(card.homepageUrl && onOpenLink);
+  const allowEngagementDownload = !viewOnlyHint && !onDownload;
+
   return (
     <div className={cn('space-y-4 text-left', className)}>
+      {viewOnlyHint ? (
+        <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-[11px] leading-relaxed text-zinc-600">
+          <i className="fa-solid fa-eye mr-1.5 text-[10px] text-zinc-400" />
+          {viewOnlyHint}
+        </p>
+      ) : null}
       {card.previewFile ? (
         <CaseDocumentPreview file={card.previewFile} />
       ) : showDocumentSlot ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50/80 px-4 py-8 text-center">
-          <i className="fa-solid fa-file-arrow-up mb-2 text-lg text-zinc-300" />
-          <p className="text-[12px] font-medium text-zinc-600">暂未上传预览文档</p>
-          <p className="mt-1 text-[10px] text-zinc-400">
-            编辑时可上传 PDF / PPT / Word / Excel，将在此处在线预览
+          <i
+            className={cn(
+              'mb-2 text-lg text-zinc-300',
+              learnFocused ? 'fa-solid fa-book-open' : 'fa-solid fa-file-arrow-up',
+            )}
+          />
+          <p className="text-[12px] font-medium text-zinc-600">
+            {learnFocused ? '暂无在线预览文档' : '暂未上传预览文档'}
           </p>
-          {onEdit ? (
-            <button
-              type="button"
-              onClick={onEdit}
-              className="mt-3 rounded-lg border border-black/8 bg-white px-3 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50"
-            >
-              去上传文档
-            </button>
-          ) : null}
+          <p className="mt-1 text-[10px] text-zinc-400">
+            {learnFocused
+              ? '可上传 PPT / PDF / Word，或使用下方外链打开信源 / 授课页'
+              : '编辑时可上传 PDF / PPT / Word / Excel，将在此处在线预览'}
+          </p>
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            {hasLink ? (
+              <button
+                type="button"
+                onClick={onOpenLink}
+                className="rounded-lg bg-zinc-900 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-zinc-800"
+              >
+                <i className="fa-solid fa-arrow-up-right-from-square mr-1 text-[10px]" />
+                打开外链
+              </button>
+            ) : null}
+            {onEdit ? (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="rounded-lg border border-black/8 bg-white px-3 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50"
+              >
+                去上传文档
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -104,7 +148,9 @@ export function CaseOutcomePanel({
       </div>
 
       <section>
-        <h4 className="mb-1.5 text-[11px] font-semibold text-zinc-500">打样三步走</h4>
+        <h4 className="mb-1.5 text-[11px] font-semibold text-zinc-500">
+          {learnFocused ? '学习路径' : '打样三步走'}
+        </h4>
         <ol className="space-y-1.5">
           {card.steps.map((step, idx) => (
             <li
@@ -146,6 +192,25 @@ export function CaseOutcomePanel({
       )}
 
       <div className="flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-3">
+        {hasLink ? (
+          <button
+            type="button"
+            onClick={onOpenLink}
+            className={cn(
+              'rounded-xl px-3.5 py-2 text-[12px] font-semibold transition',
+              learnFocused && !onDemoCase
+                ? 'bg-zinc-900 text-white hover:bg-zinc-800'
+                : 'border border-black/8 hover:bg-black/[0.03]',
+            )}
+          >
+            <i className="fa-solid fa-arrow-up-right-from-square mr-1 text-[10px]" />
+            {card.type === 'training'
+              ? '打开授课链接'
+              : card.type === 'playbook'
+                ? '打开方案链接'
+                : '打开信源'}
+          </button>
+        ) : null}
         {onDemoCase ? (
           <button
             type="button"
@@ -175,13 +240,13 @@ export function CaseOutcomePanel({
             className="rounded-xl border border-black/8 px-3.5 py-2 text-[12px] font-medium transition hover:bg-black/[0.03]"
           >
             <i className="fa-solid fa-download mr-1 text-[10px]" />
-            下载案例包
+            {learnFocused ? '下载学习包' : '下载案例包'}
           </button>
         ) : null}
         <EngagementActions
           contentId={card.id}
           className="ml-auto"
-          showDownload={!onDownload}
+          showDownload={allowEngagementDownload}
         />
       </div>
     </div>

@@ -164,12 +164,15 @@ export function CaseEditorModal({
     >
       <div className="space-y-4 text-left">
         <p className="rounded-lg bg-zinc-50 px-3 py-2 text-[11px] leading-relaxed text-zinc-500">
-          以下字段与「案例 · 样板间」成效卡一一对应：标题 / 描述 / 痛点 / 成效指标 / 打样步骤 /
-          标签与金牌能力 / 适用组织 / 预览附件。
+          按三层填写：思想层（学）负责叙事与学习材料；能力层（跑）挂载 Agent/Skill/Tool；发布区控制可见性。
+          工具层环境清单由场景配置维护，不在本表单编辑。
         </p>
 
-        <section className="space-y-3">
-          <h4 className="text-[11px] font-semibold tracking-wide text-zinc-400">成效卡 · 基础</h4>
+        <section className="space-y-3 rounded-xl border border-zinc-100 p-3">
+          <h4 className="text-[11px] font-semibold tracking-wide text-zinc-800">
+            ① 思想层 · 学
+            <span className="ml-2 font-normal text-zinc-400">类型 / 叙事 / 预览与外链</span>
+          </h4>
           <FormField label="标题（成效卡标题）">
             <FormInput
               value={form.title}
@@ -187,9 +190,30 @@ export function CaseEditorModal({
             <FormField label="类型">
               <FormSelect
                 value={form.type === 'insight' ? 'news' : form.type}
-                onChange={(e) =>
-                  setForm({ ...form, type: e.target.value as PortalContentItem['type'] })
-                }
+                onChange={(e) => {
+                  const next = e.target.value as PortalContentItem['type'];
+                  const learnSteps =
+                    next === 'playbook'
+                      ? ['预览或打开方案链接', '对照业务口径完成自学', '需要跑通时打开关联场景案例打样']
+                      : next === 'training'
+                        ? ['打开授课链接或预览课件', '完成培训路径自学', '需要上手时再打样关联技能']
+                        : next === 'news'
+                          ? ['打开信源或预览报告', '提炼对本场景的启示', '按需下载学习包归档']
+                          : form.steps;
+                  setForm({
+                    ...form,
+                    type: next,
+                    icon:
+                      next === 'playbook'
+                        ? 'fa-file-powerpoint'
+                        : next === 'training'
+                          ? 'fa-graduation-cap'
+                          : next === 'news'
+                            ? 'fa-newspaper'
+                            : form.icon || 'fa-lightbulb',
+                    steps: learnSteps?.length ? learnSteps : form.steps,
+                  });
+                }}
               >
                 {PORTAL_OPS_TYPE_OPTIONS.map((t) => (
                   <option key={t} value={t}>
@@ -212,10 +236,6 @@ export function CaseEditorModal({
               onChange={(e) => setForm({ ...form, publisher: e.target.value })}
             />
           </FormField>
-        </section>
-
-        <section className="space-y-3">
-          <h4 className="text-[11px] font-semibold tracking-wide text-zinc-400">成效卡 · 痛点与指标</h4>
           <FormField label="业务痛点">
             <FormTextarea
               rows={2}
@@ -231,7 +251,11 @@ export function CaseEditorModal({
               placeholder="如：闭环 2 天 → 4 小时"
             />
           </FormField>
-          <FormField label="打样三步走（每行一步，建议 3 步）">
+          <FormField
+            label={
+              form.type === 'case' ? '打样三步走（每行一步）' : '学习路径（每行一步）'
+            }
+          >
             <FormTextarea
               rows={3}
               value={(form.steps ?? []).join('\n')}
@@ -246,11 +270,7 @@ export function CaseEditorModal({
               }
             />
           </FormField>
-        </section>
-
-        <section className="space-y-3">
-          <h4 className="text-[11px] font-semibold tracking-wide text-zinc-400">成效卡 · 能力与标签</h4>
-          <FormField label="场景标签（逗号分隔，对应样板间 #标签）">
+          <FormField label="场景标签（逗号分隔）">
             <FormInput
               value={(form.scenarioTags ?? []).join(', ')}
               onChange={(e) =>
@@ -265,40 +285,9 @@ export function CaseEditorModal({
               placeholder="价格监测, offer"
             />
           </FormField>
-          <div className="grid grid-cols-2 gap-2">
-            <FormField label="金牌 Skill ID（立即打样优先）">
-              <FormInput
-                value={form.primarySkillId ?? form.skillId ?? ''}
-                onChange={(e) => {
-                  const v = e.target.value || undefined;
-                  setForm({ ...form, primarySkillId: v, skillId: v });
-                }}
-                placeholder="skill-price-monitor"
-              />
-            </FormField>
-            <FormField label="专家 Agent ID">
-              <FormInput
-                value={form.agentId ?? ''}
-                onChange={(e) => setForm({ ...form, agentId: e.target.value || undefined })}
-                placeholder="agent-price-monitor"
-              />
-            </FormField>
-          </div>
-          <label className="flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              className="accent-claw-600"
-              checked={Boolean(form.isGold)}
-              onChange={(e) => setForm({ ...form, isGold: e.target.checked })}
-            />
-            <span className="text-[13px]">标记为金案例（样板间显示「金」角标）</span>
-          </label>
-        </section>
-
-        <section className="space-y-3">
-          <h4 className="text-[11px] font-semibold tracking-wide text-zinc-400">
-            在线预览附件（PPT / PDF / Word / Excel）
-          </h4>
+          <h5 className="pt-1 text-[10px] font-semibold tracking-wide text-zinc-400">
+            预览附件（PPT / PDF / Word / Excel）
+          </h5>
           {form.previewFile ? (
             <div className="flex items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2.5">
               <div className="flex min-w-0 items-center gap-2">
@@ -352,9 +341,74 @@ export function CaseEditorModal({
           )}
         </section>
 
-        <section className="space-y-3">
-          <h4 className="text-[11px] font-semibold tracking-wide text-zinc-400">
-            适用组织（成效卡「适用」行）
+        <section className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/60 px-3 py-2.5">
+          <h4 className="text-[11px] font-semibold text-zinc-700">
+            ② 工具层 · 配
+            <span className="ml-2 font-normal text-zinc-400">场景级环境清单</span>
+          </h4>
+          <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">
+            硬件 / AI Coding / 大模型在场景配置（scenarioEnv）中维护，打开「场景案例」详情工具层查看；本表单不编辑。
+          </p>
+        </section>
+
+        <section className="space-y-3 rounded-xl border border-zinc-100 p-3">
+          <h4 className="text-[11px] font-semibold tracking-wide text-zinc-800">
+            ③ 能力层 · 跑
+            <span className="ml-2 font-normal text-zinc-400">
+              挂载 Agent / Skill / Tool（场景案例打样用）
+            </span>
+          </h4>
+          <p className="text-[10px] text-zinc-400">
+            思想层方案/培训可不填；类型为「场景案例」时建议填写金牌 Skill 或 Agent。
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <FormField label="金牌 Skill ID">
+              <FormInput
+                value={form.primarySkillId ?? form.skillId ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value || undefined;
+                  setForm({ ...form, primarySkillId: v, skillId: v });
+                }}
+                placeholder="skill-price-monitor"
+              />
+            </FormField>
+            <FormField label="专家 Agent ID">
+              <FormInput
+                value={form.agentId ?? ''}
+                onChange={(e) => setForm({ ...form, agentId: e.target.value || undefined })}
+                placeholder="agent-price-monitor"
+              />
+            </FormField>
+            <FormField label="Tool ID">
+              <FormInput
+                value={form.toolId ?? ''}
+                onChange={(e) => setForm({ ...form, toolId: e.target.value || undefined })}
+                placeholder="tool-ext-latam-price"
+              />
+            </FormField>
+            <FormField label="知识库文档 ID">
+              <FormInput
+                value={form.kbDocId ?? ''}
+                onChange={(e) => setForm({ ...form, kbDocId: e.target.value || undefined })}
+                placeholder="kb-offer-monitor"
+              />
+            </FormField>
+          </div>
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              className="accent-claw-600"
+              checked={Boolean(form.isGold)}
+              onChange={(e) => setForm({ ...form, isGold: e.target.checked })}
+            />
+            <span className="text-[13px]">标记为金案例（样板间「金」角标 · 优先打样）</span>
+          </label>
+        </section>
+
+        <section className="space-y-3 rounded-xl border border-zinc-100 p-3">
+          <h4 className="text-[11px] font-semibold tracking-wide text-zinc-800">
+            发布与组织
+            <span className="ml-2 font-normal text-zinc-400">可见性 · 外链 · 上架</span>
           </h4>
           <OwnershipFormFields
             ownerDeptIds={form.ownerDeptIds ?? []}

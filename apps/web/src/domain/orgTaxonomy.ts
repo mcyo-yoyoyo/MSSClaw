@@ -31,7 +31,7 @@ export type OrgAxis = 'dept' | 'region';
  * 门户/资产内容类型（步骤 2+ 将逐步落地）
  * skill/tool/agent — 平台内能力
  * external_tool — 外部工具深链登记
- * case/insight/training/news — 场景化知识地图内容
+ * case/playbook/insight/training/news — 场景化知识地图内容
  */
 export type PortalAssetType =
   | 'skill'
@@ -39,6 +39,7 @@ export type PortalAssetType =
   | 'agent'
   | 'external_tool'
   | 'case'
+  | 'playbook'
   | 'insight'
   | 'training'
   | 'news';
@@ -99,8 +100,9 @@ export const PORTAL_ASSET_TYPE_LABELS: Record<PortalAssetType, string> = {
   agent: 'Agent',
   external_tool: '外部工具',
   case: '场景案例',
+  playbook: '场景方案',
   insight: '前沿洞察',
-  training: '培训赋能',
+  training: '培训案例',
   news: '前沿洞察',
 };
 

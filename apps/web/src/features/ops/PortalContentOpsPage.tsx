@@ -481,6 +481,14 @@ export function PortalContentOpsPage() {
             card={previewCard}
             skillLabel={previewSkill?.name}
             agentLabel={previewAgent?.name}
+            onOpenLink={
+              previewItem.homepageUrl
+                ? () => {
+                    window.open(previewItem.homepageUrl, '_blank', 'noopener,noreferrer');
+                    showToast('已打开外链');
+                  }
+                : undefined
+            }
             onEdit={() => {
               const id = previewItem.id;
               setPreviewId(null);
@@ -488,7 +496,9 @@ export function PortalContentOpsPage() {
             }}
             onDownload={() => {
               downloadCaseFile(previewItem);
-              showToast('已下载案例包');
+              showToast(
+                previewItem.type === 'case' ? '已下载案例包' : '已下载学习包',
+              );
             }}
           />
         ) : null}

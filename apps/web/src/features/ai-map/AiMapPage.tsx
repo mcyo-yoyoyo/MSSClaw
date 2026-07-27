@@ -19,7 +19,10 @@ import {
 import { CaseEditorModal } from '@/components/center/CaseEditorModal';
 import { CaseOutcomePanel } from '@/components/content/CaseOutcomePanel';
 import { OrgAssetFilterBar } from '@/components/center/OrgAssetFilters';
-import { downloadCaseFile, downloadScenarioCasePack } from '@/domain/caseExport';
+import {
+  downloadScenarioCasePack,
+  downloadScenarioDemoPack,
+} from '@/domain/caseExport';
 import { isSystemAdmin } from '@/domain/currentUser';
 import {
   getPortalItemById,
@@ -35,7 +38,6 @@ import {
 import { buildSkillDemoPrompt } from '@/domain/skillRuntime';
 import { buildAgentDemoPrompt } from '@/domain/agents/runtime';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
-import { openPortalCard } from '@/domain/portalNavigation';
 import type { DeptFilter, EfficiencyFilter, RegionFilter } from '@/domain/assetFilters';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { usePortalContentStore } from '@/stores/portalContentStore';
@@ -46,6 +48,15 @@ import { returnFromResource } from '@/domain/openResourceNav';
 import { canExecuteChat } from '@/domain/permissions';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { ExpertTeamModal } from '@/components/content/ExpertTeamModal';
+import { countScenarioEnvSlots, type ScenarioEnv } from '@/domain/scenarioEnv';
+import { ARCHITECTURE_DOC_KIND_LABELS } from '@/domain/scenarioArchitecture';
+import {
+  ScenarioLayerInspectBody,
+  inspectTitle,
+  type ScenarioLayerInspectTarget,
+  type ToolkitEnvSlotId,
+  VIEW_ONLY_HINT,
+} from '@/components/content/ScenarioLayerInspectBody';
 
 interface AiMapPageProps {
   onInvokeAgent: (agent: PrototypeAgentSeed, prompt?: string) => void;
@@ -55,35 +66,65 @@ interface AiMapPageProps {
   onStartExpertTeam: (plan: ScenarioDemoPlan, fromIndex?: number) => void;
 }
 
+function LayerBadge({
+  active,
+  label,
+}: {
+  active: boolean;
+  label: string;
+}) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold',
+        active ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-400',
+      )}
+    >
+      <span
+        className={cn(
+          'h-1.5 w-1.5 rounded-full',
+          active ? 'bg-emerald-500' : 'bg-zinc-300',
+        )}
+      />
+      {label}
+    </span>
+  );
+}
+
 function Quadrant({
   title,
   emptyHint,
   cards,
   onCard,
+  hint,
 }: {
   title: string;
   emptyHint: string;
   cards: PortalMapCard[];
   onCard: (card: PortalMapCard) => void;
+  hint?: string;
 }) {
   return (
-    <section className="rounded-xl border border-zinc-200/80 bg-white p-3">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-[12px] font-semibold text-claw-600">{title}</h3>
-        <span className="text-[10px] text-zinc-400">{cards.length}</span>
+    <section className="rounded-xl border border-zinc-200/80 bg-zinc-50/40 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="text-[12px] font-semibold text-claw-600">{title}</h3>
+          {hint ? <p className="mt-0.5 text-[10px] text-zinc-400">{hint}</p> : null}
+        </div>
+        <span className="shrink-0 text-[10px] text-zinc-400">{cards.length}</span>
       </div>
       {cards.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50/80 px-3 py-6 text-center text-[11px] text-zinc-400">
+        <p className="rounded-lg border border-dashed border-zinc-200 bg-white px-3 py-5 text-center text-[11px] text-zinc-400">
           {emptyHint}
         </p>
       ) : (
         <ul className="space-y-1.5">
-          {cards.slice(0, 5).map((card) => (
+          {cards.slice(0, 6).map((card) => (
             <li key={card.id}>
               <button
                 type="button"
                 onClick={() => onCard(card)}
-                className="flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left transition hover:bg-zinc-50"
+                className="flex w-full items-start gap-2 rounded-lg bg-white px-2 py-1.5 text-left transition hover:bg-zinc-50"
               >
                 <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-zinc-800 text-white">
                   <i className={`fa-solid ${card.icon} text-[9px]`} />
@@ -98,6 +139,84 @@ function Quadrant({
         </ul>
       )}
     </section>
+  );
+}
+
+function ToolkitEnvPanel({
+  env,
+  onInspectSlot,
+}: {
+  env: ScenarioEnv | null;
+  onInspectSlot: (slot: ToolkitEnvSlotId) => void;
+}) {
+  const slots = countScenarioEnvSlots(env);
+  const models = [...(env?.cloudModels ?? []), ...(env?.localModels ?? [])];
+
+  const cardClass = (filled: boolean) =>
+    cn(
+      'w-full rounded-lg border px-3 py-3 text-left transition hover:border-zinc-300 hover:bg-zinc-50/80',
+      filled
+        ? 'border-zinc-200 bg-white'
+        : 'border-dashed border-zinc-200 bg-zinc-50/60',
+    );
+
+  return (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <button type="button" onClick={() => onInspectSlot('hardware')} className={cardClass(slots.hardware)}>
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-zinc-900 text-white">
+            <i className="fa-solid fa-laptop text-[11px]" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[12px] font-semibold text-zinc-800">硬件设备</p>
+            <p className="text-[10px] text-zinc-400">点击查看详情</p>
+          </div>
+        </div>
+        {slots.hardware ? (
+          <p className="mt-2 line-clamp-3 text-[11px] leading-relaxed text-zinc-600">{env!.hardware}</p>
+        ) : (
+          <p className="mt-2 text-[10px] text-zinc-400">清单待补充</p>
+        )}
+      </button>
+
+      <button type="button" onClick={() => onInspectSlot('coding')} className={cardClass(slots.coding)}>
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-zinc-900 text-white">
+            <i className="fa-solid fa-code text-[11px]" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[12px] font-semibold text-zinc-800">AI Coding 工具</p>
+            <p className="text-[10px] text-zinc-400">点击查看详情</p>
+          </div>
+        </div>
+        {slots.coding ? (
+          <p className="mt-2 line-clamp-3 text-[11px] text-zinc-600">
+            {env!.codingTools!.map((t) => t.name).join(' · ')}
+          </p>
+        ) : (
+          <p className="mt-2 text-[10px] text-zinc-400">清单待补充</p>
+        )}
+      </button>
+
+      <button type="button" onClick={() => onInspectSlot('models')} className={cardClass(slots.models)}>
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-zinc-900 text-white">
+            <i className="fa-solid fa-microchip text-[11px]" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[12px] font-semibold text-zinc-800">云端 / 本地大模型</p>
+            <p className="text-[10px] text-zinc-400">点击查看详情</p>
+          </div>
+        </div>
+        {slots.models ? (
+          <p className="mt-2 line-clamp-3 text-[11px] text-zinc-600">
+            {models.map((m) => m.name).join(' · ')}
+          </p>
+        ) : (
+          <p className="mt-2 text-[10px] text-zinc-400">清单待补充</p>
+        )}
+      </button>
+    </div>
   );
 }
 
@@ -119,7 +238,6 @@ function ReturnToTaskButton() {
 export function AiMapPage({
   onInvokeAgent,
   onInvokeSkill,
-  onAskKbDocument,
   onStartExpertTeam,
 }: AiMapPageProps) {
   const agents = useMarketplaceStore((s) => s.agents);
@@ -135,10 +253,12 @@ export function AiMapPage({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [narrativeCard, setNarrativeCard] = useState<PortalMapCard | null>(null);
   const [editorTarget, setEditorTarget] = useState<string | 'new' | null>(null);
-  const [narrativeKind, setNarrativeKind] = useState<'all' | 'case' | 'training' | 'news'>('all');
+  const [narrativeKind, setNarrativeKind] = useState<
+    'all' | 'playbook' | 'case' | 'training' | 'news'
+  >('all');
   const [teamPlan, setTeamPlan] = useState<ScenarioDemoPlan | null>(null);
+  const [inspectTarget, setInspectTarget] = useState<ScenarioLayerInspectTarget | null>(null);
   const canEditCase = isSystemAdmin(user?.platformRole);
-  const [capsOpen, setCapsOpen] = useState(true);
   const [deptFilter, setDeptFilter] = useState<DeptFilter>('all');
   const [regionFilter, setRegionFilter] = useState<RegionFilter>('all');
   const [efficiencyFilter, setEfficiencyFilter] = useState<EfficiencyFilter>('all');
@@ -250,7 +370,17 @@ export function AiMapPage({
     const card = hit.cases.find((c) => c.action.type === 'case' && c.action.caseId === id) ?? null;
     if (card) {
       setNarrativeCard(card);
-      setNarrativeKind(card.kind === 'insight' ? 'news' : card.kind === 'training' ? 'training' : card.kind === 'case' ? 'case' : 'all');
+      setNarrativeKind(
+        card.kind === 'insight'
+          ? 'news'
+          : card.kind === 'training'
+            ? 'training'
+            : card.kind === 'playbook'
+              ? 'playbook'
+              : card.kind === 'case'
+                ? 'case'
+                : 'all',
+      );
     }
   }, [pendingCaseId, allBundles, consumeCaseId, showToast]);
 
@@ -302,27 +432,31 @@ export function AiMapPage({
   }, [selected, narrativeKind]);
 
   const narrativeKindOptions = useMemo(() => {
-    if (!selected?.cases.length) return [] as Array<'case' | 'training' | 'news'>;
+    if (!selected?.cases.length) {
+      return [] as Array<'playbook' | 'case' | 'training' | 'news'>;
+    }
     const kinds = selected.cases.map((c) => (c.kind === 'insight' ? 'news' : c.kind));
     const set = new Set(kinds);
-    return (['case', 'training', 'news'] as const).filter((k) => set.has(k));
+    return (['playbook', 'training', 'news', 'case'] as const).filter((k) => set.has(k));
   }, [selected]);
 
-  const handleCard = (card: PortalMapCard) => {
-    openPortalCard(card, { onInvokeAgent, onInvokeSkill, onAskKbDocument, showToast });
+  /** 方案 A：层内点击一律只读详情，执行/下载走顶栏 */
+  const openCapabilityInspect = (card: PortalMapCard) => {
+    setInspectTarget({ kind: 'capability', card, layerLabel: '能力层' });
   };
 
-  /** 能力组合：专家/技能仅展示挂载，不开任务；工具/知识仍可打开 */
-  const handleCapabilityCard = (card: PortalMapCard) => {
-    if (card.action.type === 'agent' || card.action.type === 'skill') {
-      showToast(
-        card.action.type === 'agent'
-          ? `本场景挂载专家「${card.title}」· 请用上方「一键打样」开任务`
-          : `本场景挂载技能「${card.title}」· 请用上方「一键打样」开任务`,
-      );
-      return;
-    }
-    handleCard(card);
+  const openToolkitToolInspect = (card: PortalMapCard) => {
+    setInspectTarget({ kind: 'toolkit-tool', card });
+  };
+
+  const openToolkitEnvInspect = (slot: ToolkitEnvSlotId) => {
+    if (!selected) return;
+    setInspectTarget({ kind: 'toolkit-env', slot, env: selected.env });
+  };
+
+  const openUrlKnow = (url: string, label: string) => {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    showToast(`已打开了解：${label}`);
   };
 
   const invokePipelineStep = (plan: ScenarioDemoPlan, step: ScenarioPipelineStep, stepIndex: number) => {
@@ -372,20 +506,42 @@ export function AiMapPage({
 
   const selectedDemoPlan = selected ? resolveScenarioDemoPlan(selected) : null;
 
-  const downloadScenarioPack = (bundle: ScenarioBundle) => {
+  const downloadLearnPack = (bundle: ScenarioBundle) => {
     const items = resolveScenarioCaseItems(bundle);
-    if (!items.length) {
-      showToast('该场景暂无可下载的案例包');
+    if (!items.length && !bundle.layers.toolkit) {
+      showToast('该场景暂无可下载的学习内容');
       return;
     }
-    downloadScenarioCasePack(bundle.label, items);
+    downloadScenarioCasePack(bundle.label, items, bundle.env);
     const bump = useContentEngagementStore.getState().bumpDownload;
     items.forEach((i) => bump(i.id));
-    showToast(
-      items.length === 1
-        ? `已下载案例包：${items[0]!.title}`
-        : `已下载场景案例包（${items.length} 个）`,
-    );
+    showToast('已下载学习包（.learn.zip）');
+  };
+
+  const downloadDemoPack = (bundle: ScenarioBundle) => {
+    const all = resolveScenarioCaseItems(bundle);
+    const caseItems = all.filter((i) => i.type === 'case');
+    const hasCaps =
+      bundle.agents.length +
+        bundle.skills.length +
+        bundle.tools.length +
+        bundle.architectureDocs.length +
+        caseItems.length >
+      0;
+    if (!hasCaps) {
+      showToast('该场景暂无可下载的打样能力包');
+      return;
+    }
+    downloadScenarioDemoPack({
+      scenarioId: bundle.id,
+      scenarioLabel: bundle.label,
+      agents: bundle.agents,
+      skills: bundle.skills,
+      tools: bundle.tools,
+      architectureDocs: bundle.architectureDocs,
+      caseItems,
+    });
+    showToast('已下载打样包（.demo.zip）');
   };
 
   const narrativeOutcome = narrativeCard ? outcomeFromNarrativeCard(narrativeCard) : null;
@@ -401,10 +557,11 @@ export function AiMapPage({
       <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-4 py-4 md:px-6">
         <CenterPageHeader
           title="场景案例"
-          subtitle="下载案例包 · 一键打样开任务（多步场景走接力，无需进入专家库）"
+          subtitle="学·学习包 · 配·环境清单 · 跑·打样包 / 一键打样"
           tip={
             <>
-              3 分钟演示：选场景 → 打开成效卡 →「一键打样」开任务。首页「学 · 找案例」是橱窗，这里是完整案例库。
+              三层齐套灯：思想层下学习包（.learn.zip），工具层看环境，能力层下打样包（.demo.zip）或一键打样；架构
+              md 可在能力层在线阅读。
             </>
           }
           actions={
@@ -494,7 +651,7 @@ export function AiMapPage({
                             selectedId === b.id ? 'text-white/60' : 'text-zinc-400',
                           )}
                         >
-                          {b.completeness}/4
+                          {b.completeness}/3
                         </span>
                       </span>
                       <span
@@ -507,13 +664,14 @@ export function AiMapPage({
                       </span>
                       <span
                         className={cn(
-                          'mt-1 flex flex-wrap gap-1.5 text-[9px]',
-                          selectedId === b.id ? 'text-white/50' : 'text-zinc-400',
+                          'mt-1 flex flex-wrap gap-1 text-[9px]',
+                          selectedId === b.id ? 'text-white/55' : 'text-zinc-400',
                         )}
                       >
-                        <span>专家 {b.agents.length}</span>
-                        <span>工具 {b.tools.length}</span>
-                        <span>案例 {b.cases.length}</span>
+                        <span>{b.layers.thought ? '学' : '·'}</span>
+                        <span>{b.layers.toolkit ? '配' : '·'}</span>
+                        <span>{b.layers.capability ? '跑' : '·'}</span>
+                        <span className="opacity-70">· 案 {b.cases.length}</span>
                       </span>
                     </span>
                   </button>
@@ -536,40 +694,57 @@ export function AiMapPage({
                         <p className="text-[12px] text-zinc-500">{selected.desc}</p>
                       </div>
                     </div>
-                    <p className="mt-2 text-[11px] text-zinc-400">
-                      能力齐套 {selected.completeness}/4
-                      {selected.related ? ' · 与你相关' : ''}
-                      {selectedDemoPlan?.mode === 'team'
-                        ? ` · 多步接力 ${selectedDemoPlan.steps.length} 步`
-                        : selectedDemoPlan
-                          ? ' · 可一键打样'
-                          : ''}
-                      {selected.matchTags.length
-                        ? ` · ${selected.matchTags.map((t) => `#${t}`).join(' ')}`
-                        : ''}
-                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <LayerBadge active={selected.layers.thought} label="学 · 思想层" />
+                      <LayerBadge active={selected.layers.toolkit} label="配 · 工具层" />
+                      <LayerBadge active={selected.layers.capability} label="跑 · 能力层" />
+                      <span className="text-[11px] text-zinc-400">
+                        齐套 {selected.completeness}/3
+                        {selected.related ? ' · 与你相关' : ''}
+                        {selectedDemoPlan?.mode === 'team'
+                          ? ` · 多步接力 ${selectedDemoPlan.steps.length} 步`
+                          : selectedDemoPlan
+                            ? ' · 可一键打样'
+                            : ' · 暂不可打样'}
+                      </span>
+                    </div>
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => downloadScenarioPack(selected)}
-                      className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03]"
+                      onClick={() => downloadLearnPack(selected)}
+                      disabled={!selected.layers.thought && !selected.layers.toolkit}
+                      className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-40"
+                      title="学习包：思想层 + 工具层环境（.learn.zip）"
                     >
                       <i className="fa-solid fa-download mr-1 text-[10px]" />
-                      一键下载案例包
+                      下载学习包
                     </button>
-                    {canExecuteChat() && selectedDemoPlan ? (
+                    <button
+                      type="button"
+                      onClick={() => downloadDemoPack(selected)}
+                      disabled={!selected.layers.capability}
+                      className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-40"
+                      title="打样包：架构 md + 能力挂载 + 场景案例（.demo.zip）"
+                    >
+                      <i className="fa-solid fa-box-archive mr-1 text-[10px]" />
+                      下载打样包
+                    </button>
+                    {canExecuteChat() ? (
                       <button
                         type="button"
                         onClick={() => startScenario(selected)}
-                        className="rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-800"
+                        disabled={!selectedDemoPlan}
+                        className="rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
                         title={
-                          selectedDemoPlan.mode === 'team'
-                            ? '按场景步骤在任务中接力打样（无需进入专家库）'
-                            : '用本场景主能力直接开任务打样'
+                          selectedDemoPlan?.mode === 'team'
+                            ? '按场景步骤在任务中接力打样'
+                            : selectedDemoPlan
+                              ? '用本场景能力层主能力开任务打样'
+                              : '能力层暂无可用 Agent / Skill'
                         }
                       >
-                        {selectedDemoPlan.mode === 'team'
+                        {selectedDemoPlan?.mode === 'team'
                           ? '一键打样 · 多步接力'
                           : '一键打样'}
                       </button>
@@ -577,16 +752,24 @@ export function AiMapPage({
                   </div>
                 </div>
 
+                {/* ① 思想层 · 学 */}
                 <section className="rounded-xl border border-zinc-200/80 bg-white p-3">
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-[12px] font-semibold text-claw-600">样板间叙事 · 案例与培训</h3>
+                    <div>
+                      <h3 className="text-[12px] font-semibold text-zinc-900">
+                        ① 思想层 · 学
+                        <span className="ml-2 text-[11px] font-normal text-zinc-400">
+                          点击查看详情 · 下载请用上方「下载学习包」
+                        </span>
+                      </h3>
+                    </div>
                     <span className="text-[10px] text-zinc-400">
                       {narrativeCards.length}/{selected.cases.length}
                     </span>
                   </div>
                   {selected.cases.length === 0 ? (
                     <p className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50/80 px-3 py-6 text-center text-[11px] text-zinc-400">
-                      待建设 · 可从门户运营上架案例 / 洞察 / 培训
+                      待建设 · 可从上架前沿洞察、培训案例或场景方案
                     </p>
                   ) : (
                     <>
@@ -616,11 +799,13 @@ export function AiMapPage({
                                   : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200',
                               )}
                             >
-                              {k === 'case'
-                                ? '场景案例'
-                                : k === 'training'
-                                  ? '培训'
-                                  : '前沿洞察'}
+                              {k === 'playbook'
+                                ? '场景方案'
+                                : k === 'case'
+                                  ? '场景案例'
+                                  : k === 'training'
+                                    ? '培训案例'
+                                    : '前沿洞察'}
                             </button>
                           ))}
                         </div>
@@ -660,49 +845,157 @@ export function AiMapPage({
                       )}
                     </>
                   )}
-                </section>
-
-                <section className="overflow-hidden rounded-xl border border-zinc-200/80 bg-white">
-                  <button
-                    type="button"
-                    onClick={() => setCapsOpen((v) => !v)}
-                    className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition hover:bg-zinc-50"
-                  >
-                    <span className="text-[12px] font-semibold text-zinc-800">
-                      能力组合
-                      <span className="ml-2 text-[11px] font-normal text-zinc-400">
-                        齐套 {selected.completeness}/4 · Agent / Tool / 知识
-                      </span>
-                    </span>
-                    <i
-                      className={cn(
-                        'fa-solid text-[10px] text-zinc-400',
-                        capsOpen ? 'fa-chevron-up' : 'fa-chevron-down',
-                      )}
-                    />
-                  </button>
-                  {capsOpen ? (
-                    <div className="grid grid-cols-1 gap-3 border-t border-zinc-100 p-3 sm:grid-cols-3">
-                      <Quadrant
-                        title="专家（本场景挂载）"
-                        emptyHint="待建设 · 可挂载业务专家"
-                        cards={selected.agents}
-                        onCard={handleCapabilityCard}
-                      />
-                      <Quadrant
-                        title="技能 / 工具"
-                        emptyHint="待建设 · 可挂载工具或 Skill"
-                        cards={selected.tools}
-                        onCard={handleCapabilityCard}
-                      />
-                      <Quadrant
-                        title="相关知识"
-                        emptyHint="待建设 · 可关联知识库文档"
-                        cards={selected.knowledge}
-                        onCard={handleCapabilityCard}
-                      />
+                  {selected.knowledge.length > 0 ? (
+                    <div className="mt-3 border-t border-zinc-100 pt-3">
+                      <p className="mb-1.5 text-[11px] font-medium text-zinc-500">延伸知识</p>
+                      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                        {selected.knowledge.slice(0, 4).map((card) => (
+                          <button
+                            key={card.id}
+                            type="button"
+                            onClick={() =>
+                              setInspectTarget({
+                                kind: 'capability',
+                                card,
+                                layerLabel: '思想层 · 延伸知识',
+                              })
+                            }
+                            className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] text-zinc-700 transition hover:bg-zinc-50"
+                          >
+                            <i className={`fa-solid ${card.icon} w-4 text-[10px] text-zinc-400`} />
+                            <span className="truncate">{card.title}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   ) : null}
+                </section>
+
+                {/* ② 工具层 · 配 */}
+                <section className="rounded-xl border border-zinc-200/80 bg-white p-3">
+                  <div className="mb-2">
+                    <h3 className="text-[12px] font-semibold text-zinc-900">
+                      ② 工具层 · 配
+                      <span className="ml-2 text-[11px] font-normal text-zinc-400">
+                        硬件 / AI Coding / 大模型 · 仅了解，不调用
+                      </span>
+                    </h3>
+                  </div>
+                  <ToolkitEnvPanel
+                    env={selected.env}
+                    onInspectSlot={openToolkitEnvInspect}
+                  />
+                  <p className="mt-2 text-[10px] text-zinc-400">
+                    点击卡片查看环境详情（只读）。与首页「常用 AI 工具」不同，此处不提供调用。
+                  </p>
+                  {selected.envTools.length > 0 ? (
+                    <div className="mt-3">
+                      <p className="mb-1.5 text-[11px] font-medium text-zinc-500">
+                        本场景相关外部工具（点击查看）
+                      </p>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        {selected.envTools.slice(0, 6).map((card) => (
+                          <button
+                            key={card.id}
+                            type="button"
+                            onClick={() => openToolkitToolInspect(card)}
+                            className="flex items-start gap-2 rounded-lg border border-zinc-100 px-3 py-2 text-left transition hover:border-zinc-300 hover:bg-zinc-50"
+                          >
+                            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-zinc-800 text-white">
+                              <i className={`fa-solid ${card.icon} text-[9px]`} />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block truncate text-[12px] font-medium text-zinc-900">
+                                {card.title}
+                              </span>
+                              <span className="block truncate text-[10px] text-zinc-400">
+                                {card.kindLabel} · 查看详情
+                              </span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </section>
+
+                {/* ③ 能力层 · 跑 */}
+                <section className="rounded-xl border border-zinc-200/80 bg-white p-3">
+                  <div className="mb-2">
+                    <h3 className="text-[12px] font-semibold text-zinc-900">
+                      ③ 能力层 · 跑
+                      <span className="ml-2 text-[11px] font-normal text-zinc-400">
+                        Agent / Skill / Tool / 架构文件 · 打样或下载打样包
+                      </span>
+                    </h3>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <Quadrant
+                      title="Agent"
+                      hint="点击查看 · 不执行"
+                      emptyHint="待挂载业务专家"
+                      cards={selected.agents}
+                      onCard={openCapabilityInspect}
+                    />
+                    <Quadrant
+                      title="Skill"
+                      hint="点击查看 · 不执行"
+                      emptyHint="待挂载技能"
+                      cards={selected.skills}
+                      onCard={openCapabilityInspect}
+                    />
+                    <Quadrant
+                      title="Tool"
+                      hint="点击查看 · 不执行"
+                      emptyHint="待挂载连接器"
+                      cards={selected.tools}
+                      onCard={openCapabilityInspect}
+                    />
+                  </div>
+                  <div className="mt-3 border-t border-zinc-100 pt-3">
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                      <p className="text-[11px] font-medium text-zinc-500">
+                        架构文件.md
+                        <span className="ml-1 font-normal text-zinc-400">
+                          点击查看 · 只读
+                        </span>
+                      </p>
+                      <span className="text-[10px] text-zinc-400">
+                        {selected.architectureDocs.length}
+                      </span>
+                    </div>
+                    {selected.architectureDocs.length === 0 ? (
+                      <p className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50/80 px-3 py-4 text-center text-[11px] text-zinc-400">
+                        待补充架构设计与执行方案
+                      </p>
+                    ) : (
+                      <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        {selected.architectureDocs.map((d) => (
+                          <li key={d.id}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setInspectTarget({ kind: 'architecture', doc: d })
+                              }
+                              className="flex w-full items-start gap-2 rounded-lg border border-zinc-100 px-3 py-2.5 text-left transition hover:border-zinc-300 hover:bg-zinc-50"
+                            >
+                              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-zinc-800 text-white">
+                                <i className="fa-solid fa-file-lines text-[9px]" />
+                              </span>
+                              <span className="min-w-0">
+                                <span className="mb-0.5 inline-block rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] font-semibold text-zinc-500">
+                                  {ARCHITECTURE_DOC_KIND_LABELS[d.kind]}
+                                </span>
+                                <span className="block truncate text-[12px] font-medium text-zinc-900">
+                                  {d.title}
+                                </span>
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 </section>
               </div>
             ) : (
@@ -713,6 +1006,26 @@ export function AiMapPage({
           </main>
         </div>
       </div>
+
+      <CenterModal
+        open={!!inspectTarget}
+        title={inspectTarget ? inspectTitle(inspectTarget) : '详情'}
+        onClose={() => setInspectTarget(null)}
+        size="lg"
+        actions={
+          <button
+            type="button"
+            onClick={() => setInspectTarget(null)}
+            className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium"
+          >
+            关闭
+          </button>
+        }
+      >
+        {inspectTarget ? (
+          <ScenarioLayerInspectBody target={inspectTarget} onOpenUrl={openUrlKnow} />
+        ) : null}
+      </CenterModal>
 
       <ExpertTeamModal
         plan={teamPlan}
@@ -752,17 +1065,12 @@ export function AiMapPage({
             card={narrativeOutcome}
             skillLabel={narrativeSkill?.name}
             agentLabel={narrativeAgent?.name}
-            onDemoCase={
-              narrativeSkill || narrativeAgent
+            viewOnlyHint={VIEW_ONLY_HINT}
+            onOpenLink={
+              narrativeOutcome.homepageUrl
                 ? () => {
-                    if (narrativeSkill) {
-                      onInvokeSkill(narrativeSkill);
-                      showToast(`已按案例打样：${narrativeSkill.name}`);
-                    } else if (narrativeAgent) {
-                      onInvokeAgent(narrativeAgent);
-                      showToast(`已按案例打样：${narrativeAgent.name}`);
-                    }
-                    setNarrativeCard(null);
+                    window.open(narrativeOutcome.homepageUrl, '_blank', 'noopener,noreferrer');
+                    showToast('已打开了解');
                   }
                 : undefined
             }
@@ -777,18 +1085,6 @@ export function AiMapPage({
                   }
                 : undefined
             }
-            onDownload={() => {
-              const item =
-                narrativeCard.action.type === 'case'
-                  ? getPortalItemById(narrativeCard.action.caseId)
-                  : getPortalItemById(narrativeOutcome.id);
-              if (!item) {
-                showToast('未找到可下载的案例内容');
-                return;
-              }
-              downloadCaseFile(item);
-              showToast('已下载案例包（.case.zip）');
-            }}
           />
         ) : null}
       </CenterModal>

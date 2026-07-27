@@ -13,6 +13,7 @@ export interface CaseOutcomeCard {
   id: string;
   title: string;
   desc: string;
+  type: PortalContentItem['type'];
   typeLabel: string;
   painPoint: string;
   impactMetric: string;
@@ -22,6 +23,7 @@ export interface CaseOutcomeCard {
   agentId?: string;
   toolId?: string;
   kbDocId?: string;
+  homepageUrl?: string;
   isGold: boolean;
   scenarioTags: string[];
   publisher?: string;
@@ -60,6 +62,7 @@ export function toCaseOutcomeCard(
     id: item.id,
     title: item.title,
     desc: item.desc,
+    type: item.type,
     typeLabel,
     painPoint: pain,
     impactMetric: metric,
@@ -69,6 +72,7 @@ export function toCaseOutcomeCard(
     agentId: item.agentId,
     toolId: item.toolId,
     kbDocId: item.kbDocId,
+    homepageUrl: item.homepageUrl,
     isGold: Boolean(item.isGold),
     scenarioTags: item.scenarioTags ?? [],
     publisher: item.publisher,
@@ -83,10 +87,18 @@ export function getPortalItemById(id: string): PortalContentItem | null {
 
 export function outcomeFromNarrativeCard(card: PortalMapCard): CaseOutcomeCard | null {
   if (card.action.type !== 'case') {
+    const kind =
+      card.kind === 'insight' ||
+      card.kind === 'training' ||
+      card.kind === 'news' ||
+      card.kind === 'playbook' ||
+      card.kind === 'case'
+        ? card.kind
+        : 'case';
     return toCaseOutcomeCard(
       {
         id: card.id,
-        type: card.kind === 'insight' || card.kind === 'training' || card.kind === 'news' ? card.kind : 'case',
+        type: kind,
         title: card.title,
         desc: card.desc,
         icon: card.icon,
@@ -123,11 +135,33 @@ export function resolveScenarioCaseItems(bundle: ScenarioBundle): PortalContentI
     .map((c) => (c.action.type === 'case' ? c.action.caseId : ''))
     .filter(Boolean);
   const related = portal.filter((i) => caseIds.includes(i.id));
-  return [...related].sort((a, b) => Number(Boolean(b.isGold)) - Number(Boolean(a.isGold)));
+  return sortThoughtLayerItems(related);
 }
 
 function scoreScenarioCaseItem(item: PortalContentItem): number {
-  return (item.isGold ? 4 : 0) + (item.type === 'case' ? 2 : 0) + (item.type === 'training' ? 1 : 0);
+  const typeScore =
+    item.type === 'playbook'
+      ? 5
+      : item.type === 'case'
+        ? 4
+        : item.type === 'training'
+          ? 3
+          : item.type === 'news' || item.type === 'insight'
+            ? 2
+            : 0;
+  return (item.isGold ? 6 : 0) + typeScore;
+}
+
+/** 学习包排序：场景方案 > 培训 > 洞察 > 可打样案例 */
+export function sortThoughtLayerItems(items: PortalContentItem[]): PortalContentItem[] {
+  const rank = (t: PortalContentItem['type']) =>
+    t === 'playbook' ? 4 : t === 'training' ? 3 : t === 'news' || t === 'insight' ? 2 : t === 'case' ? 1 : 0;
+  return [...items].sort(
+    (a, b) =>
+      rank(b.type) - rank(a.type) ||
+      Number(Boolean(b.isGold)) - Number(Boolean(a.isGold)) ||
+      (b.publishedAt || '').localeCompare(a.publishedAt || ''),
+  );
 }
 
 /** 首页橱窗下载：场景标签命中的全部门户内容（金案例优先） */
@@ -158,7 +192,11 @@ export function resolveScenarioDemoTarget(bundle: ScenarioBundle): {
     .filter((c) => c.action.type === 'case')
     .map((c) => (c.action.type === 'case' ? c.action.caseId : ''));
   const related = portal.filter((i) => caseIds.includes(i.id));
-  const gold = related.find((i) => i.isGold) ?? related[0];
+  const gold =
+    related.find((i) => i.isGold && i.type === 'case') ??
+    related.find((i) => i.type === 'case' && (i.primarySkillId || i.skillId || i.agentId)) ??
+    related.find((i) => i.isGold) ??
+    related[0];
 
   if (gold) {
     const { skillId, agentId } = resolveInvokeIds(gold);
@@ -178,13 +216,13 @@ export function resolveScenarioDemoTarget(bundle: ScenarioBundle): {
     if (agent) return { agent, label: bundle.label };
   }
 
-  const toolAction = bundle.tools[0]?.action;
-  if (toolAction?.type === 'skill') {
-    const skill = market.skills.find((s) => s.id === toolAction.skillId);
+  const skillAction = bundle.skills[0]?.action;
+  if (skillAction?.type === 'skill') {
+    const skill = market.skills.find((s) => s.id === skillAction.skillId);
     if (skill) return { skill, label: bundle.label };
   }
-  if (toolAction?.type === 'agent') {
-    const agent = market.agents.find((a) => a.id === toolAction.agentId);
+  if (skillAction?.type === 'agent') {
+    const agent = market.agents.find((a) => a.id === skillAction.agentId);
     if (agent) return { agent, label: bundle.label };
   }
 

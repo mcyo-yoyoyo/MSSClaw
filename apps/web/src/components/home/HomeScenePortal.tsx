@@ -10,6 +10,7 @@ import {
   resolvePrimaryCaseIdForScenario,
 } from '@/domain/portalCase';
 import { downloadScenarioCasePack } from '@/domain/caseExport';
+import { getScenarioEnv } from '@/domain/scenarioEnv';
 import {
   AI_TOOL_NAV_CATEGORIES,
   isHomeAiTool,
@@ -461,13 +462,13 @@ export function HomeScenePortal({
                   showToast('该场景暂无可下载的案例包');
                   return;
                 }
-                downloadScenarioCasePack(s.label, items);
+                downloadScenarioCasePack(s.label, items, getScenarioEnv(s.id));
                 const bump = useContentEngagementStore.getState().bumpDownload;
                 items.forEach((i) => bump(i.id));
                 showToast(
                   items.length === 1
-                    ? `已下载案例包：${items[0]!.title}`
-                    : `已下载场景案例包（${items.length} 个）`,
+                    ? `已下载学习包：${items[0]!.title}`
+                    : `已下载场景学习包（${items.length} 个）`,
                 );
               }}
               onAfterAction={(action) => {
@@ -481,7 +482,7 @@ export function HomeScenePortal({
       {/* L2 · 场景工具：与场景案例同宽同构，无外框 */}
       <section>
         <SectionToolbar
-          title="场景工具（精选）"
+          title="常用 AI 工具（精选）"
           filters={
             <FilterTrack>
               {AI_TOOL_NAV_CATEGORIES.map((c) => (
