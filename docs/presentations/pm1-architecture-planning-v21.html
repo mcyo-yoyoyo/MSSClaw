@@ -1,0 +1,1330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>平台定位与架构规划 · 可视化汇报稿 v2.1</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f4f3f0;
+      --panel: #ffffff;
+      --ink: #18181b;
+      --muted: #71717a;
+      --line: rgba(24, 24, 27, 0.1);
+      --accent: #cf0a2c;
+      --accent-soft: #fff1f2;
+      --ops: #1e293b;
+      --teal: #0f766e;
+      --teal-soft: #ecfdf5;
+      --amber: #b45309;
+      --amber-soft: #fffbeb;
+      --sky: #0369a1;
+      --sky-soft: #e0f2fe;
+      --violet: #5b21b6;
+      --shadow: 0 16px 40px -24px rgba(24, 24, 27, 0.4);
+      --radius: 14px;
+      --font: "Noto Sans SC", "PingFang SC", sans-serif;
+      --display: "Source Serif 4", "Noto Serif SC", serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #0a0a0b; color: var(--ink); font-family: var(--font); overflow: hidden; }
+    .deck { width: 100vw; height: 100vh; position: relative; }
+    .slide {
+      position: absolute; inset: 0; display: none;
+      padding: clamp(20px, 3vw, 40px) clamp(24px, 4vw, 56px);
+      background:
+        radial-gradient(1000px 520px at 100% 0%, rgba(207,10,44,.07), transparent 50%),
+        radial-gradient(800px 420px at 0% 100%, rgba(15,118,110,.07), transparent 50%),
+        var(--bg);
+      overflow: hidden;
+    }
+    .slide.is-active { display: flex; flex-direction: column; }
+    .slide-inner {
+      flex: 1; min-height: 0; display: flex; flex-direction: column;
+      max-width: 1200px; width: 100%; margin: 0 auto;
+    }
+    .kicker { margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+    .h1 { margin: 0; font-family: var(--display); font-size: clamp(30px, 4vw, 48px); font-weight: 600; line-height: 1.12; }
+    .h2 { margin: 0; font-family: var(--display); font-size: clamp(24px, 2.8vw, 34px); font-weight: 600; line-height: 1.2; }
+    .lede { margin: 10px 0 0; max-width: 48ch; font-size: 15px; line-height: 1.55; color: var(--muted); }
+    .footer { display: flex; justify-content: space-between; margin-top: auto; padding-top: 12px; font-size: 11px; color: var(--muted); }
+    .brand { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; }
+    .brand i { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+    .grow { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; }
+    .notes { display: none; }
+    .hint-bar {
+      position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%);
+      display: flex; gap: 12px; padding: 7px 14px; border-radius: 999px;
+      background: rgba(24,24,27,.9); color: #e4e4e7; font-size: 11px; z-index: 30;
+    }
+    .hint-bar kbd { padding: 1px 5px; border-radius: 4px; background: #3f3f46; font-size: 10px; }
+
+    /* —— visual primitives —— */
+    .pill { display: inline-flex; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--accent-soft); color: var(--accent); }
+    .pill.teal { background: var(--teal-soft); color: var(--teal); }
+    .pill.amber { background: var(--amber-soft); color: var(--amber); }
+    .pill.sky { background: var(--sky-soft); color: var(--sky); }
+    .pill.slate { background: #f4f4f5; color: #3f3f46; }
+
+    .vcard {
+      background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 14px 16px; box-shadow: var(--shadow);
+    }
+    .vcard h3 { margin: 0 0 6px; font-size: 14px; font-weight: 700; }
+    .vcard p { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+
+    .arrow {
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 20px; opacity: .55; flex: none;
+    }
+
+    /* journey */
+    .journey {
+      display: grid; grid-template-columns: 1fr 28px 1fr 28px 1fr; gap: 0; align-items: stretch; margin-top: 8px;
+    }
+    .j-node {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+      padding: 18px 16px; box-shadow: var(--shadow); position: relative;
+    }
+    .j-node .tag {
+      display: inline-block; font-family: var(--display); font-size: 28px; font-weight: 600;
+      line-height: 1; margin-bottom: 8px;
+    }
+    .j-node.learn .tag { color: var(--teal); }
+    .j-node.cfg .tag { color: var(--amber); }
+    .j-node.run .tag { color: var(--accent); }
+    .j-node h3 { margin: 0 0 6px; font-size: 15px; }
+    .j-node p { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.45; }
+    .j-node .sub {
+      margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line);
+      font-size: 11px; color: var(--ink); font-weight: 500;
+    }
+
+    /* dual entry */
+    .dual-entry {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px;
+    }
+    .entry {
+      border-radius: 14px; padding: 14px 16px; color: #fff;
+    }
+    .entry.find { background: linear-gradient(135deg, #0f766e, #115e59); }
+    .entry.do { background: linear-gradient(135deg, #1e293b, #0f172a); }
+    .entry .lab { font-size: 11px; opacity: .75; letter-spacing: .08em; text-transform: uppercase; }
+    .entry .tit { font-size: 18px; font-weight: 700; margin-top: 4px; }
+    .entry .desc { font-size: 12px; opacity: .85; margin-top: 6px; line-height: 1.4; }
+
+    /* architecture */
+    .arch {
+      display: grid; grid-template-columns: 1fr 200px; gap: 14px; margin-top: 10px; flex: 1; min-height: 0;
+    }
+    .arch-main { display: flex; flex-direction: column; gap: 8px; }
+    .layer {
+      border-radius: 12px; padding: 12px 14px; border: 1px solid var(--line); background: var(--panel);
+      display: grid; grid-template-columns: 88px 1fr; gap: 12px; align-items: center;
+      box-shadow: var(--shadow);
+    }
+    .layer .lab {
+      font-size: 12px; font-weight: 700; color: #fff; text-align: center;
+      padding: 10px 6px; border-radius: 10px; letter-spacing: .04em;
+    }
+    .layer.discover .lab { background: var(--teal); }
+    .layer.scenario .lab { background: var(--ops); }
+    .layer.execute .lab { background: var(--accent); }
+    .layer .body { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip {
+      padding: 5px 10px; border-radius: 999px; background: #f4f4f5;
+      font-size: 11.5px; font-weight: 500; color: #3f3f46;
+    }
+    .chip.on { background: var(--teal-soft); color: var(--teal); }
+    .chip.warn { background: var(--amber-soft); color: var(--amber); }
+    .chip.hot { background: var(--accent-soft); color: var(--accent); }
+    .ops-rail {
+      border-radius: 14px; background: linear-gradient(180deg, #1e293b, #0f172a);
+      color: #fff; padding: 16px 14px; display: flex; flex-direction: column; gap: 8px;
+      box-shadow: var(--shadow);
+    }
+    .ops-rail .t { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; opacity: .65; }
+    .ops-rail .h { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+    .ops-rail .item {
+      font-size: 12px; padding: 8px 10px; border-radius: 8px;
+      background: rgba(255,255,255,.08); line-height: 1.35;
+    }
+
+    /* scenario cube */
+    .scene-cube {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 8px;
+    }
+    .cube {
+      border-radius: 14px; padding: 16px 14px; min-height: 140px;
+      border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow);
+      position: relative; overflow: hidden;
+    }
+    .cube::before {
+      content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+    }
+    .cube.l::before { background: var(--teal); }
+    .cube.c::before { background: var(--amber); }
+    .cube.r::before { background: var(--accent); }
+    .cube .n { font-family: var(--display); font-size: 22px; font-weight: 600; }
+    .cube.l .n { color: var(--teal); }
+    .cube.c .n { color: var(--amber); }
+    .cube.r .n { color: var(--accent); }
+    .cube h3 { margin: 4px 0 8px; font-size: 15px; }
+    .cube ul { margin: 0; padding-left: 1em; font-size: 12px; color: var(--muted); line-height: 1.45; }
+
+    /* timeline evolution */
+    .timeline {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin-top: 12px; position: relative;
+    }
+    .timeline::before {
+      content: ""; position: absolute; left: 8%; right: 8%; top: 28px; height: 3px;
+      background: linear-gradient(90deg, #a1a1aa, var(--teal), var(--amber), var(--accent));
+      border-radius: 2px; z-index: 0;
+    }
+    .tl {
+      position: relative; z-index: 1; padding: 0 8px; text-align: center;
+    }
+    .tl .dot {
+      width: 18px; height: 18px; border-radius: 50%; margin: 20px auto 12px;
+      border: 3px solid var(--panel); box-shadow: 0 0 0 2px currentColor;
+    }
+    .tl.t0 { color: #71717a; }
+    .tl.t1 { color: var(--teal); }
+    .tl.t2 { color: var(--amber); }
+    .tl.t3 { color: var(--accent); }
+    .tl .dot { background: currentColor; }
+    .tl .phase { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+    .tl .box {
+      text-align: left; background: var(--panel); border: 1px solid var(--line);
+      border-radius: 12px; padding: 10px; box-shadow: var(--shadow); min-height: 150px;
+    }
+    .tl .box h4 { margin: 0 0 6px; font-size: 13px; }
+    .tl .box p { margin: 0; font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+    .weight {
+      margin-top: 8px; height: 6px; border-radius: 99px; background: #e4e4e7; overflow: hidden;
+    }
+    .weight i { display: block; height: 100%; border-radius: 99px; background: currentColor; }
+
+    /* dual ledger visual */
+    .ledgers {
+      display: grid; grid-template-columns: 1fr 56px 1fr; gap: 8px; align-items: stretch; margin-top: 8px;
+    }
+    .ledger {
+      border-radius: 16px; padding: 16px; border: 1px solid var(--line); background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+    .ledger.a { border-top: 4px solid var(--teal); }
+    .ledger.b { border-top: 4px solid var(--accent); }
+    .ledger .hd { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    .ledger .name { font-size: 18px; font-weight: 700; margin: 4px 0 10px; }
+    .ledger .row {
+      display: flex; align-items: center; gap: 8px; padding: 7px 0;
+      border-bottom: 1px dashed var(--line); font-size: 12.5px;
+    }
+    .ledger .row:last-child { border-bottom: 0; }
+    .ledger .ico {
+      width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; flex: none;
+    }
+    .ledger.a .ico { background: var(--teal-soft); color: var(--teal); }
+    .ledger.b .ico { background: var(--accent-soft); color: var(--accent); }
+    .bridge {
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+      font-size: 11px; font-weight: 600; color: var(--amber); text-align: center;
+    }
+    .bridge .arr {
+      width: 40px; height: 40px; border-radius: 50%; background: var(--amber-soft);
+      display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--amber);
+    }
+
+    /* budget bars */
+    .bars { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 10px; }
+    .bar-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; box-shadow: var(--shadow); }
+    .bar-card h3 { margin: 0 0 12px; font-size: 14px; }
+    .bar-row { display: grid; grid-template-columns: 72px 1fr 36px; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 12px; }
+    .bar-track { height: 12px; border-radius: 99px; background: #eee; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 99px; }
+    .bar-fill.teal { background: var(--teal); }
+    .bar-fill.amber { background: #d97706; }
+    .bar-fill.red { background: var(--accent); }
+    .bar-fill.slate { background: #64748b; }
+    .bar-fill.sky { background: var(--sky); }
+
+    /* lights */
+    .lights { display: flex; gap: 12px; margin-top: 10px; }
+    .light {
+      flex: 1; background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+      padding: 16px; text-align: center; box-shadow: var(--shadow);
+    }
+    .lamp {
+      width: 36px; height: 36px; border-radius: 50%; margin: 0 auto 10px;
+      box-shadow: 0 0 0 4px rgba(0,0,0,.04);
+    }
+    .lamp.on-g { background: #10b981; }
+    .lamp.on-a { background: #f59e0b; }
+    .lamp.on-r { background: #ef4444; }
+    .light h3 { margin: 0 0 4px; font-size: 15px; }
+    .light p { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+
+    /* vs cards */
+    .vs {
+      display: grid; grid-template-columns: 1fr 40px 1fr; gap: 10px; align-items: stretch; margin-top: 10px;
+    }
+    .vs .side { border-radius: 14px; padding: 16px; box-shadow: var(--shadow); }
+    .vs .yes { background: var(--teal-soft); border: 1px solid rgba(15,118,110,.2); }
+    .vs .no { background: #fafafa; border: 1px dashed var(--line); }
+    .vs .mid { display: flex; align-items: center; justify-content: center; font-weight: 800; color: var(--muted); font-size: 13px; }
+    .vs h3 { margin: 0 0 8px; font-size: 14px; }
+    .vs li { font-size: 12.5px; color: var(--muted); margin: 0 0 6px; line-height: 1.4; }
+
+    /* access matrix visual */
+    .matrix {
+      display: grid; grid-template-columns: 100px repeat(4, 1fr); gap: 6px; margin-top: 10px; font-size: 12px;
+    }
+    .matrix .h, .matrix .rh {
+      padding: 8px; text-align: center; font-weight: 700; color: var(--muted); font-size: 11px;
+    }
+    .matrix .rh { text-align: left; color: var(--ink); display: flex; align-items: center; }
+    .matrix .cell {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+      padding: 10px 6px; text-align: center; font-weight: 600;
+    }
+    .matrix .cell.y { background: var(--teal-soft); color: var(--teal); border-color: rgba(15,118,110,.2); }
+    .matrix .cell.n { background: #fafafa; color: #a1a1aa; }
+    .matrix .cell.p { background: var(--sky-soft); color: var(--sky); }
+
+    /* decision board */
+    .board {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 12px;
+    }
+    .dec {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+      padding: 12px 10px; min-height: 148px; box-shadow: var(--shadow);
+      border-top: 3px solid var(--accent);
+    }
+    .dec .q { font-size: 12px; font-weight: 700; margin-bottom: 8px; line-height: 1.35; min-height: 34px; }
+    .dec .opt { font-size: 11px; color: var(--muted); line-height: 1.4; padding: 6px 8px; border-radius: 8px; background: #fafafa; margin-bottom: 4px; }
+    .dec .opt.pick { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+    /* swim / raci */
+    .swim {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px;
+    }
+    .lane {
+      border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+    .lane .hd {
+      padding: 10px 12px; font-size: 13px; font-weight: 700; color: #fff;
+    }
+    .lane:nth-child(1) .hd { background: var(--ops); }
+    .lane:nth-child(2) .hd { background: var(--teal); }
+    .lane:nth-child(3) .hd { background: var(--amber); }
+    .lane .bd { padding: 10px 12px; }
+    .lane .item {
+      font-size: 12px; padding: 8px 0; border-bottom: 1px dashed var(--line);
+      color: var(--muted); line-height: 1.4;
+    }
+    .lane .item:last-child { border-bottom: 0; }
+    .lane .item strong { color: var(--ink); display: block; margin-bottom: 2px; }
+
+    /* demo steps horizontal */
+    .steps {
+      display: flex; gap: 0; margin-top: 12px; align-items: stretch;
+    }
+    .step {
+      flex: 1; position: relative; padding: 14px 12px 14px 16px;
+      background: var(--panel); border: 1px solid var(--line); margin-right: -1px;
+    }
+    .step:first-child { border-radius: 12px 0 0 12px; }
+    .step:last-child { border-radius: 0 12px 12px 0; margin-right: 0; }
+    .step .n {
+      width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff;
+      font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+      margin-bottom: 8px;
+    }
+    .step h4 { margin: 0 0 4px; font-size: 13px; }
+    .step p { margin: 0; font-size: 11px; color: var(--muted); line-height: 1.35; }
+    .step .ok { margin-top: 8px; font-size: 11px; color: var(--teal); font-weight: 600; }
+
+    /* pillars */
+    .pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
+    .pillar {
+      border-radius: 16px; padding: 20px 16px; color: #fff; min-height: 220px;
+      box-shadow: var(--shadow); position: relative; overflow: hidden;
+    }
+    .pillar::after {
+      content: attr(data-n); position: absolute; right: 12px; top: 8px;
+      font-family: var(--display); font-size: 56px; font-weight: 600; opacity: .18;
+    }
+    .pillar.p1 { background: linear-gradient(160deg, #0f766e, #134e4a); }
+    .pillar.p2 { background: linear-gradient(160deg, #1e293b, #0f172a); }
+    .pillar.p3 { background: linear-gradient(160deg, #9f1239, #cf0a2c); }
+    .pillar .k { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; opacity: .7; }
+    .pillar .t { font-size: 20px; font-weight: 700; margin: 8px 0 10px; }
+    .pillar li { font-size: 12.5px; opacity: .9; margin: 0 0 6px; line-height: 1.4; }
+
+    /* persona */
+    .personas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+    .persona {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+      padding: 14px; box-shadow: var(--shadow); min-height: 200px;
+    }
+    .persona .av {
+      width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 14px; margin-bottom: 10px; color: #fff;
+    }
+    .persona:nth-child(1) .av { background: var(--teal); }
+    .persona:nth-child(2) .av { background: #64748b; }
+    .persona:nth-child(3) .av { background: var(--ops); }
+    .persona:nth-child(4) .av { background: var(--accent); }
+    .persona h3 { margin: 0 0 4px; font-size: 14px; }
+    .persona .want { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+    .persona .get {
+      font-size: 12px; font-weight: 600; padding: 8px; border-radius: 8px;
+      background: #fafafa; line-height: 1.35;
+    }
+
+    /* roadmap phases */
+    .phases { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 10px; }
+    .phase {
+      border-radius: 16px; overflow: hidden; border: 1px solid var(--line);
+      background: var(--panel); box-shadow: var(--shadow);
+    }
+    .phase .top { padding: 12px 14px; color: #fff; }
+    .phase:nth-child(1) .top { background: var(--teal); }
+    .phase:nth-child(2) .top { background: var(--amber); }
+    .phase:nth-child(3) .top { background: var(--accent); }
+    .phase .top .v { font-family: var(--display); font-size: 28px; font-weight: 600; }
+    .phase .top .s { font-size: 12px; opacity: .9; }
+    .phase .body { padding: 12px 14px; }
+    .phase .block { margin-bottom: 10px; }
+    .phase .block .l { font-size: 10px; font-weight: 700; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
+    .phase .block .c { font-size: 12.5px; margin-top: 3px; line-height: 1.4; }
+
+    /* before after */
+    .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+    .ba .col { border-radius: 14px; padding: 16px; min-height: 240px; }
+    .ba .before { background: #fafafa; border: 1px dashed #d4d4d8; }
+    .ba .after { background: var(--teal-soft); border: 1px solid rgba(15,118,110,.25); }
+    .ba h3 { margin: 0 0 12px; font-size: 14px; }
+    .ba .item {
+      display: flex; gap: 8px; align-items: flex-start; margin-bottom: 10px; font-size: 12.5px; line-height: 1.4;
+    }
+    .ba .item b { flex: none; width: 18px; text-align: center; }
+
+    /* cover visual */
+    .cover-vis {
+      margin-top: 24px; display: grid; grid-template-columns: 1.2fr .8fr; gap: 16px; align-items: stretch;
+    }
+    .cover-flow {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      background: var(--panel); border-radius: 16px; padding: 18px; border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+    .cover-flow .node {
+      padding: 12px 16px; border-radius: 12px; font-weight: 700; font-size: 14px; color: #fff;
+    }
+    .cover-flow .n1 { background: var(--teal); }
+    .cover-flow .n2 { background: var(--amber); }
+    .cover-flow .n3 { background: var(--accent); }
+    .cover-side {
+      border-radius: 16px; background: linear-gradient(160deg, #18181b, #27272a);
+      color: #fff; padding: 18px; box-shadow: var(--shadow);
+    }
+    .cover-side li { font-size: 13px; opacity: .85; margin: 0 0 10px; line-height: 1.4; }
+  </style>
+</head>
+<body>
+  <div class="deck">
+
+    <!-- 01 -->
+    <section class="slide" data-title="封面">
+      <div class="slide-inner">
+        <div class="brand"><i></i>MSSClaw · 分工一 · 可视化汇报稿 v2.1</div>
+        <div class="grow">
+          <p class="kicker">领导决策 + 团队对齐 · 初稿</p>
+          <h1 class="h1">平台定位与架构规划</h1>
+          <p class="lede">用图说话：学到干主链 · 配层演进 · 架构分层 · 资源双账本 · 投入与权限。</p>
+          <div class="cover-vis">
+            <div class="cover-flow">
+              <div class="node n1">学</div>
+              <div class="arrow">→</div>
+              <div class="node n2">配</div>
+              <div class="arrow">→</div>
+              <div class="node n3">跑</div>
+              <div style="width:100%;margin-top:8px;font-size:12px;color:var(--muted)">
+                1.0 配=体外参照　　2.0 配→平台代持运行环境
+              </div>
+            </div>
+            <div class="cover-side">
+              <div style="font-size:11px;opacity:.6;letter-spacing:.1em;margin-bottom:10px">THREE DELIVERABLES</div>
+              <ul style="margin:0;padding-left:1.1em">
+                <li><strong>D1</strong> 定位与示范叙事</li>
+                <li><strong>D2</strong> 架构与能力边界</li>
+                <li><strong>D3</strong> 资源双账本 + 权限</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>← → 翻页 · F 全屏 · N 讲稿</span><span>01 / 20</span></div>
+      </div>
+      <aside class="notes">开场用学配跑三色块建立视觉记忆，再落到三份交付件。</aside>
+    </section>
+
+    <!-- 02 -->
+    <section class="slide" data-title="议程地图">
+      <div class="slide-inner">
+        <p class="kicker">02 · 议程地图</p>
+        <h2 class="h2">六段叙事，一张图走完</h2>
+        <div class="grow">
+          <svg viewBox="0 0 1100 320" width="100%" style="max-height:300px" aria-label="议程地图">
+            <defs>
+              <linearGradient id="g1" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#0f766e"/><stop offset="50%" stop-color="#b45309"/><stop offset="100%" stop-color="#cf0a2c"/>
+              </linearGradient>
+            </defs>
+            <path d="M60 160 C 220 40, 400 280, 560 140 S 900 60, 1040 160" fill="none" stroke="url(#g1)" stroke-width="4" stroke-linecap="round"/>
+            <!-- nodes -->
+            <g font-family="Noto Sans SC,sans-serif">
+              <circle cx="80" cy="150" r="28" fill="#0f766e"/><text x="80" y="155" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">01</text>
+              <text x="80" y="210" text-anchor="middle" font-size="13" font-weight="700">立场</text>
+              <text x="80" y="228" text-anchor="middle" font-size="11" fill="#71717a">为何要顶层设计</text>
+
+              <circle cx="260" cy="95" r="28" fill="#0f766e"/><text x="260" y="100" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">02</text>
+              <text x="260" y="155" text-anchor="middle" font-size="13" font-weight="700">D1 定位</text>
+              <text x="260" y="173" text-anchor="middle" font-size="11" fill="#71717a">学到干 · Demo</text>
+
+              <circle cx="440" cy="210" r="28" fill="#1e293b"/><text x="440" y="215" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">03</text>
+              <text x="440" y="270" text-anchor="middle" font-size="13" font-weight="700">D2 架构</text>
+              <text x="440" y="288" text-anchor="middle" font-size="11" fill="#71717a">分层 · 边界</text>
+
+              <circle cx="620" cy="120" r="28" fill="#b45309"/><text x="620" y="125" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">04</text>
+              <text x="620" y="180" text-anchor="middle" font-size="13" font-weight="700">配层演进</text>
+              <text x="620" y="198" text-anchor="middle" font-size="11" fill="#71717a">1.0→2.0 关键纠正</text>
+
+              <circle cx="800" cy="200" r="28" fill="#cf0a2c"/><text x="800" y="205" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">05</text>
+              <text x="800" y="260" text-anchor="middle" font-size="13" font-weight="700">双账本</text>
+              <text x="800" y="278" text-anchor="middle" font-size="11" fill="#71717a">投入 · 权限</text>
+
+              <circle cx="980" cy="145" r="28" fill="#cf0a2c"/><text x="980" y="150" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">06</text>
+              <text x="980" y="205" text-anchor="middle" font-size="13" font-weight="700">拍板</text>
+              <text x="980" y="223" text-anchor="middle" font-size="11" fill="#71717a">决策 · 下一步</text>
+            </g>
+          </svg>
+        </div>
+        <div class="footer"><span>领导 15′ 抓红点；团队 60′ 展开边界与账本</span><span>02 / 20</span></div>
+      </div>
+      <aside class="notes">用曲线议程替代文字目录，强调「配层演进」是中段高潮。</aside>
+    </section>
+
+    <!-- 03 -->
+    <section class="slide" data-title="三支柱">
+      <div class="slide-inner">
+        <p class="kicker">03 · 核心交付件</p>
+        <h2 class="h2">不是功能清单，是三根支柱</h2>
+        <div class="grow">
+          <div class="pillars">
+            <div class="pillar p1" data-n="D1">
+              <div class="k">定位与示范</div>
+              <div class="t">说清是什么</div>
+              <ul style="margin:0;padding-left:1.1em">
+                <li>品类与「不是什么」</li>
+                <li>对象优先级</li>
+                <li>学到干叙事</li>
+                <li>3 分钟 Demo 判据</li>
+              </ul>
+            </div>
+            <div class="pillar p2" data-n="D2">
+              <div class="k">架构与边界</div>
+              <div class="t">画清能不能做</div>
+              <ul style="margin:0;padding-left:1.1em">
+                <li>发现 / 场景 / 执行</li>
+                <li>使用 vs 配置</li>
+                <li>参照 vs 调用</li>
+                <li>评审边界表</li>
+              </ul>
+            </div>
+            <div class="pillar p3" data-n="D3">
+              <div class="k">资源与权限</div>
+              <div class="t">定齐尺子</div>
+              <ul style="margin:0;padding-left:1.1em">
+                <li>供给账本 A</li>
+                <li>建设投入账本 B</li>
+                <li>角色开放节奏</li>
+                <li>P0 库存与三期</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>缺一根支柱 → 方案与体验反复返工</span><span>03 / 20</span></div>
+      </div>
+      <aside class="notes">三色柱建立交付件记忆，后面章节按此展开。</aside>
+    </section>
+
+    <!-- 04 -->
+    <section class="slide" data-title="定位">
+      <div class="slide-inner">
+        <p class="kicker">04 · D1 定位</p>
+        <h2 class="h2">品类一句话 + 边界切割</h2>
+        <div class="grow">
+          <div class="vcard" style="margin-bottom:12px;border-left:4px solid var(--accent)">
+            <p style="font-size:17px;line-height:1.55;color:var(--ink);font-family:var(--display)">
+              场景化 <strong>AI 能力落地操作系统</strong>：以业务场景为单元，把学习、参照配置、打样执行串成闭环。
+            </p>
+          </div>
+          <div class="vs">
+            <div class="side yes">
+              <h3>✓ 我们是</h3>
+              <ul style="margin:0;padding-left:1.1em">
+                <li>场景驱动的学到干闭环</li>
+                <li>可演示、可复用、可运营</li>
+                <li>1.0 降低体外打样门槛</li>
+                <li>2.0 托管执行的落地 OS</li>
+              </ul>
+            </div>
+            <div class="mid">VS</div>
+            <div class="side no">
+              <h3>✕ 我们不是</h3>
+              <ul style="margin:0;padding-left:1.1em">
+                <li>通用聊天皮肤</li>
+                <li>纯运营后台货架</li>
+                <li>外部工具导航站</li>
+                <li>一次性 Demo 幻灯片</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>请拍板：品类表述是否采用</span><span>04 / 20</span></div>
+      </div>
+      <aside class="notes">若「操作系统」过重，可降为「落地工作台」——当场确认。</aside>
+    </section>
+
+    <!-- 05 -->
+    <section class="slide" data-title="对象">
+      <div class="slide-inner">
+        <p class="kicker">05 · 对象与结果</p>
+        <h2 class="h2">四人四面，主路径只有一条</h2>
+        <div class="grow">
+          <div class="personas">
+            <div class="persona">
+              <div class="av">业</div>
+              <h3>业务员工</h3>
+              <div class="want">要：会用、敢用</div>
+              <div class="get">结果：照着场景跑出第一次成果<br/><span class="pill teal" style="margin-top:8px">主用户</span></div>
+            </div>
+            <div class="persona">
+              <div class="av">骨</div>
+              <h3>骨干 / 专家</h3>
+              <div class="want">要：经验可复制</div>
+              <div class="get">结果：个人方法沉淀为组织资产</div>
+            </div>
+            <div class="persona">
+              <div class="av">管</div>
+              <h3>管理者</h3>
+              <div class="want">要：看得见、控得住</div>
+              <div class="get">结果：从「有人会」到「组织会」</div>
+            </div>
+            <div class="persona">
+              <div class="av">运</div>
+              <h3>能力运营</h3>
+              <div class="want">要：可上架可治理</div>
+              <div class="get">结果：目录 · 橱窗 · 边界清晰</div>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>投资与体验优先对齐「业务员工」主路径</span><span>05 / 20</span></div>
+      </div>
+      <aside class="notes">强调勿平均用力。</aside>
+    </section>
+
+    <!-- 06 学配跑大图 -->
+    <section class="slide" data-title="学到干">
+      <div class="slide-inner">
+        <p class="kicker">06 · 主叙事可视化</p>
+        <h2 class="h2">学 → 配 → 跑</h2>
+        <div class="grow">
+          <div class="journey">
+            <div class="j-node learn">
+              <div class="tag">学</div>
+              <h3>理解方法与样板</h3>
+              <p>方案 · 培训 · 洞察 · 案例</p>
+              <div class="sub">交付：学习包 .learn.zip</div>
+            </div>
+            <div class="arrow">→</div>
+            <div class="j-node cfg">
+              <div class="tag">配</div>
+              <h3>1.0 体外参照</h3>
+              <p>设备 · 工具 · 模型清单<br/>自行配置，非平台代配</p>
+              <div class="sub">2.0：权重下降 → 平台托管</div>
+            </div>
+            <div class="arrow">→</div>
+            <div class="j-node run">
+              <div class="tag">跑</div>
+              <h3>能力打样落地</h3>
+              <p>打样包 · 一键打样 · 任务</p>
+              <div class="sub">交付：.demo.zip / 任务闭环</div>
+            </div>
+          </div>
+          <div class="dual-entry">
+            <div class="entry find">
+              <div class="lab">入口 A</div>
+              <div class="tit">找案例 · 发现</div>
+              <div class="desc">偏学与样板；进入场景样板间展开三层</div>
+            </div>
+            <div class="entry do">
+              <div class="lab">入口 B</div>
+              <div class="tit">做任务 · 执行</div>
+              <div class="desc">偏干与沉淀；精选能力发起，任务中心承接</div>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>双入口是同一叙事两端，不是两套产品</span><span>06 / 20</span></div>
+      </div>
+      <aside class="notes">全文视觉主轴。配节点用琥珀色标出「会演进」。</aside>
+    </section>
+
+    <!-- 07 Demo 步骤条 -->
+    <section class="slide" data-title="Demo">
+      <div class="slide-inner">
+        <p class="kicker">07 · 1.0 Demo 剧本（可视化）</p>
+        <h2 class="h2">一条时间轴，五步收官</h2>
+        <div class="grow">
+          <div class="steps">
+            <div class="step">
+              <div class="n">1</div>
+              <h4>开场 30s</h4>
+              <p>定位 + 双入口</p>
+              <div class="ok">✓ 复述学到干</div>
+            </div>
+            <div class="step">
+              <div class="n">2</div>
+              <h4>学 60–90s</h4>
+              <p>高齐套场景 + 学习包</p>
+              <div class="ok">✓ 先学方法</div>
+            </div>
+            <div class="step">
+              <div class="n">3</div>
+              <h4>配 30–45s</h4>
+              <p>参照清单可下载</p>
+              <div class="ok">✓ 懂自行配置</div>
+            </div>
+            <div class="step">
+              <div class="n">4</div>
+              <h4>跑 60–90s</h4>
+              <p>一键打样进任务</p>
+              <div class="ok">✓ 真实执行上下文</div>
+            </div>
+            <div class="step">
+              <div class="n">5</div>
+              <h4>收束 30s</h4>
+              <p>可复用可运营</p>
+              <div class="ok">✓ 投入换什么</div>
+            </div>
+          </div>
+          <div class="ba" style="margin-top:14px;min-height:auto">
+            <div class="col before" style="min-height:auto;padding:12px 14px">
+              <h3>✕ 刻意不演</h3>
+              <p style="margin:0;font-size:12.5px;color:var(--muted);line-height:1.5">功能菜单巡礼 · 堆砌多场景 · 假装平台已代配全部算力 · 四处点击试错</p>
+            </div>
+            <div class="col after" style="min-height:auto;padding:12px 14px">
+              <h3>✓ 2.0 台本切换</h3>
+              <p style="margin:0;font-size:12.5px;color:var(--muted);line-height:1.5">弱化自备清单 → 强调「同一场景平台内跑通」</p>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>Demo 成功 = 判据达成，不是页数逛完</span><span>07 / 20</span></div>
+      </div>
+      <aside class="notes">演示纪律：配步不能演成算力已就绪。</aside>
+    </section>
+
+    <!-- 08 架构总图 -->
+    <section class="slide" data-title="架构总图">
+      <div class="slide-inner">
+        <p class="kicker">08 · D2 平台架构总图</p>
+        <h2 class="h2">发现 · 场景 · 执行 + 运营轨</h2>
+        <div class="grow">
+          <div class="arch">
+            <div class="arch-main">
+              <div class="layer discover">
+                <div class="lab">发现层</div>
+                <div class="body">
+                  <span class="chip on">找案例</span>
+                  <span class="chip on">场景列表</span>
+                  <span class="chip on">样板间入口</span>
+                  <span class="chip">首页门户</span>
+                </div>
+              </div>
+              <div class="layer scenario">
+                <div class="lab">场景层</div>
+                <div class="body">
+                  <span class="chip on">学 · 思想</span>
+                  <span class="chip warn">配 · 参照</span>
+                  <span class="chip hot">跑 · 能力</span>
+                  <span class="chip">学习包</span>
+                  <span class="chip">打样包</span>
+                  <span class="chip hot">一键打样</span>
+                </div>
+              </div>
+              <div class="layer execute">
+                <div class="lab">执行层</div>
+                <div class="body">
+                  <span class="chip hot">做任务</span>
+                  <span class="chip hot">任务中心</span>
+                  <span class="chip">专家团接力</span>
+                  <span class="chip">交付沉淀</span>
+                </div>
+              </div>
+              <div style="font-size:12px;color:var(--muted);margin-top:4px;text-align:center">
+                ▲ 业务主路径（使用心智）　　场景 = 最小完整交付单元
+              </div>
+            </div>
+            <div class="ops-rail">
+              <div class="t">Ops rail</div>
+              <div class="h">运营配置轨</div>
+              <div class="item">能力目录<br/>Agent / Skill / Tool</div>
+              <div class="item">发布 → 精选橱窗</div>
+              <div class="item">门户内容 · 金案</div>
+              <div class="item">展示配置 · 权限</div>
+              <div style="font-size:11px;opacity:.65;margin-top:auto">与业务壳分离<br/>避免配置心智污染</div>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>使用 / 配置分离 = 架构级取舍</span><span>08 / 20</span></div>
+      </div>
+      <aside class="notes">指图讲解：左边三层是用户，右边是运营；中间场景层是咬合点。</aside>
+    </section>
+
+    <!-- 09 场景立方 -->
+    <section class="slide" data-title="场景三层">
+      <div class="slide-inner">
+        <p class="kicker">09 · 场景单元解剖</p>
+        <h2 class="h2">一个场景 = 三层齐套</h2>
+        <div class="grow">
+          <div class="scene-cube">
+            <div class="cube l">
+              <div class="n">① 学</div>
+              <h3>思想层</h3>
+              <ul>
+                <li>场景方案</li>
+                <li>培训案例</li>
+                <li>前沿洞察</li>
+                <li>场景案例</li>
+              </ul>
+            </div>
+            <div class="cube c">
+              <div class="n">② 配</div>
+              <h3>体外参照（1.0）</h3>
+              <ul>
+                <li>硬件设备</li>
+                <li>AI Coding / IDE</li>
+                <li>云端 / 本地模型</li>
+                <li>外链工具了解</li>
+              </ul>
+            </div>
+            <div class="cube r">
+              <div class="n">③ 跑</div>
+              <h3>能力层</h3>
+              <ul>
+                <li>Agent / Skill / Tool</li>
+                <li>架构 design / exec</li>
+                <li>打样落点</li>
+                <li>专家团编排</li>
+              </ul>
+            </div>
+          </div>
+          <div class="lights">
+            <div class="light"><div class="lamp on-g"></div><h3>满灯可示范</h3><p>三层齐 = 对外可讲</p></div>
+            <div class="light"><div class="lamp on-a"></div><h3>缺跑只可学</h3><p>不能承诺落地</p></div>
+            <div class="light"><div class="lamp on-r"></div><h3>缺学难复制</h3><p>有能力不可传播</p></div>
+          </div>
+        </div>
+        <div class="footer"><span>禁止口头「差不多齐了」——用灯号说话</span><span>09 / 20</span></div>
+      </div>
+      <aside class="notes">齐套灯是验收语言，也是对领导的承诺语言。</aside>
+    </section>
+
+    <!-- 10 边界视觉 -->
+    <section class="slide" data-title="边界">
+      <div class="slide-inner">
+        <p class="kicker">10 · 能力边界（图示）</p>
+        <h2 class="h2">层内看 · 顶栏跑</h2>
+        <div class="grow">
+          <svg viewBox="0 0 1100 280" width="100%" style="max-height:260px">
+            <rect x="40" y="40" width="700" height="200" rx="16" fill="#fff" stroke="rgba(24,24,27,.1)"/>
+            <text x="60" y="70" font-size="14" font-weight="700" fill="#18181b">场景详情（层内 · 只读）</text>
+            <rect x="60" y="90" width="200" height="120" rx="12" fill="#ecfdf5" stroke="#0f766e"/>
+            <text x="160" y="145" text-anchor="middle" font-size="13" font-weight="700" fill="#0f766e">学 · 查看</text>
+            <text x="160" y="168" text-anchor="middle" font-size="11" fill="#71717a">不执行</text>
+            <rect x="280" y="90" width="200" height="120" rx="12" fill="#fffbeb" stroke="#b45309"/>
+            <text x="380" y="145" text-anchor="middle" font-size="13" font-weight="700" fill="#b45309">配 · 参照</text>
+            <text x="380" y="168" text-anchor="middle" font-size="11" fill="#71717a">不代配</text>
+            <rect x="500" y="90" width="200" height="120" rx="12" fill="#fff1f2" stroke="#cf0a2c"/>
+            <text x="600" y="145" text-anchor="middle" font-size="13" font-weight="700" fill="#cf0a2c">跑 · 说明</text>
+            <text x="600" y="168" text-anchor="middle" font-size="11" fill="#71717a">不点击即调用</text>
+
+            <path d="M760 140 H820" stroke="#cf0a2c" stroke-width="3" marker-end="url(#arrow)"/>
+            <defs>
+              <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+                <path d="M0,0 L8,4 L0,8 Z" fill="#cf0a2c"/>
+              </marker>
+            </defs>
+
+            <rect x="830" y="70" width="230" height="160" rx="16" fill="#1e293b"/>
+            <text x="945" y="105" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">顶栏 · 场景级动作</text>
+            <rect x="850" y="120" width="190" height="28" rx="8" fill="rgba(255,255,255,.1)"/>
+            <text x="945" y="139" text-anchor="middle" font-size="12" fill="#fff">下载学习包</text>
+            <rect x="850" y="156" width="190" height="28" rx="8" fill="rgba(255,255,255,.1)"/>
+            <text x="945" y="175" text-anchor="middle" font-size="12" fill="#fff">下载打样包</text>
+            <rect x="850" y="192" width="190" height="28" rx="8" fill="#cf0a2c"/>
+            <text x="945" y="211" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">一键打样 → 任务</text>
+          </svg>
+          <div style="display:flex;gap:10px;justify-content:center;margin-top:4px">
+            <span class="pill teal">降低误操作</span>
+            <span class="pill amber">强化学到干节奏</span>
+            <span class="pill">执行可审计</span>
+          </div>
+        </div>
+        <div class="footer"><span>方案评审：层内禁止 invoke，执行只走顶栏</span><span>10 / 20</span></div>
+      </div>
+      <aside class="notes">用左右分区图讲边界，比表格更易记忆。</aside>
+    </section>
+
+    <!-- 11 配纠正 -->
+    <section class="slide" data-title="配纠正">
+      <div class="slide-inner">
+        <p class="kicker">11 · 关键纠正</p>
+        <h2 class="h2">「配」不是工具调用层</h2>
+        <div class="grow">
+          <div class="ba">
+            <div class="col before">
+              <h3>✕ 易歧义理解</h3>
+              <div class="item"><b>1</b><span>配 = 平台工具货架，点了就能调</span></div>
+              <div class="item"><b>2</b><span>「仅了解」= 永远不在平台执行</span></div>
+              <div class="item"><b>3</b><span>配 = 平台已提供全部算力</span></div>
+              <div class="item"><b>4</b><span>场景说明书 = 项目采购清单</span></div>
+            </div>
+            <div class="col after">
+              <h3>✓ 正确产品语义</h3>
+              <div class="item"><b>1</b><span><strong>1.0</strong>：体外打样参照配置（自备）</span></div>
+              <div class="item"><b>2</b><span>一键打样 = 平台内有限执行（另入口）</span></div>
+              <div class="item"><b>3</b><span><strong>2.0</strong>：平台托管模型/服务，自备权重↓</span></div>
+              <div class="item"><b>4</b><span>账本 A≠账本 B，分表汇报</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>讲不清「配」，2.0 预算一定会投错</span><span>11 / 20</span></div>
+      </div>
+      <aside class="notes">本页是纠正高潮，停顿让听众消化。</aside>
+    </section>
+
+    <!-- 12 演进时间轴 -->
+    <section class="slide" data-title="配演进">
+      <div class="slide-inner">
+        <p class="kicker">12 · 配层演进时间轴</p>
+        <h2 class="h2">责任从「人」迁到「平台」</h2>
+        <div class="grow">
+          <div class="timeline">
+            <div class="tl t0">
+              <div class="dot"></div>
+              <div class="phase">建成前</div>
+              <div class="box">
+                <h4>私有环境</h4>
+                <p>PM/骨干人肉搭环境跑样板。经验在人身上。</p>
+                <div class="weight" title="用户自备权重"><i style="width:95%"></i></div>
+                <p style="margin-top:4px;font-size:10px">自备权重 ▉▉▉▉</p>
+              </div>
+            </div>
+            <div class="tl t1">
+              <div class="dot"></div>
+              <div class="phase">1.0 生态样板</div>
+              <div class="box">
+                <h4>参照清单</h4>
+                <p>可下载对照；自行配置；平台有限打样。不代配完整环境。</p>
+                <div class="weight"><i style="width:70%"></i></div>
+                <p style="margin-top:4px;font-size:10px">自备权重 ▉▉▉</p>
+              </div>
+            </div>
+            <div class="tl t2">
+              <div class="dot"></div>
+              <div class="phase">2.0 内模主链</div>
+              <div class="box">
+                <h4>平台代持</h4>
+                <p>内模可调用；主路径不靠用户自备大模型。清单改就绪/配额。</p>
+                <div class="weight"><i style="width:30%"></i></div>
+                <p style="margin-top:4px;font-size:10px">自备权重 ▉</p>
+              </div>
+            </div>
+            <div class="tl t3">
+              <div class="dot"></div>
+              <div class="phase">3.0 自动化</div>
+              <div class="box">
+                <h4>配近乎隐形</h4>
+                <p>云服务+模型+API 默认。用户感知：学会→直接跑。</p>
+                <div class="weight"><i style="width:10%"></i></div>
+                <p style="margin-top:4px;font-size:10px">自备权重 ·</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>接入主线：网络 → 内模 → 数据 API</span><span>12 / 20</span></div>
+      </div>
+      <aside class="notes">用进度条视觉表达「自备权重下降」。</aside>
+    </section>
+
+    <!-- 13 双账本 -->
+    <section class="slide" data-title="双账本">
+      <div class="slide-inner">
+        <p class="kicker">13 · 资源双账本</p>
+        <h2 class="h2">供给 vs 建设：2.0 把配挪过去</h2>
+        <div class="grow">
+          <div class="ledgers">
+            <div class="ledger a">
+              <div class="hd">Ledger A · 给用户</div>
+              <div class="name">平台供给资源</div>
+              <div class="row"><div class="ico">思</div><span>思想：方案 / 培训 / 洞察 / 案例</span></div>
+              <div class="row"><div class="ico">配</div><span>参照：硬件 / Coding / 模型清单</span></div>
+              <div class="row"><div class="ico">能</div><span>能力：专家 / 技能 / 连接器 / 架构</span></div>
+              <div class="row"><div class="ico">组</div><span>组织运营：可见 / 发布 / 精选</span></div>
+            </div>
+            <div class="bridge">
+              <div class="arr">⇒</div>
+              <div>2.0<br/>配的责任<br/>迁移</div>
+            </div>
+            <div class="ledger b">
+              <div class="hd">Ledger B · 建平台</div>
+              <div class="name">建设投入资源</div>
+              <div class="row"><div class="ico">硬</div><span>设备 · 演示环境 · 试点终端</span></div>
+              <div class="row"><div class="ico">算</div><span>模型算力 · 内模配额 · 评测</span></div>
+              <div class="row"><div class="ico">开</div><span>产品 / 前后端 / 模型工程 / 测试</span></div>
+              <div class="row"><div class="ico">运</div><span>内容 · 能力上架 · 培训支持</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>只批其一，学到干必然断在中途</span><span>13 / 20</span></div>
+      </div>
+      <aside class="notes">中间箭头是本页重点：2.0 预算为什么要偏向算力与接入。</aside>
+    </section>
+
+    <!-- 14 预算结构图 -->
+    <section class="slide" data-title="投入结构">
+      <div class="slide-inner">
+        <p class="kicker">14 · 投入结构对照（示意）</p>
+        <h2 class="h2">1.0 保主路径 · 2.0 加码代持</h2>
+        <div class="grow">
+          <div class="bars">
+            <div class="bar-card">
+              <h3>1.0 建议结构（相对比重）</h3>
+              <div class="bar-row"><span>内容运营</span><div class="bar-track"><div class="bar-fill teal" style="width:28%"></div></div><span>28%</span></div>
+              <div class="bar-row"><span>主路径研发</span><div class="bar-track"><div class="bar-fill slate" style="width:30%"></div></div><span>30%</span></div>
+              <div class="bar-row"><span>发布/基础</span><div class="bar-track"><div class="bar-fill sky" style="width:18%"></div></div><span>18%</span></div>
+              <div class="bar-row"><span>示范算力</span><div class="bar-track"><div class="bar-fill amber" style="width:14%"></div></div><span>14%</span></div>
+              <div class="bar-row"><span>其他</span><div class="bar-track"><div class="bar-fill red" style="width:10%"></div></div><span>10%</span></div>
+              <p style="margin:10px 0 0;font-size:11px;color:var(--muted)">重点：清单真实、Demo 可复演、内网可达</p>
+            </div>
+            <div class="bar-card">
+              <h3>2.0 建议结构（相对比重）</h3>
+              <div class="bar-row"><span>内模/算力</span><div class="bar-track"><div class="bar-fill amber" style="width:32%"></div></div><span>32%</span></div>
+              <div class="bar-row"><span>接入工程</span><div class="bar-track"><div class="bar-fill red" style="width:24%"></div></div><span>24%</span></div>
+              <div class="bar-row"><span>主路径研发</span><div class="bar-track"><div class="bar-fill slate" style="width:18%"></div></div><span>18%</span></div>
+              <div class="bar-row"><span>运营治理</span><div class="bar-track"><div class="bar-fill teal" style="width:16%"></div></div><span>16%</span></div>
+              <div class="bar-row"><span>其他</span><div class="bar-track"><div class="bar-fill sky" style="width:10%"></div></div><span>10%</span></div>
+              <p style="margin:10px 0 0;font-size:11px;color:var(--muted)">重点：平台内跑通，不靠用户自备大模型</p>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>比重为决策示意，非精确预算；可替换为你们测算数字</span><span>14 / 20</span></div>
+      </div>
+      <aside class="notes">若有真实预算表，替换百分比即可。</aside>
+    </section>
+
+    <!-- 15 三期 -->
+    <section class="slide" data-title="三期">
+      <div class="slide-inner">
+        <p class="kicker">15 · 三期版本完成定义</p>
+        <h2 class="h2">每期一张「关门卡片」</h2>
+        <div class="grow">
+          <div class="phases">
+            <div class="phase">
+              <div class="top"><div class="v">1.0</div><div class="s">接网络 · 生态样板</div></div>
+              <div class="body">
+                <div class="block"><div class="l">用户侧配</div><div class="c">下载参照，自行配置，有限打样</div></div>
+                <div class="block"><div class="l">平台交付</div><div class="c">内网可访问 · P0 满灯 · 清单真实</div></div>
+                <div class="block"><div class="l">关门标准</div><div class="c">学→参照→可自行配→跑通一条</div></div>
+              </div>
+            </div>
+            <div class="phase">
+              <div class="top"><div class="v">2.0</div><div class="s">接内模 · 可调用</div></div>
+              <div class="body">
+                <div class="block"><div class="l">用户侧配</div><div class="c">不再强调先买齐自备模型</div></div>
+                <div class="block"><div class="l">平台交付</div><div class="c">内模主链路 · 案例可调用内模</div></div>
+                <div class="block"><div class="l">关门标准</div><div class="c">主路径不依赖用户自备大模型</div></div>
+              </div>
+            </div>
+            <div class="phase">
+              <div class="top"><div class="v">3.0</div><div class="s">接数据 · 自动化</div></div>
+              <div class="body">
+                <div class="block"><div class="l">用户侧配</div><div class="c">近乎隐形 / 仅配额提示</div></div>
+                <div class="block"><div class="l">平台交付</div><div class="c">数据 API · 自动化 · 治理度量</div></div>
+                <div class="block"><div class="l">关门标准</div><div class="c">任务可自动化 · 开放与算力闭环</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>先确认本阶段停在 1.0 还是直指 2.0</span><span>15 / 20</span></div>
+      </div>
+      <aside class="notes">三张卡并置，便于领导选目标阶段。</aside>
+    </section>
+
+    <!-- 16 权限矩阵 -->
+    <section class="slide" data-title="权限">
+      <div class="slide-inner">
+        <p class="kicker">16 · 权限可视化</p>
+        <h2 class="h2">开放节奏 × 角色矩阵</h2>
+        <div class="grow">
+          <div class="matrix">
+            <div class="h"></div>
+            <div class="h">找案例</div>
+            <div class="h">做任务/打样</div>
+            <div class="h">任务沉淀</div>
+            <div class="h">配置治理</div>
+            <div class="rh">访客只读</div>
+            <div class="cell y">✓</div><div class="cell n">—</div><div class="cell n">—</div><div class="cell n">—</div>
+            <div class="rh">业务用户</div>
+            <div class="cell y">✓</div><div class="cell y">✓</div><div class="cell y">✓</div><div class="cell n">—</div>
+            <div class="rh">能力运营</div>
+            <div class="cell p">预览</div><div class="cell y">✓</div><div class="cell y">✓</div><div class="cell y">✓</div>
+            <div class="rh">系统管理</div>
+            <div class="cell p">预览</div><div class="cell y">✓</div><div class="cell y">✓</div><div class="cell y">全部</div>
+          </div>
+          <div class="dual-entry" style="margin-top:14px">
+            <div class="entry find" style="background:linear-gradient(135deg,#0f766e,#115e59)">
+              <div class="lab">1.0 开放策略</div>
+              <div class="tit">控打样 · 鼓励学</div>
+              <div class="desc">算力有限；体外打样作补充；访客只读推广</div>
+            </div>
+            <div class="entry do">
+              <div class="lab">2.0 开放策略</div>
+              <div class="tit">先配额 · 再扩面</div>
+              <div class="desc">风险从「不会用」变为「用太多」</div>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>权限与投入同表决策</span><span>16 / 20</span></div>
+      </div>
+      <aside class="notes">绿格=可，灰=不可，蓝=预览。</aside>
+    </section>
+
+    <!-- 17 取舍 -->
+    <section class="slide" data-title="取舍">
+      <div class="slide-inner">
+        <p class="kicker">17 · 关键设计决策墙</p>
+        <h2 class="h2">五次「选 A 不选 B」</h2>
+        <div class="grow">
+          <div class="board" style="grid-template-columns:repeat(5,1fr)">
+            <div class="dec">
+              <div class="q">主组织单元</div>
+              <div class="opt pick">✓ 业务场景</div>
+              <div class="opt">单点能力零件</div>
+            </div>
+            <div class="dec">
+              <div class="q">学习与执行</div>
+              <div class="opt pick">✓ 先理解再打样</div>
+              <div class="opt">处处可点即调用</div>
+            </div>
+            <div class="dec">
+              <div class="q">了解与调用</div>
+              <div class="opt pick">✓ 1.0 参照≠调用</div>
+              <div class="opt">外链=内部同一套</div>
+            </div>
+            <div class="dec">
+              <div class="q">业务与运营</div>
+              <div class="opt pick">✓ 双视角分离</div>
+              <div class="opt">一套菜单给所有人</div>
+            </div>
+            <div class="dec">
+              <div class="q">进入业务方式</div>
+              <div class="opt pick">✓ 发布+精选</div>
+              <div class="opt">目录有啥前台有啥</div>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>边界变更须本分工批准</span><span>17 / 20</span></div>
+      </div>
+      <aside class="notes">决策墙适合领导快速扫视认可。</aside>
+    </section>
+
+    <!-- 18 歧义/债 -->
+    <section class="slide" data-title="治理债">
+      <div class="slide-inner">
+        <p class="kicker">18 · 已对齐与架构债</p>
+        <h2 class="h2">文案已改 · 模型分阶段</h2>
+        <div class="grow">
+          <div class="ba">
+            <div class="col after">
+              <h3>✓ 本轮已做（文案层）</h3>
+              <div class="item"><b>✓</b><span>统一「体外参照」口径</span></div>
+              <div class="item"><b>✓</b><span>样板间 / 学习包去永久「不调用」</span></div>
+              <div class="item"><b>✓</b><span>配 vs 一键打样拆开</span></div>
+              <div class="item"><b>✓</b><span>编辑器与详情徽章对齐</span></div>
+            </div>
+            <div class="col before">
+              <h3>□ 2.0 架构债（未改模型）</h3>
+              <div class="item"><b>□</b><span>齐套灯号：平台就绪指标</span></div>
+              <div class="item"><b>□</b><span>Env 增加 platformRuntime 字段</span></div>
+              <div class="item"><b>□</b><span>Demo 台本 1.0/2.0 分轨</span></div>
+              <div class="item"><b>□</b><span>指标：平台内打样成功率</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>1.0 先正名，2.0 再改造齐套算法</span><span>18 / 20</span></div>
+      </div>
+      <aside class="notes">说明分阶段是有意识的，不是偷懒。</aside>
+    </section>
+
+    <!-- 19 决策包 -->
+    <section class="slide" data-title="拍板">
+      <div class="slide-inner">
+        <p class="kicker">19 · 请领导拍板</p>
+        <h2 class="h2">五个决策位，当场勾选</h2>
+        <div class="grow">
+          <div class="board">
+            <div class="dec">
+              <div class="q">① 对「配」的承诺</div>
+              <div class="opt pick">1.0：清单真实可用</div>
+              <div class="opt">直指2.0：批内模算力</div>
+            </div>
+            <div class="dec">
+              <div class="q">② 预算结构</div>
+              <div class="opt pick">内容/主路径优先</div>
+              <div class="opt">模型与接入上升</div>
+            </div>
+            <div class="dec">
+              <div class="q">③ Demo 口径</div>
+              <div class="opt pick">学→参照→有限打样</div>
+              <div class="opt">学→平台内跑通</div>
+            </div>
+            <div class="dec">
+              <div class="q">④ 开放节奏</div>
+              <div class="opt pick">控打样·鼓励学</div>
+              <div class="opt">先配额再扩面</div>
+            </div>
+            <div class="dec">
+              <div class="q">⑤ P0 场景承诺</div>
+              <div class="opt pick">清单+落点真实</div>
+              <div class="opt">不靠自备模型也能跑</div>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>建议会议输出：五项勾选结果 + 版本目标</span><span>19 / 20</span></div>
+      </div>
+      <aside class="notes">逐项请领导表态，把会议变成决策记录。</aside>
+    </section>
+
+    <!-- 20 下一步 -->
+    <section class="slide" data-title="下一步">
+      <div class="slide-inner">
+        <p class="kicker">20 · 分工泳道与下一步</p>
+        <h2 class="h2">谁出什么 · 何时关门</h2>
+        <div class="grow">
+          <div class="swim">
+            <div class="lane">
+              <div class="hd">定位与架构</div>
+              <div class="bd">
+                <div class="item"><strong>定义与否决权</strong>边界 / 齐套 / 投入基线</div>
+                <div class="item"><strong>Demo 判据</strong>1.0 / 2.0 分轨口径</div>
+                <div class="item"><strong>本周</strong>定位简述 + 台本 v1</div>
+              </div>
+            </div>
+            <div class="lane">
+              <div class="hd">方案细化</div>
+              <div class="bd">
+                <div class="item"><strong>场景/能力方案</strong>在边界内深化</div>
+                <div class="item"><strong>资源补齐</strong>按灯号与挂载规则</div>
+                <div class="item"><strong>产出</strong>可验收方案包</div>
+              </div>
+            </div>
+            <div class="lane">
+              <div class="hd">体验运营 · 项目</div>
+              <div class="bd">
+                <div class="item"><strong>主路径体验</strong>排练 Demo</div>
+                <div class="item"><strong>排期验收</strong>把门与闭环</div>
+                <div class="item"><strong>指标</strong>转化与卡点回流</div>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <span class="pill">W1 D1</span>
+            <span class="arrow">→</span>
+            <span class="pill slate">W2 D2 边界表</span>
+            <span class="arrow">→</span>
+            <span class="pill amber">W2–3 D3 双账本 + P0</span>
+            <span class="arrow">→</span>
+            <span class="pill teal">签字冻结</span>
+          </div>
+        </div>
+        <div class="footer">
+          <span>文件：docs/presentations/pm1-architecture-planning-v21.html</span>
+          <span>20 / 20</span>
+        </div>
+      </div>
+      <aside class="notes">收尾：回收五项决策 + 版本目标，更新本稿标记已拍板。</aside>
+    </section>
+  </div>
+
+  <div class="hint-bar">
+    <span><kbd>←</kbd><kbd>→</kbd> 翻页</span>
+    <span><kbd>F</kbd> 全屏</span>
+    <span><kbd>N</kbd> 讲稿</span>
+    <span id="progress">1 / 20</span>
+  </div>
+
+  <script>
+    (function () {
+      const slides = Array.from(document.querySelectorAll('.slide'));
+      let idx = 0;
+      const progress = document.getElementById('progress');
+      const total = slides.length;
+
+      function show(i) {
+        idx = Math.max(0, Math.min(total - 1, i));
+        slides.forEach((s, n) => s.classList.toggle('is-active', n === idx));
+        progress.textContent = (idx + 1) + ' / ' + total;
+        const foot = slides[idx].querySelector('.footer span:last-child');
+        if (foot) foot.textContent = String(idx + 1).padStart(2, '0') + ' / ' + String(total).padStart(2, '0');
+        location.hash = String(idx + 1);
+      }
+
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+          e.preventDefault(); show(idx + 1);
+        } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+          e.preventDefault(); show(idx - 1);
+        } else if (e.key.toLowerCase() === 'f') {
+          if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+          else document.exitFullscreen?.();
+        } else if (e.key.toLowerCase() === 'n') {
+          const note = slides[idx].querySelector('.notes');
+          alert((note && note.textContent.trim()) || '（本页无讲稿）');
+        } else if (e.key === 'Home') show(0);
+        else if (e.key === 'End') show(total - 1);
+      });
+
+      let touchX = null;
+      window.addEventListener('touchstart', (e) => { touchX = e.changedTouches[0].screenX; }, { passive: true });
+      window.addEventListener('touchend', (e) => {
+        if (touchX == null) return;
+        const dx = e.changedTouches[0].screenX - touchX;
+        if (Math.abs(dx) > 40) show(idx + (dx < 0 ? 1 : -1));
+        touchX = null;
+      }, { passive: true });
+
+      const fromHash = parseInt((location.hash || '').replace('#', ''), 10);
+      show(Number.isFinite(fromHash) && fromHash > 0 ? fromHash - 1 : 0);
+    })();
+  </script>
+</body>
+</html>

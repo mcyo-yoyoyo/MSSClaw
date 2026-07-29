@@ -1,6 +1,56 @@
 import type { DiscoverScenarioId } from '@/domain/scenarioCapabilities';
 
-/** AI Coding / IDE 平台（工具层 · 了解） */
+/**
+ * 场景三层对外叙事：**学习 → 准备 → 开干**
+ *
+ * 「准备」层产品语义：
+ * - **1.0（当前）**：体外参照清单——下载后自行配置设备 / 工具 / 模型，再开干打样。
+ * - **2.0+**：平台逐步托管运行环境与模型，「自备」权重下降。
+ *
+ * 与「一键打样」差异：准备层是体外 DIY 参照；一键打样是平台内开干入口。
+ */
+export const SCENARIO_JOURNEY_COPY = {
+  flow: '学习 → 准备 → 开干',
+  pageSubtitle: '学习 → 准备 → 开干 · 顶栏一键打样',
+  pageTip:
+    '先学习方法，再按清单准备条件，最后开干打样。层内只读查看；下载与执行请用上方按钮。',
+  learnBadge: '学习',
+  learnSectionTitle: '① 学习',
+  learnSectionHint: '先学习方法 · 点击查看 · 下载用上方「下载学习包」',
+  learnExtendLabel: '学习 · 延伸知识',
+  /** 准备层 */
+  layerBadge: '准备',
+  sectionTitle: '② 准备',
+  sectionHint: '体外参照清单 · 自行配置设备 / 工具 / 模型 · 1.0 非平台代配',
+  panelFooter:
+    '说明离开平台自行打样时要准备什么。平台内开干请用上方「一键打样」；2.0 起将由平台逐步托管运行环境与模型。',
+  inspectBanner:
+    '准备清单（只读）。按条目自行配置环境，非平台内调用。后续版本将由平台托管更多运行环境与模型。',
+  inspectToolLabel: '准备 · 体外参照',
+  slotClickHint: '准备清单 · 点击查看',
+  learnPackTitle: '学习包：学习材料 + 准备清单（.learn.zip）',
+  learnMdHeading: '## 准备 · 体外参照环境（自行配置）',
+  learnMdEmpty:
+    '## 准备 · 体外参照环境\n\n（本场景暂未配置硬件 / Coding / 模型参照清单）\n\n',
+  learnIntro:
+    '> 学习：先读方案 / 培训 / 洞察 / 案例；准备：按体外清单自行配置设备 / 工具 / 模型；开干：回到平台一键打样或下载打样包。',
+  learnPathStep:
+    '2. 按「准备」清单自行配置设备 / AI 工具 / 模型（体外参照；1.0 非平台代配）',
+  envToolsCaption: '相关外部工具（准备参照，打开了解）',
+  slotHardware: '建议自备的硬件设备',
+  slotCoding: '建议使用的 AI Coding / IDE',
+  slotModels: '建议对接的云端 / 本地模型',
+  runBadge: '开干',
+  runSectionTitle: '③ 开干',
+  runSectionHint: '对照能力说明 · 开干请用上方「一键打样」或「下载打样包」',
+  runInspectHint:
+    '本条目为开干前对照说明，仅供了解。不会在此页调用 Agent / Skill / Tool；执行请用上方「一键打样」。',
+} as const;
+
+/** @deprecated 使用 SCENARIO_JOURNEY_COPY；保留别名避免大面积改 import */
+export const TOOLKIT_LAYER_COPY = SCENARIO_JOURNEY_COPY;
+
+/** AI Coding / IDE（准备 · 体外参照） */
 export interface ScenarioCodingTool {
   name: string;
   note?: string;
@@ -16,8 +66,8 @@ export interface ScenarioModelRef {
 }
 
 /**
- * 场景工具层环境清单（配）
- * 与首页「常用 AI 工具」解耦：此处描述打样依赖环境，不提供调用。
+ * 场景「准备」层：体外打样参照环境清单（1.0）
+ * 非平台内调用入口；与首页「常用 AI 工具」解耦。
  */
 export interface ScenarioEnv {
   /** 电脑 / 外设等硬件要求 */
@@ -293,17 +343,22 @@ export function getScenarioEnv(scenarioId: string): ScenarioEnv | null {
   return null;
 }
 
-/** 写入学习包 LEARN.md 的环境摘要 */
+/** 写入学习包 LEARN.md 的「准备」层摘要（1.0：体外参照） */
 export function formatScenarioEnvLearnSection(env?: ScenarioEnv | null): string {
   if (!isScenarioEnvFilled(env)) {
-    return ['## 工具层环境', '', '（本场景暂未配置硬件 / Coding / 模型清单）', ''].join('\n');
+    return SCENARIO_JOURNEY_COPY.learnMdEmpty;
   }
-  const lines: string[] = ['## 工具层环境（了解，不调用）', ''];
+  const lines: string[] = [
+    SCENARIO_JOURNEY_COPY.learnMdHeading,
+    '',
+    '> 准备清单：离开平台自行打样时对照配置；不是平台代配。2.0 起平台托管运行环境后，本清单权重将下降。',
+    '',
+  ];
   if (env!.hardware?.trim()) {
-    lines.push('### 硬件设备', '', env!.hardware.trim(), '');
+    lines.push(`### ${SCENARIO_JOURNEY_COPY.slotHardware}`, '', env!.hardware.trim(), '');
   }
   if (env!.codingTools?.length) {
-    lines.push('### AI Coding 工具', '');
+    lines.push(`### ${SCENARIO_JOURNEY_COPY.slotCoding}`, '');
     env!.codingTools.forEach((t) => {
       const link = t.url ? ` · ${t.url}` : '';
       lines.push(`- **${t.name}**${t.note ? `：${t.note}` : ''}${link}`);
@@ -312,7 +367,7 @@ export function formatScenarioEnvLearnSection(env?: ScenarioEnv | null): string 
   }
   const models = [...(env!.cloudModels ?? []), ...(env!.localModels ?? [])];
   if (models.length) {
-    lines.push('### 大模型', '');
+    lines.push(`### ${SCENARIO_JOURNEY_COPY.slotModels}`, '');
     models.forEach((m) => {
       const tag = m.kind === 'cloud' ? '云端' : '本地';
       lines.push(`- **[${tag}] ${m.name}**${m.note ? `：${m.note}` : ''}`);

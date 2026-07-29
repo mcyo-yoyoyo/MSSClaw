@@ -1,13 +1,13 @@
 import { cn } from '@/lib/utils';
 import type { PortalMapCard } from '@/domain/portalMap';
-import type { ScenarioEnv } from '@/domain/scenarioEnv';
+import { SCENARIO_JOURNEY_COPY, type ScenarioEnv } from '@/domain/scenarioEnv';
 import {
   ARCHITECTURE_DOC_KIND_LABELS,
   type ScenarioArchitectureDoc,
 } from '@/domain/scenarioArchitecture';
 
 const VIEW_ONLY_HINT =
-  '当前为只读详情。下载请用上方「下载学习包 / 下载打样包」，执行请用「一键打样」。';
+  '当前为只读详情。下载请用上方「下载学习包 / 下载打样包」，开干请用「一键打样」。';
 
 export type ToolkitEnvSlotId = 'hardware' | 'coding' | 'models';
 
@@ -21,9 +21,21 @@ const SLOT_META: Record<
   ToolkitEnvSlotId,
   { title: string; blurb: string; icon: string }
 > = {
-  hardware: { title: '硬件设备', blurb: '电脑 / 外设要求', icon: 'fa-laptop' },
-  coding: { title: 'AI Coding 工具', blurb: '打样 IDE / 平台', icon: 'fa-code' },
-  models: { title: '云端 / 本地大模型', blurb: '场景依赖模型', icon: 'fa-microchip' },
+  hardware: {
+    title: '硬件设备',
+    blurb: SCENARIO_JOURNEY_COPY.slotHardware,
+    icon: 'fa-laptop',
+  },
+  coding: {
+    title: 'AI Coding 工具',
+    blurb: SCENARIO_JOURNEY_COPY.slotCoding,
+    icon: 'fa-code',
+  },
+  models: {
+    title: '云端 / 本地大模型',
+    blurb: SCENARIO_JOURNEY_COPY.slotModels,
+    icon: 'fa-microchip',
+  },
 };
 
 function ViewOnlyBanner({ text = VIEW_ONLY_HINT }: { text?: string }) {
@@ -62,9 +74,7 @@ function CapabilityInspect({
       <p className="text-[13px] leading-relaxed text-zinc-600">{card.desc || '暂无描述'}</p>
       <div className="rounded-xl border border-zinc-100 bg-zinc-50/80 px-3 py-2.5 text-[11px] text-zinc-500">
         <p className="font-semibold text-zinc-600">挂载说明</p>
-        <p className="mt-1 leading-relaxed">
-          本条目为场景能力层交付件，仅供对照了解。不会在此页调用 Agent / Skill / Tool。
-        </p>
+        <p className="mt-1 leading-relaxed">{SCENARIO_JOURNEY_COPY.runInspectHint}</p>
       </div>
     </div>
   );
@@ -85,14 +95,14 @@ function ToolkitToolInspect({
         : undefined;
   return (
     <div className="space-y-3 text-left">
-      <ViewOnlyBanner text="当前为工具层只读详情。不提供调用；下载学习包见上方按钮。" />
+      <ViewOnlyBanner text="当前为准备清单只读详情。不提供调用；下载学习包见上方按钮。" />
       <div className="flex items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-white">
           <i className={`fa-solid ${card.icon} text-[13px]`} />
         </span>
         <div className="min-w-0">
           <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-500">
-            工具层 · {card.kindLabel}
+            {SCENARIO_JOURNEY_COPY.inspectToolLabel} · {card.kindLabel}
           </span>
           <h3 className="mt-1 text-[15px] font-semibold text-zinc-900">{card.title}</h3>
         </div>
@@ -124,14 +134,14 @@ function ToolkitEnvInspect({
   const meta = SLOT_META[slot];
   return (
     <div className="space-y-3 text-left">
-      <ViewOnlyBanner text="当前为工具层环境清单详情，仅了解，不调用。" />
+      <ViewOnlyBanner text={SCENARIO_JOURNEY_COPY.inspectBanner} />
       <div className="flex items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-white">
           <i className={`fa-solid ${meta.icon} text-[13px]`} />
         </span>
         <div>
           <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-500">
-            工具层 · 配
+            {SCENARIO_JOURNEY_COPY.layerBadge}
           </span>
           <h3 className="mt-1 text-[15px] font-semibold text-zinc-900">{meta.title}</h3>
           <p className="text-[11px] text-zinc-400">{meta.blurb}</p>

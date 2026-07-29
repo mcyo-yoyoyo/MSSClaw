@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSSClaw · 四角色定位、权限与体验路径</title>
+  <style>
+    :root {
+      --bg: #f5f5f5;
+      --panel: #ffffff;
+      --ink: #1a1a1a;
+      --muted: #5c5c5c;
+      --muted-2: #8a8a8a;
+      --line: rgba(26, 26, 26, 0.12);
+      --accent: #cf0a2c;
+      --accent-soft: #fdecef;
+      --business: #1b5e20;
+      --business-soft: #e8f5e9;
+      --ops: #0d47a1;
+      --ops-soft: #e3f2fd;
+      --admin: #4a148c;
+      --admin-soft: #f3e5f5;
+      --viewer: #424242;
+      --viewer-soft: #f0f0f0;
+      --shadow: 0 10px 28px -18px rgba(26, 26, 26, 0.28);
+      --radius: 12px;
+      --font: "Microsoft YaHei", "微软雅黑", "PingFang SC", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      background: linear-gradient(180deg, #fafafa 0%, var(--bg) 100%);
+      color: var(--ink);
+      font-family: var(--font);
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 40px 28px 72px;
+    }
+    .brand {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 13px; font-weight: 600; margin-bottom: 12px;
+    }
+    .brand i {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent); display: inline-block;
+    }
+    .kicker {
+      margin: 0 0 8px;
+      font-size: 13px; font-weight: 700;
+      letter-spacing: .08em; color: var(--accent);
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(28px, 4vw, 36px);
+      font-weight: 700; line-height: 1.25;
+    }
+    .lede {
+      margin: 0 0 28px;
+      max-width: 72ch;
+      font-size: 15px; color: var(--muted);
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 36px;
+    }
+    .summary a {
+      text-decoration: none; color: inherit;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      box-shadow: var(--shadow);
+      transition: border-color .15s, transform .15s;
+    }
+    .summary a:hover {
+      border-color: rgba(207, 10, 44, 0.35);
+      transform: translateY(-1px);
+    }
+    .summary .tag {
+      display: inline-block;
+      font-size: 11px; font-weight: 700;
+      padding: 2px 8px; border-radius: 999px;
+      margin-bottom: 8px;
+    }
+    .summary h3 { margin: 0 0 4px; font-size: 16px; }
+    .summary p { margin: 0; font-size: 12px; color: var(--muted); }
+
+    .role {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      margin-bottom: 28px;
+      overflow: hidden;
+    }
+    .role-head {
+      padding: 22px 24px 18px;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: start;
+    }
+    .role-head h2 {
+      margin: 0 0 8px;
+      font-size: 22px;
+    }
+    .role-head .pos {
+      margin: 0;
+      font-size: 15px;
+      color: var(--ink);
+      max-width: 60ch;
+    }
+    .shell-pill {
+      justify-self: end;
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 13px; font-weight: 700;
+      white-space: nowrap;
+    }
+    .role.business .role-head { background: linear-gradient(90deg, var(--business-soft), #fff); }
+    .role.business .shell-pill { background: var(--business-soft); color: var(--business); }
+    .role.viewer .role-head { background: linear-gradient(90deg, var(--viewer-soft), #fff); }
+    .role.viewer .shell-pill { background: var(--viewer-soft); color: var(--viewer); }
+    .role.ops .role-head { background: linear-gradient(90deg, var(--ops-soft), #fff); }
+    .role.ops .shell-pill { background: var(--ops-soft); color: var(--ops); }
+    .role.admin .role-head { background: linear-gradient(90deg, var(--admin-soft), #fff); }
+    .role.admin .shell-pill { background: var(--admin-soft); color: var(--admin); }
+
+    .role-body {
+      padding: 20px 24px 24px;
+      display: grid;
+      gap: 18px;
+    }
+    .block h3 {
+      margin: 0 0 10px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      color: var(--accent);
+    }
+    .chips {
+      display: flex; flex-wrap: wrap; gap: 8px;
+    }
+    .chip {
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: #f0f0f0;
+      font-size: 13px;
+      color: #333;
+    }
+    .chip.ok { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+    .chip.no { background: #f5f5f5; color: #a0a0a0; text-decoration: line-through; }
+
+    .grid2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px 16px;
+      background: #fafafa;
+    }
+    .card h4 {
+      margin: 0 0 8px;
+      font-size: 14px;
+    }
+    .card ul {
+      margin: 0;
+      padding-left: 1.15em;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .card li { margin-bottom: 4px; }
+
+    .path {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .path .step {
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: #fff;
+      border: 1px solid var(--line);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .path .arr { color: var(--muted-2); font-size: 16px; }
+    .path-note {
+      margin: 10px 0 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .matrix-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: center;
+    }
+    th:first-child, td:first-child { text-align: left; font-weight: 600; }
+    th {
+      background: #f7f7f7;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    tr:last-child td { border-bottom: 0; }
+    .lv-admin { color: #4a148c; font-weight: 700; }
+    .lv-write { color: #b45309; font-weight: 700; }
+    .lv-exec { color: #1b5e20; font-weight: 700; }
+    .lv-read { color: #1565c0; font-weight: 600; }
+    .lv-none { color: #bdbdbd; }
+
+    .footnote {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted-2);
+    }
+    .footer {
+      margin-top: 40px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      color: var(--muted-2);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 900px) {
+      .summary, .grid2 { grid-template-columns: 1fr 1fr; }
+      .role-head { grid-template-columns: 1fr; }
+      .shell-pill { justify-self: start; }
+    }
+    @media (max-width: 560px) {
+      .summary, .grid2 { grid-template-columns: 1fr; }
+      .page { padding: 24px 16px 48px; }
+    }
+    @media print {
+      body { background: #fff; }
+      .role { break-inside: avoid; box-shadow: none; }
+      .summary a { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="brand"><i></i>MSSClaw · AI 提效作战平台</div>
+    <p class="kicker">角色体验说明 · 一页报告</p>
+    <h1>四类角色：定位 · 权限 · 功能 · 体验路径</h1>
+    <p class="lede">
+      依据当前产品实现（双壳由角色派生、RBAC 矩阵、展示配置 MVP 默认菜单）整理。
+      主路径统一为「学习 → 准备 → 开干」；业务壳与运营壳职责分离。
+    </p>
+
+    <nav class="summary" aria-label="角色速览">
+      <a href="#business_user">
+        <span class="tag" style="background:var(--business-soft);color:var(--business)">业务壳</span>
+        <h3>业务用户</h3>
+        <p>找案例 · 做任务 · 任务沉淀</p>
+      </a>
+      <a href="#viewer">
+        <span class="tag" style="background:var(--viewer-soft);color:var(--viewer)">业务壳</span>
+        <h3>只读访客</h3>
+        <p>只读找案例 · 不可执行</p>
+      </a>
+      <a href="#capability_ops">
+        <span class="tag" style="background:var(--ops-soft);color:var(--ops)">运营壳</span>
+        <h3>能力运营</h3>
+        <p>货架配置 · 上架精选</p>
+      </a>
+      <a href="#super_admin">
+        <span class="tag" style="background:var(--admin-soft);color:var(--admin)">运营壳</span>
+        <h3>超级管理员</h3>
+        <p>治理 · 展示 · 租户</p>
+      </a>
+    </nav>
+
+    <!-- 业务用户 -->
+    <section class="role business" id="business_user">
+      <div class="role-head">
+        <div>
+          <h2>业务用户</h2>
+          <p class="pos">定位：业务主路径的核心使用者——在业务工作台完成「学习 → 准备 → 开干」，把场景方法落到任务交付。</p>
+        </div>
+        <div class="shell-pill">业务工作台</div>
+      </div>
+      <div class="role-body">
+        <div class="block">
+          <h3>权限要点</h3>
+          <div class="chips">
+            <span class="chip ok">可执行对话 / 打样</span>
+            <span class="chip ok">技能可执行</span>
+            <span class="chip ok">专家 / 知识只读</span>
+            <span class="chip ok">可配置个人模型 API</span>
+            <span class="chip no">无能力配置写权限</span>
+            <span class="chip no">无系统治理入口</span>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="card">
+            <h4>主要功能点</h4>
+            <ul>
+              <li>找案例：发现场景与学习内容</li>
+              <li>场景样板间：学习 / 准备 / 开干三层只读浏览</li>
+              <li>做任务：选用精选技能 / 专家开工</li>
+              <li>任务记录：计划确认、执行接力、交付预览</li>
+              <li>消息：站内触达（MVP 默认可开）</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>明确不做</h4>
+            <ul>
+              <li>不配置专家 / 技能 / 工具货架</li>
+              <li>不管理展示配置、租户、组织权限</li>
+              <li>不进入门户内容运营后台</li>
+              <li>MVP 默认不开协作空间（完整方案可开）</li>
+            </ul>
+          </div>
+        </div>
+        <div class="block">
+          <h3>主要体验路径</h3>
+          <div class="path">
+            <span class="step">登录（业务壳）</span><span class="arr">→</span>
+            <span class="step">找案例</span><span class="arr">→</span>
+            <span class="step">进入样板间学习/准备</span><span class="arr">→</span>
+            <span class="step">顶栏一键打样</span><span class="arr">→</span>
+            <span class="step">任务中心沉淀</span>
+          </div>
+          <p class="path-note">备选路径：登录 → 做任务橱窗选精选能力 → 直接开任务 → 交付沉淀。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 访客 -->
+    <section class="role viewer" id="viewer">
+      <div class="role-head">
+        <div>
+          <h2>只读访客</h2>
+          <p class="pos">定位：推广与观摩角色——扩大「找案例」覆盖面，只看不跑，降低误操作与算力消耗。</p>
+        </div>
+        <div class="shell-pill">业务工作台 · 只读</div>
+      </div>
+      <div class="role-body">
+        <div class="block">
+          <h3>权限要点</h3>
+          <div class="chips">
+            <span class="chip ok">案例 / 场景只读浏览</span>
+            <span class="chip ok">对话结果只读</span>
+            <span class="chip no">不可发起 / 发送执行</span>
+            <span class="chip no">不可配置模型 API</span>
+            <span class="chip no">无做任务 / 任务记录菜单（MVP）</span>
+            <span class="chip no">无任何配置与治理写权限</span>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="card">
+            <h4>主要功能点</h4>
+            <ul>
+              <li>找案例：浏览场景与学习材料</li>
+              <li>场景样板间：只读查看学习 / 准备 / 开干说明</li>
+              <li>消息：可接收站内信息（若开放）</li>
+              <li>可下载学习材料（若入口开放），但不打样执行</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>明确不做</h4>
+            <ul>
+              <li>不打开「做任务」开工</li>
+              <li>不进入任务执行与交付闭环</li>
+              <li>不修改个人模型与平台配置</li>
+              <li>不访问运营台任何模块</li>
+            </ul>
+          </div>
+        </div>
+        <div class="block">
+          <h3>主要体验路径</h3>
+          <div class="path">
+            <span class="step">登录（业务壳）</span><span class="arr">→</span>
+            <span class="step">找案例</span><span class="arr">→</span>
+            <span class="step">打开样板间浏览</span><span class="arr">→</span>
+            <span class="step">学习方法 / 对照准备清单</span>
+          </div>
+          <p class="path-note">路径止于「学与备」；若需开干，须切换为业务用户或由运营侧开放执行权限。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 能力运营 -->
+    <section class="role ops" id="capability_ops">
+      <div class="role-head">
+        <div>
+          <h2>能力运营</h2>
+          <p class="pos">定位：平台能力供给者——在运营台把专家 / 技能 / 工具上架并精选露出，保障业务侧「能学、能开干」。</p>
+        </div>
+        <div class="shell-pill">平台运营台</div>
+      </div>
+      <div class="role-body">
+        <div class="block">
+          <h3>权限要点</h3>
+          <div class="chips">
+            <span class="chip ok">工作平台可预览 / 可执行</span>
+            <span class="chip ok">专家 / 技能 / 工具可写</span>
+            <span class="chip ok">知识 / 记忆 / 提示词可写（按方案）</span>
+            <span class="chip ok">设置只读</span>
+            <span class="chip no">无展示配置 / 租户配置（超管专属）</span>
+            <span class="chip no">无组织权限管理</span>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="card">
+            <h4>主要功能点</h4>
+            <ul>
+              <li>配置专家 / 技能 / 工具：上架与精选</li>
+              <li>场景挂载：把能力挂到样板间开干层</li>
+              <li>预览业务工作台：验证找案例 / 做任务露出</li>
+              <li>任务中心：抽检打样链路是否可跑通</li>
+              <li>标准方案可扩展：知识库、自动化等</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>明确不做</h4>
+            <ul>
+              <li>不改侧栏展示方案（超管）</li>
+              <li>不管理租户数据空间与成员治理</li>
+              <li>不替代业务用户做日常业务交付</li>
+              <li>不以个人身份绕过货架发布流程</li>
+            </ul>
+          </div>
+        </div>
+        <div class="block">
+          <h3>主要体验路径</h3>
+          <div class="path">
+            <span class="step">登录（运营壳）</span><span class="arr">→</span>
+            <span class="step">配置专家/技能/工具</span><span class="arr">→</span>
+            <span class="step">发布并精选</span><span class="arr">→</span>
+            <span class="step">挂载场景</span><span class="arr">→</span>
+            <span class="step">预览业务侧露出</span><span class="arr">→</span>
+            <span class="step">抽检一键打样</span>
+          </div>
+          <p class="path-note">运营闭环：供给 → 精选 → 挂载 → 验证；与业务「学到干」形成前后台接力。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 超管 -->
+    <section class="role admin" id="super_admin">
+      <div class="role-head">
+        <div>
+          <h2>超级管理员</h2>
+          <p class="pos">定位：平台治理者——在能力运营能力之上，负责人、空间、展示与门户边界，保证平台可管可控。</p>
+        </div>
+        <div class="shell-pill">平台运营台 · 治理</div>
+      </div>
+      <div class="role-body">
+        <div class="block">
+          <h3>权限要点</h3>
+          <div class="chips">
+            <span class="chip ok">全部模块 Admin</span>
+            <span class="chip ok">展示配置（侧栏菜单方案）</span>
+            <span class="chip ok">租户 / 组织权限</span>
+            <span class="chip ok">门户内容运营</span>
+            <span class="chip ok">能力货架全权</span>
+            <span class="chip ok">可预览业务主路径</span>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="card">
+            <h4>主要功能点</h4>
+            <ul>
+              <li>展示配置：按角色控制菜单（MVP / 标准 / 完整）</li>
+              <li>组织权限：成员与角色治理</li>
+              <li>租户配置：数据空间启用与边界</li>
+              <li>门户运营：方案 / 培训 / 洞察 / 案例上架</li>
+              <li>兼具能力运营全部货架能力</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>明确边界</h4>
+            <ul>
+              <li>治理优先于日常业务打样</li>
+              <li>菜单开放需与 1.0 开放节奏匹配</li>
+              <li>业务壳菜单仍不塞运营配置项</li>
+              <li>对外演示边界由展示方案控制</li>
+            </ul>
+          </div>
+        </div>
+        <div class="block">
+          <h3>主要体验路径</h3>
+          <div class="path">
+            <span class="step">登录（运营壳）</span><span class="arr">→</span>
+            <span class="step">设定展示方案 / 角色菜单</span><span class="arr">→</span>
+            <span class="step">组织与租户就绪</span><span class="arr">→</span>
+            <span class="step">门户内容上架</span><span class="arr">→</span>
+            <span class="step">复核货架精选</span><span class="arr">→</span>
+            <span class="step">抽检业务主路径</span>
+          </div>
+          <p class="path-note">治理路径强调「先边界、后供给、再验证」；与能力运营协作完成可运行样板。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Matrix -->
+    <section class="role" id="matrix">
+      <div class="role-head" style="background:#fff">
+        <div>
+          <h2>资源权限矩阵（摘要）</h2>
+          <p class="pos">对应代码 <code>RBAC_MATRIX</code>：none / read / execute / write / admin。</p>
+        </div>
+      </div>
+      <div class="role-body">
+        <div class="matrix-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>模块</th>
+                <th>业务用户</th>
+                <th>只读访客</th>
+                <th>能力运营</th>
+                <th>超级管理员</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Chat / 执行</td>
+                <td class="lv-exec">Execute</td>
+                <td class="lv-read">Read</td>
+                <td class="lv-exec">Execute</td>
+                <td class="lv-admin">Admin</td>
+              </tr>
+              <tr>
+                <td>Skill</td>
+                <td class="lv-exec">Execute</td>
+                <td class="lv-read">Read</td>
+                <td class="lv-write">Write</td>
+                <td class="lv-admin">Admin</td>
+              </tr>
+              <tr>
+                <td>Agent</td>
+                <td class="lv-read">Read</td>
+                <td class="lv-read">Read</td>
+                <td class="lv-write">Write</td>
+                <td class="lv-admin">Admin</td>
+              </tr>
+              <tr>
+                <td>Tool</td>
+                <td class="lv-read">Read</td>
+                <td class="lv-none">—</td>
+                <td class="lv-write">Write</td>
+                <td class="lv-admin">Admin</td>
+              </tr>
+              <tr>
+                <td>Knowledge / Prompt</td>
+                <td class="lv-read">Read</td>
+                <td class="lv-read">Read</td>
+                <td class="lv-write">Write</td>
+                <td class="lv-admin">Admin</td>
+              </tr>
+              <tr>
+                <td>Memory</td>
+                <td class="lv-read">Read</td>
+                <td class="lv-none">—</td>
+                <td class="lv-write">Write</td>
+                <td class="lv-admin">Admin</td>
+              </tr>
+              <tr>
+                <td>Settings</td>
+                <td class="lv-none">—</td>
+                <td class="lv-none">—</td>
+                <td class="lv-read">Read</td>
+                <td class="lv-admin">Admin</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="footnote">侧栏实际可见项另受展示配置方案（MVP / 标准 / 完整）约束；上表为资源权限矩阵口径（rbac.ts）。</p>
+      </div>
+    </section>
+
+    <div class="footer">
+      <span>MSSClaw · 四角色定位 / 权限 / 功能 / 体验路径</span>
+      <span>依据：rbac.ts · permissions.ts · shellPerspective.ts · navPresentation.ts</span>
+    </div>
+  </div>
+</body>
+</html>

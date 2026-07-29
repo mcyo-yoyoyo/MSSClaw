@@ -8,6 +8,7 @@ import { sortThoughtLayerItems, toCaseOutcomeCard } from '@/domain/portalCase';
 import {
   formatScenarioEnvLearnSection,
   isScenarioEnvFilled,
+  TOOLKIT_LAYER_COPY,
   type ScenarioEnv,
 } from '@/domain/scenarioEnv';
 import {
@@ -139,7 +140,7 @@ export function buildCasePackageFiles(item: PortalContentItem): Record<string, s
   };
 }
 
-/** 场景学习包目录：思想层优先清单 + 工具层环境 */
+/** 场景学习包目录：学习材料优先清单 + 准备层体外参照 */
 export function buildScenarioLearnMd(
   scenarioLabel: string,
   items: PortalContentItem[],
@@ -154,19 +155,19 @@ export function buildScenarioLearnMd(
   return [
     `# ${scenarioLabel} · 学习包`,
     '',
-    '> 思想层优先：场景方案 / 培训案例 / 前沿洞察；工具层为环境了解；场景案例附带可打样挂载说明。',
+    TOOLKIT_LAYER_COPY.learnIntro,
     '',
     '## 学习清单',
     '',
-    ...(lines.length ? lines : ['（暂无思想层内容）']),
+    ...(lines.length ? lines : ['（暂无学习层内容）']),
     '',
     formatScenarioEnvLearnSection(env),
-    '## 建议路径',
+    '## 建议路径（1.0）',
     '',
-    '1. 先读「场景方案」与「前沿洞察」，对齐业务口径',
-    '2. 对照工具层硬件 / Coding / 模型清单准备环境',
-    '3. 完成「培训案例」或外链授课',
-    '4. 需要上手时回到平台「一键打样」执行能力层',
+    '1. 学习：先读「场景方案」与「前沿洞察」，对齐业务口径',
+    TOOLKIT_LAYER_COPY.learnPathStep,
+    '3. 学习：完成「培训案例」或外链授课',
+    '4. 开干：结合能力沉淀自行打样，或回到平台「一键打样」',
     '',
   ].join('\n');
 }
@@ -217,7 +218,7 @@ function pickLearnPackItems(items: PortalContentItem[]): PortalContentItem[] {
   return sortThoughtLayerItems(base);
 }
 
-/** 下载场景学习包（思想层 + 工具层环境）；不含架构打样卷 */
+/** 下载场景学习包（学习材料 + 准备清单）；不含架构打样卷 */
 export function downloadScenarioCasePack(
   scenarioLabel: string,
   items: PortalContentItem[],
@@ -239,10 +240,10 @@ export function downloadScenarioCasePack(
     [
       `# ${scenarioLabel} · 场景学习包`,
       '',
-      '本卷为**学习包**（思想层 + 工具层环境）。',
+      '本卷为**学习包**（学习材料 + 准备清单）。',
       '可执行打样与架构 md 请另下「打样包」`.demo.zip`。',
       '',
-      `- 思想层内容：${packItems.length} 个`,
+      `- 学习层内容：${packItems.length} 个`,
       `- 入口：先读 LEARN.md`,
       '',
     ].join('\n'),

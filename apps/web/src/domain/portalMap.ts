@@ -483,7 +483,7 @@ export const FEATURED_SCENARIOS: ScenarioDef[] = [
   },
 ];
 
-/** 场景三层齐套：思想（学）/ 工具（配）/ 能力（跑） */
+/** 场景三层齐套：学习 / 准备·体外参照（1.0）/ 开干 */
 export interface ScenarioLayerFlags {
   thought: boolean;
   toolkit: boolean;
@@ -501,9 +501,9 @@ export interface ScenarioBundle {
   skills: PortalMapCard[];
   /** 能力层 · 内部连接器 Tool */
   tools: PortalMapCard[];
-  /** 工具层 · 外部/SaaS 等了解项（与场景环境清单并列） */
+  /** 准备层 · 外部/SaaS 等体外参照项（与环境清单并列；非平台调用） */
   envTools: PortalMapCard[];
-  /** 工具层 · 硬件 / AI Coding / 大模型环境清单 */
+  /** 准备层 · 硬件 / AI Coding / 大模型体外参照清单（1.0；2.0+ 权重下降） */
   env: ScenarioEnv | null;
   /** 能力层 · 架构 / AI 执行方案 md */
   architectureDocs: ScenarioArchitectureDoc[];

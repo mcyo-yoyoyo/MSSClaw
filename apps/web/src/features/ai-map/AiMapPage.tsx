@@ -48,7 +48,11 @@ import { returnFromResource } from '@/domain/openResourceNav';
 import { canExecuteChat } from '@/domain/permissions';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { ExpertTeamModal } from '@/components/content/ExpertTeamModal';
-import { countScenarioEnvSlots, type ScenarioEnv } from '@/domain/scenarioEnv';
+import {
+  countScenarioEnvSlots,
+  SCENARIO_JOURNEY_COPY,
+  type ScenarioEnv,
+} from '@/domain/scenarioEnv';
 import { ARCHITECTURE_DOC_KIND_LABELS } from '@/domain/scenarioArchitecture';
 import {
   ScenarioLayerInspectBody,
@@ -169,7 +173,7 @@ function ToolkitEnvPanel({
           </span>
           <div className="min-w-0">
             <p className="text-[12px] font-semibold text-zinc-800">硬件设备</p>
-            <p className="text-[10px] text-zinc-400">点击查看详情</p>
+            <p className="text-[10px] text-zinc-400">{SCENARIO_JOURNEY_COPY.slotHardware}</p>
           </div>
         </div>
         {slots.hardware ? (
@@ -186,7 +190,7 @@ function ToolkitEnvPanel({
           </span>
           <div className="min-w-0">
             <p className="text-[12px] font-semibold text-zinc-800">AI Coding 工具</p>
-            <p className="text-[10px] text-zinc-400">点击查看详情</p>
+            <p className="text-[10px] text-zinc-400">{SCENARIO_JOURNEY_COPY.slotClickHint}</p>
           </div>
         </div>
         {slots.coding ? (
@@ -205,7 +209,7 @@ function ToolkitEnvPanel({
           </span>
           <div className="min-w-0">
             <p className="text-[12px] font-semibold text-zinc-800">云端 / 本地大模型</p>
-            <p className="text-[10px] text-zinc-400">点击查看详情</p>
+            <p className="text-[10px] text-zinc-400">{SCENARIO_JOURNEY_COPY.slotClickHint}</p>
           </div>
         </div>
         {slots.models ? (
@@ -442,7 +446,11 @@ export function AiMapPage({
 
   /** 方案 A：层内点击一律只读详情，执行/下载走顶栏 */
   const openCapabilityInspect = (card: PortalMapCard) => {
-    setInspectTarget({ kind: 'capability', card, layerLabel: '能力层' });
+    setInspectTarget({
+      kind: 'capability',
+      card,
+      layerLabel: SCENARIO_JOURNEY_COPY.runBadge,
+    });
   };
 
   const openToolkitToolInspect = (card: PortalMapCard) => {
@@ -557,13 +565,8 @@ export function AiMapPage({
       <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-4 py-4 md:px-6">
         <CenterPageHeader
           title="场景案例"
-          subtitle="学·学习包 · 配·环境清单 · 跑·打样包 / 一键打样"
-          tip={
-            <>
-              三层齐套灯：思想层下学习包（.learn.zip），工具层看环境，能力层下打样包（.demo.zip）或一键打样；架构
-              md 可在能力层在线阅读。
-            </>
-          }
+          subtitle={SCENARIO_JOURNEY_COPY.pageSubtitle}
+          tip={<>{SCENARIO_JOURNEY_COPY.pageTip}</>}
           actions={
             <>
               <ReturnToTaskButton />
@@ -668,9 +671,9 @@ export function AiMapPage({
                           selectedId === b.id ? 'text-white/55' : 'text-zinc-400',
                         )}
                       >
-                        <span>{b.layers.thought ? '学' : '·'}</span>
-                        <span>{b.layers.toolkit ? '配' : '·'}</span>
-                        <span>{b.layers.capability ? '跑' : '·'}</span>
+                        <span>{b.layers.thought ? '学习' : '·'}</span>
+                        <span>{b.layers.toolkit ? '准备' : '·'}</span>
+                        <span>{b.layers.capability ? '开干' : '·'}</span>
                         <span className="opacity-70">· 案 {b.cases.length}</span>
                       </span>
                     </span>
@@ -694,10 +697,25 @@ export function AiMapPage({
                         <p className="text-[12px] text-zinc-500">{selected.desc}</p>
                       </div>
                     </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      <LayerBadge active={selected.layers.thought} label="学 · 思想层" />
-                      <LayerBadge active={selected.layers.toolkit} label="配 · 工具层" />
-                      <LayerBadge active={selected.layers.capability} label="跑 · 能力层" />
+                    <p className="mt-2 text-[11px] font-medium tracking-wide text-zinc-500">
+                      {SCENARIO_JOURNEY_COPY.flow}
+                      <span className="ml-1.5 font-normal text-zinc-400">
+                        先学习方法 → 备齐条件 → 顶栏开干
+                      </span>
+                    </p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <LayerBadge
+                        active={selected.layers.thought}
+                        label={SCENARIO_JOURNEY_COPY.learnBadge}
+                      />
+                      <LayerBadge
+                        active={selected.layers.toolkit}
+                        label={SCENARIO_JOURNEY_COPY.layerBadge}
+                      />
+                      <LayerBadge
+                        active={selected.layers.capability}
+                        label={SCENARIO_JOURNEY_COPY.runBadge}
+                      />
                       <span className="text-[11px] text-zinc-400">
                         齐套 {selected.completeness}/3
                         {selected.related ? ' · 与你相关' : ''}
@@ -715,7 +733,7 @@ export function AiMapPage({
                       onClick={() => downloadLearnPack(selected)}
                       disabled={!selected.layers.thought && !selected.layers.toolkit}
                       className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-40"
-                      title="学习包：思想层 + 工具层环境（.learn.zip）"
+                      title={SCENARIO_JOURNEY_COPY.learnPackTitle}
                     >
                       <i className="fa-solid fa-download mr-1 text-[10px]" />
                       下载学习包
@@ -740,8 +758,8 @@ export function AiMapPage({
                           selectedDemoPlan?.mode === 'team'
                             ? '按场景步骤在任务中接力打样'
                             : selectedDemoPlan
-                              ? '用本场景能力层主能力开任务打样'
-                              : '能力层暂无可用 Agent / Skill'
+                              ? '用本场景开干层主能力开任务打样'
+                              : '开干层暂无可用 Agent / Skill'
                         }
                       >
                         {selectedDemoPlan?.mode === 'team'
@@ -752,14 +770,14 @@ export function AiMapPage({
                   </div>
                 </div>
 
-                {/* ① 思想层 · 学 */}
+                {/* ① 学习 */}
                 <section className="rounded-xl border border-zinc-200/80 bg-white p-3">
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h3 className="text-[12px] font-semibold text-zinc-900">
-                        ① 思想层 · 学
+                        {SCENARIO_JOURNEY_COPY.learnSectionTitle}
                         <span className="ml-2 text-[11px] font-normal text-zinc-400">
-                          点击查看详情 · 下载请用上方「下载学习包」
+                          {SCENARIO_JOURNEY_COPY.learnSectionHint}
                         </span>
                       </h3>
                     </div>
@@ -857,7 +875,7 @@ export function AiMapPage({
                               setInspectTarget({
                                 kind: 'capability',
                                 card,
-                                layerLabel: '思想层 · 延伸知识',
+                                layerLabel: SCENARIO_JOURNEY_COPY.learnExtendLabel,
                               })
                             }
                             className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] text-zinc-700 transition hover:bg-zinc-50"
@@ -871,13 +889,13 @@ export function AiMapPage({
                   ) : null}
                 </section>
 
-                {/* ② 工具层 · 配 */}
+                {/* ② 准备 */}
                 <section className="rounded-xl border border-zinc-200/80 bg-white p-3">
                   <div className="mb-2">
                     <h3 className="text-[12px] font-semibold text-zinc-900">
-                      ② 工具层 · 配
+                      {SCENARIO_JOURNEY_COPY.sectionTitle}
                       <span className="ml-2 text-[11px] font-normal text-zinc-400">
-                        硬件 / AI Coding / 大模型 · 仅了解，不调用
+                        {SCENARIO_JOURNEY_COPY.sectionHint}
                       </span>
                     </h3>
                   </div>
@@ -886,12 +904,12 @@ export function AiMapPage({
                     onInspectSlot={openToolkitEnvInspect}
                   />
                   <p className="mt-2 text-[10px] text-zinc-400">
-                    点击卡片查看环境详情（只读）。与首页「常用 AI 工具」不同，此处不提供调用。
+                    {SCENARIO_JOURNEY_COPY.panelFooter}
                   </p>
                   {selected.envTools.length > 0 ? (
                     <div className="mt-3">
                       <p className="mb-1.5 text-[11px] font-medium text-zinc-500">
-                        本场景相关外部工具（点击查看）
+                        {SCENARIO_JOURNEY_COPY.envToolsCaption}
                       </p>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         {selected.envTools.slice(0, 6).map((card) => (
@@ -919,13 +937,13 @@ export function AiMapPage({
                   ) : null}
                 </section>
 
-                {/* ③ 能力层 · 跑 */}
+                {/* ③ 开干 */}
                 <section className="rounded-xl border border-zinc-200/80 bg-white p-3">
                   <div className="mb-2">
                     <h3 className="text-[12px] font-semibold text-zinc-900">
-                      ③ 能力层 · 跑
+                      {SCENARIO_JOURNEY_COPY.runSectionTitle}
                       <span className="ml-2 text-[11px] font-normal text-zinc-400">
-                        Agent / Skill / Tool / 架构文件 · 打样或下载打样包
+                        {SCENARIO_JOURNEY_COPY.runSectionHint}
                       </span>
                     </h3>
                   </div>

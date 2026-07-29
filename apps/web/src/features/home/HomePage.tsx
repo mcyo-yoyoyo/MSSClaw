@@ -56,7 +56,7 @@ interface HomePageProps {
 const ASK_SUBTITLE_SKILLS = '选场景技能 · 再补充意图 · 对话到执行';
 const ASK_SUBTITLE_WITH_EXPERTS =
   '选场景技能，或选营销 / 知识专家 · 点选填入 · 补充意图后执行';
-const DISCOVER_SUBTITLE = '看场景案例 · 学样板做法 · 再到做任务';
+const DISCOVER_SUBTITLE = '学习场景案例 · 准备条件 · 再到做任务开干';
 
 export function HomePage({
   onSubmitTask,

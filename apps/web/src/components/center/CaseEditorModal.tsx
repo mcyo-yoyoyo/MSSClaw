@@ -164,13 +164,13 @@ export function CaseEditorModal({
     >
       <div className="space-y-4 text-left">
         <p className="rounded-lg bg-zinc-50 px-3 py-2 text-[11px] leading-relaxed text-zinc-500">
-          按三层填写：思想层（学）负责叙事与学习材料；能力层（跑）挂载 Agent/Skill/Tool；发布区控制可见性。
-          工具层环境清单由场景配置维护，不在本表单编辑。
+          按「学习 → 准备 → 开干」三层填写：学习层负责叙事与学习材料；开干层挂载
+          Agent/Skill/Tool；发布区控制可见性。准备层清单由场景配置维护，不在本表单编辑。
         </p>
 
         <section className="space-y-3 rounded-xl border border-zinc-100 p-3">
           <h4 className="text-[11px] font-semibold tracking-wide text-zinc-800">
-            ① 思想层 · 学
+            ① 学习
             <span className="ml-2 font-normal text-zinc-400">类型 / 叙事 / 预览与外链</span>
           </h4>
           <FormField label="标题（成效卡标题）">
@@ -343,23 +343,24 @@ export function CaseEditorModal({
 
         <section className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/60 px-3 py-2.5">
           <h4 className="text-[11px] font-semibold text-zinc-700">
-            ② 工具层 · 配
-            <span className="ml-2 font-normal text-zinc-400">场景级环境清单</span>
+            ② 准备
+            <span className="ml-2 font-normal text-zinc-400">1.0 自行配置参照</span>
           </h4>
           <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">
-            硬件 / AI Coding / 大模型在场景配置（scenarioEnv）中维护，打开「场景案例」详情工具层查看；本表单不编辑。
+            硬件 / AI Coding / 大模型在场景配置（scenarioEnv）中维护，供学习包下载后体外准备对照；在「场景案例」详情查看。本表单不编辑。2.0
+            起平台托管运行环境后，本层权重将下降。
           </p>
         </section>
 
         <section className="space-y-3 rounded-xl border border-zinc-100 p-3">
           <h4 className="text-[11px] font-semibold tracking-wide text-zinc-800">
-            ③ 能力层 · 跑
+            ③ 开干
             <span className="ml-2 font-normal text-zinc-400">
-              挂载 Agent / Skill / Tool（场景案例打样用）
+              挂载 Agent / Skill / Tool（一键打样用）
             </span>
           </h4>
           <p className="text-[10px] text-zinc-400">
-            思想层方案/培训可不填；类型为「场景案例」时建议填写金牌 Skill 或 Agent。
+            学习层方案/培训可不填；类型为「场景案例」时建议填写金牌 Skill 或 Agent。
           </p>
           <div className="grid grid-cols-2 gap-2">
             <FormField label="金牌 Skill ID">
