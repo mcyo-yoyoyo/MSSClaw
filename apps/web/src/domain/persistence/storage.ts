@@ -36,6 +36,7 @@ import {
   saveSessionsApi,
 } from '@/api/persistenceApi';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { demoDefaults } from '@/domain/demoContentPolicy';
 
 export interface MarketplaceSnapshot {
   agents: PrototypeAgentSeed[];
@@ -64,21 +65,28 @@ function readLocalMarketplace(): MarketplaceSnapshot {
     const savedAuto = JSON.parse(localStorage.getItem(LS_AUTOMATIONS) || 'null') as PrototypeAutomation[] | null;
     const savedKb = JSON.parse(localStorage.getItem(LS_KB_DOCS) || 'null') as PrototypeKbDocument[] | null;
 
+    const agents0 = demoDefaults(PROTOTYPE_AGENTS);
+    const skills0 = demoDefaults(PROTOTYPE_SKILLS);
+    const tools0 = demoDefaults(PROTOTYPE_TOOLS);
+    const autos0 = demoDefaults(PROTOTYPE_AUTOMATIONS);
+    const kb0 = demoDefaults(PROTOTYPE_KB_DOCS);
     return {
-      agents: mergeCatalog(PROTOTYPE_AGENTS, savedA),
-      skills: mergeCatalog(PROTOTYPE_SKILLS, savedS),
-      tools: mergeCatalog(PROTOTYPE_TOOLS, savedT),
+      agents: mergeCatalog(agents0, savedA),
+      skills: mergeCatalog(skills0, savedS),
+      tools: mergeCatalog(tools0, savedT),
       automations:
-        Array.isArray(savedAuto) && savedAuto.length ? savedAuto : structuredClone(PROTOTYPE_AUTOMATIONS),
-      kbDocs: mergeCatalog(PROTOTYPE_KB_DOCS, savedKb),
+        Array.isArray(savedAuto) && savedAuto.length
+          ? savedAuto
+          : structuredClone(autos0),
+      kbDocs: mergeCatalog(kb0, savedKb),
     };
   } catch {
     return {
-      agents: structuredClone(PROTOTYPE_AGENTS),
-      skills: structuredClone(PROTOTYPE_SKILLS),
-      tools: structuredClone(PROTOTYPE_TOOLS),
-      automations: structuredClone(PROTOTYPE_AUTOMATIONS),
-      kbDocs: structuredClone(PROTOTYPE_KB_DOCS),
+      agents: structuredClone(demoDefaults(PROTOTYPE_AGENTS)),
+      skills: structuredClone(demoDefaults(PROTOTYPE_SKILLS)),
+      tools: structuredClone(demoDefaults(PROTOTYPE_TOOLS)),
+      automations: structuredClone(demoDefaults(PROTOTYPE_AUTOMATIONS)),
+      kbDocs: structuredClone(demoDefaults(PROTOTYPE_KB_DOCS)),
     };
   }
 }
@@ -98,17 +106,26 @@ export async function loadMarketplace(workspaceId: string): Promise<MarketplaceS
       const remote = await fetchMarketplaceApi(workspaceId);
       if (remote) {
         return {
-          agents: mergeCatalog(PROTOTYPE_AGENTS, remote.agents as PrototypeAgentSeed[]),
-          skills: mergeCatalog(PROTOTYPE_SKILLS, remote.skills as PrototypeSkillSeed[]),
+          agents: mergeCatalog(
+            demoDefaults(PROTOTYPE_AGENTS),
+            remote.agents as PrototypeAgentSeed[],
+          ),
+          skills: mergeCatalog(
+            demoDefaults(PROTOTYPE_SKILLS),
+            remote.skills as PrototypeSkillSeed[],
+          ),
           tools: mergeCatalog(
-            PROTOTYPE_TOOLS,
+            demoDefaults(PROTOTYPE_TOOLS),
             (remote as { tools?: PrototypeToolSeed[] }).tools,
           ),
           automations:
             Array.isArray(remote.automations) && remote.automations.length
               ? (remote.automations as PrototypeAutomation[])
-              : structuredClone(PROTOTYPE_AUTOMATIONS),
-          kbDocs: mergeCatalog(PROTOTYPE_KB_DOCS, remote.kbDocs as PrototypeKbDocument[]),
+              : structuredClone(demoDefaults(PROTOTYPE_AUTOMATIONS)),
+          kbDocs: mergeCatalog(
+            demoDefaults(PROTOTYPE_KB_DOCS),
+            remote.kbDocs as PrototypeKbDocument[],
+          ),
         };
       }
     } catch {

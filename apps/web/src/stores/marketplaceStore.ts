@@ -18,6 +18,7 @@ import { parseAgentUpload } from '@/domain/agentExport';
 import { parseKbDocument } from '@/api/kbClient';
 import { rebuildKbVectorIndex } from '@/api/kbClient';
 import { loadMarketplace, scheduleSaveMarketplace } from '@/domain/persistence/storage';
+import { demoDefaults } from '@/domain/demoContentPolicy';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import {
   matchesAssetOrgFilters,
@@ -107,11 +108,11 @@ interface MarketplaceState {
 
 export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   ready: false,
-  agents: structuredClone(PROTOTYPE_AGENTS),
-  skills: structuredClone(PROTOTYPE_SKILLS),
-  tools: structuredClone(PROTOTYPE_TOOLS),
-  automations: structuredClone(PROTOTYPE_AUTOMATIONS),
-  kbDocs: structuredClone(PROTOTYPE_KB_DOCS),
+  agents: structuredClone(demoDefaults(PROTOTYPE_AGENTS)),
+  skills: structuredClone(demoDefaults(PROTOTYPE_SKILLS)),
+  tools: structuredClone(demoDefaults(PROTOTYPE_TOOLS)),
+  automations: structuredClone(demoDefaults(PROTOTYPE_AUTOMATIONS)),
+  kbDocs: structuredClone(demoDefaults(PROTOTYPE_KB_DOCS)),
   agentFilter: 'all',
   skillFilter: 'all',
   agentSearch: '',

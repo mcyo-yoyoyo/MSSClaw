@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from 'react';
+﻿import { useEffect, useMemo, type ReactNode } from 'react';
 import {
   APP_VIEW_NAV,
   NAV_SECTION_LABELS,
@@ -180,7 +180,7 @@ export function AppShellSidebar() {
           onClick={() => openUseSkills({ focusComposer: false })}
           onMouseEnter={() => ROUTE_PREFETCH.home?.()}
           className={cn('wb-nav-item', doTaskActive && 'active')}
-          title={sidebarCollapsed ? '做任务' : '做任务 · 进入干 · 做任务（场景技能）'}
+          title={sidebarCollapsed ? '做任务' : '做任务 · 进入用 · 做任务（场景技能）'}
         >
           <i className="fa-solid fa-cube w-5 text-center text-[15px]" />
           <span className="nav-label">做任务</span>

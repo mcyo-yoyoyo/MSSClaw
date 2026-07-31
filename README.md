@@ -11,8 +11,8 @@
 | GitHub Pages | https://mcyo-yoyoyo.github.io/MSSClaw/ |
 | Vercel | https://mssclaw.vercel.app/ |
 
-- 演示账号：`mcyo@company.com` / `mssclaw`（平台运营 / 系统管理员）
-- 统一演示密码：`mssclaw`（登录页可选其他角色账号）
+- 演示账号：`mcyo@company.com`（平台运营）；默认仍可用演示密码 `mssclaw`（未单独设密时）
+- **生产前**：在「系统设置 · 组织权限」关闭演示密码，并用「账号密码」批量配置各账号密码
 - 与本地 `npm run dev` 为同一套 React 应用（静态托管 `apps/web` 构建产物）
 
 ### Vercel
@@ -146,11 +146,37 @@ MSSClaw/
 | `GET/PUT /api/v1/workspaces/:id/marketplace` | Agent / Skill / 自动化 / KB |
 | `POST /api/v1/executions/stream` | SSE 执行流 |
 
-## 内网部署建议
+## 内网部署与并发（约 500 人 / 64G·2T）
 
-**轻量（推荐试用）**：Node 20/22 LTS 构建前端 → Nginx / IIS 托管 `apps/web/dist`。无需数据库。约 2C / 4GB 即可。
+详见 **[docs/PERFORMANCE.md](./docs/PERFORMANCE.md)** 与 **[deploy/nginx.mssclaw.conf.example](./deploy/nginx.mssclaw.conf.example)**。
 
-**前端 + API**：再跑 Nest 进程，Prisma 使用 **SQLite 文件**（可写目录）；Nginx 反代静态资源与 `/api`。约 4C / 8GB。当前无官方 Docker 镜像；正式生产前需补强鉴权、备份与多租户隔离。
+| 模式 | 约 500 并发 | 建议 |
+|------|-------------|------|
+| **静态前端 only** | ✅ 推荐 | Nginx 托管 `apps/web/dist`；每用户独立 localStorage |
+| **前端 + Nest/SQLite** | ❌ 勿当共享业务库 | 仅小流量演示；共享写会互相覆盖且 SQLite 写串行 |
+
+**64G + 2T 硬件余量充足**；瓶颈在架构而非内存/磁盘。静态站点约 1–2GB RAM 即可。
+
+API 加固环境变量示例：`deploy/api.env.example`（限流、SSE 上限、可选 `API_KEY`、JSON body 上限）。
+
+### 内网部署：去掉演示数据
+
+代码内置了大量示例案例 / Agent / Skill / How to 等，**仅清浏览器缓存不够**——刷新后还会再灌进来。正式使用请二选一（可并用）：
+
+1. **部署时关掉（推荐）**  
+   构建前端时设置：
+   ```bash
+   VITE_INCLUDE_DEMO_CONTENT=false
+   ```
+   新打开的浏览器不会再加载系统自带示例；再通过「门户运营」导入真实案例即可。
+
+2. **已上线环境快速清空**（需 **平台运营** 账号，如 `mcyo@company.com`）  
+   - 入口 A：**侧栏「门户运营」** → 页头黄条旁 / 右上角 **「清空演示数据」**  
+   - 入口 B：侧栏或头像菜单 **「偏好设置」** → 往下滚到 **「演示内容」** → **「清空演示数据（正式使用）」**  
+   会清除本机示例缓存并关闭注入，然后刷新；**不会**清除登录、成员、租户与密码。  
+   **一键恢复**：清空后同一位置会出现 **「一键恢复演示内容」**，可重新加载系统自带示例（覆盖本机门户相关数据）。  
+   每个使用者的浏览器各自有一份 localStorage，若多人已打开过演示站，需各自点一次，或统一发新构建（上面第 1 步）。  
+   若构建时设置了 `VITE_INCLUDE_DEMO_CONTENT=false`，则无法在浏览器里恢复演示内容。
 
 ## 文档
 

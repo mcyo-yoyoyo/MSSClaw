@@ -21,7 +21,10 @@ export interface SessionUser {
 interface SessionState {
   user: SessionUser | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => { ok: true } | { ok: false; error: string };
+  login: (
+    email: string,
+    password: string,
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
   logout: () => void;
   getUserId: () => string;
   getUserName: () => string;
@@ -130,8 +133,8 @@ export const useSessionStore = create<SessionState>((set, get) => {
     user: initial,
     isAuthenticated: Boolean(initial),
 
-    login: (email, password) => {
-      const result = authenticate(email, password);
+    login: async (email, password) => {
+      const result = await authenticate(email, password);
       if (!result.ok) return { ok: false, error: result.error };
       const user = toSessionUser(result.account);
       persist(user);

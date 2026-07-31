@@ -1,4 +1,4 @@
-import type { AppView, NavSection } from '@/domain/appView';
+﻿import type { AppView, NavSection } from '@/domain/appView';
 import { APP_VIEWS } from '@/domain/appView';
 import { WORKSPACE_CONFIG_VIEW } from '@/domain/workspaceConfig';
 import { PlatformRoleSchema, ROLE_LABELS, type PlatformRole } from '@/domain/rbac';
@@ -52,7 +52,7 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   {
     id: 'home',
     label: '首页',
-    subtitle: '业务：找案例 · 做任务；运营：预览广场（学/干）',
+    subtitle: '业务：找案例 · 做任务；运营：预览广场（学/用）',
     icon: 'fa-house',
     section: 'workspace',
   },
@@ -114,7 +114,7 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   {
     id: 'portal-ops',
     label: '门户运营',
-    subtitle: '场景方案包 · 三槽分责上架',
+    subtitle: '场景方案包 · 工具 How to',
     icon: 'fa-newspaper',
     section: 'system',
     locked: true,

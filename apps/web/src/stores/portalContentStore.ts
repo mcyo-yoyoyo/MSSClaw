@@ -4,6 +4,7 @@ import {
   loadPortalContent,
   scheduleSavePortalContent,
 } from '@/domain/persistence/portalStorage';
+import { demoDefaults } from '@/domain/demoContentPolicy';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 interface PortalContentState {
@@ -23,7 +24,7 @@ interface PortalContentState {
 
 export const usePortalContentStore = create<PortalContentState>((set, get) => ({
   ready: false,
-  items: structuredClone(PROTOTYPE_PORTAL_CONTENT),
+  items: structuredClone(demoDefaults(PROTOTYPE_PORTAL_CONTENT)),
   toast: null,
 
   bootstrap: async (workspaceId) => {
@@ -47,9 +48,9 @@ export const usePortalContentStore = create<PortalContentState>((set, get) => ({
   },
 
   deleteItem: (id) => {
-    const seedIds = new Set(PROTOTYPE_PORTAL_CONTENT.map((p) => p.id));
+    const seedIds = new Set(demoDefaults(PROTOTYPE_PORTAL_CONTENT).map((p) => p.id));
     if (seedIds.has(id)) {
-      // 内置种子不可物理删除，改为下�?
+      // ?????????????????
       set((s) => ({
         items: s.items.map((row) => (row.id === id ? { ...row, published: false } : row)),
       }));
@@ -71,7 +72,7 @@ export const usePortalContentStore = create<PortalContentState>((set, get) => ({
   getPublishedItems: () => get().items.filter((i) => i.published !== false),
 
   resetToSeeds: () => {
-    set({ items: structuredClone(PROTOTYPE_PORTAL_CONTENT) });
+    set({ items: structuredClone(demoDefaults(PROTOTYPE_PORTAL_CONTENT)) });
     get().persist();
   },
 

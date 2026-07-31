@@ -1,4 +1,4 @@
-export const APP_VIEWS = [
+﻿export const APP_VIEWS = [
   'home',
   'ai-map',
   'task',
@@ -43,7 +43,7 @@ export const APP_VIEW_NAV: AppViewNavItem[] = [
   {
     id: 'home',
     label: '首页',
-    subtitle: '业务：找案例 · 做任务；运营：预览广场（学/干）',
+    subtitle: '业务：找案例 · 做任务；运营：预览广场（学/用）',
     icon: 'fa-house',
     section: 'workspace',
   },

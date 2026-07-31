@@ -1,10 +1,10 @@
-import { cn } from '@/lib/utils';
+﻿import { cn } from '@/lib/utils';
 import type { PrototypeAgentSeed } from '@/domain/prototype/types';
 import { HOME_SECONDARY_PANEL_H } from '@/components/home/CardPageCarousel';
 import { SectionToolbar } from '@/components/home/HomeScenePortal';
 
 /**
- * 干 · 做任务 · 场景专家：全域门面精选（营销/知识等），不分区域/领域。
+ * 用 · 做任务 · 场景专家：全域门面精选（营销/知识等），不分区域/领域。
  * 组织视角筛选只作用于上方「场景技能」，此处不重复、也不按 org 过滤。
  */
 export function SceneExpertPanel({

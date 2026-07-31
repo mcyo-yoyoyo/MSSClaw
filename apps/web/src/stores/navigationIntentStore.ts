@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+﻿import { create } from 'zustand';
 import type { AppView } from '@/domain/appView';
 import type { BusinessScenarioId } from '@/domain/businessScenarios';
 
@@ -18,7 +18,7 @@ interface NavigationIntentState {
   pendingPortalType: PortalOpsType | null;
   pendingScenarioId: string | null;
   pendingMessageId: string | null;
-  /** 干 · 做任务 / 学 · 找案例：预选业务场景筛选 */
+  /** 用 · 做任务 / 学 · 找案例：预选业务场景筛选 */
   pendingBusinessScenario: BusinessScenarioId | 'all' | null;
   returnTarget: NavReturnTarget | null;
   focusTool: (id: string) => void;

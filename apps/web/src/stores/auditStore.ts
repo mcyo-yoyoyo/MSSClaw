@@ -8,9 +8,14 @@ import {
 import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
 import { SEED_MEMBERS, type PlatformRole } from '@/domain/rbac';
 import { useSessionStore } from '@/stores/sessionStore';
+import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
 
 const LS_KEY = 'mssclaw_audit_log_v2';
 const MAX_LOGS = 400;
+
+function emptyOrSeedLogs(): AuditLogEntry[] {
+  return isDemoContentEnabled() ? [...SEED_AUDIT_LOGS] : [];
+}
 
 /** 旧日志缺少组织轴时，按邮箱从种子成员补全，便于筛选 */
 function enrichOrgFields(entry: AuditLogEntry): AuditLogEntry {
@@ -53,13 +58,13 @@ function loadLogs(): AuditLogEntry[] {
           return parsed;
         }
       }
-      return [...SEED_AUDIT_LOGS];
+      return emptyOrSeedLogs();
     }
     const parsed = JSON.parse(raw) as AuditLogEntry[];
-    if (!Array.isArray(parsed) || !parsed.length) return [...SEED_AUDIT_LOGS];
+    if (!Array.isArray(parsed) || !parsed.length) return emptyOrSeedLogs();
     return parsed.map(enrichOrgFields);
   } catch {
-    return [...SEED_AUDIT_LOGS];
+    return emptyOrSeedLogs();
   }
 }
 

@@ -1,5 +1,7 @@
 /** 内容运营 · 统一互动指标与排行（P2） */
 
+import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
+
 export type RankMode = 'trending' | 'newest' | 'top_rated' | 'most_used';
 
 export const RANK_MODE_OPTIONS: { id: RankMode; label: string }[] = [
@@ -93,7 +95,8 @@ export function resolveEngagement(
   id: string,
   map: Record<string, ContentEngagement>,
 ): ContentEngagement {
-  return map[id] ?? seedEngagement(id);
+  if (map[id]) return map[id];
+  return isDemoContentEnabled() ? seedEngagement(id) : emptyEngagement(id);
 }
 
 export function sortByRankMode<T extends RankableContent>(

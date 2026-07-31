@@ -22,10 +22,14 @@ import {
 } from '@/domain/aiToolCategories';
 import { listFeaturedFindCaseTools } from '@/domain/plazaToolPicks';
 import {
-  getPlazaToolGuides,
   PLAZA_GUIDE_TYPE_LABEL,
   type PlazaToolGuide,
 } from '@/domain/plazaToolGuides';
+import { isHowtoDataUrl, openHowtoResource } from '@/domain/howtoUpload';
+import {
+  ensurePlazaToolGuidesBootstrapped,
+  usePlazaToolGuideStore,
+} from '@/stores/plazaToolGuideStore';
 import {
   getBusinessScenarioMeta,
   getPrimaryBusinessScenario,
@@ -150,17 +154,19 @@ function ToolIconRow({
   tools,
   onOpen,
   onHowTo,
+  guidesFor,
   emptyText = '暂无推荐',
 }: {
   tools: PrototypeToolSeed[];
   onOpen: (id: string) => void;
   onHowTo: (tool: PrototypeToolSeed) => void;
+  guidesFor: (toolId: string) => PlazaToolGuide[];
   emptyText?: string;
 }) {
   return (
     <div className="flex min-h-0 items-center gap-2 overflow-x-auto px-0.5 scroll-hidden">
       {tools.map((t) => {
-        const hasGuide = getPlazaToolGuides(t.id).length > 0;
+        const hasGuide = guidesFor(t.id).length > 0;
         return (
           <div key={t.id} className="flex shrink-0 items-center gap-1.5 px-0.5">
             <button
@@ -218,6 +224,7 @@ function HowToDrawer({
           <div className="min-w-0">
             <p className="font-serif text-[12px] italic text-zinc-400">How to</p>
             <h3 className="mt-0.5 truncate text-[14px] font-semibold text-zinc-900">{toolName}</h3>
+            <p className="mt-0.5 text-[10px] text-zinc-400">图片 · PDF · PPT · 视频 · 链接 · 文字</p>
           </div>
           <button
             type="button"
@@ -235,17 +242,24 @@ function HowToDrawer({
               onClick={() => onOpenGuide(g)}
               className="flex w-full items-start gap-2.5 rounded-xl border border-zinc-200/80 bg-zinc-50/50 px-3 py-2.5 text-left transition hover:border-zinc-300 hover:bg-white"
             >
-              <span className="mt-0.5 shrink-0 rounded-md bg-zinc-900/90 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
-                {PLAZA_GUIDE_TYPE_LABEL[g.type]}
+              <span className="mt-0.5 shrink-0 rounded-md bg-zinc-900/90 px-1.5 py-0.5 text-[9px] font-semibold tracking-wide text-white">
+                {PLAZA_GUIDE_TYPE_LABEL[g.type] ?? g.type}
               </span>
               <span className="min-w-0">
                 <span className="block text-[12px] font-semibold text-zinc-800">{g.title}</span>
                 {g.blurb ? (
                   <span className="mt-0.5 block text-[10px] leading-snug text-zinc-400">{g.blurb}</span>
+                ) : g.type === 'text' && g.body ? (
+                  <span className="mt-0.5 block line-clamp-2 text-[10px] leading-snug text-zinc-400">
+                    {g.body}
+                  </span>
                 ) : null}
               </span>
             </button>
           ))}
+          {!guides.length ? (
+            <p className="py-8 text-center text-[11px] text-zinc-400">暂无指引</p>
+          ) : null}
         </div>
       </aside>
     </div>
@@ -262,6 +276,14 @@ export function HomeScenePortal({
   const portalContent = usePortalContentStore((s) => s.items);
   const showToast = useMarketplaceStore((s) => s.showToast);
   const user = useSessionStore((s) => s.user);
+  const guideRecords = usePlazaToolGuideStore((s) => s.records);
+
+  useEffect(() => {
+    ensurePlazaToolGuidesBootstrapped();
+  }, []);
+
+  const guidesFor = (toolId: string) =>
+    guideRecords.filter((r) => r.toolId === toolId).map(({ toolId: _t, ...g }) => g);
 
   const [businessFilter, setBusinessFilter] = useState<BusinessScenarioId | 'all'>('all');
   const pendingBusinessScenario = useNavigationIntentStore((s) => s.pendingBusinessScenario);
@@ -282,6 +304,7 @@ export function HomeScenePortal({
   }, [pendingBusinessScenario, consumeBusinessScenario]);
   const [toolCat, setToolCat] = useState<AiToolNavCategoryId>('chat');
   const [howToTool, setHowToTool] = useState<PrototypeToolSeed | null>(null);
+  const [guidePreview, setGuidePreview] = useState<PlazaToolGuide | null>(null);
   const [showcaseScenarioId, setShowcaseScenarioId] = useState<string | null>(null);
 
   const orgResetKey = useMemo(
@@ -430,11 +453,41 @@ export function HomeScenePortal({
   };
 
   const openGuideResource = (g: PlazaToolGuide) => {
-    if (!g.url || g.url === '#') {
-      showToast(`指引「${g.title}」演示占位，后续可挂 PPT / 图片 / 视频`);
+    if (g.type === 'text') {
+      if (g.body?.trim() || (g.url && g.url !== '#')) {
+        setGuidePreview(g);
+        return;
+      }
+      showToast(`指引「${g.title}」尚未填写正文`);
       return;
     }
-    window.open(g.url, '_blank', 'noopener,noreferrer');
+    if (g.type === 'image' && g.url && g.url !== '#') {
+      setGuidePreview(g);
+      return;
+    }
+    if (
+      g.type === 'video' &&
+      g.url &&
+      g.url !== '#' &&
+      (isHowtoDataUrl(g.url) || /\.(mp4|webm|mov)(\?|$)/i.test(g.url) || g.url.startsWith('blob:'))
+    ) {
+      setGuidePreview(g);
+      return;
+    }
+    if (!g.url || g.url === '#') {
+      showToast(`指引「${g.title}」尚未配置文件或链接（可在门户运营 · 工具 How to 上传/维护）`);
+      return;
+    }
+    const ok = openHowtoResource(g);
+    if (!ok) {
+      showToast('无法打开资源，请检查链接或重新上传');
+      return;
+    }
+    showToast(
+      isHowtoDataUrl(g.url)
+        ? `已打开上传文件：${g.fileName || g.title}`
+        : `已打开：${g.title}`,
+    );
   };
 
   const openScenario = (scenarioId: string) => {
@@ -587,7 +640,12 @@ export function HomeScenePortal({
         <div className={cn('grid grid-cols-1 gap-2 md:grid-cols-2', HOME_SECONDARY_PANEL_H)}>
           <div className="flex min-h-0 flex-col justify-center rounded-xl border border-zinc-200/80 bg-white px-2 py-1.5">
             <p className="mb-0.5 px-1 text-[10px] font-semibold leading-none text-zinc-400">外部</p>
-            <ToolIconRow tools={pickedTools.external} onOpen={openTool} onHowTo={openHowTo} />
+            <ToolIconRow
+              tools={pickedTools.external}
+              onOpen={openTool}
+              onHowTo={openHowTo}
+              guidesFor={guidesFor}
+            />
           </div>
           <div className="flex min-h-0 flex-col justify-center rounded-xl border border-zinc-200/80 bg-white px-2 py-1.5">
             <p className="mb-0.5 px-1 text-[10px] font-semibold leading-none text-zinc-400">内部</p>
@@ -595,6 +653,7 @@ export function HomeScenePortal({
               tools={pickedTools.internal}
               onOpen={openTool}
               onHowTo={openHowTo}
+              guidesFor={guidesFor}
               emptyText="暂无内部推荐"
             />
           </div>
@@ -604,11 +663,72 @@ export function HomeScenePortal({
       {howToTool ? (
         <HowToDrawer
           toolName={howToTool.name}
-          guides={getPlazaToolGuides(howToTool.id)}
+          guides={guidesFor(howToTool.id)}
           onClose={() => setHowToTool(null)}
           onOpenGuide={openGuideResource}
         />
       ) : null}
+
+      <CenterModal
+        open={!!guidePreview}
+        title={guidePreview ? `How to · ${guidePreview.title}` : 'How to'}
+        onClose={() => setGuidePreview(null)}
+        size="lg"
+        elevate
+        actions={
+          <>
+            {guidePreview?.url && guidePreview.url !== '#' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  openHowtoResource(guidePreview);
+                }}
+                className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium"
+              >
+                {isHowtoDataUrl(guidePreview.url)
+                  ? guidePreview.fileName
+                    ? `打开 ${guidePreview.fileName}`
+                    : '打开文件'
+                  : '打开链接'}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setGuidePreview(null)}
+              className="rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white"
+            >
+              关闭
+            </button>
+          </>
+        }
+      >
+        {guidePreview?.type === 'image' && guidePreview.url && guidePreview.url !== '#' ? (
+          <img
+            src={guidePreview.url}
+            alt={guidePreview.title}
+            className="mx-auto max-h-[70vh] w-auto max-w-full rounded-xl object-contain"
+          />
+        ) : null}
+        {guidePreview?.type === 'video' && guidePreview.url && guidePreview.url !== '#' ? (
+          <video
+            src={guidePreview.url}
+            controls
+            className="mx-auto max-h-[70vh] w-full max-w-full rounded-xl bg-black"
+          />
+        ) : null}
+        {guidePreview?.type === 'text' ? (
+          <div className="space-y-3 text-left">
+            {guidePreview.blurb ? (
+              <p className="text-[12px] text-zinc-500">{guidePreview.blurb}</p>
+            ) : null}
+            {guidePreview.body ? (
+              <pre className="whitespace-pre-wrap rounded-xl border border-zinc-100 bg-zinc-50/80 px-4 py-3 text-[13px] leading-relaxed text-zinc-800">
+                {guidePreview.body}
+              </pre>
+            ) : null}
+          </div>
+        ) : null}
+      </CenterModal>
 
       <CenterModal
         open={!!showcaseScenarioId}

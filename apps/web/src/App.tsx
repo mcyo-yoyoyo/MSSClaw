@@ -10,6 +10,7 @@ import { useConversationStore } from '@/stores/conversationStore';
 import { useHomeStore } from '@/stores/homeStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { usePortalContentStore } from '@/stores/portalContentStore';
+import { usePlazaToolGuideStore } from '@/stores/plazaToolGuideStore';
 import { useInboxStore } from '@/stores/inboxStore';
 import { getAgentById } from '@/domain/plan';
 import { buildSkillDemoPrompt } from '@/domain/skillRuntime';
@@ -157,6 +158,7 @@ export function App() {
 
         await useMarketplaceStore.getState().bootstrap(wsId);
         await usePortalContentStore.getState().bootstrap(wsId);
+        usePlazaToolGuideStore.getState().bootstrap(wsId);
         useInboxStore.getState().bootstrap(wsId);
 
         const persisted = await loadSessions(wsId);
@@ -181,6 +183,7 @@ export function App() {
       try {
         await useMarketplaceStore.getState().bootstrap(nextWorkspaceId);
         await usePortalContentStore.getState().bootstrap(nextWorkspaceId);
+        usePlazaToolGuideStore.getState().bootstrap(nextWorkspaceId);
         useInboxStore.getState().bootstrap(nextWorkspaceId);
         const persisted = await loadSessions(nextWorkspaceId);
         const catalog = useWorkspaceStore.getState().getCatalog(nextWorkspaceId);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type {
   PrototypeAgentSeed,
@@ -257,7 +257,7 @@ export function HomePage({
               {(
                 [
                   { id: 'portal' as const, label: '学 · 找案例', icon: 'fa-compass' },
-                  { id: 'assistant' as const, label: '干 · 做任务', icon: 'fa-list-check' },
+                  { id: 'assistant' as const, label: '用 · 做任务', icon: 'fa-list-check' },
                 ] as const
               ).map((tab) => (
                 <button

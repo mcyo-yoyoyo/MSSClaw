@@ -7,6 +7,7 @@ import {
   seedEngagement,
   type ContentEngagement,
 } from '@/domain/contentEngagement';
+import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
 
 const LS_KEY = 'mssclaw_content_engagement_v1';
 const LS_VOTE_KEY = 'mssclaw_content_user_votes_v1';
@@ -53,7 +54,8 @@ interface ContentEngagementState {
 }
 
 function ensure(map: Record<string, ContentEngagement>, id: string): ContentEngagement {
-  return map[id] ?? seedEngagement(id);
+  if (map[id]) return map[id];
+  return isDemoContentEnabled() ? seedEngagement(id) : emptyEngagement(id);
 }
 
 export const useContentEngagementStore = create<ContentEngagementState>((set, get) => ({
@@ -133,7 +135,7 @@ export const useContentEngagementStore = create<ContentEngagementState>((set, ge
     const list = Object.values(byId).length
       ? Object.values(byId)
       : [];
-    // 确保常见 id 也有种子参与队列演示：仅返回已有记录中需优化�?
+    // ???? id ??????????????????????�?
     return list.filter((e) => needsOptimization(e)).sort((a, b) => dislikeRatioDesc(b, a));
   },
 }));
@@ -144,8 +146,9 @@ function dislikeRatioDesc(a: ContentEngagement, b: ContentEngagement) {
   return ra - rb;
 }
 
-/** 演示：对一批内�?id 预热种子，便于运营看板有数据 */
+/** ???????�?id ?????????????? */
 export function ensureEngagementSeeds(ids: string[]) {
+  if (!isDemoContentEnabled()) return;
   const state = useContentEngagementStore.getState();
   const byId = { ...state.byId };
   let changed = false;
@@ -163,8 +166,9 @@ export function ensureEngagementSeeds(ids: string[]) {
 
 const DEMO_QUEUE_FLAG = 'mssclaw_engagement_demo_queue_v1';
 
-/** 仅首次写入高踩样本，便于运营看板演示「待优化」队�?*/
+/** ????????????????????????�?*/
 export function forceQueueDemoSeeds(ids: string[]) {
+  if (!isDemoContentEnabled()) return;
   try {
     if (localStorage.getItem(DEMO_QUEUE_FLAG)) return;
   } catch {

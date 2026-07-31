@@ -1,7 +1,8 @@
-import { create } from 'zustand';
+﻿import { create } from 'zustand';
 import type { InboxMessage, InboxMessageKind } from '@/domain/inbox';
 import { loadInboxMessages, saveInboxMessages } from '@/domain/persistence/inboxStorage';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
+import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 interface InboxState {
@@ -109,6 +110,7 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   },
 
   seedDemoIfEmpty: (userId) => {
+    if (!isDemoContentEnabled()) return;
     const mine = get().forUser(userId);
     if (mine.length) return;
     const now = Date.now();
@@ -117,7 +119,7 @@ export const useInboxStore = create<InboxState>((set, get) => ({
         id: `msg-seed-${now}-1`,
         kind: 'system',
         title: '欢迎使用「MSS AI提效作战平台」',
-        body: '这里是你的通知中枢：找案例学样板 → 做任务进入干·做任务开工 → 任务记录查看进度与交付 → 交付物可推送到协作空间或成员。系统提醒、协作通知与交付推送都会汇集于此。',
+        body: '这里是你的通知中枢：找案例学样板 → 做任务进入用·做任务开工 → 任务记录查看进度与交付 → 交付物可推送到协作空间或成员。系统提醒、协作通知与交付推送都会汇集于此。',
         fromName: 'MSS AI',
         toUserId: userId,
         createdAt: new Date(now - 3600_000).toISOString(),
@@ -127,7 +129,7 @@ export const useInboxStore = create<InboxState>((set, get) => ({
         id: `msg-seed-${now}-2`,
         kind: 'system',
         title: '上手提示：三步走通提效闭环',
-        body: '① 在「干 · 做任务」点选场景技能并补充意图；② 在「任务记录」确认计划并执行；③ 预览交付物后选择「推送」发给协作空间或同事——对方可在「我的消息」查收。',
+        body: '① 在「用 · 做任务」点选场景技能并补充意图；② 在「任务记录」确认计划并执行；③ 预览交付物后选择「推送」发给协作空间或同事——对方可在「我的消息」查收。',
         fromName: 'MSS AI',
         toUserId: userId,
         createdAt: new Date(now - 5400_000).toISOString(),
@@ -142,7 +144,7 @@ export const useInboxStore = create<InboxState>((set, get) => ({
         toUserId: userId,
         createdAt: new Date(now - 7200_000).toISOString(),
         read: true,
-        meta: { artifactType: 'marketing', query: '从干·做任务发起一次提效任务' },
+        meta: { artifactType: 'marketing', query: '从用·做任务发起一次提效任务' },
       },
     ];
     set((s) => ({ messages: [...seeds, ...s.messages] }));

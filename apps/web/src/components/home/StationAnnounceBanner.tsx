@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   ensureStationAnnouncementInbox,
+  getStationAnnouncements,
   openStationAnnouncement,
   openStationAnnouncementList,
-  STATION_ANNOUNCEMENTS,
 } from '@/domain/stationAnnouncements';
 
 const BADGE_CLASS: Record<string, string> = {
@@ -16,7 +16,7 @@ const BADGE_CLASS: Record<string, string> = {
 /** 站内公告广播条：压缩高度、无消息卡片外框 */
 export function StationAnnounceBanner({ className }: { className?: string }) {
   const [paused, setPaused] = useState(false);
-  const items = STATION_ANNOUNCEMENTS;
+  const items = getStationAnnouncements();
 
   useEffect(() => {
     ensureStationAnnouncementInbox();
@@ -29,6 +29,8 @@ export function StationAnnounceBanner({ className }: { className?: string }) {
     return [...unit, ...unit];
   }, [items]);
 
+  if (!items.length) return null;
+
   return (
     <div className={cn('flex items-center gap-2.5 py-1', className)}>
       <span className="shrink-0 text-[11px] font-semibold tracking-tight text-zinc-800">
@@ -39,36 +41,32 @@ export function StationAnnounceBanner({ className }: { className?: string }) {
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
       >
-        {items.length ? (
-          <div
-            className={cn(
-              'plaza-marquee-track flex w-max items-center gap-5',
-              paused && 'plaza-marquee-paused',
-            )}
-            style={{ animationDuration: `${Math.max(16, items.length * 6)}s` }}
-          >
-            {track.map((a, i) => (
-              <button
-                key={`${a.id}-${i}`}
-                type="button"
-                onClick={() => openStationAnnouncement(a.id)}
-                className="inline-flex max-w-[280px] shrink-0 items-baseline gap-1.5 text-left transition hover:opacity-80"
+        <div
+          className={cn(
+            'plaza-marquee-track flex w-max items-center gap-5',
+            paused && 'plaza-marquee-paused',
+          )}
+          style={{ animationDuration: `${Math.max(16, items.length * 6)}s` }}
+        >
+          {track.map((a, i) => (
+            <button
+              key={`${a.id}-${i}`}
+              type="button"
+              onClick={() => openStationAnnouncement(a.id)}
+              className="inline-flex max-w-[280px] shrink-0 items-baseline gap-1.5 text-left transition hover:opacity-80"
+            >
+              <span
+                className={cn(
+                  'shrink-0 text-[10px] font-semibold',
+                  BADGE_CLASS[a.badge] ?? 'text-zinc-500',
+                )}
               >
-                <span
-                  className={cn(
-                    'shrink-0 text-[10px] font-semibold',
-                    BADGE_CLASS[a.badge] ?? 'text-zinc-500',
-                  )}
-                >
-                  {a.badge}
-                </span>
-                <span className="truncate text-[12px] text-zinc-600">{a.title}</span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <p className="text-[11px] text-zinc-400">暂无公告</p>
-        )}
+                {a.badge}
+              </span>
+              <span className="truncate text-[12px] text-zinc-600">{a.title}</span>
+            </button>
+          ))}
+        </div>
       </div>
       <button
         type="button"

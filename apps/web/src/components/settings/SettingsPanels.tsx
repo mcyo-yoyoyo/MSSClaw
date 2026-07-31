@@ -25,10 +25,19 @@ import {
   type AuditLogQuery,
 } from '@/domain/auditLog';
 import { downloadAuditLogsExcel } from '@/domain/auditExport';
-import { DEMO_PASSWORD } from '@/domain/authAccounts';
+import {
+  batchSetAccountPasswords,
+  generateTempPassword,
+  hasCredential,
+  listCredentialEmails,
+  loadAuthPolicy,
+  setAccountPassword,
+  setAllowDemoPassword,
+} from '@/domain/accountCredentials';
 import { getNavMetaLabel } from '@/domain/navPresentation';
 import { cn } from '@/lib/utils';
 import type { InviteMemberInput } from '@/stores/settingsStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { useWorkspaceConfigStore } from '@/stores/workspaceConfigStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useOrgTaxonomyStore } from '@/stores/orgTaxonomyStore';
@@ -112,6 +121,7 @@ function MembersAndOrgPanel({
   const [deptId, setDeptId] = useState<DeptId | ''>('');
   const [regionId, setRegionId] = useState<RegionId | ''>('');
   const [activateNow, setActivateNow] = useState(true);
+  const [pwdTick, setPwdTick] = useState(0);
 
   const deptCoverage = useMemo(() => {
     const set = new Set<string>();
@@ -164,7 +174,7 @@ function MembersAndOrgPanel({
         </dl>
         <ol className="mt-4 list-decimal space-y-1 pl-4 text-[11px] leading-relaxed text-zinc-500">
           <li>平台运营邀请邮箱并指定角色 / 部门 / 区域</li>
-          <li>激活后可用演示密码 <code className="rounded bg-zinc-100 px-1">{DEMO_PASSWORD}</code> 登录</li>
+          <li>激活或批量设密后，用户用专属密码登录（生产请关闭演示密码）</li>
           <li>会话携带角色与组织归属，驱动菜单、资产可见性与审计回溯</li>
         </ol>
       </Section>
@@ -408,6 +418,26 @@ function MembersAndOrgPanel({
                         <button
                           type="button"
                           onClick={() => {
+                            void (async () => {
+                              const temp = generateTempPassword();
+                              const r = await setAccountPassword(member.email, temp);
+                              if (r.ok) {
+                                window.alert(
+                                  `${member.email} 临时密码已重置为：\n${temp}\n\n请安全告知本人后立即销毁此提示。`,
+                                );
+                                setPwdTick((n) => n + 1);
+                              } else {
+                                window.alert(r.error);
+                              }
+                            })();
+                          }}
+                          className="rounded border border-zinc-200 px-2 py-0.5 text-[10px] font-semibold text-zinc-600 hover:bg-zinc-50"
+                        >
+                          重置密码
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
                             if (window.confirm(`确定移除 ${member.name}？`)) onRemove(member.id);
                           }}
                           className="rounded border border-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-600 hover:bg-red-50"
@@ -425,7 +455,154 @@ function MembersAndOrgPanel({
           </table>
         </div>
       </Section>
+
+      {canManage ? (
+        <AccountPasswordAdminSection members={members} tick={pwdTick} onChanged={() => setPwdTick((n) => n + 1)} />
+      ) : null}
     </div>
+  );
+}
+
+function AccountPasswordAdminSection({
+  members,
+  tick,
+  onChanged,
+}: {
+  members: WorkspaceMember[];
+  tick: number;
+  onChanged: () => void;
+}) {
+  const [allowDemo, setAllowDemo] = useState(() => loadAuthPolicy().allowDemoPassword);
+  const [batchText, setBatchText] = useState(
+    '# 每行：邮箱,密码\nmcyo@company.com,ChangeMe123\n',
+  );
+  const [singleEmail, setSingleEmail] = useState('');
+  const [singlePwd, setSinglePwd] = useState('');
+  const [busy, setBusy] = useState(false);
+  const setToast = useSettingsStore((s) => s.setToast);
+
+  void tick;
+  const credCount = listCredentialEmails().length;
+  const activeEmails = members.filter((m) => m.status === 'active').map((m) => m.email);
+
+  return (
+    <Section title="账号密码（短期生产）">
+      <p className="mb-3 text-[11px] leading-relaxed text-zinc-500">
+        密码以哈希保存在本机浏览器（平台运营配置用）。关闭演示密码后，仅已设密账号可登录。
+        正式 SSO 上线前作过渡方案。已设密账号：{credCount}。
+      </p>
+      <label className="mb-4 flex items-start gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-[12px] text-zinc-700">
+        <input
+          type="checkbox"
+          className="mt-0.5 accent-claw-600"
+          checked={allowDemo}
+          onChange={(e) => {
+            const next = e.target.checked;
+            setAllowDemo(next);
+            setAllowDemoPassword(next);
+            setToast(
+              next
+                ? '已开启演示密码（未设密账号仍可用 mssclaw）'
+                : '已关闭演示密码：必须为账号单独设密',
+            );
+          }}
+        />
+        <span>
+          <span className="font-semibold">允许演示密码登录</span>
+          <span className="mt-0.5 block text-[11px] text-zinc-400">
+            生产部署前请关闭。关闭后，未设密账号无法登录。
+          </span>
+        </span>
+      </label>
+
+      <div className="mb-4 space-y-2 rounded-xl border border-zinc-200 bg-white p-3">
+        <p className="text-[12px] font-semibold text-zinc-800">单账号设密</p>
+        <div className="flex flex-wrap gap-2">
+          <select
+            value={singleEmail}
+            onChange={(e) => setSingleEmail(e.target.value)}
+            className="min-w-[200px] rounded-lg border border-zinc-200 px-2 py-1.5 text-[12px]"
+          >
+            <option value="">选择成员邮箱</option>
+            {activeEmails.map((em) => (
+              <option key={em} value={em}>
+                {em}
+                {hasCredential(em) ? ' · 已设密' : ' · 未设密'}
+              </option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={singlePwd}
+            onChange={(e) => setSinglePwd(e.target.value)}
+            placeholder="新密码（≥6 位）"
+            className="min-w-[160px] flex-1 rounded-lg border border-zinc-200 px-2 py-1.5 text-[12px]"
+          />
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              void (async () => {
+                setBusy(true);
+                const r = await setAccountPassword(singleEmail, singlePwd);
+                setBusy(false);
+                if (r.ok) {
+                  setToast(`已为 ${singleEmail} 设置密码`);
+                  setSinglePwd('');
+                  onChanged();
+                } else setToast(r.error);
+              })();
+            }}
+            className="rounded-lg bg-zinc-900 px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
+          >
+            保存
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-2 rounded-xl border border-zinc-200 bg-white p-3">
+        <p className="text-[12px] font-semibold text-zinc-800">批量导入密码</p>
+        <textarea
+          rows={5}
+          value={batchText}
+          onChange={(e) => setBatchText(e.target.value)}
+          className="w-full rounded-lg border border-zinc-200 px-2.5 py-2 font-mono text-[11px] text-zinc-800"
+          spellCheck={false}
+        />
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              void (async () => {
+                setBusy(true);
+                const r = await batchSetAccountPasswords(batchText);
+                setBusy(false);
+                onChanged();
+                setToast(
+                  r.fail.length
+                    ? `成功 ${r.ok} 条，失败 ${r.fail.length} 条`
+                    : `已批量设置 ${r.ok} 个账号密码`,
+                );
+              })();
+            }}
+            className="rounded-lg bg-claw-600 px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
+          >
+            批量应用
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const lines = activeEmails.map((em) => `${em},${generateTempPassword()}`);
+              setBatchText(`# 已生成临时密码草稿，确认后点「批量应用」\n${lines.join('\n')}\n`);
+            }}
+            className="rounded-lg border border-zinc-200 px-3 py-1.5 text-[12px] font-medium text-zinc-700 hover:bg-zinc-50"
+          >
+            为全部激活成员生成草稿
+          </button>
+        </div>
+      </div>
+    </Section>
   );
 }
 
@@ -784,7 +961,7 @@ function RolesAndRbacPanel({ workspace }: { workspace: Workspace }) {
     <div className="space-y-6">
       <Section title={`角色与权限 · ${workspace.name}`}>
         <p className="mb-4 text-xs text-[#86868b]">
-          四角色统一矩阵：平台运营为全模块 Admin（由种子/白名单产生，不通过邀请下发）。Admin =
+          四角色统一矩阵：平台运营为全模块 Admin（由系统预置账号或白名单开通，不能靠邀请产生）。Admin =
           完全控制 · Write = 创建/编辑 · Execute = 运行 · R = 只读 · — = 无权限。实际授权通过「成员与组织」改派角色。
         </p>
         <div className="overflow-x-auto rounded-xl border border-black/[0.06]">

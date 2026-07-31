@@ -1,4 +1,5 @@
-import type { InboxMessage } from '@/domain/inbox';
+﻿import type { InboxMessage } from '@/domain/inbox';
+import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
 import { useInboxStore } from '@/stores/inboxStore';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
@@ -18,12 +19,12 @@ export type StationAnnouncement = {
   publishedAt: string;
 };
 
-/** 演示种子：正式环境由门户运营配置下发 */
-export const STATION_ANNOUNCEMENTS: StationAnnouncement[] = [
+/** 系统自带示例公告（正式环境请关闭演示内容后自行配置） */
+const STATION_ANNOUNCEMENT_SEEDS: StationAnnouncement[] = [
   {
     id: 'ann-ops-feature-scenario-ia',
     title: '功能上线：业务场景主线与场景技能',
-    body: '找案例 / 做任务已对齐学·干双轨：学 · 找案例看样板，干 · 做任务选技能开工；组织视角筛选已同步上线。详情与指引见本条消息。',
+    body: '找案例 / 做任务已对齐学·用双轨：学 · 找案例看样板，用 · 做任务选技能开工；组织视角筛选已同步上线。详情与指引见本条消息。',
     badge: '上线',
     publishedAt: '2026-07-22T09:00:00.000Z',
   },
@@ -50,11 +51,20 @@ export const STATION_ANNOUNCEMENTS: StationAnnouncement[] = [
   },
 ];
 
+export function getStationAnnouncements(): StationAnnouncement[] {
+  return isDemoContentEnabled() ? STATION_ANNOUNCEMENT_SEEDS : [];
+}
+
+/** @deprecated 使用 getStationAnnouncements()；保留别名兼容旧引用 */
+export const STATION_ANNOUNCEMENTS = STATION_ANNOUNCEMENT_SEEDS;
+
 /** 将运营公告同步为广播站内消息（幂等） */
 export function ensureStationAnnouncementInbox() {
+  const announcements = getStationAnnouncements();
+  if (!announcements.length) return;
   const { messages } = useInboxStore.getState();
   const existing = new Set(messages.map((m) => m.id));
-  const toAdd: InboxMessage[] = STATION_ANNOUNCEMENTS.filter((a) => !existing.has(a.id)).map(
+  const toAdd: InboxMessage[] = announcements.filter((a) => !existing.has(a.id)).map(
     (a) => ({
       id: a.id,
       kind: 'system',

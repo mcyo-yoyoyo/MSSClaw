@@ -9,6 +9,13 @@ import { CaseEditorModal } from '@/components/center/CaseEditorModal';
 import { OrgAssetFilterBar } from '@/components/center/OrgAssetFilters';
 import { formatEngagementLine } from '@/components/content/EngagementActions';
 import { isSystemAdmin } from '@/domain/currentUser';
+import {
+  clearDemoContentAndDisable,
+  demoContentStatusLabel,
+  envAllowsDemoContent,
+  isDemoContentEnabled,
+  restoreDemoContentDefaults,
+} from '@/domain/demoContentPolicy';
 import { ASSET_VISIBILITY_LABELS } from '@/domain/orgTaxonomy';
 import type { DeptFilter, RegionFilter } from '@/domain/assetFilters';
 import { heatScore } from '@/domain/contentEngagement';
@@ -30,8 +37,11 @@ import {
   forceQueueDemoSeeds,
   useContentEngagementStore,
 } from '@/stores/contentEngagementStore';
+import { usePlazaToolGuideStore } from '@/stores/plazaToolGuideStore';
+import { PortalHowToOpsPanel } from '@/features/ops/PortalHowToOpsPanel';
 
 type EditorTarget = string | 'new' | null;
+type OpsSurface = 'packs' | 'howto';
 
 /** 运营视角：全部 / 只展开某负责人槽位 */
 type SlotFocus = 'all' | ScenarioPackSlotId;
@@ -65,6 +75,7 @@ export function PortalContentOpsPage() {
   const engagementById = useContentEngagementStore((s) => s.byId);
   const optimizationQueue = useContentEngagementStore((s) => s.optimizationQueue);
 
+  const [opsSurface, setOpsSurface] = useState<OpsSurface>('packs');
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState<DeptFilter>('all');
   const [regionFilter, setRegionFilter] = useState<RegionFilter>('all');
@@ -73,6 +84,19 @@ export function PortalContentOpsPage() {
   const [editorType, setEditorType] = useState<PortalContentItem['type']>('case');
   const [editorTags, setEditorTags] = useState<string[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const howtoToast = usePlazaToolGuideStore((s) => s.toast);
+  const dismissHowtoToast = usePlazaToolGuideStore((s) => s.dismissToast);
+  const bootstrapHowto = usePlazaToolGuideStore((s) => s.bootstrap);
+
+  useEffect(() => {
+    bootstrapHowto();
+  }, [bootstrapHowto]);
+
+  useEffect(() => {
+    if (!howtoToast) return;
+    const t = window.setTimeout(() => dismissHowtoToast(), 2800);
+    return () => window.clearTimeout(t);
+  }, [howtoToast, dismissHowtoToast]);
 
   const consumePortalType = useNavigationIntentStore((s) => s.consumePortalType);
   const consumePortalEditId = useNavigationIntentStore((s) => s.consumePortalEditId);
@@ -205,63 +229,193 @@ export function PortalContentOpsPage() {
       <div className="mx-auto max-w-6xl">
         <CenterPageHeader
           title="门户运营"
-          subtitle="按场景方案包配置 · 三槽分责维护"
+          subtitle={
+            opsSurface === 'packs'
+              ? '按场景方案包配置 · 三槽分责维护'
+              : '常用 AI 工具 How to · 找案例精选指引'
+          }
           tip={
-            <>
-              用户在找案例看到的是<strong className="font-semibold">一张场景卡 = 完整学习包</strong>
-              （洞察 + 案例 + 课件）。运营侧按三槽分责填写：洞察 / 案例 / 课件负责人各自维护本槽，
-              「用户侧预览」即打开前端真实学习层。
-            </>
+            opsSurface === 'packs' ? (
+              <>
+                用户在找案例看到的是<strong className="font-semibold">一张场景卡 = 完整学习包</strong>
+                （洞察 + 案例 + 课件）。运营侧按三槽分责填写；「用户侧预览」打开前端真实学习层。
+              </>
+            ) : (
+              <>
+                维护找案例「常用 AI 工具（精选）」的 How to：可上传文件或填链接（图片 / PDF / PPT / 短视频 / 文字），「链接」类型仅填 URL；保存后首页立即生效。
+              </>
+            )
           }
           actions={
-            <>
-              <CenterSearchInput
-                value={search}
-                onChange={setSearch}
-                placeholder="搜索场景或内容…"
-              />
-              <label className="cursor-pointer rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03]">
-                导入
-                <input
-                  type="file"
-                  accept=".zip,.case.zip,.json,application/zip,application/json"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = '';
-                    if (!file) return;
-                    try {
-                      const imported = await parseCaseUpload(file);
-                      if (!imported.length) {
-                        showToast('未能解析案例包');
+            opsSurface === 'packs' ? (
+              <>
+                <CenterSearchInput
+                  value={search}
+                  onChange={setSearch}
+                  placeholder="搜索场景或内容…"
+                />
+                <label className="cursor-pointer rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03]">
+                  导入
+                  <input
+                    type="file"
+                    accept=".zip,.case.zip,.json,application/zip,application/json"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (!file) return;
+                      try {
+                        const imported = await parseCaseUpload(file);
+                        if (!imported.length) {
+                          showToast('未能解析案例包');
+                          return;
+                        }
+                        for (const item of imported) {
+                          upsertItem(item, !items.some((i) => i.id === item.id));
+                        }
+                        showToast(`已导入 ${imported.length} 条`);
+                      } catch {
+                        showToast('导入失败，请检查文件格式');
+                      }
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        '确定恢复为系统自带的示例内容？你改过、新建的门户内容都会被覆盖。',
+                      )
+                    ) {
+                      return;
+                    }
+                    resetToSeeds();
+                    showToast('已恢复为默认示例内容');
+                  }}
+                  className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03]"
+                >
+                  恢复默认示例
+                </button>
+                {isDemoContentEnabled() ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (
+                        !window.confirm(
+                          '确定清空本机演示数据并关闭示例注入？\n\n将清除门户案例、Agent/Skill/工具示例、How to、站内消息等。\n不会清除登录、成员与密码。\n清空后页面将刷新。',
+                        )
+                      ) {
                         return;
                       }
-                      for (const item of imported) {
-                        upsertItem(item, !items.some((i) => i.id === item.id));
-                      }
-                      showToast(`已导入 ${imported.length} 条`);
-                    } catch {
-                      showToast('导入失败，请检查文件格式');
-                    }
-                  }}
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  resetToSeeds();
-                  showToast('已重置为内置种子');
-                }}
-                className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03]"
-              >
-                重置种子
-              </button>
-            </>
+                      const { removed } = clearDemoContentAndDisable();
+                      showToast(`已清空演示数据（${removed} 项），即将刷新…`);
+                      window.setTimeout(() => window.location.reload(), 400);
+                    }}
+                    className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-[12px] font-semibold text-red-700 transition hover:bg-red-100"
+                  >
+                    清空演示数据
+                  </button>
+                ) : null}
+              </>
+            ) : null
           }
         />
 
-        <StatCardGrid items={stats} />
+        {!isDemoContentEnabled() ? (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-4 py-3">
+            <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-emerald-900">
+              演示内容已关闭（{demoContentStatusLabel()}）。可导入真实案例；若要重新做演示，可一键恢复系统自带示例。
+            </p>
+            {envAllowsDemoContent() ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      '确定一键恢复系统自带演示内容？\n\n将重新加载示例案例、Agent/Skill/工具、How to 等，并覆盖本机当前门户相关数据。\n登录与成员不受影响。恢复后页面将刷新。',
+                    )
+                  ) {
+                    return;
+                  }
+                  const result = restoreDemoContentDefaults();
+                  if (!result.ok) {
+                    showToast(result.reason);
+                    return;
+                  }
+                  showToast('已恢复默认演示内容，即将刷新…');
+                  window.setTimeout(() => window.location.reload(), 400);
+                }}
+                className="shrink-0 rounded-xl bg-zinc-900 px-3 py-1.5 text-[12px] font-semibold text-white transition hover:bg-zinc-800"
+              >
+                一键恢复演示内容
+              </button>
+            ) : (
+              <p className="shrink-0 text-[11px] text-emerald-800/80">
+                部署已关闭演示，无法恢复
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200/80 bg-amber-50/60 px-4 py-3">
+            <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-amber-950">
+              当前仍在使用系统自带示例。内网正式使用前请先清空，再导入真实案例。
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    '确定清空本机演示数据并关闭示例注入？\n\n将清除门户案例、Agent/Skill/工具示例、How to、站内消息等。\n不会清除登录、成员与密码。\n清空后页面将刷新。',
+                  )
+                ) {
+                  return;
+                }
+                const { removed } = clearDemoContentAndDisable();
+                showToast(`已清空演示数据（${removed} 项），即将刷新…`);
+                window.setTimeout(() => window.location.reload(), 400);
+              }}
+              className="shrink-0 rounded-xl border border-red-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-red-700 transition hover:bg-red-50"
+            >
+              清空演示数据
+            </button>
+          </div>
+        )}
 
+        <div className="mb-4 flex flex-wrap gap-1.5">
+          {(
+            [
+              { id: 'packs' as const, label: '场景方案包' },
+              { id: 'howto' as const, label: '工具 How to' },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setOpsSurface(tab.id)}
+              className={cn(
+                'rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition',
+                opsSurface === tab.id
+                  ? 'bg-zinc-900 text-white'
+                  : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200/80',
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {howtoToast ? (
+          <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-800">
+            {howtoToast}
+          </div>
+        ) : null}
+
+        {opsSurface === 'howto' ? <PortalHowToOpsPanel /> : null}
+
+        {opsSurface === 'packs' ? <StatCardGrid items={stats} /> : null}
+
+        {opsSurface === 'packs' ? (
         <div className="mb-4">
           <OrgAssetFilterBar
             deptFilter={deptFilter}
@@ -271,8 +425,9 @@ export function PortalContentOpsPage() {
             collapsible
           />
         </div>
+        ) : null}
 
-        {pendingOptimize.length > 0 ? (
+        {opsSurface === 'packs' && pendingOptimize.length > 0 ? (
           <div className="mb-4 rounded-2xl border border-amber-200/80 bg-amber-50/50 px-4 py-3">
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-[12px] font-semibold text-amber-900">待优化</h3>
@@ -297,6 +452,8 @@ export function PortalContentOpsPage() {
           </div>
         ) : null}
 
+        {opsSurface === 'packs' ? (
+        <>
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-medium text-zinc-500">负责人视角</span>
           <div className="flex flex-wrap gap-1.5">
@@ -586,6 +743,8 @@ export function PortalContentOpsPage() {
               ))}
             </div>
           </section>
+        ) : null}
+        </>
         ) : null}
       </div>
 

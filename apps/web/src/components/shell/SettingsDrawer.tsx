@@ -33,9 +33,14 @@ export function SettingsDrawer() {
         )}
       >
         <div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-4">
-          <h2 id="prefs-drawer-title" className="text-[15px] font-semibold text-[#1d1d1f]">
-            偏好设置
-          </h2>
+          <div>
+            <h2 id="prefs-drawer-title" className="text-[15px] font-semibold text-[#1d1d1f]">
+              偏好设置
+            </h2>
+            <p className="mt-0.5 text-[11px] text-zinc-400">
+              平台运营可在下方找到「演示内容」清空示例
+            </p>
+          </div>
           <button
             type="button"
             onClick={closeSettings}

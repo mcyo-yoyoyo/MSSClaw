@@ -1,4 +1,4 @@
-import type { BusinessScenarioId } from '@/domain/businessScenarios';
+﻿import type { BusinessScenarioId } from '@/domain/businessScenarios';
 import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
 import { openResourceWithReturn } from '@/domain/openResourceNav';
 import { useAppViewStore } from '@/stores/appViewStore';
@@ -8,7 +8,7 @@ import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useTaskStore } from '@/stores/taskStore';
 
 export type HomeJourneyOpts = {
-  /** 预选业务场景筛选（学 · 找案例 / 干 · 做任务共用） */
+  /** 预选业务场景筛选（学 · 找案例 / 用 · 做任务共用） */
   businessId?: BusinessScenarioId | 'all';
   focusComposer?: boolean;
 };
@@ -22,7 +22,7 @@ export function openFindCases(opts?: HomeJourneyOpts) {
   useAppViewStore.getState().setAppView('home');
 }
 
-/** 做任务 → Tab「干 · 做任务」场景技能页；只读用户回落找案例 */
+/** 做任务 → Tab「用 · 做任务」场景技能页；只读用户回落找案例 */
 export function openUseSkills(opts?: HomeJourneyOpts) {
   if (opts?.businessId) {
     useNavigationIntentStore.getState().focusBusinessScenario(opts.businessId);

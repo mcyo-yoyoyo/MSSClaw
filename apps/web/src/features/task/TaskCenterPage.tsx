@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { WarRoomMembersModal } from '@/components/task/WarRoomMembersModal';
 import { TaskChatPanel } from '@/components/chat/TaskChatPanel';
 import { ArtifactPanel } from '@/components/artifact/ArtifactPanel';
@@ -226,7 +226,7 @@ export function TaskCenterPage(_props: TaskCenterPageProps) {
           <div className="text-center">
             <p className="text-[14px] font-medium text-zinc-700">还没有任务</p>
             <p className="mt-1 text-[12px] text-zinc-400">
-              按业务场景选一类，从「做任务」进入干 · 做任务开工；或打开已有记录
+              按业务场景选一类，从「做任务」进入用 · 做任务开工；或打开已有记录
             </p>
           </div>
           {executeAllowed ? (

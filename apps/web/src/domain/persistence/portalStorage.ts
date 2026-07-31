@@ -11,6 +11,7 @@ import {
   savePortalContentApi,
 } from '@/api/persistenceApi';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { demoDefaults } from '@/domain/demoContentPolicy';
 
 export interface PortalContentSnapshot {
   items: PortalContentItem[];
@@ -31,9 +32,10 @@ function readLocalPortalContent(workspaceId: string): PortalContentSnapshot {
   try {
     const raw = localStorage.getItem(portalContentKeyForWorkspace(workspaceId));
     const saved = raw ? (JSON.parse(raw) as PortalContentItem[] | null) : null;
-    return { items: mergeCatalog(PROTOTYPE_PORTAL_CONTENT, saved) };
+    const defaults = demoDefaults(PROTOTYPE_PORTAL_CONTENT);
+    return { items: mergeCatalog(defaults, saved) };
   } catch {
-    return { items: structuredClone(PROTOTYPE_PORTAL_CONTENT) };
+    return { items: structuredClone(demoDefaults(PROTOTYPE_PORTAL_CONTENT)) };
   }
 }
 
@@ -48,7 +50,9 @@ export async function loadPortalContent(workspaceId: string): Promise<PortalCont
     try {
       const remote = await fetchPortalContentApi(workspaceId);
       if (remote?.items) {
-        return { items: mergeCatalog(PROTOTYPE_PORTAL_CONTENT, remote.items) };
+        return {
+          items: mergeCatalog(demoDefaults(PROTOTYPE_PORTAL_CONTENT), remote.items),
+        };
       }
     } catch {
       /* fall through */

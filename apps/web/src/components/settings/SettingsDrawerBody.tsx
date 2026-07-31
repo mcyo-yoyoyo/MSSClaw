@@ -2,6 +2,13 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { getApiBase, LS_API_KEY } from '@/api/client';
 import { isSystemAdmin } from '@/domain/currentUser';
+import {
+  clearDemoContentAndDisable,
+  demoContentStatusLabel,
+  envAllowsDemoContent,
+  isDemoContentEnabled,
+  restoreDemoContentDefaults,
+} from '@/domain/demoContentPolicy';
 import { canConfigureModelApi } from '@/domain/permissions';
 import { loadSecurityPolicy, saveSecurityPolicy } from '@/domain/securityPolicy';
 import { loadWarroomWebhookUrl, saveWarroomWebhookUrl } from '@/domain/webhookConfig';
@@ -162,7 +169,71 @@ export function SettingsDrawerBody({ onClose }: SettingsDrawerBodyProps) {
             </label>
           </SettingsCard>
 
-          <SettingsCard title="Runtime" hint="演示环境后端地址与作战室推送。">
+          <SettingsCard
+            title="演示内容"
+            hint="内网正式使用前，可清空系统自带示例案例/工具/消息等，再导入真实数据。登录账号与成员不会被清除。"
+          >
+            <p className="mb-3 text-[12px] text-[#1d1d1f]">
+              当前状态：
+              <span className="ml-1 font-medium">{demoContentStatusLabel()}</span>
+            </p>
+            {isDemoContentEnabled() ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      '确定清空本机演示数据并关闭示例注入？\n\n将清除：门户案例、Agent/Skill/工具示例、How to、站内消息与互动示意等。\n不会清除：登录态、成员、租户与密码配置。\n\n清空后页面将刷新，便于导入真实数据。',
+                    )
+                  ) {
+                    return;
+                  }
+                  const { removed } = clearDemoContentAndDisable();
+                  showToast(`已清空演示数据（${removed} 项缓存），即将刷新…`);
+                  window.setTimeout(() => window.location.reload(), 400);
+                }}
+                className="w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-700 transition hover:bg-red-100"
+              >
+                清空演示数据（正式使用）
+              </button>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-[11px] leading-relaxed text-[#86868b]">
+                  示例已关闭。可导入真实案例；需要演示时点下方一键恢复系统自带内容。
+                </p>
+                {envAllowsDemoContent() ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (
+                        !window.confirm(
+                          '确定一键恢复系统自带演示内容？\n\n将重新加载示例案例、Agent/Skill/工具、How to 等，并覆盖本机当前门户相关数据。\n登录与成员不受影响。恢复后页面将刷新。',
+                        )
+                      ) {
+                        return;
+                      }
+                      const result = restoreDemoContentDefaults();
+                      if (!result.ok) {
+                        showToast(result.reason);
+                        return;
+                      }
+                      showToast('已恢复默认演示内容，即将刷新…');
+                      window.setTimeout(() => window.location.reload(), 400);
+                    }}
+                    className="w-full rounded-xl bg-zinc-900 px-3 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-800"
+                  >
+                    一键恢复演示内容
+                  </button>
+                ) : (
+                  <p className="text-[11px] text-[#86868b]">
+                    当前构建已设置 VITE_INCLUDE_DEMO_CONTENT=false，无法在本机恢复演示内容。
+                  </p>
+                )}
+              </div>
+            )}
+          </SettingsCard>
+
+          <SettingsCard title="Runtime" hint="后端地址与作战室推送（可选）。">
             <label className="mb-1 block text-[12px] text-[#86868b]">API 地址（可选）</label>
             <input
               type="text"

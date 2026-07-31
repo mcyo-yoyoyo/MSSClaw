@@ -13,7 +13,10 @@ import {
   type RegionId,
 } from '@/domain/orgTaxonomy';
 
-/** 演示环境统一密码（对接成员权限管理账号） */
+/**
+ * 遗留演示密码。仅当「允许演示密码」开启且该账号尚未单独设密时可用。
+ * 生产请在组织权限中关闭演示密码，并为账号批量设密。
+ */
 export const DEMO_PASSWORD = 'mssclaw';
 
 export interface LoginAccount {
@@ -152,14 +155,17 @@ export type AuthResult =
   | { ok: true; account: LoginAccount }
   | { ok: false; error: string };
 
-export function authenticate(emailInput: string, password: string): AuthResult {
+export async function authenticate(
+  emailInput: string,
+  password: string,
+): Promise<AuthResult> {
   const email = emailInput.trim().toLowerCase();
   if (!email) return { ok: false, error: '请输入邮箱账号' };
   if (!password) return { ok: false, error: '请输入密码' };
 
   const account = buildLoginAccounts().find((a) => a.email.toLowerCase() === email);
   if (!account) {
-    return { ok: false, error: '账号不存在，请使用成员权限管理中的邮箱登录' };
+    return { ok: false, error: '账号不存在，请使用组织权限中的邮箱登录' };
   }
   if (account.status === 'invited') {
     return { ok: false, error: '该成员尚未激活，请联系管理员完成邀请' };
@@ -167,10 +173,29 @@ export function authenticate(emailInput: string, password: string): AuthResult {
   if (account.status === 'suspended') {
     return { ok: false, error: '账号已停用，无法登录' };
   }
-  if (password !== DEMO_PASSWORD) {
-    return { ok: false, error: '密码错误（演示密码：mssclaw）' };
+
+  const { loadAuthPolicy, verifyAccountPassword } = await import(
+    '@/domain/accountCredentials'
+  );
+  const policy = loadAuthPolicy();
+  const verified = await verifyAccountPassword(email, password);
+
+  if (verified === 'match') return { ok: true, account };
+  if (verified === 'mismatch') {
+    return { ok: false, error: '密码错误' };
   }
-  return { ok: true, account };
+
+  // 未单独设密
+  if (policy.allowDemoPassword && password === DEMO_PASSWORD) {
+    return { ok: true, account };
+  }
+  if (!policy.allowDemoPassword) {
+    return {
+      ok: false,
+      error: '该账号尚未设置密码，请联系平台运营在「组织权限」中配置',
+    };
+  }
+  return { ok: false, error: '密码错误' };
 }
 
 /** 登录页展示的演示账号提示（按角色排序的四位种子） */

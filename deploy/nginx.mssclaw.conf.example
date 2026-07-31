@@ -1,0 +1,82 @@
+# MSS Claw · 私服 Nginx 示例（约 500 并发浏览 · 静态前端优先）
+# 用法：复制并按域名/证书路径修改后 include 到 nginx.conf
+#
+# 推荐拓扑（64G / 2T 机器绰绰有余）：
+#   浏览器 → Nginx(TLS + 静态 apps/web/dist) → [可选] Nest API :3000
+#
+# 说明：当前原型默认每用户 localStorage；勿把 SQLite API 当 500 人共享写库。
+
+worker_processes auto;
+worker_rlimit_nofile 65535;
+
+events {
+  worker_connections 4096;
+  multi_accept on;
+}
+
+http {
+  include       mime.types;
+  default_type  application/octet-stream;
+  sendfile      on;
+  tcp_nopush    on;
+  tcp_nodelay   on;
+  keepalive_timeout 65;
+  server_tokens off;
+
+  gzip on;
+  gzip_comp_level 5;
+  gzip_min_length 1024;
+  gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+
+  # 限流：防刷登录页 / API（按需调整）
+  limit_req_zone $binary_remote_addr zone=mss_web:20m rate=30r/s;
+  limit_req_zone $binary_remote_addr zone=mss_api:10m rate=20r/s;
+
+  upstream mssclaw_api {
+    server 127.0.0.1:3000;
+    keepalive 32;
+  }
+
+  server {
+    listen 443 ssl http2;
+    server_name claw.example.com;
+
+    # ssl_certificate     /etc/ssl/certs/claw.pem;
+    # ssl_certificate_key /etc/ssl/private/claw.key;
+
+    root /opt/mssclaw/apps/web/dist;
+    index index.html;
+
+    # 静态资源长缓存（Vite 带 hash 的 chunk）
+    location /assets/ {
+      expires 30d;
+      add_header Cache-Control "public, immutable";
+      try_files $uri =404;
+    }
+
+    location /brand/ {
+      expires 7d;
+      add_header Cache-Control "public";
+      try_files $uri =404;
+    }
+
+    # SPA
+    location / {
+      limit_req zone=mss_web burst=60 nodelay;
+      try_files $uri $uri/ /index.html;
+    }
+
+    # 可选：反代 Nest（仅小规模共享 / 演示持久化；生产多用户写请换 Postgres）
+    location /api/ {
+      limit_req zone=mss_api burst=40 nodelay;
+      proxy_http_version 1.1;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header Connection "";
+      proxy_read_timeout 120s;
+      proxy_buffering off; # SSE
+      proxy_pass http://mssclaw_api;
+    }
+  }
+}

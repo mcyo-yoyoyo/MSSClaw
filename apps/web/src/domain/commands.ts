@@ -1,4 +1,4 @@
-import type { AppView } from '@/domain/appView';
+﻿import type { AppView } from '@/domain/appView';
 import { openFindCases, openUseSkills } from '@/domain/openHomeJourney';
 
 export interface AppCommand {
@@ -39,7 +39,7 @@ const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
     id: 'goto-use-skills',
     label: '做任务',
     icon: 'fa-cube',
-    keywords: '做任务 干 技能库 技能 assistant 开工 home 新建任务',
+    keywords: '做任务 用 技能库 技能 assistant 开工 home 新建任务',
     view: 'home',
     run: () => openUseSkills(),
   },

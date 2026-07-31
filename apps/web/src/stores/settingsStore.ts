@@ -9,7 +9,11 @@ import {
   type WorkspaceMember,
 } from '@/domain/rbac';
 import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
-import { DEMO_PASSWORD, MEMBERS_LS_PREFIX } from '@/domain/authAccounts';
+import { MEMBERS_LS_PREFIX } from '@/domain/authAccounts';
+import {
+  generateTempPassword,
+  setAccountPassword,
+} from '@/domain/accountCredentials';
 import { PROTOTYPE_WORKSPACE_ID } from '@/domain/prototype/constants';
 
 function loadMembers(workspaceId: string): WorkspaceMember[] {
@@ -34,7 +38,7 @@ export interface InviteMemberInput {
   name?: string;
   deptIds?: DeptId[];
   regionId?: RegionId | null;
-  /** 邀请后立即激活，可直接用演示密码登录 */
+  /** 邀请后立即激活，并生成临时密码 */
   activateNow?: boolean;
 }
 
@@ -54,6 +58,7 @@ interface SettingsState {
   setMemberStatus: (memberId: string, status: WorkspaceMember['status']) => void;
   inviteMember: (input: InviteMemberInput | string, role?: PlatformRole) => void;
   removeMember: (memberId: string) => void;
+  setToast: (toast: string | null) => void;
   dismissToast: () => void;
 }
 
@@ -98,57 +103,77 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setMemberStatus: (memberId, status) => {
-    const member = get().members.find((m) => m.id === memberId);
-    const members = get().members.map((m) => (m.id === memberId ? { ...m, status } : m));
-    persistMembers(get().workspaceId, members);
-    const tip =
-      status === 'active' && member
-        ? `已激活 ${member.email}，可用演示密码 ${DEMO_PASSWORD} 登录`
-        : member
+    void (async () => {
+      const member = get().members.find((m) => m.id === memberId);
+      const members = get().members.map((m) => (m.id === memberId ? { ...m, status } : m));
+      persistMembers(get().workspaceId, members);
+      if (status === 'active' && member) {
+        const temp = generateTempPassword();
+        await setAccountPassword(member.email, temp);
+        set({
+          members,
+          toast: `已激活 ${member.email}，临时密码：${temp}（请另行告知用户）`,
+        });
+        return;
+      }
+      set({
+        members,
+        toast: member
           ? `${member.name} 状态：${MEMBER_STATUS_LABELS[status]}`
-          : '状态已更新';
-    set({ members, toast: tip });
+          : '状态已更新',
+      });
+    })();
   },
 
   inviteMember: (input, roleArg) => {
-    const payload: InviteMemberInput =
-      typeof input === 'string'
-        ? { email: input, role: roleArg ?? 'business_user' }
-        : input;
+    void (async () => {
+      const payload: InviteMemberInput =
+        typeof input === 'string'
+          ? { email: input, role: roleArg ?? 'business_user' }
+          : input;
 
-    const trimmed = payload.email.trim();
-    if (!trimmed || !trimmed.includes('@')) {
-      set({ toast: '请输入有效邮箱' });
-      return;
-    }
-    if (get().members.some((m) => m.email.toLowerCase() === trimmed.toLowerCase())) {
-      set({ toast: '该成员已在工作区中' });
-      return;
-    }
+      const trimmed = payload.email.trim();
+      if (!trimmed || !trimmed.includes('@')) {
+        set({ toast: '请输入有效邮箱' });
+        return;
+      }
+      if (get().members.some((m) => m.email.toLowerCase() === trimmed.toLowerCase())) {
+        set({ toast: '该成员已在工作区中' });
+        return;
+      }
 
-    const id = `inv_${Date.now()}`;
-    const status: WorkspaceMember['status'] = payload.activateNow ? 'active' : 'invited';
-    const members = [
-      ...get().members,
-      {
-        id,
-        name: payload.name?.trim() || trimmed.split('@')[0] || '新成员',
-        email: trimmed,
-        role: normalizePlatformRole(payload.role),
-        avatar: 'bg-zinc-700',
-        lastActive: '刚刚',
-        status,
-        deptIds: payload.deptIds ?? [],
-        regionId: payload.regionId ?? null,
-      },
-    ];
-    persistMembers(get().workspaceId, members);
-    set({
-      members,
-      toast: payload.activateNow
-        ? `已邀请并激活 ${trimmed}，可用密码 ${DEMO_PASSWORD} 登录`
-        : `邀请已发送至 ${trimmed}（待管理员激活后方可登录）`,
-    });
+      const id = `inv_${Date.now()}`;
+      const status: WorkspaceMember['status'] = payload.activateNow ? 'active' : 'invited';
+      const members = [
+        ...get().members,
+        {
+          id,
+          name: payload.name?.trim() || trimmed.split('@')[0] || '新成员',
+          email: trimmed,
+          role: normalizePlatformRole(payload.role),
+          avatar: 'bg-zinc-700',
+          lastActive: '刚刚',
+          status,
+          deptIds: payload.deptIds ?? [],
+          regionId: payload.regionId ?? null,
+        },
+      ];
+      persistMembers(get().workspaceId, members);
+
+      if (payload.activateNow) {
+        const temp = generateTempPassword();
+        await setAccountPassword(trimmed, temp);
+        set({
+          members,
+          toast: `已邀请并激活 ${trimmed}，临时密码：${temp}（请另行告知用户）`,
+        });
+        return;
+      }
+      set({
+        members,
+        toast: `邀请已发送至 ${trimmed}（待管理员激活后方可登录）`,
+      });
+    })();
   },
 
   removeMember: (memberId) => {
@@ -163,5 +188,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ members, toast: `已移除成员 ${member.name}` });
   },
 
+  setToast: (toast) => set({ toast }),
   dismissToast: () => set({ toast: null }),
 }));

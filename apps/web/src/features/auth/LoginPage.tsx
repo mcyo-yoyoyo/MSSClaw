@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from 'react';
-import { DEMO_PASSWORD } from '@/domain/authAccounts';
+import { loadAuthPolicy } from '@/domain/accountCredentials';
 import { MssZhishuMark } from '@/components/brand/MssZhishuMark';
 import { useSessionStore } from '@/stores/sessionStore';
 
 /** Pages 子路径部署时需带 base（如 /MSSClaw/）；Vercel 根路径则为 / */
-const LOGIN_HERO = `${import.meta.env.BASE_URL}brand/login-hero.png`.replace(/([^:]\/)\/+/g, '$1');
+const baseBrand = `${import.meta.env.BASE_URL}brand/`.replace(/([^:]\/)\/+/g, '$1');
+const LOGIN_HERO_WEBP = `${baseBrand}login-hero.webp`;
+const LOGIN_HERO_JPG = `${baseBrand}login-hero.jpg`;
 
 const inputClass =
   'w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-[13px] text-zinc-900 placeholder:text-zinc-400 transition focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#e0122f]/15';
@@ -15,27 +17,36 @@ const inputClass =
 export function LoginPage() {
   const login = useSessionStore((s) => s.login);
   const [email, setEmail] = useState('mcyo@company.com');
-  const [password, setPassword] = useState(DEMO_PASSWORD);
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const demoAllowed = loadAuthPolicy().allowDemoPassword;
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
     setSubmitting(true);
-    const result = login(email, password);
-    setSubmitting(false);
-    if (!result.ok) setError(result.error);
+    try {
+      const result = await login(email, password);
+      if (!result.ok) setError(result.error);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-[#f4f4f6]">
-      <img
-        src={LOGIN_HERO}
-        alt=""
-        className="pointer-events-none absolute inset-0 h-full w-full object-cover object-[16%_center] select-none"
-        draggable={false}
-      />
+      <picture>
+        <source srcSet={LOGIN_HERO_WEBP} type="image/webp" />
+        <img
+          src={LOGIN_HERO_JPG}
+          alt=""
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover object-[16%_center] select-none"
+          draggable={false}
+          decoding="async"
+          fetchPriority="high"
+        />
+      </picture>
       {/* 右侧轻微提亮，保证文案与表单清晰，不切割整页 */}
       <div
         className="pointer-events-none absolute inset-y-0 right-0 w-[min(640px,56%)] bg-gradient-to-l from-white/72 via-white/38 to-transparent"
@@ -105,9 +116,15 @@ export function LoginPage() {
               {submitting ? '登录中…' : '进入工作台'}
             </button>
 
-            <p className="text-center text-[11px] text-zinc-400">
-              演示密码 <span className="font-mono text-zinc-600">{DEMO_PASSWORD}</span>
-            </p>
+            {demoAllowed ? (
+              <p className="text-center text-[11px] text-zinc-400">
+                未单独设密时仍可用演示密码（生产请在组织权限中关闭）
+              </p>
+            ) : (
+              <p className="text-center text-[11px] text-zinc-400">
+                请使用平台运营为您配置的账号密码登录
+              </p>
+            )}
           </form>
         </div>
       </div>
