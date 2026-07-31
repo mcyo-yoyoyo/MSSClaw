@@ -56,20 +56,34 @@ export function withSkillOwnership(skills: PrototypeSkillSeed[]): PrototypeSkill
 export function applyCanonicalSkillOwnership(skill: PrototypeSkillSeed): PrototypeSkillSeed {
   const own = SKILL_OWNERSHIP[skill.id];
   if (own) {
+    const region = own.ownerRegionId ?? null;
     return {
       ...skill,
       sourceType: skill.sourceType ?? 'internal',
       visibility: 'org',
       ownerDeptIds: [...own.ownerDeptIds],
-      ownerRegionId: own.ownerRegionId ?? null,
+      ownerRegionId: region,
+      // 清掉历史多区域缓存，避免 ownerRegionIds=['latam'] 盖住 ownerRegionId=apac
+      ownerRegionIds: region ? [region] : [],
+      // 未显式关精选时，交给 HOME_BUSINESS_SKILLS 静态表判断
+      featuredInDoTask:
+        typeof skill.featuredInDoTask === 'boolean' ? skill.featuredInDoTask : undefined,
+      published: skill.published !== false,
     };
   }
+  const region = skill.ownerRegionId ?? null;
   return {
     ...skill,
     sourceType: skill.sourceType ?? 'internal',
     visibility: skill.visibility ?? 'org',
     ownerDeptIds: singleOwnerDeptIds(skill.ownerDeptIds),
-    ownerRegionId: skill.ownerRegionId ?? null,
+    ownerRegionId: region,
+    ownerRegionIds:
+      Array.isArray(skill.ownerRegionIds) && skill.ownerRegionIds.length > 0
+        ? [skill.ownerRegionIds[0]!]
+        : region
+          ? [region]
+          : [],
   };
 }
 

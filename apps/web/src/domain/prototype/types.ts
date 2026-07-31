@@ -17,6 +17,8 @@ export type HomeCategory = DeptId;
 export interface AssetOwnershipFields {
   ownerDeptIds?: DeptId[];
   ownerRegionId?: RegionId | null;
+  /** 多区域（历史字段）；与 ownerRegionId 并存时以非空数组为准 */
+  ownerRegionIds?: RegionId[];
   publisher?: string;
   publisherUserId?: string;
   sourceType?: AssetSourceType;

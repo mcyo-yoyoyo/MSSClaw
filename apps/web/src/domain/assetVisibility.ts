@@ -35,8 +35,13 @@ export function matchesAssetOrgScope(asset: OwnableAsset, affiliation: OrgAffili
   const viewerDepts = affiliation.deptIds ?? [];
   const viewerRegion = affiliation.regionId ?? null;
   const assetDepts = asset.ownerDeptIds ?? [];
+  // 勿用 `ownerRegionIds ?? ownerRegionId`：空数组 [] 会挡住单值 ownerRegionId
   const assetRegions =
-    asset.ownerRegionIds ?? (asset.ownerRegionId ? [asset.ownerRegionId] : []);
+    Array.isArray(asset.ownerRegionIds) && asset.ownerRegionIds.length > 0
+      ? asset.ownerRegionIds
+      : asset.ownerRegionId
+        ? [asset.ownerRegionId]
+        : [];
 
   if (assetDepts.length === 0 && assetRegions.length === 0) return false;
 

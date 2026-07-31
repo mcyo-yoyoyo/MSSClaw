@@ -94,8 +94,11 @@ export function matchesAssetOrgFilters(asset: OwnableAsset, input: AssetFilterIn
 
   if (regionFilter !== 'all') {
     const regions =
-      asset.ownerRegionIds ??
-      (asset.ownerRegionId ? [asset.ownerRegionId] : []);
+      Array.isArray(asset.ownerRegionIds) && asset.ownerRegionIds.length > 0
+        ? asset.ownerRegionIds
+        : asset.ownerRegionId
+          ? [asset.ownerRegionId]
+          : [];
     if (regions.length > 0 && !regions.includes(regionFilter)) return false;
   }
 

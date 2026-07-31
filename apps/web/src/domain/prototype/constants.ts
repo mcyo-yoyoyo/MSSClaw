@@ -1,6 +1,6 @@
 import type { EfficiencyCategory } from '@/domain/prototype/types';
 
-export const MARKET_VERSION = 'v17-skill-acl-gtm-apac';
+export const MARKET_VERSION = 'v18-fix-ownerRegionIds-override';
 
 export const KB_VERSION = 'v2-biz-dept';
 export const TASK_SESSIONS_VERSION = 'v2-no-default-warroom';
