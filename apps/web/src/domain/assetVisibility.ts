@@ -29,7 +29,7 @@ function isAssetPublisher(asset: OwnableAsset, viewer: AssetViewerContext): bool
  * 是否属于资产「所属组织」：
  * - 声明了职能：须与观众职能有交集
  * - 声明了区域：观众有区域时须匹配；观众无区域（总部岗）不挡区域
- * - 未声明职能/区域：兼容种子与历史数据，对已登录观众可见
+ * - 未声明职能/区域：不再放行（避免脏缓存导致业务用户看见全站技能）
  */
 export function matchesAssetOrgScope(asset: OwnableAsset, affiliation: OrgAffiliation): boolean {
   const viewerDepts = affiliation.deptIds ?? [];
@@ -38,14 +38,18 @@ export function matchesAssetOrgScope(asset: OwnableAsset, affiliation: OrgAffili
   const assetRegions =
     asset.ownerRegionIds ?? (asset.ownerRegionId ? [asset.ownerRegionId] : []);
 
-  if (assetDepts.length === 0 && assetRegions.length === 0) return true;
+  if (assetDepts.length === 0 && assetRegions.length === 0) return false;
 
   const deptOk =
     assetDepts.length === 0 || viewerDepts.some((d) => assetDepts.includes(d));
+  // 资产绑了区域时：观众有区域必须命中；总部岗（无区域）可看各区域组织资产
   const regionOk =
     assetRegions.length === 0 ||
     !viewerRegion ||
     assetRegions.includes(viewerRegion);
+
+  // 观众有职能时，资产若声明了职能则必须命中（禁止「只靠区域」跨职能看见）
+  if (viewerDepts.length > 0 && assetDepts.length > 0 && !deptOk) return false;
 
   return deptOk && regionOk;
 }

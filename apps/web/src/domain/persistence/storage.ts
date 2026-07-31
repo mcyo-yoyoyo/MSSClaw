@@ -9,6 +9,7 @@ import { PROTOTYPE_SKILLS } from '@/domain/prototype/skills';
 import { PROTOTYPE_TOOLS } from '@/domain/prototype/tools';
 import { PROTOTYPE_AUTOMATIONS } from '@/domain/prototype/automations';
 import { PROTOTYPE_KB_DOCS } from '@/domain/prototype/kb';
+import { applyCanonicalSkillOwnershipList } from '@/domain/prototype/skillOwnership';
 import type {
   PrototypeAgentSeed,
   PrototypeAutomation,
@@ -72,7 +73,7 @@ function readLocalMarketplace(): MarketplaceSnapshot {
     const kb0 = demoDefaults(PROTOTYPE_KB_DOCS);
     return {
       agents: mergeCatalog(agents0, savedA),
-      skills: mergeCatalog(skills0, savedS),
+      skills: applyCanonicalSkillOwnershipList(mergeCatalog(skills0, savedS)),
       tools: mergeCatalog(tools0, savedT),
       automations:
         Array.isArray(savedAuto) && savedAuto.length
@@ -83,7 +84,9 @@ function readLocalMarketplace(): MarketplaceSnapshot {
   } catch {
     return {
       agents: structuredClone(demoDefaults(PROTOTYPE_AGENTS)),
-      skills: structuredClone(demoDefaults(PROTOTYPE_SKILLS)),
+      skills: applyCanonicalSkillOwnershipList(
+        structuredClone(demoDefaults(PROTOTYPE_SKILLS)),
+      ),
       tools: structuredClone(demoDefaults(PROTOTYPE_TOOLS)),
       automations: structuredClone(demoDefaults(PROTOTYPE_AUTOMATIONS)),
       kbDocs: structuredClone(demoDefaults(PROTOTYPE_KB_DOCS)),
@@ -110,9 +113,11 @@ export async function loadMarketplace(workspaceId: string): Promise<MarketplaceS
             demoDefaults(PROTOTYPE_AGENTS),
             remote.agents as PrototypeAgentSeed[],
           ),
-          skills: mergeCatalog(
-            demoDefaults(PROTOTYPE_SKILLS),
-            remote.skills as PrototypeSkillSeed[],
+          skills: applyCanonicalSkillOwnershipList(
+            mergeCatalog(
+              demoDefaults(PROTOTYPE_SKILLS),
+              remote.skills as PrototypeSkillSeed[],
+            ),
           ),
           tools: mergeCatalog(
             demoDefaults(PROTOTYPE_TOOLS),

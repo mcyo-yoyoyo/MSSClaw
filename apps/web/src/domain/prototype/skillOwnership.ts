@@ -2,8 +2,9 @@ import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
 
 /**
- * Skill 所属职能：每个技能只挂一个领域，避免做任务橱窗出现多职能标签造成误会。
- * 业务场景篮子（S1/S2…）仍可单独配置，与职能无关。
+ * Skill 所属职能：每个技能只挂一个领域。
+ * 业务场景篮子（S1/S2…）另配，与职能无关。
+ * GTM 做任务精选对齐演示账号 Dickson（gtm · apac）。
  */
 export const SKILL_OWNERSHIP: Record<
   string,
@@ -12,7 +13,7 @@ export const SKILL_OWNERSHIP: Record<
     ownerRegionId?: RegionId | null;
   }
 > = {
-  'skill-data-analysis': { ownerDeptIds: ['gtm'], ownerRegionId: null },
+  'skill-data-analysis': { ownerDeptIds: ['gtm'], ownerRegionId: 'apac' },
   'skill-doc-gen': { ownerDeptIds: ['mkt'], ownerRegionId: null },
   'skill-doc-compliance': { ownerDeptIds: ['quality'], ownerRegionId: 'europe' },
   'skill-file-archive': { ownerDeptIds: ['hr'], ownerRegionId: null },
@@ -26,8 +27,8 @@ export const SKILL_OWNERSHIP: Record<
   'skill-review-translate': { ownerDeptIds: ['ecommerce'], ownerRegionId: 'apac' },
   'skill-review-cluster': { ownerDeptIds: ['ecommerce'], ownerRegionId: 'apac' },
   'skill-retail-insight': { ownerDeptIds: ['retail'], ownerRegionId: 'latam' },
-  'skill-price-monitor': { ownerDeptIds: ['gtm'], ownerRegionId: null },
-  'skill-so-report': { ownerDeptIds: ['gtm'], ownerRegionId: null },
+  'skill-price-monitor': { ownerDeptIds: ['gtm'], ownerRegionId: 'apac' },
+  'skill-so-report': { ownerDeptIds: ['gtm'], ownerRegionId: 'apac' },
   'skill-jd-parser': { ownerDeptIds: ['hr'], ownerRegionId: null },
   'skill-resume-screen': { ownerDeptIds: ['hr'], ownerRegionId: null },
   'skill-interview-analysis': { ownerDeptIds: ['hr'], ownerRegionId: null },
@@ -46,18 +47,34 @@ export function singleOwnerDeptIds(depts: DeptId[] | undefined): DeptId[] | unde
 }
 
 export function withSkillOwnership(skills: PrototypeSkillSeed[]): PrototypeSkillSeed[] {
-  return skills.map((s) => {
-    const own = SKILL_OWNERSHIP[s.id];
+  return skills.map((s) => applyCanonicalSkillOwnership(s));
+}
+
+/**
+ * 合并 localStorage/API 后再次校准：已知种子 id 强制单职能+区域，避免脏缓存「全员可见」。
+ */
+export function applyCanonicalSkillOwnership(skill: PrototypeSkillSeed): PrototypeSkillSeed {
+  const own = SKILL_OWNERSHIP[skill.id];
+  if (own) {
     return {
-      ...s,
-      sourceType: s.sourceType ?? 'internal',
-      // 默认组织内可见：能力开发仅见公开 + 本组织，避免种子全量 public 穿透
-      visibility: s.visibility ?? 'org',
-      // 有种子表时以种子为准（单职能）；否则把已有多选压成一个
-      ownerDeptIds: own ? [...own.ownerDeptIds] : singleOwnerDeptIds(s.ownerDeptIds),
-      ownerRegionId: own
-        ? (own.ownerRegionId ?? null)
-        : (s.ownerRegionId ?? null),
+      ...skill,
+      sourceType: skill.sourceType ?? 'internal',
+      visibility: 'org',
+      ownerDeptIds: [...own.ownerDeptIds],
+      ownerRegionId: own.ownerRegionId ?? null,
     };
-  });
+  }
+  return {
+    ...skill,
+    sourceType: skill.sourceType ?? 'internal',
+    visibility: skill.visibility ?? 'org',
+    ownerDeptIds: singleOwnerDeptIds(skill.ownerDeptIds),
+    ownerRegionId: skill.ownerRegionId ?? null,
+  };
+}
+
+export function applyCanonicalSkillOwnershipList(
+  skills: PrototypeSkillSeed[],
+): PrototypeSkillSeed[] {
+  return skills.map(applyCanonicalSkillOwnership);
 }
