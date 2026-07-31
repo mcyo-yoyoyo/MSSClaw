@@ -63,7 +63,7 @@ function emptySkill(): PrototypeSkillSeed {
     planSteps: [],
     sourceType: 'internal',
     visibility: 'org',
-    ownerDeptIds: [...getCurrentDeptIds()],
+    ownerDeptIds: getCurrentDeptIds().slice(0, 1),
     ownerRegionId: getCurrentRegionId(),
     homepageUrl: '',
   };
@@ -81,7 +81,9 @@ function normalizeSkillForm(skill: PrototypeSkillSeed): PrototypeSkillSeed {
     searchKeywords: Array.isArray(skill.searchKeywords) ? skill.searchKeywords : [],
     instructions: skill.instructions ?? '',
     planSteps: Array.isArray(skill.planSteps) ? skill.planSteps : [],
-    ownerDeptIds: Array.isArray(skill.ownerDeptIds) ? skill.ownerDeptIds : [...getCurrentDeptIds()],
+    ownerDeptIds: Array.isArray(skill.ownerDeptIds)
+      ? skill.ownerDeptIds.slice(0, 1)
+      : getCurrentDeptIds().slice(0, 1),
     ownerRegionId: skill.ownerRegionId ?? getCurrentRegionId(),
     visibility: skill.visibility ?? 'org',
     published: Boolean(skill.published),
@@ -156,7 +158,9 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       id: '',
       published: false,
       visibility: 'org',
-      ownerDeptIds: form.ownerDeptIds?.length ? form.ownerDeptIds : [...getCurrentDeptIds()],
+      ownerDeptIds: form.ownerDeptIds?.length
+        ? form.ownerDeptIds.slice(0, 1)
+        : getCurrentDeptIds().slice(0, 1),
       ownerRegionId: form.ownerRegionId ?? getCurrentRegionId(),
       publisher: getCurrentUserName() || parsed.publisher,
       publisherUserId: getCurrentUserId() || undefined,
@@ -304,7 +308,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       accentColor: form.accentColor || DEFAULT_SKILL_ACCENT,
       sourceType: 'internal',
       visibility,
-      ownerDeptIds: (form.ownerDeptIds ?? []) as DeptId[],
+      ownerDeptIds: ((form.ownerDeptIds ?? []).slice(0, 1) as DeptId[]),
       ownerRegionId: (form.ownerRegionId ?? null) as RegionId | null,
       homepageUrl: undefined,
       published: needsApproval ? false : wantPublish,
@@ -605,28 +609,27 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
           <div className="space-y-3">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <FormField
-                label="所属职能（可多选）"
+                label="所属职能（单选）"
                 hint={
                   isPlatformOps
-                    ? '平台运营可指定任意职能'
-                    : '能力开发仅可归属本人组织职能'
+                    ? '每个技能只挂一个领域，避免做任务列表出现多职能误会'
+                    : '能力开发仅可归属本人组织职能（单选）'
                 }
               >
-                <select
-                  multiple
-                  className="min-h-[96px] w-full rounded-xl border border-zinc-200 bg-white px-2 py-1.5 text-[13px]"
-                  value={form.ownerDeptIds ?? []}
+                <FormSelect
+                  value={(form.ownerDeptIds ?? [])[0] ?? ''}
                   onChange={(e) => {
-                    const vals = Array.from(e.target.selectedOptions).map((o) => o.value as DeptId);
-                    setForm({ ...form, ownerDeptIds: vals });
+                    const v = e.target.value as DeptId | '';
+                    setForm({ ...form, ownerDeptIds: v ? [v] : [] });
                   }}
                 >
+                  <option value="">选择职能</option>
                   {HQ_DEPTS.filter((d) => selectableDepts.includes(d.id)).map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.label}
                     </option>
                   ))}
-                </select>
+                </FormSelect>
               </FormField>
               <FormField
                 label="所属区域"

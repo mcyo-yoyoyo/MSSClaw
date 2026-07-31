@@ -1,6 +1,6 @@
 import type { EfficiencyCategory } from '@/domain/prototype/types';
 
-export const MARKET_VERSION = 'v14-review-pipeline-3agents';
+export const MARKET_VERSION = 'v16-skill-single-dept';
 
 export const KB_VERSION = 'v2-biz-dept';
 export const TASK_SESSIONS_VERSION = 'v2-no-default-warroom';
