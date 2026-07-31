@@ -92,6 +92,11 @@ export function HomePage({
     return isDoTaskSceneExpertsVisible();
   }, [roleEnabled]);
 
+  // 切换账号时清空视角筛选（含全球轴勾选）
+  useEffect(() => {
+    setOrgSelection(emptyOrgPerspectiveSelection());
+  }, [user?.id]);
+
   useEffect(() => {
     if (homeMode !== 'assistant' || !pendingBusinessScenario) return;
     const id = consumeBusinessScenario();

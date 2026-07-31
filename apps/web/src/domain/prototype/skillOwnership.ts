@@ -42,7 +42,8 @@ export function withSkillOwnership(skills: PrototypeSkillSeed[]): PrototypeSkill
     return {
       ...s,
       sourceType: s.sourceType ?? 'internal',
-      visibility: s.visibility ?? 'public',
+      // 默认组织内可见：能力开发仅见公开 + 本组织，避免种子全量 public 穿透
+      visibility: s.visibility ?? 'org',
       ownerDeptIds: s.ownerDeptIds ?? own?.ownerDeptIds,
       ownerRegionId: s.ownerRegionId ?? own?.ownerRegionId ?? null,
     };

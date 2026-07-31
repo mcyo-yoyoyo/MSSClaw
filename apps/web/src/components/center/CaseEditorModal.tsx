@@ -55,7 +55,9 @@ function emptyItem(): PortalContentItem {
 }
 
 function normalizeForm(item: PortalContentItem): PortalContentItem {
-  const type = item.type === 'insight' ? 'news' : item.type;
+  // insight / 历史 playbook 统一并入「前沿洞察」(news)，避免 Select 显示与 form 不一致
+  const type =
+    item.type === 'insight' || item.type === 'playbook' ? 'news' : item.type;
   return {
     ...emptyItem(),
     ...item,
@@ -72,6 +74,8 @@ interface CaseEditorModalProps {
   onClose: () => void;
   onSaved?: (item: PortalContentItem) => void;
   defaultType?: PortalContentItem['type'];
+  /** 从场景包槽位新建时预填场景标签 */
+  defaultScenarioTags?: string[];
 }
 
 export function CaseEditorModal({
@@ -79,6 +83,7 @@ export function CaseEditorModal({
   onClose,
   onSaved,
   defaultType = 'case',
+  defaultScenarioTags,
 }: CaseEditorModalProps) {
   const items = usePortalContentStore((s) => s.items);
   const upsertItem = usePortalContentStore((s) => s.upsertItem);
@@ -89,13 +94,18 @@ export function CaseEditorModal({
   useEffect(() => {
     if (!target) return;
     if (target === 'new') {
-      const t = defaultType === 'insight' ? 'news' : defaultType;
-      setForm({ ...emptyItem(), type: t });
+      const t =
+        defaultType === 'insight' || defaultType === 'playbook' ? 'news' : defaultType;
+      setForm({
+        ...emptyItem(),
+        type: t,
+        scenarioTags: defaultScenarioTags?.length ? [...defaultScenarioTags] : [],
+      });
       return;
     }
     const existing = items.find((i) => i.id === target);
     setForm(existing ? normalizeForm(existing) : emptyItem());
-  }, [target, items, defaultType]);
+  }, [target, items, defaultType, defaultScenarioTags]);
 
   if (!target) return null;
 
@@ -128,7 +138,8 @@ export function CaseEditorModal({
       showToast('请填写标题');
       return;
     }
-    const type = form.type === 'insight' ? 'news' : form.type;
+    const type =
+      form.type === 'insight' || form.type === 'playbook' ? 'news' : form.type;
     const saved: PortalContentItem = {
       ...form,
       id: isNew ? `portal-ops-${Date.now()}` : (target as string),
@@ -189,28 +200,26 @@ export function CaseEditorModal({
           <div className="grid grid-cols-2 gap-2">
             <FormField label="类型">
               <FormSelect
-                value={form.type === 'insight' ? 'news' : form.type}
+                value={
+                  form.type === 'insight' || form.type === 'playbook' ? 'news' : form.type
+                }
                 onChange={(e) => {
                   const next = e.target.value as PortalContentItem['type'];
                   const learnSteps =
-                    next === 'playbook'
-                      ? ['预览或打开方案链接', '对照业务口径完成自学', '需要跑通时打开关联场景案例打样']
-                      : next === 'training'
-                        ? ['打开授课链接或预览课件', '完成培训路径自学', '需要上手时再打样关联技能']
-                        : next === 'news'
-                          ? ['打开信源或预览报告', '提炼对本场景的启示', '按需下载学习包归档']
-                          : form.steps;
+                    next === 'training'
+                      ? ['打开授课链接或预览课件', '完成培训路径自学', '需要上手时再打样关联技能']
+                      : next === 'news'
+                        ? ['打开信源或预览报告', '提炼对本场景的启示', '按需下载学习包归档']
+                        : form.steps;
                   setForm({
                     ...form,
                     type: next,
                     icon:
-                      next === 'playbook'
-                        ? 'fa-file-powerpoint'
-                        : next === 'training'
-                          ? 'fa-graduation-cap'
-                          : next === 'news'
-                            ? 'fa-newspaper'
-                            : form.icon || 'fa-lightbulb',
+                      next === 'training'
+                        ? 'fa-graduation-cap'
+                        : next === 'news'
+                          ? 'fa-newspaper'
+                          : form.icon || 'fa-lightbulb',
                     steps: learnSteps?.length ? learnSteps : form.steps,
                   });
                 }}
@@ -270,7 +279,10 @@ export function CaseEditorModal({
               }
             />
           </FormField>
-          <FormField label="场景标签（逗号分隔）">
+          <FormField
+            label="场景标签（逗号分隔）"
+            hint="须命中业务场景 matchTags，才会出现在找案例 / 场景案例对应场景的学习层（前沿洞察·案例·课件）。"
+          >
             <FormInput
               value={(form.scenarioTags ?? []).join(', ')}
               onChange={(e) =>

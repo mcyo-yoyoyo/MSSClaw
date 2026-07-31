@@ -7,7 +7,7 @@ import {
 } from '@/domain/scenarioArchitecture';
 
 const VIEW_ONLY_HINT =
-  '当前为只读详情。下载请用上方「下载学习包 / 下载打样包」，开干请用「一键打样」。';
+  '当前为只读详情。体外请用上方「下载学习」，在线跑任务请用「一键打样」。';
 
 export type ToolkitEnvSlotId = 'hardware' | 'coding' | 'models';
 
@@ -221,7 +221,7 @@ function ToolkitEnvInspect({
 function ArchitectureInspect({ doc }: { doc: ScenarioArchitectureDoc }) {
   return (
     <div className="space-y-3 text-left">
-      <ViewOnlyBanner text="架构文件为只读 Markdown。需要打包请用上方「下载打样包」。" />
+      <ViewOnlyBanner text="架构文件为只读 Markdown。需要打包请用上方「下载学习」。" />
       <span className="inline-block rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-500">
         {ARCHITECTURE_DOC_KIND_LABELS[doc.kind]} · Markdown
       </span>

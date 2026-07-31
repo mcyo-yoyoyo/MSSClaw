@@ -35,9 +35,9 @@ import {
 } from '@/features/lazyPages';
 import { useCommandPaletteStore } from '@/stores/commandPaletteStore';
 import { useWorkspaceConfigStore } from '@/stores/workspaceConfigStore';
-import { useSessionStore } from '@/stores/sessionStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useShellPerspectiveStore } from '@/stores/shellPerspectiveStore';
+import { useSessionStore } from '@/stores/sessionStore';
 import { TaskGlobalModals } from '@/components/task/TaskGlobalModals';
 import { openAiAssistantForNewTask } from '@/domain/openNewTask';
 import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';

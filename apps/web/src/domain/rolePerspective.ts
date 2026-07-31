@@ -10,7 +10,7 @@ import {
 } from '@/domain/orgTaxonomy';
 import { isSystemAdmin } from '@/domain/currentUser';
 
-/** 是否拥有全球全职能视角（超级管理员） */
+/** 是否拥有全球全职能视角（平台运营） */
 export function hasGlobalOrgScope(role?: PlatformRole): boolean {
   return isSystemAdmin(role);
 }
@@ -36,8 +36,8 @@ export function getVisibleHomeRegions(
 }
 
 const ROLE_TITLE: Record<PlatformRole, string> = {
-  super_admin: '管理员',
-  capability_ops: '运营',
+  super_admin: '平台运营',
+  capability_ops: '能力开发',
   business_user: '经理',
   viewer: '专员',
 };

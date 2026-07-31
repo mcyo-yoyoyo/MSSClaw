@@ -56,7 +56,7 @@ export const PORTAL_CONTENT_TYPE_LABELS: Record<PortalContentItem['type'], strin
   playbook: '场景方案',
   /** 历史类型，展示并入「前沿洞察」 */
   insight: '前沿洞察',
-  training: '培训案例',
+  training: '培训课件',
   news: '前沿洞察',
 };
 
@@ -73,12 +73,14 @@ export function isThoughtLayerType(type: PortalContentItem['type']): boolean {
   return THOUGHT_LAYER_TYPES.includes(type);
 }
 
-/** 门户运营可新建/筛选的类型（不含已合并的 insight） */
+/**
+ * 门户运营 Tab / 新建类型（从左到右）：
+ * 前沿洞察 · 场景案例 · 培训课件（不含「场景方案」；历史 playbook 并入洞察筛选）
+ */
 export const PORTAL_OPS_TYPE_OPTIONS: PortalContentItem['type'][] = [
-  'playbook',
+  'news',
   'case',
   'training',
-  'news',
 ];
 
 export const PROTOTYPE_PORTAL_CONTENT: PortalContentItem[] = [

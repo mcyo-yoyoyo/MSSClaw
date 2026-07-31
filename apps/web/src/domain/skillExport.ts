@@ -1,7 +1,9 @@
 import { strToU8, zipSync, unzipSync, strFromU8 } from 'fflate';
+import * as XLSX from 'xlsx';
 import type { EfficiencyCategory, PrototypeSkillSeed } from '@/domain/prototype/types';
-import { downloadBlob } from '@/lib/download';
 import { getSkillPack } from '@/domain/skills/catalog';
+import { ASSET_VISIBILITY_LABELS, getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
+import type { AssetVisibility, DeptId, RegionId } from '@/domain/orgTaxonomy';
 
 const VALID_CATEGORIES: EfficiencyCategory[] = ['office', 'manage', 'process', 'experience'];
 
@@ -19,18 +21,24 @@ export function skillSlug(skill: Pick<PrototypeSkillSeed, 'id' | 'name' | 'comma
 export function skillManifest(skill: PrototypeSkillSeed) {
   const pack = getSkillPack(skill.id);
   return {
-    manifestVersion: '2.0',
+    manifestVersion: '2.1',
     format: 'mssclaw-skill-package',
     id: skill.id,
-    name: skill.name,
-    description: skill.desc,
+    name: skill.nameZh || skill.name,
+    nameZh: skill.nameZh || skill.name,
+    nameEn: skill.nameEn || '',
+    description: skill.descZh || skill.desc,
+    descZh: skill.descZh || skill.desc,
+    descEn: skill.descEn || '',
     command: skill.command,
     category: skill.category,
     version: skill.version || '1.0.0',
     author: skill.author,
     connector: skill.connector || '',
     tags: skill.tags || [],
+    searchKeywords: skill.searchKeywords || [],
     published: !!skill.published,
+    visibility: skill.visibility || 'org',
     icon: skill.icon,
     instructions: skill.instructions || '',
     planSteps: skill.planSteps || [],
@@ -48,24 +56,31 @@ function yamlEscape(value: string): string {
 
 /** 生成符合 Agent Skill 约定的 SKILL.md（frontmatter + 正文） */
 export function buildSkillMd(skill: PrototypeSkillSeed): string {
+  const title = skill.nameZh || skill.name;
+  const desc = skill.descZh || skill.desc || title;
   const body =
     skill.instructions?.trim() ||
-    `# ${skill.name}\n\n${skill.desc}\n\n在对话中输入 \`${skill.command}\` 调用本 Skill。`;
+    `# ${title}\n\n${desc}\n\n在对话中输入 \`${skill.command}\` 调用本 Skill。`;
   const lines = [
     '---',
     `name: ${yamlEscape(skillSlug(skill))}`,
-    `description: ${yamlEscape(skill.desc || skill.name)}`,
+    `description: ${yamlEscape(desc)}`,
     `metadata:`,
     `  mssclaw:`,
     `    id: ${yamlEscape(skill.id)}`,
+    `    nameZh: ${yamlEscape(skill.nameZh || skill.name)}`,
+    `    nameEn: ${yamlEscape(skill.nameEn || '')}`,
+    `    descZh: ${yamlEscape(skill.descZh || skill.desc || '')}`,
+    `    descEn: ${yamlEscape(skill.descEn || '')}`,
     `    command: ${yamlEscape(skill.command)}`,
     `    category: ${yamlEscape(skill.category)}`,
     `    version: ${yamlEscape(skill.version || '1.0.0')}`,
-    `    connector: ${yamlEscape(skill.connector || '')}`,
     `    tags: ${JSON.stringify(skill.tags || [])}`,
+    `    searchKeywords: ${JSON.stringify(skill.searchKeywords || [])}`,
+    `    visibility: ${yamlEscape(skill.visibility || 'org')}`,
     '---',
     '',
-    body.startsWith('#') ? body : `# ${skill.name}\n\n${body}`,
+    body.startsWith('#') ? body : `# ${title}\n\n${body}`,
     '',
   ];
   return lines.join('\n');
@@ -142,9 +157,125 @@ export function downloadSkillFile(skill: PrototypeSkillSeed) {
   downloadBinary(`${skillSlug(skill)}.skill.zip`, bytes, 'application/zip');
 }
 
-/** 批量仍导出 JSON 清单（便于平台备份）；单技能请用 ZIP 包 */
+/** 运营分析用：单 Skill 调用与上架状态字段 */
+export function skillOpsAnalyticsRow(skill: PrototypeSkillSeed) {
+  const invokeCount = Number(skill.invokes) || 0;
+  const published = !!skill.published;
+  const hasBody = Boolean(skill.instructions?.trim());
+  return {
+    id: skill.id,
+    nameZh: skill.nameZh || skill.name,
+    nameEn: skill.nameEn || '',
+    command: skill.command,
+    category: skill.category,
+    version: skill.version || '1.0.0',
+    author: skill.author,
+    publisher: skill.publisher || skill.author,
+    ownerDeptIds: skill.ownerDeptIds || [],
+    ownerRegionId: skill.ownerRegionId ?? null,
+    visibility: skill.visibility || 'org',
+    /** 是否已上架可调用（可执行模型任务） */
+    publishedExecutable: published,
+    /** 是否精选露出到「做任务」 */
+    featuredInDoTask: !!skill.featuredInDoTask,
+    businessScenarioId: skill.businessScenarioId ?? null,
+    /** 累计被调用执行次数（平台内 bump 计数） */
+    invokeCount,
+    /** 是否具备可注入正文（具备执行内容） */
+    hasExecutableBody: hasBody,
+    /** 实际上可对话执行：已上架且有正文 */
+    runnableNow: published && hasBody,
+    tags: skill.tags || [],
+    searchKeywords: skill.searchKeywords || [],
+    sourceType: skill.sourceType || 'internal',
+  };
+}
+
+/**
+ * 导出全部 Skill 运营清单（Excel .xlsx）。
+ * 含调用执行次数、上架/可见/精选状态，便于后续运营分析；单技能包请用 downloadSkillFile。
+ */
 export function downloadAllSkillsFile(skills: PrototypeSkillSeed[]) {
-  downloadBlob('mssclaw-skills.json', JSON.stringify(skills.map(skillManifest), null, 2));
+  const rows = skills.map(skillOpsAnalyticsRow);
+  const totalInvokes = rows.reduce((n, r) => n + r.invokeCount, 0);
+  const executableCount = rows.filter((r) => r.publishedExecutable).length;
+  const runnableCount = rows.filter((r) => r.runnableNow).length;
+  const featuredCount = rows.filter((r) => r.featuredInDoTask).length;
+  const byVisibility = rows.reduce(
+    (acc, r) => {
+      const key = r.visibility || 'org';
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
+  const topInvoked = [...rows].sort((a, b) => b.invokeCount - a.invokeCount).slice(0, 10);
+
+  const detailSheet =
+    rows.length > 0
+      ? rows.map((r) => {
+          const vis = (r.visibility || 'org') as AssetVisibility;
+          return {
+            技能ID: r.id,
+            中文名称: r.nameZh,
+            英文名称: r.nameEn,
+            调用指令: r.command,
+            版本: r.version,
+            创建人: r.author,
+            发布人: r.publisher,
+            所属职能: (r.ownerDeptIds as DeptId[]).map(getDeptLabel).join('、') || '',
+            所属区域: r.ownerRegionId ? getRegionLabel(r.ownerRegionId as RegionId) : '',
+            可见范围: ASSET_VISIBILITY_LABELS[vis] ?? String(vis),
+            已上架可调用: r.publishedExecutable ? '是' : '否',
+            精选做任务: r.featuredInDoTask ? '是' : '否',
+            业务场景篮子: r.businessScenarioId ?? '',
+            累计调用次数: r.invokeCount,
+            具备执行正文: r.hasExecutableBody ? '是' : '否',
+            当前可对话执行: r.runnableNow ? '是' : '否',
+            运营标签: (r.tags || []).join('、'),
+            搜索关键词: (r.searchKeywords || []).join('、'),
+          };
+        })
+      : [{ 说明: '当前无 Skill 数据' }];
+
+  const summarySheet = [
+    { 指标: '导出时间', 值: new Date().toISOString() },
+    { 指标: 'Skill 总数', 值: rows.length },
+    { 指标: '已上架可调用数', 值: executableCount },
+    { 指标: '当前可对话执行数', 值: runnableCount },
+    { 指标: '精选做任务数', 值: featuredCount },
+    { 指标: '累计调用总次数', 值: totalInvokes },
+    { 指标: '可见-全员', 值: byVisibility.public || 0 },
+    { 指标: '可见-本组织', 值: byVisibility.org || 0 },
+    { 指标: '可见-仅发布方', 值: byVisibility.private || 0 },
+  ];
+
+  const topSheet = topInvoked.length
+    ? topInvoked.map((r, i) => ({
+        排名: i + 1,
+        技能ID: r.id,
+        中文名称: r.nameZh,
+        调用指令: r.command,
+        累计调用次数: r.invokeCount,
+        已上架可调用: r.publishedExecutable ? '是' : '否',
+      }))
+    : [{ 排名: '', 说明: '暂无调用数据' }];
+
+  const wb = XLSX.utils.book_new();
+  const wsSummary = XLSX.utils.json_to_sheet(summarySheet);
+  const wsDetail = XLSX.utils.json_to_sheet(detailSheet);
+  const wsTop = XLSX.utils.json_to_sheet(topSheet);
+  const detailKeys = Object.keys(detailSheet[0] ?? {});
+  wsDetail['!cols'] = detailKeys.map((k) => ({
+    wch: Math.min(28, Math.max(12, String(k).length + 4)),
+  }));
+  XLSX.utils.book_append_sheet(wb, wsSummary, '汇总');
+  XLSX.utils.book_append_sheet(wb, wsDetail, '技能明细');
+  XLSX.utils.book_append_sheet(wb, wsTop, '调用Top10');
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  // writeFile 在浏览器内直接触发下载，避免 type:'array' 无 .buffer 导致静默失败
+  XLSX.writeFile(wb, `mssclaw-skills-ops-${stamp}.xlsx`);
 }
 
 export function parseSkillImport(raw: unknown): PrototypeSkillSeed | null {
@@ -174,19 +305,44 @@ export function parseSkillImport(raw: unknown): PrototypeSkillSeed | null {
     ? o.planSteps.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
     : undefined;
 
+  const nameZh =
+    typeof o.nameZh === 'string' && o.nameZh.trim()
+      ? o.nameZh.trim()
+      : /[\u4e00-\u9fff]/.test(name)
+        ? name
+        : '';
+  const nameEn =
+    typeof o.nameEn === 'string' && o.nameEn.trim()
+      ? o.nameEn.trim()
+      : /[\u4e00-\u9fff]/.test(name)
+        ? ''
+        : name;
+  const descZh = typeof o.descZh === 'string' ? o.descZh : desc;
+  const descEn = typeof o.descEn === 'string' ? o.descEn : '';
+  const searchKeywords = Array.isArray(o.searchKeywords)
+    ? o.searchKeywords.filter((t): t is string => typeof t === 'string')
+    : [];
+
   return {
     id: typeof o.id === 'string' && o.id.trim() ? o.id.trim() : `skill-import-${Date.now()}`,
-    name,
-    desc,
+    name: nameZh || nameEn || name,
+    desc: descZh || descEn || desc,
+    nameZh: nameZh || name,
+    nameEn,
+    descZh,
+    descEn,
     category,
     command,
     author: typeof o.author === 'string' ? o.author : 'Imported',
     version: typeof o.version === 'string' ? o.version : '1.0.0',
     connector: typeof o.connector === 'string' ? o.connector : '',
-    published: o.published !== false,
+    // 导入默认草稿：不可调用，组织内可见（需审批后上架/公开）
+    published: false,
+    visibility: 'org',
     invokes: typeof o.invokes === 'number' ? o.invokes : 0,
     icon: typeof o.icon === 'string' ? o.icon : 'fa-cube',
     tags: Array.isArray(o.tags) ? o.tags.filter((t): t is string => typeof t === 'string') : [],
+    searchKeywords,
     ...(instructions ? { instructions } : {}),
     ...(planSteps?.length ? { planSteps } : {}),
   };
@@ -237,19 +393,28 @@ export function parseSkillMd(md: string, fallbackId?: string): PrototypeSkillSee
     ? (categoryRaw as EfficiencyCategory)
     : 'office';
 
+  const displayName = name || 'Imported Skill';
+  const desc = meta.description || body.slice(0, 120);
+  const hasZh = /[\u4e00-\u9fff]/.test(displayName + desc);
   return {
     id: fallbackId || `skill-import-${Date.now()}`,
-    name: name || 'Imported Skill',
-    desc: meta.description || body.slice(0, 120),
+    name: displayName,
+    desc,
+    nameZh: hasZh ? displayName : displayName,
+    nameEn: hasZh ? '' : displayName,
+    descZh: desc,
+    descEn: '',
     category,
     command: command || '/imported-skill',
     author: meta.author || 'Imported',
     version: meta.version || '1.0.0',
     connector: meta.connector || '',
-    published: true,
+    published: false,
+    visibility: 'org',
     invokes: 0,
     icon: 'fa-cube',
     tags: [],
+    searchKeywords: [],
     instructions: body || undefined,
   };
 }

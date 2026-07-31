@@ -11,12 +11,12 @@ import type { DiscoverScenarioId } from '@/domain/scenarioCapabilities';
  */
 export const SCENARIO_JOURNEY_COPY = {
   flow: '学习 → 准备 → 开干',
-  pageSubtitle: '学习 → 准备 → 开干 · 顶栏一键打样',
+  pageSubtitle: '学习 → 准备 → 开干 · 下载学习（体外）· 一键打样（在线）',
   pageTip:
-    '先学习方法，再按清单准备条件，最后开干打样。层内只读查看；下载与执行请用上方按钮。',
+    '先在弹窗预览洞察 / 案例 / 课件与学练路径；关闭后可逐项查看①②③详情。体外用「下载学习」，在线跑任务用「一键打样」。',
   learnBadge: '学习',
   learnSectionTitle: '① 学习',
-  learnSectionHint: '先学习方法 · 点击查看 · 下载用上方「下载学习包」',
+  learnSectionHint: '前沿洞察 · 场景案例 · 培训课件 · 点击卡片预览',
   learnExtendLabel: '学习 · 延伸知识',
   /** 准备层 */
   layerBadge: '准备',
@@ -28,12 +28,12 @@ export const SCENARIO_JOURNEY_COPY = {
     '准备清单（只读）。按条目自行配置环境，非平台内调用。后续版本将由平台托管更多运行环境与模型。',
   inspectToolLabel: '准备 · 体外参照',
   slotClickHint: '准备清单 · 点击查看',
-  learnPackTitle: '学习包：学习材料 + 准备清单（.learn.zip）',
+  learnPackTitle: '一键下载：学习材料 + 准备清单 + 打样参照（.zip）',
   learnMdHeading: '## 准备 · 体外参照环境（自行配置）',
   learnMdEmpty:
     '## 准备 · 体外参照环境\n\n（本场景暂未配置硬件 / Coding / 模型参照清单）\n\n',
   learnIntro:
-    '> 学习：先读方案 / 培训 / 洞察 / 案例；准备：按体外清单自行配置设备 / 工具 / 模型；开干：回到平台一键打样或下载打样包。',
+    '> 学习：先读洞察 / 案例 / 课件；准备：按体外清单自行配置；开干：回到平台「一键打样」在线跑任务。',
   learnPathStep:
     '2. 按「准备」清单自行配置设备 / AI 工具 / 模型（体外参照；1.0 非平台代配）',
   envToolsCaption: '相关外部工具（准备参照，打开了解）',
@@ -42,7 +42,7 @@ export const SCENARIO_JOURNEY_COPY = {
   slotModels: '建议对接的云端 / 本地模型',
   runBadge: '开干',
   runSectionTitle: '③ 开干',
-  runSectionHint: '对照能力说明 · 开干请用上方「一键打样」或「下载打样包」',
+  runSectionHint: '对照能力说明 · 在线执行请用上方「一键打样」',
   runInspectHint:
     '本条目为开干前对照说明，仅供了解。不会在此页调用 Agent / Skill / Tool；执行请用上方「一键打样」。',
 } as const;

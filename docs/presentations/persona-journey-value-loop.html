@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSSClaw · 岗位体验之旅（金案校准）· 一页</title>
+  <style>
+    :root {
+      --bg: #f4f4f4; --panel: #fff; --ink: #1a1a1a; --muted: #5c5c5c; --muted-2: #8a8a8a;
+      --line: rgba(26,26,26,.12); --accent: #cf0a2c; --accent-soft: #fdecef;
+      --shadow: 0 12px 32px -20px rgba(26,26,26,.35);
+      --font: "Microsoft YaHei","微软雅黑","PingFang SC",sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; height: 100%; background: #111; color: var(--ink);
+      font-family: var(--font); overflow: hidden; -webkit-font-smoothing: antialiased;
+    }
+    .slide {
+      width: 100vw; height: 100vh;
+      padding: clamp(12px,1.6vh,20px) clamp(20px,2.8vw,36px) clamp(8px,1.2vh,14px);
+      background:
+        radial-gradient(800px 380px at 0% 0%, rgba(207,10,44,.06), transparent 55%),
+        linear-gradient(180deg,#fafafa 0%,var(--bg) 100%);
+      display: flex; flex-direction: column;
+    }
+    .inner {
+      flex: 1; min-height: 0; max-width: 1500px; width: 100%; margin: 0 auto;
+      display: grid; grid-template-rows: auto 1fr auto auto; gap: 8px;
+    }
+    .top {
+      display: grid; grid-template-columns: 1.45fr 1fr; gap: 12px; align-items: end;
+      padding-bottom: 8px; border-bottom: 1px solid var(--line);
+    }
+    .brand { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
+    .brand i { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+    .kicker { margin: 4px 0 0; font-size: 11px; font-weight: 700; letter-spacing: .1em; color: var(--accent); }
+    h1 { margin: 4px 0 0; font-size: clamp(20px,2.3vw,28px); font-weight: 700; line-height: 1.15; }
+    h1 em { font-style: normal; color: var(--accent); }
+    .so {
+      background: #1a1a1a; color: #fff; border-radius: 10px; padding: 11px 14px;
+      border-left: 4px solid var(--accent); box-shadow: var(--shadow);
+    }
+    .so .lab { font-size: 10px; letter-spacing: .1em; color: rgba(255,255,255,.5); font-weight: 700; }
+    .so p { margin: 5px 0 0; font-size: 12.5px; font-weight: 700; line-height: 1.4; }
+
+    .board {
+      min-height: 0;
+      display: grid; grid-template-columns: 1.2fr 1.05fr 1.05fr .95fr; gap: 8px;
+    }
+    .card {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 11px;
+      box-shadow: var(--shadow); padding: 10px 11px; min-height: 0;
+      display: flex; flex-direction: column;
+    }
+    .card.hero { box-shadow: inset 0 0 0 2px var(--accent), var(--shadow); }
+    .who { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+    .avatar {
+      width: 32px; height: 32px; border-radius: 50%; background: #1a1a1a; color: #fff;
+      display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex: none;
+    }
+    .avatar.r { background: var(--accent); }
+    .who h3 { margin: 0; font-size: 13.5px; font-weight: 700; }
+    .who .tag { font-size: 10px; color: var(--muted-2); font-weight: 600; }
+    .pill {
+      align-self: flex-start; font-size: 10px; font-weight: 700; color: var(--accent);
+      background: var(--accent-soft); padding: 2px 8px; border-radius: 999px; margin-bottom: 5px;
+    }
+    .pain {
+      font-size: 11px; color: var(--muted); line-height: 1.35;
+      padding: 5px 7px; background: #f5f5f5; border-radius: 7px; margin-bottom: 6px;
+      border-left: 2px solid #bbb;
+    }
+    .pain b { color: var(--ink); }
+    .steps { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
+    .st {
+      display: grid; grid-template-columns: 42px 1fr; gap: 6px; align-items: start;
+      padding: 5px 6px; border-radius: 7px; background: #fafafa; border: 1px solid var(--line);
+    }
+    .st .ph {
+      font-size: 10px; font-weight: 700; color: #fff; background: #2a2a2a;
+      border-radius: 4px; text-align: center; padding: 3px 0; line-height: 1.2;
+    }
+    .st.hot .ph { background: var(--accent); }
+    .st .act { font-size: 11px; font-weight: 700; line-height: 1.25; }
+    .st .ui { font-size: 10px; color: var(--muted); margin-top: 1px; line-height: 1.25; }
+    .pipe {
+      display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px;
+    }
+    .pipe span {
+      font-size: 9.5px; font-weight: 700; padding: 2px 5px; border-radius: 4px;
+      background: #1a1a1a; color: #fff;
+    }
+    .out {
+      margin-top: 5px; padding: 6px 7px; border-radius: 7px;
+      background: var(--accent-soft); border: 1px solid rgba(207,10,44,.2);
+      font-size: 10.5px; line-height: 1.35; color: var(--muted);
+    }
+    .out b { color: var(--accent); }
+
+    .loop-card .ph-title { font-size: 12px; font-weight: 700; margin: 0 0 6px; }
+    .loop { flex: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 5px; }
+    .lp {
+      position: relative; padding: 6px 8px 6px 26px; border-radius: 8px;
+      background: #f7f7f7; border: 1px solid var(--line);
+    }
+    .lp::before {
+      content: attr(data-n); position: absolute; left: 6px; top: 7px;
+      width: 15px; height: 15px; border-radius: 50%; background: #1a1a1a; color: #fff;
+      font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+    }
+    .lp.hot::before { background: var(--accent); }
+    .lp b { display: block; font-size: 11px; font-weight: 700; }
+    .lp span { display: block; font-size: 10px; color: var(--muted); margin-top: 1px; line-height: 1.3; }
+    .fit {
+      margin-top: 6px; font-size: 10px; color: var(--muted-2); line-height: 1.35;
+      padding-left: 7px; border-left: 2px solid var(--accent);
+    }
+
+    .bar {
+      display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center;
+      background: #1a1a1a; color: #fff; border-radius: 11px; padding: 10px 14px; box-shadow: var(--shadow);
+    }
+    .bar .mark {
+      width: 44px; height: 44px; border-radius: 50%; background: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; text-align: center; line-height: 1.15;
+    }
+    .bar h2 { margin: 0; font-size: clamp(13px,1.5vw,17px); font-weight: 700; }
+    .bar p { margin: 3px 0 0; font-size: 11.5px; color: rgba(255,255,255,.72); line-height: 1.35; max-width: 74ch; }
+    .chips { display: flex; flex-direction: column; gap: 4px; }
+    .chips span {
+      font-size: 10px; font-weight: 700; padding: 5px 9px; border-radius: 999px;
+      background: rgba(255,255,255,.1); white-space: nowrap; text-align: center;
+    }
+    .chips span.on { background: var(--accent); }
+
+    .footer {
+      display: flex; justify-content: space-between; font-size: 11px; color: var(--muted-2);
+    }
+    .footer a { color: var(--muted); text-decoration: none; border-bottom: 1px solid var(--line); }
+    .footer a:hover { color: var(--accent); }
+
+    @media (max-width: 1200px) {
+      body { overflow: auto; }
+      .slide { height: auto; min-height: 100vh; }
+      .board, .top, .bar { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <section class="slide">
+    <div class="inner">
+      <div class="top">
+        <div>
+          <div class="brand"><i></i>MSSClaw · 按现网金案校准的岗位叙事</div>
+          <p class="kicker">FIT REVIEW · REFRESHED</p>
+          <h1>三角色不用换，<em>金案绑定</em>必须换准</h1>
+        </div>
+        <aside class="so">
+          <div class="lab">ONE SPINE</div>
+          <p>主线=学习→(准备)→开干→沉淀。逛做交学是界面落点；准备 1.0 实讲、2.0 变薄。</p>
+        </aside>
+      </div>
+
+      <div class="board">
+        <div class="card hero">
+          <div class="pill">英雄主 Demo · team×3</div>
+          <div class="who">
+            <div class="avatar r">商</div>
+            <div>
+              <h3>商城·电渠运营 · 小陈</h3>
+              <div class="tag">亚太评论金案 · 旁证拉美价监</div>
+            </div>
+          </div>
+          <div class="pain"><b>痛点：</b>多站点评论散、语种杂，人工归纳 1.5 天。</div>
+          <div class="steps">
+            <div class="st"><div class="ph">学习</div><div><div class="act">找案例 → 电渠评论样板间</div><div class="ui">学金案三段职责分工</div></div></div>
+            <div class="st"><div class="ph">准备</div><div><div class="act">学习包 + 体外参照清单</div><div class="ui">站点/模型/工具位自备</div></div></div>
+            <div class="st hot"><div class="ph">开干</div><div>
+              <div class="act">一键打样 · 专家团接力</div>
+              <div class="pipe"><span>采集</span><span>翻译</span><span>分析</span></div>
+            </div></div>
+            <div class="st"><div class="ph">沉淀</div><div><div class="act">周报交付 · 下周复跑</div><div class="ui">口播旁证：价监 2天→4小时</div></div></div>
+          </div>
+          <div class="out"><b>为何最适合：</b>唯二多步接力场景之一，编排可「看见」。</div>
+        </div>
+
+        <div class="card">
+          <div class="pill">战役闸 · 金案可点</div>
+          <div class="who">
+            <div class="avatar">营</div>
+            <div>
+              <h3>营销经理 · 林予</h3>
+              <div class="tag">MEA 卖点卡初译 · 欧洲合规</div>
+            </div>
+          </div>
+          <div class="pain"><b>痛点：</b>出海物料初译与合规抽检割裂在聊天/邮件里。</div>
+          <div class="steps">
+            <div class="st"><div class="ph">学习</div><div><div class="act">小语种金案 · 方法边界</div><div class="ui">初译≠免审终校</div></div></div>
+            <div class="st"><div class="ph">准备</div><div><div class="act">术语表 / 合规工具位</div><div class="ui">战役前清单对齐项目组</div></div></div>
+            <div class="st hot"><div class="ph">开干</div><div><div class="act">初译打样 → 合规抽检打样</div><div class="ui">出料与过闸同在平台</div></div></div>
+            <div class="st"><div class="ph">沉淀</div><div><div class="act">作业包归档 · 提精选</div><div class="ui">每场战役回到同一入口</div></div></div>
+          </div>
+          <div class="out"><b>刷新点：</b>不再虚指「营销 Agent 橱窗」。</div>
+        </div>
+
+        <div class="card">
+          <div class="pill">口径源 · 原绑定正确</div>
+          <div class="who">
+            <div class="avatar">服</div>
+            <div>
+              <h3>服务经理 · 阿凯</h3>
+              <div class="tag">电池过热客诉 SOP 金案</div>
+            </div>
+          </div>
+          <div class="pain"><b>痛点：</b>SOP 在群文件漂，一线口径不一致。</div>
+          <div class="steps">
+            <div class="st"><div class="ph">学习</div><div><div class="act">客诉样板间 · SOP 金案</div><div class="ui">访客可只学不跑</div></div></div>
+            <div class="st"><div class="ph">准备</div><div><div class="act">学习包训班组</div><div class="ui">单一学习入口替换群文件</div></div></div>
+            <div class="st hot"><div class="ph">开干</div><div><div class="act">/客诉 一键打样</div><div class="ui">标准应答草案 → 审核推送</div></div></div>
+            <div class="st"><div class="ph">沉淀</div><div><div class="act">提精选挂场景</div><div class="ui">人走 · 口径源不走</div></div></div>
+          </div>
+          <div class="out"><b>为何保留：</b>岗位可识别度最高，知识闭环最硬。</div>
+        </div>
+
+        <div class="card loop-card">
+          <p class="ph-title">选型结论 · 一眼看懂</p>
+          <div class="loop">
+            <div class="lp hot" data-n="主"><b>主线唯一</b><span>学习→(准备)→开干→沉淀</span></div>
+            <div class="lp" data-n="1"><b>英雄：评论接力</b><span>编排可看见</span></div>
+            <div class="lp" data-n="2"><b>营销 / 服务</b><span>金案可点 · 口径可留</span></div>
+            <div class="lp" data-n="注"><b>准备 1.0 实讲</b><span>2.0 内模后变薄</span></div>
+          </div>
+          <p class="fit">逛做交学=界面落点；不另喊「用得留回」——沉淀问带走什么即可。</p>
+        </div>
+      </div>
+
+      <div class="bar">
+        <div class="mark">Demo</div>
+        <div>
+          <h2>先 30 秒定主线，再跑评论三段式；准备按听众版本调权重</h2>
+          <p>沉淀只问「交付物 · 方法 · 复跑入口」——不用再记第四套闭环口号。</p>
+        </div>
+        <div class="chips">
+          <span class="on">先岗位故事</span>
+          <span>再主链路字幕</span>
+          <span>最后角色矩阵</span>
+        </div>
+      </div>
+
+      <div class="footer">
+        <span>金案校准版 · 评分与分镜见全文</span>
+        <a href="./persona-journey-value-loop-brief.html">打开全文方案 →</a>
+      </div>
+    </div>
+  </section>
+</body>
+</html>

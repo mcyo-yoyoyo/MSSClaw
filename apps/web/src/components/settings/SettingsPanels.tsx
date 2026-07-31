@@ -11,17 +11,28 @@ import {
   ROLE_DESCRIPTIONS,
   ROLE_LABELS,
   getRbacMatrix,
+  normalizeSettingsTab,
   type PlatformRole,
   type ResourceModule,
   type SettingsTab,
   type WorkspaceMember,
 } from '@/domain/rbac';
-import { HQ_DEPTS, REGIONS, getDeptLabel, getRegionLabel, type DeptId, type RegionId } from '@/domain/orgTaxonomy';
+import { getDeptLabel, getRegionLabel, type DeptId, type RegionId } from '@/domain/orgTaxonomy';
+import {
+  AUDIT_CATEGORY_LABELS,
+  matchAuditLog,
+  type AuditCategory,
+  type AuditLogQuery,
+} from '@/domain/auditLog';
+import { downloadAuditLogsExcel } from '@/domain/auditExport';
 import { DEMO_PASSWORD } from '@/domain/authAccounts';
+import { getNavMetaLabel } from '@/domain/navPresentation';
 import { cn } from '@/lib/utils';
 import type { InviteMemberInput } from '@/stores/settingsStore';
 import { useWorkspaceConfigStore } from '@/stores/workspaceConfigStore';
 import { useSessionStore } from '@/stores/sessionStore';
+import { useOrgTaxonomyStore } from '@/stores/orgTaxonomyStore';
+import { useAuditStore, recordAudit } from '@/stores/auditStore';
 
 const ROLES = PlatformRoleSchema.options;
 
@@ -49,12 +60,13 @@ export function SettingsContent({
   onInvite,
   onRemove,
 }: SettingsContentProps) {
-  if (tab === 'org') return <OrgPanel workspace={workspace} members={members} />;
-  if (tab === 'depts') return <DeptsPanel members={members} />;
-  if (tab === 'roles') return <RolesPanel />;
-  if (tab === 'members') {
+  const resolved = normalizeSettingsTab(tab);
+  if (resolved === 'depts') return <DeptsPanel members={members} />;
+  if (resolved === 'roles') return <RolesAndRbacPanel workspace={workspace} />;
+  if (resolved === 'members') {
     return (
-      <MembersPanel
+      <MembersAndOrgPanel
+        workspace={workspace}
         members={members}
         onUpdateRole={onUpdateRole}
         onUpdateOrg={onUpdateOrg}
@@ -64,172 +76,11 @@ export function SettingsContent({
       />
     );
   }
-  if (tab === 'rbac') return <RbacMatrixPanel workspace={workspace} />;
   return <AuditPanel workspace={workspace} />;
 }
 
-function OrgPanel({ workspace, members }: { workspace: Workspace; members: WorkspaceMember[] }) {
-  const updateWorkspace = useWorkspaceConfigStore((s) => s.updateWorkspace);
-  const [nameDraft, setNameDraft] = useState(workspace.name);
-  const deptCount = useMemo(() => {
-    const set = new Set<string>();
-    members.forEach((m) => m.deptIds?.forEach((d) => set.add(d)));
-    return set.size || HQ_DEPTS.length;
-  }, [members]);
-
-  return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <Section title="组织概览 · 可编辑">
-        <p className="mb-3 text-[12px] text-[#6e6e73]">
-          组织名称用于侧栏与登录视角展示。成员邀请后写入本地账号目录，激活即可用演示密码登录。
-        </p>
-        <div className="mb-4 flex flex-wrap items-end gap-2">
-          <label className="min-w-[220px] flex-1 text-[11px] font-semibold text-zinc-500">
-            组织显示名
-            <input
-              value={nameDraft}
-              onChange={(e) => setNameDraft(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-[13px] font-medium text-zinc-900"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={() => {
-              const next = nameDraft.trim();
-              if (!next) return;
-              updateWorkspace(workspace.id, { name: next });
-            }}
-            className="rounded-lg bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white"
-          >
-            保存名称
-          </button>
-        </div>
-        <dl className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
-          <Field label="当前组织 / 租户" value={workspace.name} />
-          <Field label="Namespace" value={`ns/${workspace.namespace}`} mono />
-          <Field label="成员" value={`${members.length} 人`} />
-          <Field label="覆盖部门" value={`${deptCount} 个`} />
-        </dl>
-      </Section>
-      <Section title="组织双轴结构">
-        <p className="mb-3 text-[12px] text-[#6e6e73]">
-          MSS 组织按「机关职能 × 一线区域」划分；资产可见性与场景案例推荐均基于此结构。在「成员管理」中可为每人指定归属。
-        </p>
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-xl border border-black/[0.06] bg-white p-4">
-            <p className="mb-2 text-[11px] font-semibold text-zinc-500">机关职能（部门）</p>
-            <ul className="space-y-1.5">
-              {HQ_DEPTS.map((d) => (
-                <li key={d.id} className="flex items-center justify-between text-[12px]">
-                  <span className="font-medium text-zinc-800">{d.label}</span>
-                  <span className="font-mono text-[10px] text-zinc-400">{d.id}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="rounded-xl border border-black/[0.06] bg-white p-4">
-            <p className="mb-2 text-[11px] font-semibold text-zinc-500">一线区域</p>
-            <ul className="space-y-1.5">
-              {REGIONS.map((r) => (
-                <li key={r.id} className="flex items-center justify-between text-[12px]">
-                  <span className="font-medium text-zinc-800">{r.label}</span>
-                  <span className="font-mono text-[10px] text-zinc-400">{r.id}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </Section>
-      <Section title="鉴权链路">
-        <ol className="list-decimal space-y-1.5 pl-4 text-[12px] leading-relaxed text-zinc-600">
-          <li>管理员在「成员管理」邀请邮箱并指定角色 / 部门 / 区域</li>
-          <li>激活后账号进入登录目录（与种子成员合并）</li>
-          <li>登录页使用邮箱 + 演示密码 <code className="rounded bg-zinc-100 px-1">{DEMO_PASSWORD}</code></li>
-          <li>会话携带角色与组织归属，驱动菜单、资产可见性与场景推荐</li>
-        </ol>
-      </Section>
-    </div>
-  );
-}
-
-function DeptsPanel({ members }: { members: WorkspaceMember[] }) {
-  const counts = useMemo(() => {
-    const map = Object.fromEntries(HQ_DEPTS.map((d) => [d.id, 0])) as Record<string, number>;
-    members.forEach((m) => {
-      (m.deptIds ?? []).forEach((id) => {
-        map[id] = (map[id] ?? 0) + 1;
-      });
-    });
-    return map;
-  }, [members]);
-
-  return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <Section title="部门（机关职能）">
-        <p className="mb-3 text-[12px] text-[#6e6e73]">
-          部门字典由平台预置。成员归属请在「成员管理」中编辑；此处展示人数分布，便于核对组织覆盖。
-        </p>
-        <div className="overflow-hidden rounded-xl border border-black/[0.06]">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-black/[0.06] bg-[#fafafa] text-[11px] font-bold uppercase text-[#86868b]">
-              <tr>
-                <th className="px-4 py-3">部门</th>
-                <th className="px-4 py-3">编码</th>
-                <th className="px-4 py-3">成员数</th>
-              </tr>
-            </thead>
-            <tbody>
-              {HQ_DEPTS.map((d) => (
-                <tr key={d.id} className="border-b border-black/[0.05] last:border-0">
-                  <td className="px-4 py-3 font-semibold text-[#1d1d1f]">{d.label}</td>
-                  <td className="px-4 py-3 font-mono text-[12px] text-zinc-500">{d.id}</td>
-                  <td className="px-4 py-3 text-zinc-600">{counts[d.id] ?? 0}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Section>
-      <Section title="一线区域">
-        <div className="flex flex-wrap gap-2">
-          {REGIONS.map((r) => (
-            <span
-              key={r.id}
-              className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-[12px] font-medium text-zinc-700"
-            >
-              {r.label}
-              <span className="ml-1.5 font-mono text-[10px] text-zinc-400">{r.id}</span>
-            </span>
-          ))}
-        </div>
-      </Section>
-    </div>
-  );
-}
-
-function RolesPanel() {
-  return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <Section title="平台角色">
-        <p className="mb-3 text-[12px] text-[#6e6e73]">
-          角色决定模块访问级别；与部门/区域正交——同一角色可归属不同组织单元。在「成员管理」中可随时改派角色。
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {ROLES.map((role) => (
-            <div key={role} className="rounded-xl border border-black/[0.06] bg-white p-4">
-              <span className={cn('rounded border px-2 py-0.5 text-[11px] font-bold', getRoleBadgeClass(role))}>
-                {ROLE_LABELS[role]}
-              </span>
-              <p className="mt-2 text-[12px] leading-relaxed text-zinc-600">{ROLE_DESCRIPTIONS[role]}</p>
-            </div>
-          ))}
-        </div>
-      </Section>
-    </div>
-  );
-}
-
-function MembersPanel({
+function MembersAndOrgPanel({
+  workspace,
   members,
   onUpdateRole,
   onUpdateOrg,
@@ -237,6 +88,7 @@ function MembersPanel({
   onInvite,
   onRemove,
 }: {
+  workspace: Workspace;
   members: WorkspaceMember[];
   onUpdateRole: (id: string, role: PlatformRole) => void;
   onUpdateOrg: (
@@ -247,9 +99,13 @@ function MembersPanel({
   onInvite: (input: InviteMemberInput) => void;
   onRemove: (id: string) => void;
 }) {
+  const updateWorkspace = useWorkspaceConfigStore((s) => s.updateWorkspace);
+  const depts = useOrgTaxonomyStore((s) => s.depts);
+  const regions = useOrgTaxonomyStore((s) => s.regions);
   const currentUser = useSessionStore((s) => s.user);
   const canManage = currentUser?.platformRole === 'super_admin';
 
+  const [nameDraft, setNameDraft] = useState(workspace.name);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [role, setRole] = useState<PlatformRole>('business_user');
@@ -257,16 +113,66 @@ function MembersPanel({
   const [regionId, setRegionId] = useState<RegionId | ''>('');
   const [activateNow, setActivateNow] = useState(true);
 
+  const deptCoverage = useMemo(() => {
+    const set = new Set<string>();
+    members.forEach((m) => m.deptIds?.forEach((d) => set.add(d)));
+    return set.size;
+  }, [members]);
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <Section title="邀请成员">
+      <Section title="组织概览">
         <p className="mb-3 text-[12px] text-[#6e6e73]">
-          邀请写入工作区成员表，并进入登录账号目录。勾选「立即激活」后可用演示密码{' '}
-          <code className="rounded bg-zinc-100 px-1">{DEMO_PASSWORD}</code> 登录；未激活则登录会被拒绝。
+          组织名称用于侧栏与登录视角；成员归属决定资产可见性与权限申请/管控的基础单元。部门与区域字典请在「部门区域」维护。
         </p>
+        <div className="mb-4 flex flex-wrap items-end gap-2">
+          <label className="min-w-[220px] flex-1 text-[11px] font-semibold text-zinc-500">
+            组织显示名
+            <input
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              disabled={!canManage}
+              className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-[13px] font-medium text-zinc-900 disabled:bg-zinc-50"
+            />
+          </label>
+          {canManage ? (
+            <button
+              type="button"
+              onClick={() => {
+                const next = nameDraft.trim();
+                if (!next) return;
+                updateWorkspace(workspace.id, { name: next });
+                recordAudit({
+                  category: 'org',
+                  action: 'org.rename',
+                  module: 'org',
+                  detail: `更新组织显示名为「${next}」`,
+                  workspaceId: workspace.id,
+                });
+              }}
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white"
+            >
+              保存名称
+            </button>
+          ) : null}
+        </div>
+        <dl className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
+          <Field label="当前组织" value={workspace.name} />
+          <Field label="Namespace" value={`ns/${workspace.namespace}`} mono />
+          <Field label="成员" value={`${members.length} 人`} />
+          <Field label="覆盖部门" value={`${deptCoverage || depts.length} 个`} />
+        </dl>
+        <ol className="mt-4 list-decimal space-y-1 pl-4 text-[11px] leading-relaxed text-zinc-500">
+          <li>平台运营邀请邮箱并指定角色 / 部门 / 区域</li>
+          <li>激活后可用演示密码 <code className="rounded bg-zinc-100 px-1">{DEMO_PASSWORD}</code> 登录</li>
+          <li>会话携带角色与组织归属，驱动菜单、资产可见性与审计回溯</li>
+        </ol>
+      </Section>
+
+      <Section title="邀请成员">
         {!canManage ? (
           <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
-            当前账号无成员管理权限（需超级管理员），仅可查看。
+            当前账号无成员管理权限（需平台运营），仅可查看。
           </p>
         ) : (
           <div className="space-y-2 rounded-xl border border-zinc-200 bg-white p-4">
@@ -304,7 +210,7 @@ function MembersPanel({
                 className="rounded-lg border border-black/[0.06] px-3 py-2 text-sm"
               >
                 <option value="">部门（可选）</option>
-                {HQ_DEPTS.map((d) => (
+                {depts.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.label}
                   </option>
@@ -316,7 +222,7 @@ function MembersPanel({
                 className="rounded-lg border border-black/[0.06] px-3 py-2 text-sm"
               >
                 <option value="">区域（可选）</option>
-                {REGIONS.map((r) => (
+                {regions.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.label}
                   </option>
@@ -399,7 +305,7 @@ function MembersPanel({
                         className="max-w-[120px] rounded border border-zinc-200 px-1.5 py-1 text-[11px]"
                       >
                         <option value="">—</option>
-                        {HQ_DEPTS.map((d) => (
+                        {depts.map((d) => (
                           <option key={d.id} value={d.id}>
                             {d.label}
                           </option>
@@ -423,7 +329,7 @@ function MembersPanel({
                         className="max-w-[110px] rounded border border-zinc-200 px-1.5 py-1 text-[11px]"
                       >
                         <option value="">机关</option>
-                        {REGIONS.map((r) => (
+                        {regions.map((r) => (
                           <option key={r.id} value={r.id}>
                             {r.label}
                           </option>
@@ -523,19 +429,366 @@ function MembersPanel({
   );
 }
 
-function RbacMatrixPanel({ workspace }: { workspace: Workspace }) {
+function DeptsPanel({ members }: { members: WorkspaceMember[] }) {
+  const depts = useOrgTaxonomyStore((s) => s.depts);
+  const regions = useOrgTaxonomyStore((s) => s.regions);
+  const addDept = useOrgTaxonomyStore((s) => s.addDept);
+  const updateDept = useOrgTaxonomyStore((s) => s.updateDept);
+  const removeDept = useOrgTaxonomyStore((s) => s.removeDept);
+  const addRegion = useOrgTaxonomyStore((s) => s.addRegion);
+  const updateRegion = useOrgTaxonomyStore((s) => s.updateRegion);
+  const removeRegion = useOrgTaxonomyStore((s) => s.removeRegion);
+  const resetDefaults = useOrgTaxonomyStore((s) => s.resetDefaults);
+  const toast = useOrgTaxonomyStore((s) => s.toast);
+  const dismissToast = useOrgTaxonomyStore((s) => s.dismissToast);
+  const currentUser = useSessionStore((s) => s.user);
+  const canManage = currentUser?.platformRole === 'super_admin';
+
+  const [newDept, setNewDept] = useState('');
+  const [newRegion, setNewRegion] = useState('');
+  const [editingDept, setEditingDept] = useState<{ id: string; label: string } | null>(null);
+  const [editingRegion, setEditingRegion] = useState<{ id: string; label: string } | null>(null);
+
+  const deptCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    depts.forEach((d) => {
+      map[d.id] = 0;
+    });
+    members.forEach((m) => {
+      (m.deptIds ?? []).forEach((id) => {
+        map[id] = (map[id] ?? 0) + 1;
+      });
+    });
+    return map;
+  }, [members, depts]);
+
+  const regionCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    regions.forEach((r) => {
+      map[r.id] = 0;
+    });
+    members.forEach((m) => {
+      if (m.regionId) map[m.regionId] = (map[m.regionId] ?? 0) + 1;
+    });
+    return map;
+  }, [members, regions]);
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-6">
+      {toast ? (
+        <div className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-[12px] text-zinc-700">
+          <span>{toast}</span>
+          <button type="button" onClick={dismissToast} className="text-zinc-400 hover:text-zinc-700">
+            关闭
+          </button>
+        </div>
+      ) : null}
+
+      <Section title="部门（机关职能）">
+        <p className="mb-3 text-[12px] text-[#6e6e73]">
+          部门字典是成员归属、资产可见性与后续权限申请的基础数据。可增删改；删除前需先清空成员归属。
+        </p>
+        {!canManage ? (
+          <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+            仅平台运营可编辑部门/区域字典。
+          </p>
+        ) : (
+          <div className="mb-3 flex flex-wrap gap-2">
+            <input
+              value={newDept}
+              onChange={(e) => setNewDept(e.target.value)}
+              placeholder="新部门名称，如 法务"
+              className="min-w-[180px] flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (addDept(newDept)) {
+                  recordAudit({
+                    category: 'org',
+                    action: 'dept.create',
+                    module: 'org',
+                    detail: `新增部门「${newDept.trim()}」`,
+                  });
+                  setNewDept('');
+                }
+              }}
+              className="rounded-lg bg-zinc-900 px-3 py-2 text-[12px] font-semibold text-white"
+            >
+              新增部门
+            </button>
+          </div>
+        )}
+        <div className="overflow-hidden rounded-xl border border-black/[0.06]">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-black/[0.06] bg-[#fafafa] text-[11px] font-bold uppercase text-[#86868b]">
+              <tr>
+                <th className="px-4 py-3">部门</th>
+                <th className="px-4 py-3">编码</th>
+                <th className="px-4 py-3">成员数</th>
+                <th className="px-4 py-3">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {depts.map((d) => (
+                <tr key={d.id} className="border-b border-black/[0.05] last:border-0">
+                  <td className="px-4 py-3">
+                    {editingDept?.id === d.id ? (
+                      <input
+                        value={editingDept.label}
+                        onChange={(e) => setEditingDept({ ...editingDept, label: e.target.value })}
+                        className="w-full rounded border border-zinc-200 px-2 py-1 text-[13px]"
+                      />
+                    ) : (
+                      <span className="font-semibold text-[#1d1d1f]">{d.label}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 font-mono text-[12px] text-zinc-500">{d.id}</td>
+                  <td className="px-4 py-3 text-zinc-600">{deptCounts[d.id] ?? 0}</td>
+                  <td className="px-4 py-3">
+                    {canManage ? (
+                      <div className="flex flex-wrap gap-1">
+                        {editingDept?.id === d.id ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (updateDept(d.id, editingDept.label)) {
+                                  recordAudit({
+                                    category: 'org',
+                                    action: 'dept.update',
+                                    module: 'org',
+                                    detail: `重命名部门 ${d.id} →「${editingDept.label.trim()}」`,
+                                  });
+                                  setEditingDept(null);
+                                }
+                              }}
+                              className="rounded border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold text-emerald-700"
+                            >
+                              保存
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingDept(null)}
+                              className="rounded border border-zinc-200 px-2 py-0.5 text-[10px] text-zinc-600"
+                            >
+                              取消
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setEditingDept({ id: d.id, label: d.label })}
+                              className="rounded border border-zinc-200 px-2 py-0.5 text-[10px] font-semibold text-zinc-600"
+                            >
+                              编辑
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const count = deptCounts[d.id] ?? 0;
+                                if (count > 0) {
+                                  removeDept(d.id, count);
+                                  return;
+                                }
+                                if (!window.confirm(`确定删除部门「${d.label}」？`)) return;
+                                if (removeDept(d.id, 0)) {
+                                  recordAudit({
+                                    category: 'org',
+                                    action: 'dept.delete',
+                                    module: 'org',
+                                    detail: `删除部门「${d.label}」(${d.id})`,
+                                  });
+                                }
+                              }}
+                              className="rounded border border-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-600"
+                            >
+                              删除
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-zinc-400">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+
+      <Section title="一线区域">
+        <p className="mb-3 text-[12px] text-[#6e6e73]">
+          区域与租户解耦，仅作归属标签；一线人员建议必填，机关可空。
+        </p>
+        {canManage ? (
+          <div className="mb-3 flex flex-wrap gap-2">
+            <input
+              value={newRegion}
+              onChange={(e) => setNewRegion(e.target.value)}
+              placeholder="新区域名称，如 北美"
+              className="min-w-[180px] flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (addRegion(newRegion)) {
+                  recordAudit({
+                    category: 'org',
+                    action: 'region.create',
+                    module: 'org',
+                    detail: `新增区域「${newRegion.trim()}」`,
+                  });
+                  setNewRegion('');
+                }
+              }}
+              className="rounded-lg bg-zinc-900 px-3 py-2 text-[12px] font-semibold text-white"
+            >
+              新增区域
+            </button>
+          </div>
+        ) : null}
+        <div className="overflow-hidden rounded-xl border border-black/[0.06]">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-black/[0.06] bg-[#fafafa] text-[11px] font-bold uppercase text-[#86868b]">
+              <tr>
+                <th className="px-4 py-3">区域</th>
+                <th className="px-4 py-3">编码</th>
+                <th className="px-4 py-3">成员数</th>
+                <th className="px-4 py-3">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {regions.map((r) => (
+                <tr key={r.id} className="border-b border-black/[0.05] last:border-0">
+                  <td className="px-4 py-3">
+                    {editingRegion?.id === r.id ? (
+                      <input
+                        value={editingRegion.label}
+                        onChange={(e) =>
+                          setEditingRegion({ ...editingRegion, label: e.target.value })
+                        }
+                        className="w-full rounded border border-zinc-200 px-2 py-1 text-[13px]"
+                      />
+                    ) : (
+                      <span className="font-semibold text-[#1d1d1f]">{r.label}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 font-mono text-[12px] text-zinc-500">{r.id}</td>
+                  <td className="px-4 py-3 text-zinc-600">{regionCounts[r.id] ?? 0}</td>
+                  <td className="px-4 py-3">
+                    {canManage ? (
+                      <div className="flex flex-wrap gap-1">
+                        {editingRegion?.id === r.id ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (updateRegion(r.id, editingRegion.label)) {
+                                  recordAudit({
+                                    category: 'org',
+                                    action: 'region.update',
+                                    module: 'org',
+                                    detail: `重命名区域 ${r.id} →「${editingRegion.label.trim()}」`,
+                                  });
+                                  setEditingRegion(null);
+                                }
+                              }}
+                              className="rounded border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold text-emerald-700"
+                            >
+                              保存
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingRegion(null)}
+                              className="rounded border border-zinc-200 px-2 py-0.5 text-[10px] text-zinc-600"
+                            >
+                              取消
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setEditingRegion({ id: r.id, label: r.label })}
+                              className="rounded border border-zinc-200 px-2 py-0.5 text-[10px] font-semibold text-zinc-600"
+                            >
+                              编辑
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const count = regionCounts[r.id] ?? 0;
+                                if (count > 0) {
+                                  removeRegion(r.id, count);
+                                  return;
+                                }
+                                if (!window.confirm(`确定删除区域「${r.label}」？`)) return;
+                                if (removeRegion(r.id, 0)) {
+                                  recordAudit({
+                                    category: 'org',
+                                    action: 'region.delete',
+                                    module: 'org',
+                                    detail: `删除区域「${r.label}」(${r.id})`,
+                                  });
+                                }
+                              }}
+                              className="rounded border border-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-600"
+                            >
+                              删除
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-zinc-400">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+
+      {canManage ? (
+        <button
+          type="button"
+          onClick={() => {
+            if (!window.confirm('恢复默认部门与区域字典？自定义项将被覆盖。')) return;
+            resetDefaults();
+            recordAudit({
+              category: 'org',
+              action: 'taxonomy.reset',
+              module: 'org',
+              detail: '恢复默认部门与区域字典',
+            });
+          }}
+          className="text-[11px] font-medium text-zinc-500 underline-offset-2 hover:underline"
+        >
+          恢复默认字典
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function RolesAndRbacPanel({ workspace }: { workspace: Workspace }) {
   const modules = Object.keys(MODULE_LABELS) as ResourceModule[];
   const matrix = getRbacMatrix(workspace.id);
 
   return (
     <div className="space-y-6">
-      <Section title={`RBAC 权限矩阵 · ${workspace.name}`}>
+      <Section title={`角色与权限 · ${workspace.name}`}>
         <p className="mb-4 text-xs text-[#86868b]">
-          当前数字空间的角色×模块访问级别（演示只读，随工作区切换而变化）。Admin = 完全控制 · Write =
-          创建/编辑 · Execute = 运行 · R = 只读 · — = 无权限。实际授权请通过「成员管理」改派角色。
+          四角色统一矩阵：平台运营为全模块 Admin（由种子/白名单产生，不通过邀请下发）。Admin =
+          完全控制 · Write = 创建/编辑 · Execute = 运行 · R = 只读 · — = 无权限。实际授权通过「成员与组织」改派角色。
         </p>
         <div className="overflow-x-auto rounded-xl border border-black/[0.06]">
-          <table className="w-full min-w-[720px] text-center text-xs">
+          <table className="w-full min-w-[780px] text-center text-xs">
             <thead>
               <tr className="border-b border-black/[0.06] bg-[#fafafa]">
                 <th className="px-3 py-3 text-left font-bold text-[#86868b]">角色</th>
@@ -547,17 +800,31 @@ function RbacMatrixPanel({ workspace }: { workspace: Workspace }) {
               </tr>
             </thead>
             <tbody>
-              {ROLES.filter((r) => r !== 'super_admin').map((role) => (
+              {ROLES.map((role) => (
                 <tr key={role} className="border-b border-black/[0.05] last:border-0">
                   <td className="px-3 py-3 text-left">
-                    <p className="font-bold text-[#1d1d1f]">{ROLE_LABELS[role]}</p>
-                    <p className="text-[10px] text-[#aeaeb2]">{ROLE_DESCRIPTIONS[role]}</p>
+                    <span
+                      className={cn(
+                        'mb-1 inline-block rounded border px-2 py-0.5 text-[11px] font-bold',
+                        getRoleBadgeClass(role),
+                      )}
+                    >
+                      {ROLE_LABELS[role]}
+                    </span>
+                    <p className="mt-1 max-w-[220px] text-[10px] leading-relaxed text-[#86868b]">
+                      {ROLE_DESCRIPTIONS[role]}
+                    </p>
                   </td>
                   {modules.map((mod) => {
                     const level = matrix[role][mod];
                     return (
                       <td key={mod} className="px-2 py-3">
-                        <span className={cn('inline-block rounded px-2 py-1 font-bold', PERMISSION_CLASSES[level])}>
+                        <span
+                          className={cn(
+                            'inline-block rounded px-2 py-1 font-bold',
+                            PERMISSION_CLASSES[level],
+                          )}
+                        >
                           {PERMISSION_LABELS[level]}
                         </span>
                       </td>
@@ -574,34 +841,279 @@ function RbacMatrixPanel({ workspace }: { workspace: Workspace }) {
 }
 
 function AuditPanel({ workspace }: { workspace: Workspace }) {
-  const logs = [
-    { time: '14:02', user: 'Mcyo', action: '激活成员 bruce@company.com', module: 'members' },
-    { time: '13:45', user: 'Mcyo', action: '邀请 jacky@company.com 为业务用户', module: 'members' },
-    { time: '11:20', user: 'Bruce', action: '调整 Skill 可见性', module: 'skill' },
-    { time: '09:05', user: 'Mcyo', action: '更新组织显示名', module: 'org' },
+  const logs = useAuditStore((s) => s.logs);
+  const filter = useAuditStore((s) => s.filter);
+  const setFilter = useAuditStore((s) => s.setFilter);
+  const clearLogs = useAuditStore((s) => s.clearLogs);
+  const depts = useOrgTaxonomyStore((s) => s.depts);
+  const regions = useOrgTaxonomyStore((s) => s.regions);
+  const currentUser = useSessionStore((s) => s.user);
+  const canManage = currentUser?.platformRole === 'super_admin';
+
+  const [deptId, setDeptId] = useState<DeptId | ''>('');
+  const [regionId, setRegionId] = useState<RegionId | '' | '__hq__'>('');
+  const [accountQuery, setAccountQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+
+  const query: AuditLogQuery = useMemo(
+    () => ({
+      category: filter,
+      deptId,
+      regionId,
+      accountQuery,
+    }),
+    [filter, deptId, regionId, accountQuery],
+  );
+
+  const filtered = useMemo(() => {
+    return logs.filter((l) => {
+      if (l.workspaceId && l.workspaceId !== workspace.id) return false;
+      return matchAuditLog(l, query);
+    });
+  }, [logs, query, workspace.id]);
+
+  const allFilteredSelected =
+    filtered.length > 0 && filtered.every((l) => selectedIds.has(l.id));
+
+  const selectedLogs = useMemo(
+    () => filtered.filter((l) => selectedIds.has(l.id)),
+    [filtered, selectedIds],
+  );
+
+  const filters: Array<AuditCategory | 'all'> = [
+    'all',
+    'auth',
+    'browse',
+    'task',
+    'model',
+    'members',
+    'org',
+    'asset',
   ];
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllFiltered = () => {
+    if (allFilteredSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        filtered.forEach((l) => next.delete(l.id));
+        return next;
+      });
+      return;
+    }
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      filtered.forEach((l) => next.add(l.id));
+      return next;
+    });
+  };
+
+  const exportLogs = (mode: 'filtered' | 'selected') => {
+    const payload = mode === 'selected' ? selectedLogs : filtered;
+    if (!payload.length) {
+      window.alert(mode === 'selected' ? '请先勾选要导出的日志' : '当前筛选结果为空');
+      return;
+    }
+    downloadAuditLogsExcel(payload, {
+      query,
+      workspaceName: workspace.name,
+    });
+    recordAudit({
+      category: 'org',
+      action: 'audit.export',
+      module: 'audit',
+      detail: `导出审计日志 ${payload.length} 条（${mode === 'selected' ? '勾选' : '当前筛选'}）`,
+      workspaceId: workspace.id,
+    });
+  };
+
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
+    <div className="mx-auto max-w-3xl space-y-4">
       <Section title={`审计日志 · ${workspace.name}`}>
-        <div className="space-y-2">
-          {logs.map((log, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-4 rounded-lg border border-black/[0.06] bg-white px-4 py-3 text-sm"
+        <p className="mb-3 text-[12px] text-[#6e6e73]">
+          支持按类别、领域（部门）、区域与账号搜索；可勾选批量导出 Excel，用于权限使用审计回溯。
+        </p>
+
+        <div className="mb-3 grid gap-2 rounded-xl border border-zinc-200 bg-white p-3 sm:grid-cols-3">
+          <label className="text-[11px] font-semibold text-zinc-500">
+            领域（部门）
+            <select
+              value={deptId}
+              onChange={(e) => setDeptId(e.target.value as DeptId | '')}
+              className="mt-1 w-full rounded-lg border border-zinc-200 px-2.5 py-2 text-[12px] font-medium text-zinc-800"
             >
-              <span className="font-mono text-[11px] text-[#aeaeb2]">{log.time}</span>
-              <span className="font-bold text-[#424245]">{log.user}</span>
-              <span className="flex-grow text-[#6e6e73]">{log.action}</span>
-              <span className="rounded bg-black/[0.04] px-2 py-0.5 text-[10px] font-bold uppercase text-[#86868b]">
-                {log.module}
-              </span>
-            </div>
+              <option value="">全部领域</option>
+              {depts.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-[11px] font-semibold text-zinc-500">
+            区域
+            <select
+              value={regionId}
+              onChange={(e) => setRegionId(e.target.value as RegionId | '' | '__hq__')}
+              className="mt-1 w-full rounded-lg border border-zinc-200 px-2.5 py-2 text-[12px] font-medium text-zinc-800"
+            >
+              <option value="">全部区域</option>
+              <option value="__hq__">机关 / 未挂区域</option>
+              {regions.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-[11px] font-semibold text-zinc-500">
+            账号（姓名 / 邮箱）
+            <input
+              value={accountQuery}
+              onChange={(e) => setAccountQuery(e.target.value)}
+              placeholder="如 Dickson 或 @company.com"
+              className="mt-1 w-full rounded-lg border border-zinc-200 px-2.5 py-2 text-[12px] font-medium text-zinc-800"
+            />
+          </label>
+        </div>
+
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          {filters.map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setFilter(key)}
+              className={cn(
+                'rounded-full border px-2.5 py-1 text-[11px] font-medium',
+                filter === key
+                  ? 'border-zinc-900 bg-zinc-900 text-white'
+                  : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50',
+              )}
+            >
+              {key === 'all' ? '全部' : AUDIT_CATEGORY_LABELS[key]}
+            </button>
           ))}
+        </div>
+
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <label className="inline-flex items-center gap-1.5 text-[11px] text-zinc-600">
+            <input
+              type="checkbox"
+              checked={allFilteredSelected}
+              onChange={toggleSelectAllFiltered}
+              className="accent-claw-600"
+            />
+            全选当前结果（{filtered.length}）
+          </label>
+          <span className="text-[11px] text-zinc-400">已勾选 {selectedLogs.length}</span>
+          <button
+            type="button"
+            onClick={() => exportLogs('filtered')}
+            className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-zinc-700 hover:bg-zinc-50"
+          >
+            <i className="fa-solid fa-file-excel mr-1 text-emerald-600" />
+            导出当前结果
+          </button>
+          <button
+            type="button"
+            onClick={() => exportLogs('selected')}
+            className="rounded-lg bg-zinc-900 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-zinc-800"
+          >
+            批量导出勾选
+          </button>
+          {canManage ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (!window.confirm('清空本机审计日志？')) return;
+                clearLogs();
+                setSelectedIds(new Set());
+              }}
+              className="ml-auto text-[11px] text-zinc-400 underline-offset-2 hover:underline"
+            >
+              清空日志
+            </button>
+          ) : null}
+        </div>
+
+        <div className="space-y-2">
+          {filtered.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-zinc-200 px-4 py-8 text-center text-[12px] text-zinc-400">
+              暂无符合条件的审计记录
+            </p>
+          ) : (
+            filtered.map((log) => (
+              <div
+                key={log.id}
+                className="flex flex-wrap items-start gap-3 rounded-lg border border-black/[0.06] bg-white px-4 py-3 text-sm"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(log.id)}
+                  onChange={() => toggleSelect(log.id)}
+                  className="mt-1 accent-claw-600"
+                  aria-label={`选择 ${log.id}`}
+                />
+                <span className="shrink-0 font-mono text-[11px] text-[#aeaeb2]">
+                  {formatAuditTime(log.at)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-[#424245]">{log.userName}</span>
+                    {log.userEmail ? (
+                      <span className="text-[11px] text-zinc-400">{log.userEmail}</span>
+                    ) : null}
+                    {log.role ? (
+                      <span
+                        className={cn(
+                          'rounded border px-1.5 py-0.5 text-[10px] font-bold',
+                          getRoleBadgeClass(log.role),
+                        )}
+                      >
+                        {ROLE_LABELS[log.role]}
+                      </span>
+                    ) : null}
+                    <span className="rounded bg-black/[0.04] px-2 py-0.5 text-[10px] font-bold uppercase text-[#86868b]">
+                      {AUDIT_CATEGORY_LABELS[log.category]}
+                    </span>
+                    {(log.deptIds?.length || log.regionId !== undefined) && (
+                      <span className="rounded border border-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-500">
+                        {(log.deptIds ?? []).map(getDeptLabel).join('·') || '未指定领域'}
+                        {' · '}
+                        {log.regionId ? getRegionLabel(log.regionId) : '机关'}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-[13px] text-[#6e6e73]">{log.detail}</p>
+                  <p className="mt-0.5 font-mono text-[10px] text-zinc-400">
+                    {log.action} · {log.module}
+                  </p>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </Section>
     </div>
   );
+}
+
+function formatAuditTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return iso;
+  }
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -620,4 +1132,13 @@ function Field({ label, value, mono }: { label: string; value: string; mono?: bo
       <dd className={cn('mt-1 text-[#1d1d1f]', mono && 'font-mono text-sm')}>{value}</dd>
     </div>
   );
+}
+
+/** 供浏览审计使用：视图中文名 */
+export function auditViewLabel(view: string): string {
+  try {
+    return getNavMetaLabel(view as never) || view;
+  } catch {
+    return view;
+  }
 }

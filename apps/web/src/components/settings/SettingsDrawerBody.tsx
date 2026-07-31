@@ -82,8 +82,8 @@ export function SettingsDrawerBody({ onClose }: SettingsDrawerBodyProps) {
     <div className="space-y-4 pb-2">
       <p className="rounded-xl bg-zinc-50 px-3 py-2.5 text-[12px] leading-relaxed text-zinc-600">
         {showModelApi
-          ? '这里是你的个人偏好（模型等）。侧栏菜单由超级管理员在「展示配置」统一设定，其他人按配置使用。'
-          : '当前为只读访客：可浏览案例与任务结果。侧栏菜单由超级管理员统一设定。'}
+          ? '这里是你的个人偏好（模型等）。侧栏菜单由平台运营在「展示配置」统一设定，其他人按配置使用。'
+          : '当前为只读访客：可浏览案例与任务结果。侧栏菜单由平台运营统一设定。'}
       </p>
 
       {showModelApi ? (
@@ -105,7 +105,7 @@ export function SettingsDrawerBody({ onClose }: SettingsDrawerBodyProps) {
         <>
           <SettingsCard
             title="平台治理"
-            hint="仅超级管理员可写。其他人通过侧栏消费你配置后的菜单与成员。"
+            hint="仅平台运营可写。其他人通过侧栏消费你配置后的菜单与成员。"
           >
             <div className="space-y-2">
               <button

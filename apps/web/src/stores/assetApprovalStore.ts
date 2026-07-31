@@ -1,5 +1,9 @@
 import { create } from 'zustand';
-import type { AssetApprovalKind, AssetApprovalRequest } from '@/domain/assetApproval';
+import type {
+  AssetApprovalKind,
+  AssetApprovalReason,
+  AssetApprovalRequest,
+} from '@/domain/assetApproval';
 import { getCurrentUserName } from '@/domain/currentUser';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 
@@ -7,22 +11,44 @@ interface AssetApprovalState {
   current: AssetApprovalRequest | null;
   openApproval: (input: Omit<AssetApprovalRequest, 'stepIndex' | 'createdAt' | 'submitterName'> & {
     submitterName?: string;
+    reasons?: AssetApprovalReason[];
   }) => void;
   advance: () => void;
   close: () => void;
 }
 
-function markPublished(kind: AssetApprovalKind, assetId: string) {
+function applyApproval(kind: AssetApprovalKind, assetId: string, reasons: AssetApprovalReason[]) {
   const market = useMarketplaceStore.getState();
+  const wantPublish = reasons.includes('publish_executable') || reasons.length === 0;
+  const wantPublic = reasons.includes('visibility_public');
+
   if (kind === 'agent') {
     const agent = market.agents.find((a) => a.id === assetId);
-    if (agent) market.upsertAgent({ ...agent, published: true });
+    if (agent) {
+      market.upsertAgent({
+        ...agent,
+        ...(wantPublish ? { published: true } : {}),
+        ...(wantPublic ? { visibility: 'public' as const } : {}),
+      });
+    }
   } else if (kind === 'skill') {
     const skill = market.skills.find((s) => s.id === assetId);
-    if (skill) market.upsertSkill({ ...skill, published: true });
+    if (skill) {
+      market.upsertSkill({
+        ...skill,
+        ...(wantPublish ? { published: true } : {}),
+        ...(wantPublic ? { visibility: 'public' as const } : {}),
+      });
+    }
   } else if (kind === 'tool') {
     const tool = market.tools.find((t) => t.id === assetId);
-    if (tool) market.upsertTool({ ...tool, published: true });
+    if (tool) {
+      market.upsertTool({
+        ...tool,
+        ...(wantPublish ? { published: true } : {}),
+        ...(wantPublic ? { visibility: 'public' as const } : {}),
+      });
+    }
   } else if (kind === 'kb') {
     const doc = market.kbDocs.find((d) => d.id === assetId);
     if (doc) market.upsertKbDoc({ ...doc, indexed: true });
@@ -41,9 +67,10 @@ export const useAssetApprovalStore = create<AssetApprovalState>((set, get) => ({
         kind: input.kind,
         assetId: input.assetId,
         assetName: input.assetName,
-        submitterName: input.submitterName || getCurrentUserName() || '当前用户',
-        stepIndex: 1, // 提交人已完成，进入业务主�?
+        submitterName: input.submitterName || getCurrentUserName() || '????',
+        stepIndex: 1,
         createdAt: Date.now(),
+        reasons: input.reasons?.length ? input.reasons : ['publish_executable'],
       },
     });
   },
@@ -53,8 +80,9 @@ export const useAssetApprovalStore = create<AssetApprovalState>((set, get) => ({
     if (!cur) return;
     const next = cur.stepIndex + 1;
     if (next >= 3) {
-      markPublished(cur.kind, cur.assetId);
-      useMarketplaceStore.getState().showToast(`${cur.assetName} 已通过审批并上架`);
+      const reasons = cur.reasons?.length ? cur.reasons : (['publish_executable'] as AssetApprovalReason[]);
+      applyApproval(cur.kind, cur.assetId, reasons);
+      useMarketplaceStore.getState().showToast(`${cur.assetName} ?????`);
       set({ current: null });
       return;
     }

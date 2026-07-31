@@ -229,10 +229,11 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
           ...(idTaken
             ? { ...parsed, id: `skill-import-${Date.now()}-${importedSkills.length}` }
             : parsed),
-          // 导入视为当前用户构建，便于在「我构建的」中找到
           publisher: userName,
           publisherUserId: userId || parsed.publisherUserId,
           author: parsed.author || userName,
+          published: false,
+          visibility: parsed.visibility === 'private' ? 'private' : 'org',
         };
 
         get().upsertSkill(skill, true);
@@ -415,7 +416,14 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
         }
         if (skillFilter !== 'office' && s.category !== skillFilter) return false;
       }
-      if (q && !`${s.name} ${s.desc} ${s.tags.join(' ')}`.toLowerCase().includes(q)) return false;
+      if (
+        q &&
+        !`${s.name} ${s.nameZh ?? ''} ${s.nameEn ?? ''} ${s.desc} ${s.descZh ?? ''} ${s.descEn ?? ''} ${(s.tags ?? []).join(' ')} ${(s.searchKeywords ?? []).join(' ')}`
+          .toLowerCase()
+          .includes(q)
+      ) {
+        return false;
+      }
       return matchesAssetOrgFilters(s, {
         deptFilter: skillDeptFilter,
         regionFilter: skillRegionFilter,

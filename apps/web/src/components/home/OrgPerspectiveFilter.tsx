@@ -1,23 +1,26 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
 import { SKILL_ROLE_CATEGORIES } from '@/domain/skillRoles';
 import {
-  DEPT_FILTER_OPTIONS,
+  clampOrgPerspectiveSelection,
   emptyOrgPerspectiveSelection,
+  getScopedDeptFilterOptions,
+  getScopedRegionFilterOptions,
   isOrgPerspectiveEmpty,
-  REGION_FILTER_OPTIONS,
   selectionSummaryLabel,
   type OrgPerspectiveSelection,
 } from '@/domain/orgAxisTags';
 import { HOME_FILTER_TRIGGER_CLASS } from '@/components/home/homeFilterChrome';
+import { useSessionStore } from '@/stores/sessionStore';
 
 type AxisKey = 'global' | 'region' | 'dept';
 
+/** 从左到右：领域 → 区域 → 全球 */
 const AXIS_META: { key: AxisKey; label: string }[] = [
-  { key: 'region', label: '区域' },
   { key: 'dept', label: '领域' },
-  { key: 'global', label: '数字员工' },
+  { key: 'region', label: '区域' },
+  { key: 'global', label: '全球' },
 ];
 
 interface OrgPerspectiveFilterProps {
@@ -27,12 +30,45 @@ interface OrgPerspectiveFilterProps {
 
 export function OrgPerspectiveFilter({ value, onChange }: OrgPerspectiveFilterProps) {
   const [open, setOpen] = useState(false);
-  const [expanded, setExpanded] = useState<Record<AxisKey, boolean>>({
-    region: true,
-    dept: false,
-    global: false,
-  });
   const rootRef = useRef<HTMLDivElement>(null);
+  const user = useSessionStore((s) => s.user);
+
+  const affiliation = useMemo(
+    () => ({
+      deptIds: user?.deptIds ?? [],
+      regionId: user?.regionId ?? null,
+    }),
+    [user?.deptIds, user?.regionId],
+  );
+
+  const deptOptions = useMemo(
+    () => getScopedDeptFilterOptions(affiliation, user?.platformRole),
+    [affiliation, user?.platformRole],
+  );
+  const regionOptions = useMemo(
+    () => getScopedRegionFilterOptions(affiliation, user?.platformRole),
+    [affiliation, user?.platformRole],
+  );
+
+  const valueRef = useRef(value);
+  valueRef.current = value;
+
+  // 登录归属变化时，裁掉越权勾选（全球轴由父级在换账号时清空）
+  useEffect(() => {
+    const current = valueRef.current;
+    const next = clampOrgPerspectiveSelection(current, affiliation, user?.platformRole);
+    if (
+      next.dept.join() !== current.dept.join() ||
+      next.region.join() !== current.region.join()
+    ) {
+      onChange(next);
+    }
+  }, [
+    affiliation.deptIds.join(','),
+    affiliation.regionId,
+    user?.platformRole,
+    onChange,
+  ]);
 
   useEffect(() => {
     if (!open) return;
@@ -42,10 +78,6 @@ export function OrgPerspectiveFilter({ value, onChange }: OrgPerspectiveFilterPr
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
   }, [open]);
-
-  const toggleAxis = (axis: AxisKey) => {
-    setExpanded((s) => ({ ...s, [axis]: !s[axis] }));
-  };
 
   const toggleItem = (axis: AxisKey, id: string) => {
     const key = axis === 'global' ? 'global' : axis === 'region' ? 'region' : 'dept';
@@ -61,9 +93,9 @@ export function OrgPerspectiveFilter({ value, onChange }: OrgPerspectiveFilterPr
       return SKILL_ROLE_CATEGORIES.map((r) => ({ id: r.id, label: r.label }));
     }
     if (axis === 'region') {
-      return REGION_FILTER_OPTIONS.map((id) => ({ id, label: getRegionLabel(id) }));
+      return regionOptions.map((id) => ({ id, label: getRegionLabel(id) }));
     }
-    return DEPT_FILTER_OPTIONS.map((id) => ({ id, label: getDeptLabel(id) }));
+    return deptOptions.map((id) => ({ id, label: getDeptLabel(id) }));
   };
 
   const selectedIds = (axis: AxisKey): string[] => {
@@ -99,67 +131,69 @@ export function OrgPerspectiveFilter({ value, onChange }: OrgPerspectiveFilterPr
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-[220px] overflow-hidden rounded-xl border border-zinc-200/90 bg-white shadow-lg shadow-zinc-900/8">
-          <div className="flex items-center justify-between border-b border-zinc-100 px-2.5 py-2">
-            <span className="text-[11px] font-semibold text-zinc-800">视角筛选</span>
+        <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-max max-w-[min(92vw,300px)] overflow-hidden rounded-xl border border-zinc-200/90 bg-white shadow-lg shadow-zinc-900/8">
+          <div className="flex items-center justify-between border-b border-zinc-100 px-2 py-1.5">
+            <span className="text-[12px] font-semibold text-zinc-800">视角筛选</span>
             <button
               type="button"
               onClick={clearAll}
-              className="text-[10px] font-medium text-zinc-400 transition hover:text-zinc-700"
+              className="text-[11px] font-medium text-zinc-400 transition hover:text-zinc-700"
             >
               清空
             </button>
           </div>
-          <div className="max-h-[280px] overflow-y-auto py-1">
+          <div className="flex divide-x divide-zinc-100">
             {AXIS_META.map((axis) => {
               const kids = childrenOf(axis.key);
               const selected = selectedIds(axis.key);
-              const isOpen = expanded[axis.key];
               return (
-                <div key={axis.key} className="border-b border-zinc-50 last:border-0">
-                  <button
-                    type="button"
-                    onClick={() => toggleAxis(axis.key)}
-                    className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition hover:bg-zinc-50"
-                  >
-                    <i
-                      className={cn(
-                        'fa-solid text-[8px] text-zinc-400 transition',
-                        isOpen ? 'fa-chevron-down' : 'fa-chevron-right',
-                      )}
-                    />
-                    <span className="text-[11px] font-semibold text-zinc-800">{axis.label}</span>
+                <div key={axis.key} className="w-[88px] shrink-0 px-1 py-1">
+                  <div className="mb-0.5 flex items-center gap-0.5">
+                    <span className="text-[12px] font-semibold text-zinc-800">{axis.label}</span>
                     {selected.length ? (
-                      <span className="ml-auto rounded-full bg-zinc-100 px-1.5 py-px text-[9px] font-medium text-zinc-500">
+                      <span className="rounded-full bg-zinc-100 px-1 py-px text-[9px] font-medium text-zinc-500">
                         {selected.length}
                       </span>
                     ) : null}
-                  </button>
-                  {isOpen ? (
-                    <div className="space-y-0.5 px-2 pb-1.5 pl-7">
+                  </div>
+                  {kids.length === 0 ? (
+                    <p className="text-[11px] leading-snug text-zinc-400">
+                      {axis.key === 'region'
+                        ? '机关岗'
+                        : axis.key === 'dept'
+                          ? '无所属领域'
+                          : '暂无'}
+                    </p>
+                  ) : (
+                    <div className="space-y-0">
                       {kids.map((item) => {
                         const checked = selected.includes(item.id);
                         return (
                           <label
                             key={item.id}
-                            className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 transition hover:bg-zinc-50"
+                            className="flex cursor-pointer items-center gap-1 rounded py-px transition hover:bg-zinc-50"
                           >
                             <input
                               type="checkbox"
                               checked={checked}
                               onChange={() => toggleItem(axis.key, item.id)}
-                              className="h-3 w-3 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-400"
+                              className="h-3 w-3 shrink-0 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-400"
                             />
-                            <span className="text-[11px] text-zinc-700">{item.label}</span>
+                            <span className="truncate text-[11px] leading-tight text-zinc-700">
+                              {item.label}
+                            </span>
                           </label>
                         );
                       })}
                     </div>
-                  ) : null}
+                  )}
                 </div>
               );
             })}
           </div>
+          <p className="border-t border-zinc-50 px-2 py-1 text-[10px] leading-snug text-zinc-400">
+            空选=权限内全部（含公开）；选项仅本组织范围
+          </p>
         </div>
       ) : null}
     </div>

@@ -16,19 +16,17 @@ import {
   CenterPageHeader,
   CenterSearchInput,
 } from '@/components/center/CenterShell';
-import { CaseEditorModal } from '@/components/center/CaseEditorModal';
-import { CaseOutcomePanel } from '@/components/content/CaseOutcomePanel';
+import { ScenarioShowcasePanel } from '@/components/content/ScenarioShowcasePanel';
 import { OrgAssetFilterBar } from '@/components/center/OrgAssetFilters';
+import { downloadScenarioUnifiedPack } from '@/domain/caseExport';
 import {
-  downloadScenarioCasePack,
-  downloadScenarioDemoPack,
-} from '@/domain/caseExport';
+  filterCardsByShowcaseTab,
+  showcaseTabOf,
+  SHOWCASE_TABS,
+  type ShowcaseTabId,
+} from '@/domain/scenarioShowcase';
 import { isSystemAdmin } from '@/domain/currentUser';
-import {
-  getPortalItemById,
-  outcomeFromNarrativeCard,
-  resolveScenarioCaseItems,
-} from '@/domain/portalCase';
+import { getPortalItemById, resolveScenarioCaseItems } from '@/domain/portalCase';
 import {
   resolvePipelineStepTargets,
   resolveScenarioDemoPlan,
@@ -59,7 +57,6 @@ import {
   inspectTitle,
   type ScenarioLayerInspectTarget,
   type ToolkitEnvSlotId,
-  VIEW_ONLY_HINT,
 } from '@/components/content/ScenarioLayerInspectBody';
 
 interface AiMapPageProps {
@@ -256,13 +253,15 @@ export function AiMapPage({
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [narrativeCard, setNarrativeCard] = useState<PortalMapCard | null>(null);
-  const [editorTarget, setEditorTarget] = useState<string | 'new' | null>(null);
-  const [narrativeKind, setNarrativeKind] = useState<
-    'all' | 'playbook' | 'case' | 'training' | 'news'
-  >('all');
+  const [narrativeKind, setNarrativeKind] = useState<'all' | ShowcaseTabId>('all');
   const [teamPlan, setTeamPlan] = useState<ScenarioDemoPlan | null>(null);
   const [inspectTarget, setInspectTarget] = useState<ScenarioLayerInspectTarget | null>(null);
-  const canEditCase = isSystemAdmin(user?.platformRole);
+  const isAdmin = isSystemAdmin(user?.platformRole);
+
+  const openPortalEdit = (id: string) => {
+    useNavigationIntentStore.getState().focusPortalEdit(id);
+    setAppView('portal-ops');
+  };
   const [deptFilter, setDeptFilter] = useState<DeptFilter>('all');
   const [regionFilter, setRegionFilter] = useState<RegionFilter>('all');
   const [efficiencyFilter, setEfficiencyFilter] = useState<EfficiencyFilter>('all');
@@ -374,17 +373,7 @@ export function AiMapPage({
     const card = hit.cases.find((c) => c.action.type === 'case' && c.action.caseId === id) ?? null;
     if (card) {
       setNarrativeCard(card);
-      setNarrativeKind(
-        card.kind === 'insight'
-          ? 'news'
-          : card.kind === 'training'
-            ? 'training'
-            : card.kind === 'playbook'
-              ? 'playbook'
-              : card.kind === 'case'
-                ? 'case'
-                : 'all',
-      );
+      setNarrativeKind(showcaseTabOf(card.kind));
     }
   }, [pendingCaseId, allBundles, consumeCaseId, showToast]);
 
@@ -428,21 +417,11 @@ export function AiMapPage({
 
   const narrativeCards = useMemo(() => {
     if (!selected) return [];
-    if (narrativeKind === 'all') return selected.cases;
-    if (narrativeKind === 'news') {
-      return selected.cases.filter((c) => c.kind === 'news' || c.kind === 'insight');
-    }
-    return selected.cases.filter((c) => c.kind === narrativeKind);
+    return filterCardsByShowcaseTab(selected.cases, narrativeKind);
   }, [selected, narrativeKind]);
 
-  const narrativeKindOptions = useMemo(() => {
-    if (!selected?.cases.length) {
-      return [] as Array<'playbook' | 'case' | 'training' | 'news'>;
-    }
-    const kinds = selected.cases.map((c) => (c.kind === 'insight' ? 'news' : c.kind));
-    const set = new Set(kinds);
-    return (['playbook', 'training', 'news', 'case'] as const).filter((k) => set.has(k));
-  }, [selected]);
+  /** 固定顺序：前沿洞察 → 场景案例 → 培训课件 */
+  const narrativeKindOptions = SHOWCASE_TABS.map((t) => t.id);
 
   /** 方案 A：层内点击一律只读详情，执行/下载走顶栏 */
   const openCapabilityInspect = (card: PortalMapCard) => {
@@ -516,49 +495,39 @@ export function AiMapPage({
 
   const downloadLearnPack = (bundle: ScenarioBundle) => {
     const items = resolveScenarioCaseItems(bundle);
-    if (!items.length && !bundle.layers.toolkit) {
-      showToast('该场景暂无可下载的学习内容');
-      return;
-    }
-    downloadScenarioCasePack(bundle.label, items, bundle.env);
-    const bump = useContentEngagementStore.getState().bumpDownload;
-    items.forEach((i) => bump(i.id));
-    showToast('已下载学习包（.learn.zip）');
-  };
-
-  const downloadDemoPack = (bundle: ScenarioBundle) => {
-    const all = resolveScenarioCaseItems(bundle);
-    const caseItems = all.filter((i) => i.type === 'case');
-    const hasCaps =
+    const caseItems = items.filter((i) => i.type === 'case');
+    const hasAnything =
+      items.length > 0 ||
+      bundle.layers.toolkit ||
       bundle.agents.length +
         bundle.skills.length +
         bundle.tools.length +
-        bundle.architectureDocs.length +
-        caseItems.length >
-      0;
-    if (!hasCaps) {
-      showToast('该场景暂无可下载的打样能力包');
+        bundle.architectureDocs.length >
+        0;
+    if (!hasAnything) {
+      showToast('该场景暂无可下载内容');
       return;
     }
-    downloadScenarioDemoPack({
+    downloadScenarioUnifiedPack({
       scenarioId: bundle.id,
       scenarioLabel: bundle.label,
+      learnItems: items,
+      env: bundle.env,
       agents: bundle.agents,
       skills: bundle.skills,
       tools: bundle.tools,
       architectureDocs: bundle.architectureDocs,
       caseItems,
     });
-    showToast('已下载打样包（.demo.zip）');
+    const bump = useContentEngagementStore.getState().bumpDownload;
+    items.forEach((i) => bump(i.id));
+    showToast('已下载学习包（含准备与打样参照）');
   };
 
-  const narrativeOutcome = narrativeCard ? outcomeFromNarrativeCard(narrativeCard) : null;
-  const narrativeSkill = narrativeOutcome?.skillId
-    ? skills.find((s) => s.id === narrativeOutcome.skillId)
-    : undefined;
-  const narrativeAgent = narrativeOutcome?.agentId
-    ? agents.find((a) => a.id === narrativeOutcome.agentId)
-    : undefined;
+  const narrativeItems = useMemo(
+    () => (selected ? resolveScenarioCaseItems(selected) : []),
+    [selected, portalContent],
+  );
 
   return (
     <div className="center-surface center-page scroll-hidden flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -566,7 +535,16 @@ export function AiMapPage({
         <CenterPageHeader
           title="场景案例"
           subtitle={SCENARIO_JOURNEY_COPY.pageSubtitle}
-          tip={<>{SCENARIO_JOURNEY_COPY.pageTip}</>}
+          tip={
+            isAdmin ? (
+              <>
+                前端预览：学习层展示门户运营上架的前沿洞察 / 场景案例 / 培训课件。新建、编辑、上下架请到
+                <strong className="font-semibold">系统设置 · 门户运营</strong>。
+              </>
+            ) : (
+              <>{SCENARIO_JOURNEY_COPY.pageTip}</>
+            )
+          }
           actions={
             <>
               <ReturnToTaskButton />
@@ -586,14 +564,13 @@ export function AiMapPage({
               >
                 返回找案例
               </button>
-              {canEditCase ? (
+              {isAdmin ? (
                 <button
                   type="button"
-                  onClick={() => setEditorTarget('new')}
+                  onClick={() => setAppView('portal-ops')}
                   className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white"
                 >
-                  <i className="fa-solid fa-plus mr-1" />
-                  新建案例
+                  门户运营
                 </button>
               ) : null}
             </>
@@ -719,11 +696,7 @@ export function AiMapPage({
                       <span className="text-[11px] text-zinc-400">
                         齐套 {selected.completeness}/3
                         {selected.related ? ' · 与你相关' : ''}
-                        {selectedDemoPlan?.mode === 'team'
-                          ? ` · 多步接力 ${selectedDemoPlan.steps.length} 步`
-                          : selectedDemoPlan
-                            ? ' · 可一键打样'
-                            : ' · 暂不可打样'}
+                        {selectedDemoPlan ? ' · 可一键打样' : ' · 暂不可打样'}
                       </span>
                     </div>
                   </div>
@@ -731,22 +704,16 @@ export function AiMapPage({
                     <button
                       type="button"
                       onClick={() => downloadLearnPack(selected)}
-                      disabled={!selected.layers.thought && !selected.layers.toolkit}
+                      disabled={
+                        !selected.layers.thought &&
+                        !selected.layers.toolkit &&
+                        !selected.layers.capability
+                      }
                       className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-40"
                       title={SCENARIO_JOURNEY_COPY.learnPackTitle}
                     >
                       <i className="fa-solid fa-download mr-1 text-[10px]" />
-                      下载学习包
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => downloadDemoPack(selected)}
-                      disabled={!selected.layers.capability}
-                      className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-40"
-                      title="打样包：架构 md + 能力挂载 + 场景案例（.demo.zip）"
-                    >
-                      <i className="fa-solid fa-box-archive mr-1 text-[10px]" />
-                      下载打样包
+                      下载学习
                     </button>
                     {canExecuteChat() ? (
                       <button
@@ -755,16 +722,12 @@ export function AiMapPage({
                         disabled={!selectedDemoPlan}
                         className="rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
                         title={
-                          selectedDemoPlan?.mode === 'team'
-                            ? '按场景步骤在任务中接力打样'
-                            : selectedDemoPlan
-                              ? '用本场景开干层主能力开任务打样'
-                              : '开干层暂无可用 Agent / Skill'
+                          selectedDemoPlan
+                            ? '在线开任务跑模型打样（专家团场景自动接力）'
+                            : '开干层暂无可用 Agent / Skill'
                         }
                       >
-                        {selectedDemoPlan?.mode === 'team'
-                          ? '一键打样 · 多步接力'
-                          : '一键打样'}
+                        一键打样
                       </button>
                     ) : null}
                   </div>
@@ -787,78 +750,95 @@ export function AiMapPage({
                   </div>
                   {selected.cases.length === 0 ? (
                     <p className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50/80 px-3 py-6 text-center text-[11px] text-zinc-400">
-                      待建设 · 可从上架前沿洞察、培训案例或场景方案
+                      待建设 · 可从上架前沿洞察、场景案例或培训课件
                     </p>
                   ) : (
                     <>
-                      {narrativeKindOptions.length > 1 ? (
-                        <div className="mb-2 flex flex-wrap gap-1">
+                      <div className="mb-2 flex flex-wrap gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setNarrativeKind('all')}
+                          className={cn(
+                            'rounded-full px-2.5 py-0.5 text-[10px] font-medium transition',
+                            narrativeKind === 'all'
+                              ? 'bg-zinc-900 text-white'
+                              : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200',
+                          )}
+                        >
+                          全部
+                        </button>
+                        {narrativeKindOptions.map((k) => (
                           <button
+                            key={k}
                             type="button"
-                            onClick={() => setNarrativeKind('all')}
+                            onClick={() => setNarrativeKind(k)}
                             className={cn(
                               'rounded-full px-2.5 py-0.5 text-[10px] font-medium transition',
-                              narrativeKind === 'all'
+                              narrativeKind === k
                                 ? 'bg-zinc-900 text-white'
                                 : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200',
                             )}
                           >
-                            全部
+                            {SHOWCASE_TABS.find((t) => t.id === k)?.label ?? k}
                           </button>
-                          {narrativeKindOptions.map((k) => (
-                            <button
-                              key={k}
-                              type="button"
-                              onClick={() => setNarrativeKind(k)}
-                              className={cn(
-                                'rounded-full px-2.5 py-0.5 text-[10px] font-medium transition',
-                                narrativeKind === k
-                                  ? 'bg-zinc-900 text-white'
-                                  : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200',
-                              )}
-                            >
-                              {k === 'playbook'
-                                ? '场景方案'
-                                : k === 'case'
-                                  ? '场景案例'
-                                  : k === 'training'
-                                    ? '培训案例'
-                                    : '前沿洞察'}
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
+                        ))}
+                      </div>
                       {narrativeCards.length === 0 ? (
                         <p className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50/80 px-3 py-4 text-center text-[11px] text-zinc-400">
                           当前类型暂无内容
                         </p>
                       ) : (
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                          {narrativeCards.map((card) => (
-                            <button
-                              key={card.id}
-                              type="button"
-                              onClick={() => setNarrativeCard(card)}
-                              className="rounded-lg border border-zinc-100 px-3 py-2.5 text-left transition hover:border-zinc-300 hover:bg-zinc-50"
-                            >
-                              <div className="mb-1 flex items-center gap-2">
-                                <span className="flex h-6 w-6 items-center justify-center rounded-md bg-zinc-800 text-white">
-                                  <i className={`fa-solid ${card.icon} text-[9px]`} />
-                                </span>
-                                <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] font-semibold text-zinc-500">
-                                  {card.kindLabel}
-                                </span>
-                                {card.action.type === 'case' &&
-                                getPortalItemById(card.action.caseId)?.isGold ? (
-                                  <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold text-amber-800">
-                                    金
-                                  </span>
+                          {narrativeCards.map((card) => {
+                            const editId =
+                              card.action.type === 'case' ? card.action.caseId : null;
+                            return (
+                              <div
+                                key={card.id}
+                                className="group relative rounded-lg border border-zinc-100 transition hover:border-zinc-300 hover:bg-zinc-50"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => setNarrativeCard(card)}
+                                  className="w-full px-3 py-2.5 text-left"
+                                >
+                                  <div className="mb-1 flex items-center gap-2 pr-14">
+                                    <span className="flex h-6 w-6 items-center justify-center rounded-md bg-zinc-800 text-white">
+                                      <i className={`fa-solid ${card.icon} text-[9px]`} />
+                                    </span>
+                                    <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] font-semibold text-zinc-500">
+                                      {card.kindLabel}
+                                    </span>
+                                    {editId && getPortalItemById(editId)?.isGold ? (
+                                      <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold text-amber-800">
+                                        金
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <p className="truncate text-[12px] font-semibold text-zinc-900">
+                                    {card.title}
+                                  </p>
+                                  <p className="mt-0.5 line-clamp-2 text-[10px] text-zinc-500">
+                                    {card.desc}
+                                  </p>
+                                </button>
+                                {isAdmin && editId ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openPortalEdit(editId);
+                                    }}
+                                    className="absolute right-2 top-2 rounded-md border border-zinc-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-zinc-600 opacity-100 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50 sm:opacity-0 sm:group-hover:opacity-100"
+                                    title="在门户运营中编辑"
+                                  >
+                                    <i className="fa-solid fa-pen mr-1 text-[9px]" />
+                                    去配置
+                                  </button>
                                 ) : null}
                               </div>
-                              <p className="truncate text-[12px] font-semibold text-zinc-900">{card.title}</p>
-                              <p className="mt-0.5 line-clamp-2 text-[10px] text-zinc-500">{card.desc}</p>
-                            </button>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </>
@@ -1064,69 +1044,60 @@ export function AiMapPage({
       />
 
       <CenterModal
-        open={!!narrativeCard}
-        title={narrativeCard?.title ?? '案例成效'}
+        open={!!narrativeCard && !!selected}
+        title={selected ? `${selected.label} · 案例预览` : '案例预览'}
         onClose={() => setNarrativeCard(null)}
         size="lg"
         actions={
-          <button
-            type="button"
-            onClick={() => setNarrativeCard(null)}
-            className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium"
-          >
-            关闭
-          </button>
+          <>
+            {selected ? (
+              <button
+                type="button"
+                onClick={() => downloadLearnPack(selected)}
+                className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium"
+              >
+                <i className="fa-solid fa-download mr-1 text-[10px]" />
+                下载学习
+              </button>
+            ) : null}
+            {selected && canExecuteChat() ? (
+              <button
+                type="button"
+                onClick={() => {
+                  startScenario(selected);
+                  setNarrativeCard(null);
+                }}
+                disabled={!selectedDemoPlan}
+                className="rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white disabled:opacity-40"
+              >
+                一键打样
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setNarrativeCard(null)}
+              className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium"
+            >
+              关闭
+            </button>
+          </>
         }
       >
-        {narrativeCard && narrativeOutcome ? (
-          <CaseOutcomePanel
-            card={narrativeOutcome}
-            skillLabel={narrativeSkill?.name}
-            agentLabel={narrativeAgent?.name}
-            viewOnlyHint={VIEW_ONLY_HINT}
-            onOpenLink={
-              narrativeOutcome.homepageUrl
-                ? () => {
-                    window.open(narrativeOutcome.homepageUrl, '_blank', 'noopener,noreferrer');
-                    showToast('已打开了解');
-                  }
-                : undefined
+        {narrativeCard && selected ? (
+          <ScenarioShowcasePanel
+            scenarioLabel={selected.label}
+            items={narrativeItems}
+            bundle={selected}
+            initialTab={showcaseTabOf(narrativeCard.kind)}
+            initialItemId={
+              narrativeCard.action.type === 'case'
+                ? narrativeCard.action.caseId
+                : narrativeCard.id
             }
-            onEdit={
-              canEditCase
-                ? () => {
-                    const id =
-                      narrativeCard.action.type === 'case'
-                        ? narrativeCard.action.caseId
-                        : narrativeOutcome.id;
-                    setEditorTarget(id);
-                  }
-                : undefined
-            }
+            onEditItem={isAdmin ? openPortalEdit : undefined}
           />
         ) : null}
       </CenterModal>
-
-      <CaseEditorModal
-        target={editorTarget}
-        onClose={() => setEditorTarget(null)}
-        onSaved={(item) => {
-          // 若正在看该案例，刷新成效卡标题对应的 portal 数据即可（store 已更新）
-          if (
-            narrativeCard?.action.type === 'case' &&
-            narrativeCard.action.caseId === item.id
-          ) {
-            setNarrativeCard({
-              ...narrativeCard,
-              title: item.title,
-              desc: item.desc,
-              icon: item.icon,
-              publisher: item.publisher,
-              publishedAt: item.publishedAt,
-            });
-          }
-        }}
-      />
     </div>
   );
 }

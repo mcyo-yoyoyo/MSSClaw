@@ -13,6 +13,8 @@ interface NavigationIntentState {
   pendingToolId: string | null;
   pendingKbDocId: string | null;
   pendingCaseId: string | null;
+  /** 门户运营：打开后直达编辑某条内容 */
+  pendingPortalEditId: string | null;
   pendingPortalType: PortalOpsType | null;
   pendingScenarioId: string | null;
   pendingMessageId: string | null;
@@ -22,6 +24,7 @@ interface NavigationIntentState {
   focusTool: (id: string) => void;
   focusKbDoc: (id: string) => void;
   focusCase: (id: string) => void;
+  focusPortalEdit: (id: string) => void;
   focusPortalType: (type: PortalOpsType) => void;
   focusScenario: (id: string) => void;
   focusMessage: (id: string) => void;
@@ -30,6 +33,7 @@ interface NavigationIntentState {
   peekToolId: () => string | null;
   peekKbDocId: () => string | null;
   peekCaseId: () => string | null;
+  peekPortalEditId: () => string | null;
   peekPortalType: () => PortalOpsType | null;
   peekScenarioId: () => string | null;
   peekMessageId: () => string | null;
@@ -38,6 +42,7 @@ interface NavigationIntentState {
   consumeToolId: () => string | null;
   consumeKbDocId: () => string | null;
   consumeCaseId: () => string | null;
+  consumePortalEditId: () => string | null;
   consumePortalType: () => PortalOpsType | null;
   consumeScenarioId: () => string | null;
   consumeMessageId: () => string | null;
@@ -47,6 +52,7 @@ interface NavigationIntentState {
   clearTool: () => void;
   clearKb: () => void;
   clearCase: () => void;
+  clearPortalEdit: () => void;
   clearScenario: () => void;
   clearMessage: () => void;
   clearBusinessScenario: () => void;
@@ -57,6 +63,7 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
   pendingToolId: null,
   pendingKbDocId: null,
   pendingCaseId: null,
+  pendingPortalEditId: null,
   pendingPortalType: null,
   pendingScenarioId: null,
   pendingMessageId: null,
@@ -66,6 +73,7 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
   focusTool: (id) => set({ pendingToolId: id }),
   focusKbDoc: (id) => set({ pendingKbDocId: id }),
   focusCase: (id) => set({ pendingCaseId: id }),
+  focusPortalEdit: (id) => set({ pendingPortalEditId: id }),
   focusPortalType: (type) => set({ pendingPortalType: type }),
   focusScenario: (id) => set({ pendingScenarioId: id }),
   focusMessage: (id) => set({ pendingMessageId: id }),
@@ -75,6 +83,7 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
   peekToolId: () => get().pendingToolId,
   peekKbDocId: () => get().pendingKbDocId,
   peekCaseId: () => get().pendingCaseId,
+  peekPortalEditId: () => get().pendingPortalEditId,
   peekPortalType: () => get().pendingPortalType,
   peekScenarioId: () => get().pendingScenarioId,
   peekMessageId: () => get().pendingMessageId,
@@ -94,6 +103,11 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
   consumeCaseId: () => {
     const id = get().pendingCaseId;
     if (id) set({ pendingCaseId: null });
+    return id;
+  },
+  consumePortalEditId: () => {
+    const id = get().pendingPortalEditId;
+    if (id) set({ pendingPortalEditId: null });
     return id;
   },
   consumePortalType: () => {
@@ -127,6 +141,7 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
       pendingToolId: null,
       pendingKbDocId: null,
       pendingCaseId: null,
+      pendingPortalEditId: null,
       pendingPortalType: null,
       pendingScenarioId: null,
       pendingMessageId: null,
@@ -136,6 +151,7 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
   clearTool: () => set({ pendingToolId: null }),
   clearKb: () => set({ pendingKbDocId: null }),
   clearCase: () => set({ pendingCaseId: null }),
+  clearPortalEdit: () => set({ pendingPortalEditId: null }),
   clearScenario: () => set({ pendingScenarioId: null }),
   clearMessage: () => set({ pendingMessageId: null }),
   clearBusinessScenario: () => set({ pendingBusinessScenario: null }),

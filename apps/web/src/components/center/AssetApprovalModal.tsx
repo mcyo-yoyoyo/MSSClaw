@@ -2,6 +2,7 @@ import { cn } from '@/lib/utils';
 import {
   ASSET_APPROVAL_KIND_LABELS,
   ASSET_APPROVAL_NODES,
+  ASSET_APPROVAL_REASON_LABELS,
   approvalNodeStatuses,
   type ApprovalNodeStatus,
 } from '@/domain/assetApproval';
@@ -45,9 +46,15 @@ export function AssetApprovalModal() {
               {kindLabel} · {current.assetName}
             </h3>
             <p className="mt-1 text-[12px] text-zinc-500">
-              配置完成后需经三级审批方可正式上架。当前节点：
+              需经三级审批。当前节点：
               <span className="font-medium text-zinc-800">{activeNode?.title ?? '已完成'}</span>
             </p>
+            {current.reasons?.length ? (
+              <p className="mt-1.5 text-[11px] leading-snug text-zinc-600">
+                事由：
+                {current.reasons.map((r) => ASSET_APPROVAL_REASON_LABELS[r]).join(' · ')}
+              </p>
+            ) : null}
           </div>
           <button type="button" onClick={close} className="text-zinc-400 hover:text-zinc-800">
             <i className="fa-solid fa-xmark" />

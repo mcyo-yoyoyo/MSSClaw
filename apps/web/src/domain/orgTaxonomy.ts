@@ -5,24 +5,21 @@
  * - NP（HQ Dept）：GTM / MKT / 电商 / 零售 / 服务 / 渠道 / HR / 财经 / 质量与运营
  * - 区域（Region）：中国 / 亚太 / 中东非 / 拉美 / 欧洲 / 欧亚
  *
- * 区域与租户解耦：区域仅为标签/筛选轴，不单独成租户。
- * 外部工具一期以「登记深链 + 元数据」为主。
+ * 部门/区域字典可在「组织权限 → 部门区域」中编辑；运行时以 HQ_DEPTS / REGIONS 为准
+ *（由 orgTaxonomyStore 同步）。区域与租户解耦：区域仅为标签/筛选轴，不单独成租户。
  */
 
-/** NP（原机关职能） */
-export type DeptId =
-  | 'gtm'
-  | 'mkt'
-  | 'ecommerce'
-  | 'retail'
-  | 'service'
-  | 'channel'
-  | 'hr'
-  | 'finance'
-  | 'quality';
+/** 机关职能 id（可扩展自定义编码） */
+export type DeptId = string;
 
-/** 一线区域 */
-export type RegionId = 'china' | 'apac' | 'mea' | 'latam' | 'europe' | 'eurasia';
+/** 一线区域 id（可扩展自定义编码） */
+export type RegionId = string;
+
+export interface OrgUnit {
+  id: string;
+  label: string;
+  short?: string;
+}
 
 /** 首页/门户筛选轴 */
 export type OrgAxis = 'dept' | 'region';
@@ -73,7 +70,7 @@ export interface AssetOwnershipMeta {
   scenarioTags?: string[];
 }
 
-export const HQ_DEPTS: { id: DeptId; label: string; short?: string }[] = [
+export const DEFAULT_HQ_DEPTS: OrgUnit[] = [
   { id: 'gtm', label: 'GTM' },
   { id: 'mkt', label: 'MKT' },
   { id: 'ecommerce', label: '电商' },
@@ -85,7 +82,7 @@ export const HQ_DEPTS: { id: DeptId; label: string; short?: string }[] = [
   { id: 'quality', label: '质量与运营' },
 ];
 
-export const REGIONS: { id: RegionId; label: string }[] = [
+export const DEFAULT_REGIONS: OrgUnit[] = [
   { id: 'china', label: '中国' },
   { id: 'apac', label: '亚太' },
   { id: 'mea', label: '中东非' },
@@ -93,6 +90,12 @@ export const REGIONS: { id: RegionId; label: string }[] = [
   { id: 'europe', label: '欧洲' },
   { id: 'eurasia', label: '欧亚' },
 ];
+
+/** 运行时部门字典（可被 orgTaxonomyStore 原地更新） */
+export const HQ_DEPTS: OrgUnit[] = [...DEFAULT_HQ_DEPTS];
+
+/** 运行时区域字典（可被 orgTaxonomyStore 原地更新） */
+export const REGIONS: OrgUnit[] = [...DEFAULT_REGIONS];
 
 export const PORTAL_ASSET_TYPE_LABELS: Record<PortalAssetType, string> = {
   skill: 'Skill',
@@ -102,7 +105,7 @@ export const PORTAL_ASSET_TYPE_LABELS: Record<PortalAssetType, string> = {
   case: '场景案例',
   playbook: '场景方案',
   insight: '前沿洞察',
-  training: '培训案例',
+  training: '培训课件',
   news: '前沿洞察',
 };
 
@@ -112,14 +115,24 @@ export const ASSET_VISIBILITY_LABELS: Record<AssetVisibility, string> = {
   private: '仅发布方',
 };
 
-const DEPT_LABEL_MAP = Object.fromEntries(HQ_DEPTS.map((d) => [d.id, d.label])) as Record<
-  DeptId,
-  string
->;
-const REGION_LABEL_MAP = Object.fromEntries(REGIONS.map((r) => [r.id, r.label])) as Record<
-  RegionId,
-  string
->;
+let DEPT_LABEL_MAP: Record<string, string> = Object.fromEntries(
+  HQ_DEPTS.map((d) => [d.id, d.label]),
+);
+let REGION_LABEL_MAP: Record<string, string> = Object.fromEntries(
+  REGIONS.map((r) => [r.id, r.label]),
+);
+
+function rebuildLabelMaps() {
+  DEPT_LABEL_MAP = Object.fromEntries(HQ_DEPTS.map((d) => [d.id, d.label]));
+  REGION_LABEL_MAP = Object.fromEntries(REGIONS.map((r) => [r.id, r.label]));
+}
+
+/** 同步运行时字典（store 持久化后调用） */
+export function setOrgTaxonomy(depts: OrgUnit[], regions: OrgUnit[]) {
+  HQ_DEPTS.splice(0, HQ_DEPTS.length, ...depts);
+  REGIONS.splice(0, REGIONS.length, ...regions);
+  rebuildLabelMaps();
+}
 
 export function getDeptLabel(id: DeptId): string {
   return DEPT_LABEL_MAP[id] ?? id;

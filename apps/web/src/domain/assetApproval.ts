@@ -44,6 +44,14 @@ export const ASSET_APPROVAL_KIND_LABELS: Record<AssetApprovalKind, string> = {
   automation: '自动化设置',
 };
 
+/** 审批事由：上架可调用 / 公开可见（可多选） */
+export type AssetApprovalReason = 'publish_executable' | 'visibility_public';
+
+export const ASSET_APPROVAL_REASON_LABELS: Record<AssetApprovalReason, string> = {
+  publish_executable: '上架可调用（可执行模型任务）',
+  visibility_public: '公开可见（跨部门/领域）',
+};
+
 export interface AssetApprovalRequest {
   kind: AssetApprovalKind;
   assetId: string;
@@ -52,6 +60,8 @@ export interface AssetApprovalRequest {
   /** 0=提交人完成，1=待业务主管，2=待质量运营，3=全部通过 */
   stepIndex: number;
   createdAt: number;
+  /** 审批事由；缺省视为上架可调用（兼容旧调用） */
+  reasons?: AssetApprovalReason[];
 }
 
 export function approvalNodeStatuses(stepIndex: number): ApprovalNodeStatus[] {

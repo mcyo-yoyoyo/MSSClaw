@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSSClaw · 岗位体验之旅与价值闭环方案（金案校准版）</title>
+  <style>
+    :root {
+      --bg: #f7f7f7; --panel: #fff; --ink: #1a1a1a; --muted: #5c5c5c; --muted-2: #8a8a8a;
+      --line: rgba(26,26,26,.12); --accent: #cf0a2c; --accent-soft: #fdecef;
+      --font: "Microsoft YaHei","微软雅黑","PingFang SC",sans-serif;
+      --shadow: 0 8px 24px -16px rgba(26,26,26,.28); --radius: 10px; --col: 920px;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font);
+      line-height: 1.65; -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: var(--col); margin: 0 auto; padding: 48px 28px 80px; }
+    .brand { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; margin-bottom: 16px; }
+    .brand i { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+    .kicker { margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .1em; color: var(--accent); }
+    h1 { margin: 0 0 12px; font-size: clamp(26px,3.5vw,34px); font-weight: 700; line-height: 1.25; }
+    .lede { margin: 0 0 28px; font-size: 16px; color: var(--muted); max-width: 64ch; }
+    .verdict {
+      background: #1a1a1a; color: #f5f5f5; border-radius: var(--radius);
+      border-left: 4px solid var(--accent); padding: 20px 22px; margin-bottom: 36px; box-shadow: var(--shadow);
+    }
+    .verdict .lab { font-size: 11px; letter-spacing: .1em; color: rgba(245,245,245,.55); font-weight: 700; }
+    .verdict h2 { margin: 6px 0 8px; font-size: 19px; color: #fff; }
+    .verdict p { margin: 0; color: rgba(245,245,245,.82); font-size: 14.5px; }
+    .verdict strong { color: #fff; }
+
+    nav.toc {
+      background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 18px 20px; margin-bottom: 40px; box-shadow: var(--shadow);
+    }
+    nav.toc h3 { margin: 0 0 10px; font-size: 14px; }
+    nav.toc ol { margin: 0; padding-left: 1.2em; font-size: 14px; color: var(--muted); }
+    nav.toc a { color: var(--ink); text-decoration: none; border-bottom: 1px solid transparent; }
+    nav.toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+    section { margin-bottom: 42px; }
+    section > h2 {
+      margin: 0 0 14px; font-size: 22px; padding-bottom: 10px; border-bottom: 1px solid var(--line);
+    }
+    section > h2 span {
+      color: var(--accent); font-size: 13px; font-weight: 700; letter-spacing: .06em; margin-right: 8px;
+    }
+    h3 { margin: 22px 0 8px; font-size: 16px; }
+    h4 { margin: 14px 0 6px; font-size: 14.5px; }
+    p, li { font-size: 14.5px; color: var(--muted); }
+    p strong, li strong { color: var(--ink); }
+    ul, ol { padding-left: 1.25em; }
+    li + li { margin-top: 6px; }
+
+    table {
+      width: 100%; border-collapse: collapse; background: var(--panel);
+      border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
+      box-shadow: var(--shadow); margin: 14px 0; font-size: 13px;
+    }
+    th, td { padding: 9px 11px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: #efefef; font-size: 11.5px; letter-spacing: .04em; color: var(--muted-2); }
+    td strong { color: var(--ink); }
+    .score { color: var(--accent); font-weight: 700; white-space: nowrap; }
+    .dim { color: var(--muted-2); }
+
+    .card {
+      background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 16px 18px; box-shadow: var(--shadow); margin: 12px 0;
+    }
+    .card.hot { border-top: 3px solid var(--accent); }
+    .card.dark { background: #1a1a1a; color: #f5f5f5; border-color: #1a1a1a; }
+    .card.dark h3, .card.dark h4 { color: #fff; margin-top: 0; }
+    .card.dark p, .card.dark li { color: rgba(245,245,245,.78); }
+    .card.dark strong { color: #fff; }
+
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 0; }
+    @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+
+    .pick {
+      display: grid; grid-template-columns: 56px 1fr; gap: 12px; align-items: start;
+      padding: 12px 0; border-bottom: 1px dashed var(--line);
+    }
+    .pick:last-child { border-bottom: 0; }
+    .pick .rk {
+      width: 48px; height: 48px; border-radius: 50%; background: #1a1a1a; color: #fff;
+      display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;
+    }
+    .pick.hero .rk { background: var(--accent); }
+    .pick h4 { margin: 0 0 4px; }
+    .pick p { margin: 0; font-size: 13.5px; }
+
+    .journey {
+      border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
+      margin: 16px 0; box-shadow: var(--shadow); background: var(--panel);
+    }
+    .journey .head {
+      display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+      padding: 14px 16px; background: #1a1a1a; color: #fff;
+    }
+    .journey .head h3 { margin: 0; font-size: 16px; color: #fff; }
+    .journey .head .meta { font-size: 12px; color: rgba(255,255,255,.65); margin-top: 4px; }
+    .journey .badge {
+      align-self: flex-start; font-size: 11px; font-weight: 700;
+      padding: 4px 10px; border-radius: 999px; background: var(--accent); color: #fff;
+    }
+    .step-row {
+      display: grid; grid-template-columns: 72px 1fr; gap: 0;
+      border-top: 1px solid var(--line);
+    }
+    .step-ph {
+      padding: 12px 10px; background: #f3f3f3; font-size: 12px; font-weight: 700;
+      display: flex; align-items: flex-start; justify-content: center; text-align: center;
+    }
+    .step-row.hot .step-ph { background: var(--accent); color: #fff; }
+    .step-body { padding: 12px 14px; }
+    .step-body .act { font-size: 14px; font-weight: 700; color: var(--ink); }
+    .step-body .click { font-size: 13px; color: var(--muted); margin-top: 4px; }
+    .step-body .feel { font-size: 12.5px; color: var(--muted-2); margin-top: 4px; font-style: italic; }
+
+    .callout {
+      margin: 16px 0; padding: 14px 16px; border-radius: 8px;
+      background: #f0f0f0; border-left: 3px solid var(--accent); font-size: 14.5px;
+    }
+    .callout strong { color: var(--accent); }
+
+    .loop-viz {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 14px 0;
+    }
+    @media (max-width: 720px) { .loop-viz { grid-template-columns: 1fr 1fr; } }
+    .loop-viz .n {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+      padding: 12px; text-align: center; box-shadow: var(--shadow);
+    }
+    .loop-viz .n.hot { border-top: 3px solid var(--accent); }
+    .loop-viz .n b { display: block; font-size: 13px; margin-bottom: 4px; }
+    .loop-viz .n span { font-size: 12px; color: var(--muted); line-height: 1.35; }
+
+    .footer {
+      margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
+      font-size: 12px; color: var(--muted-2);
+      display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    }
+    .footer a { color: var(--accent); text-decoration: none; font-weight: 600; }
+    code { font-size: 12.5px; background: #efefef; padding: 1px 5px; border-radius: 4px; }
+    @media print {
+      body { background: #fff; }
+      .page { padding: 20px 0; }
+      .card, table, .journey, .verdict, nav.toc { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <article class="page">
+    <div class="brand"><i></i>MSSClaw · 金案校准版 · 岗位具象化</div>
+    <p class="kicker">PERSONA FIT REVIEW → REFRESHED JOURNEYS</p>
+    <h1>哪些岗位最适合扛全文方案？——按现网金案重选后的体验之旅</h1>
+    <p class="lede">
+      上一版三角色来自汇报语境举例。本版按产品内<strong>金案完整度、是否多步接力、周度刚需、MSS 岗位可识别度</strong>
+      重新评分，刷新主叙事绑定，避免「岗位对了、案例绑虚」。
+    </p>
+
+    <div class="verdict">
+      <div class="lab">ONE SPINE ONLY</div>
+      <h2>用户之旅主线只有一条：学习 →（准备）→ 开干 → 沉淀</h2>
+      <p>
+        「逛 / 做 / 交 / 学」是<strong>界面落点翻译</strong>，不是第二条主线；
+        「用 / 得 / 留 / 回」并入<strong>沉淀要带走什么</strong>，不再单独喊四字。
+        准备在 1.0 实讲、2.0 内模后变薄——架构位保留，口播权重下降。
+        岗位三角色金案绑定见后文；先把主线讲清，再进入三条具象旅程。
+      </p>
+    </div>
+
+    <nav class="toc">
+      <h3>目录</h3>
+      <ol>
+        <li><a href="#s-spine">导入：如何讲述用户之旅主线</a></li>
+        <li><a href="#s0">金案适配度评分与选型结论</a></li>
+        <li><a href="#s1">抽象 → 岗位对照（校准后）</a></li>
+        <li><a href="#s2">三条具象化用户之旅</a></li>
+        <li><a href="#s3">沉淀带走什么（不再另起闭环口号）</a></li>
+        <li><a href="#s4">备选角色与何时替换</a></li>
+        <li><a href="#s5">汇报口播与 Demo 路径</a></li>
+      </ol>
+    </nav>
+
+    <section id="s-spine">
+      <h2><span>导</span>如何讲述用户之旅主线（看岗位故事前先对齐）</h2>
+
+      <h3>1. 先回答你的疑问：主线到底是哪一条？</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>口径</th>
+            <th>本质</th>
+            <th>讲述地位</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>学习 → 准备 → 开干 → 沉淀</strong></td>
+            <td>用户<strong>价值主线</strong>（为什么按这个顺序用）</td>
+            <td class="score">唯一主线 · 对外口播只用这条</td>
+          </tr>
+          <tr>
+            <td>逛·发现与开工 / 做·计划与交付 / 交·预览与推送 / 学·复制与沉淀</td>
+            <td>界面<strong>动线拆解</strong>（手指点哪里）</td>
+            <td>字幕级对照，嵌在主线下，不并列开讲</td>
+          </tr>
+          <tr>
+            <td>用 / 得 / 留 / 回</td>
+            <td>组织复利的解释草稿</td>
+            <td><strong>废弃并列</strong>：收进「沉淀带走什么」一句话</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>裁决：</strong>体验之旅主线 = <strong>学习 →（准备）→ 开干 → 沉淀</strong>。
+        括号表示：准备是真环节，但讲述权重随版本变化——不是另立一套「逛做交学」来取代它。
+      </div>
+
+      <h3>2. 「准备」会不会在 2.0 没体感？——会变薄，不删主线</h3>
+      <div class="grid2">
+        <div class="card hot">
+          <h4>1.0 · 准备要实讲</h4>
+          <p>体外参照清单：硬件 / IDE / 模型 / 外部工具自备。用户痛点是「学了不会配、配了跑不起来」，准备层就是诚实交底。</p>
+        </div>
+        <div class="card">
+          <h4>2.0 · 准备变「默认就绪」</h4>
+          <p>内模接入、平台侧供给增强后，用户体感从「我对照清单自备」转为「环境已就绪，直接开干」。架构上准备层仍可承载清单/依赖说明，口播可压成半句。</p>
+        </div>
+      </div>
+      <p>
+        因此讲述公式建议用<strong>稳三拍 + 一字幕</strong>：
+        <strong>学金案 → 干出活 → 留下来</strong>；需要时加一句「1.0 中间多一步：对照准备清单」。
+        不要为了 2.0 提前删掉准备，否则 1.0 验收与样板间三层结构会对不上。
+      </p>
+
+      <h3>3. 「逛做交学」怎么用才不打架？</h3>
+      <p>它适合解释<strong>双壳入口与任务中心</strong>，请当作主线的界面映射表，而不是第二套四字经：</p>
+      <table>
+        <thead>
+          <tr>
+            <th>价值主线</th>
+            <th>界面落点（逛做交学 · 仅对照）</th>
+            <th>用户一句话</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>学习</strong></td>
+            <td>逛：找案例 / 样板间学习层</td>
+            <td>别人怎么做成的？</td>
+          </tr>
+          <tr>
+            <td><strong>准备</strong>（1.0 加讲）</td>
+            <td>逛：样板间准备层 · 学习包</td>
+            <td>我要自备什么才能跑？</td>
+          </tr>
+          <tr>
+            <td><strong>开干</strong></td>
+            <td>逛→做：一键打样 / 做任务橱窗 → 计划确认与执行</td>
+            <td>别讲了，帮我出一版。</td>
+          </tr>
+          <tr>
+            <td><strong>沉淀</strong></td>
+            <td>交：预览与推送 · 并回到学：场景可复制复跑</td>
+            <td>结果留下，下周还能再来。</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="dim">注意：这里的第二个「学」是「组织可复制」，对应主线里的<strong>沉淀</strong>，不要和主线开头的「学习」混成两个「学」字牌——口播请固定说「学习 / 开干 / 沉淀」，避免听众以为主线改名了。</p>
+
+      <h3>4. 推荐讲述节奏（导入 → 岗位）</h3>
+      <div class="card dark">
+        <h4>30 秒导入（进入三条旅程前）</h4>
+        <p style="margin-top:8px">
+          「用户之旅主线只有一条：先学习金案方法，1.0 再对照准备清单，然后开干打样把活干完，最后沉淀——交付留下、入口可复跑。
+          找案例和做任务不是两条产品，是这条主线的两端；任务中心里的计划、交付、推送，都落在开干与沉淀里。
+          下面用商城、营销、服务三个岗位，把这条线走一遍。」
+        </p>
+      </div>
+    </section>
+
+    <section id="s0">
+      <h2><span>00</span>金案适配度评分与选型结论</h2>
+      <p>评分维度（各约 25%）：① 金案/场景资产完整 ② 能演示平台差异点（多步接力/货架）③ 周度或战役刚需 ④ MSS 岗位一口能认。</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>候选岗位 × 金案</th>
+            <th>资产</th>
+            <th>差异点</th>
+            <th>刚需</th>
+            <th>可识别</th>
+            <th>总分</th>
+            <th>结论</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>电渠/商城运营 × 亚太评论三段式</strong><br><span class="dim">portal-case-apac-voc · team×3</span></td>
+            <td class="score">高</td>
+            <td class="score">最高</td>
+            <td class="score">高</td>
+            <td class="score">高</td>
+            <td class="score">★★★★★</td>
+            <td><strong>英雄主叙事</strong></td>
+          </tr>
+          <tr>
+            <td><strong>商城运营 × 拉美价监</strong><br><span class="dim">portal-case-latam-price · solo</span></td>
+            <td class="score">高</td>
+            <td>中</td>
+            <td class="score">最高</td>
+            <td class="score">高</td>
+            <td class="score">★★★★☆</td>
+            <td>同人旁证 / ROI 金句</td>
+          </tr>
+          <tr>
+            <td><strong>服务经理 × 电池过热客诉 SOP</strong><br><span class="dim">portal-case-service-battery</span></td>
+            <td class="score">高</td>
+            <td>中</td>
+            <td class="score">高</td>
+            <td class="score">最高</td>
+            <td class="score">★★★★☆</td>
+            <td><strong>保留 · 知识闭环</strong></td>
+          </tr>
+          <tr>
+            <td><strong>营销经理 × MEA 卖点卡初译</strong><br><span class="dim">portal-case-l10n-sku</span></td>
+            <td class="score">高</td>
+            <td>中</td>
+            <td>中高</td>
+            <td class="score">高</td>
+            <td class="score">★★★★</td>
+            <td><strong>保留 · 改绑定</strong></td>
+          </tr>
+          <tr>
+            <td><strong>营销/质量 × 欧洲物料合规</strong><br><span class="dim">portal-case-eu-compliance</span></td>
+            <td class="score">高</td>
+            <td>中</td>
+            <td>战役型</td>
+            <td class="score">高</td>
+            <td>★★★☆</td>
+            <td>营销旅程第二拍</td>
+          </tr>
+          <tr>
+            <td><strong>门店赋能 × Nova 陪练</strong><br><span class="dim">retail-training · team×2</span></td>
+            <td class="score">高</td>
+            <td class="score">高</td>
+            <td class="score">高</td>
+            <td>中高</td>
+            <td class="score">★★★★☆</td>
+            <td>备选第四人</td>
+          </tr>
+          <tr>
+            <td>代表处运营 × MEA SO 周报</td>
+            <td class="score">高</td>
+            <td>中</td>
+            <td class="score">高</td>
+            <td>中</td>
+            <td>★★★☆</td>
+            <td>经营侧备选</td>
+          </tr>
+          <tr>
+            <td>综履同学 × 结算核验</td>
+            <td class="score">高</td>
+            <td>中</td>
+            <td class="score">高</td>
+            <td>中</td>
+            <td>★★★☆</td>
+            <td>流程侧备选</td>
+          </tr>
+          <tr>
+            <td>HR × 批量简历</td>
+            <td>中高</td>
+            <td>中</td>
+            <td>中</td>
+            <td>中</td>
+            <td class="dim">★★★</td>
+            <td>非本轮主叙事</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="card hot">
+        <h4>为何刷新上一版？</h4>
+        <div class="pick hero">
+          <div class="rk">1</div>
+          <div>
+            <h4>商城运营：从「只讲价监」升级为「评论英雄 + 价监旁证」</h4>
+            <p>价监 ROI 好记，但是<strong>单点 Skill</strong>；亚太评论是现网唯二「专家团多步接力」之一（三段），最能证明「能力编排」不是空话。同属商城/电渠语境，听众不需要换脑。</p>
+          </div>
+        </div>
+        <div class="pick">
+          <div class="rk">2</div>
+          <div>
+            <h4>营销经理：岗位名保留，案例从「泛橱窗」改为可点击金案</h4>
+            <p>上一版口播易滑向「做任务里点营销 Agent」——偏抽象。现网更硬的是 <strong>MEA 卖点卡小语种初译</strong>与<strong>欧洲合规抽检</strong>，对应战役前真实闸口。</p>
+          </div>
+        </div>
+        <div class="pick">
+          <div class="rk">3</div>
+          <div>
+            <h4>服务经理：原绑定正确，加深「口径源」叙事即可</h4>
+            <p>电池过热客诉 SOP 金案完整，且直接回应「经验随人走」。无需换人，只需强调班组复跑与提精选回灌。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="s1">
+      <h2><span>01</span>抽象 → 岗位对照（校准后）</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>汇报时怎么叫</th>
+            <th>平台角色</th>
+            <th>主绑发现场景 / 金案</th>
+            <th>开干形态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>商城·电渠运营「小陈」</strong></td>
+            <td>业务用户</td>
+            <td>电渠评论采集与分析 · <code>亚太电渠评论分析样板间</code><br>旁证：商城价格&amp;offer监测 · <code>拉美价监</code></td>
+            <td><strong>多步接力</strong> 采集→翻译→分析</td>
+          </tr>
+          <tr>
+            <td><strong>营销经理「林予」</strong></td>
+            <td>业务用户</td>
+            <td>小语种本地化 · <code>MEA 卖点卡初译</code><br>第二拍：欧洲营销物料合规</td>
+            <td>单点打样（战役闸）</td>
+          </tr>
+          <tr>
+            <td><strong>服务经理「阿凯」</strong></td>
+            <td>业务用户</td>
+            <td>客诉服务与一线话术 · <code>电池过热客诉 SOP</code></td>
+            <td>单点打样（口径源）</td>
+          </tr>
+          <tr>
+            <td>新同事 / 跨区观摩</td>
+            <td>只读访客</td>
+            <td>同上场景只读学习层</td>
+            <td>不可开干</td>
+          </tr>
+          <tr>
+            <td>NP 数字化接口人</td>
+            <td>能力运营</td>
+            <td>收好打样 → 精选挂场景</td>
+            <td>运营台上架</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="s2">
+      <h2><span>02</span>三条具象化用户之旅</h2>
+      <p>
+        三条均按同一主线：<strong>学习 →（准备）→ 开干 → 沉淀</strong>。
+        「准备」在 1.0 Demo 如实走；面向 2.0 展望时可口播压成「环境就绪后进入开干」。人名虚构，金案取自现网。
+      </p>
+
+      <div class="journey">
+        <div class="head">
+          <div>
+            <h3>旅程 A（英雄）· 商城·电渠运营「小陈」——评论周报三段接力</h3>
+            <div class="meta">场景 ecommerce-review · 金案 portal-case-apac-voc · 1.5天→30分钟 · SLA+22%</div>
+          </div>
+          <span class="badge">主 Demo</span>
+        </div>
+        <div class="step-row">
+          <div class="step-ph">学习</div>
+          <div class="step-body">
+            <div class="act">找案例 →「电渠评论采集与分析」→ 打开亚太金案</div>
+            <div class="click">学习层看清三段职责：采集 / 翻译 / 分析，而不是「让 AI 随便看看评论」。</div>
+            <div class="feel">体感：「这是一条作战链路，不是一个对话框。」</div>
+          </div>
+        </div>
+        <div class="step-row">
+          <div class="step-ph">准备</div>
+          <div class="step-body">
+            <div class="act">准备层对照体外清单 + 下载学习包</div>
+            <div class="click">1.0：站点权限、模型、外部评论工具位自备；平台先交齐「要备什么」。</div>
+          </div>
+        </div>
+        <div class="step-row hot">
+          <div class="step-ph">开干</div>
+          <div class="step-body">
+            <div class="act">顶栏一键打样 → 任务中心走专家团接力</div>
+            <div class="click"><code>/评论采集</code> → <code>/评论翻译</code> → <code>/评论分析</code>，同会话出差评周报与行动建议。</div>
+            <div class="feel">体感：「能力编排」四个字被眼睛看见了。</div>
+          </div>
+        </div>
+        <div class="step-row">
+          <div class="step-ph">沉淀</div>
+          <div class="step-body">
+            <div class="act">交付预览 → 推送消息；下周同一场景复跑</div>
+            <div class="click"><strong>旁证 30 秒：</strong>再闪拉美金案「异动 2 天→4 小时」——说明同岗位还有价监周度刚需，复跑入口都在找案例。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="journey">
+        <div class="head">
+          <div>
+            <h3>旅程 B · 营销经理「林予」——卖点卡出海与合规闸</h3>
+            <div class="meta">金案 portal-case-l10n-sku（主）· portal-case-eu-compliance（战役第二拍）</div>
+          </div>
+          <span class="badge">S2 / 合规</span>
+        </div>
+        <div class="step-row">
+          <div class="step-ph">学习</div>
+          <div class="step-body">
+            <div class="act">找案例 →「小语种本地化翻译」→ MEA 卖点卡初译金案</div>
+            <div class="click">看清「术语表 → 初译 → 人工终校」的方法边界，避免神话成全自动免审。</div>
+          </div>
+        </div>
+        <div class="step-row">
+          <div class="step-ph">准备</div>
+          <div class="step-body">
+            <div class="act">下载学习包；对照术语/模型/合规工具位</div>
+            <div class="click">战役启动前把清单发给项目组，减少「工具各装各的」。</div>
+          </div>
+        </div>
+        <div class="step-row hot">
+          <div class="step-ph">开干</div>
+          <div class="step-body">
+            <div class="act">一键打样出初译稿 →（发布前）切欧洲合规金案做抽检打样</div>
+            <div class="click">两拍都在平台完成：出料与过闸，而不是初译在聊天工具、合规在邮件附件。</div>
+          </div>
+        </div>
+        <div class="step-row">
+          <div class="step-ph">沉淀</div>
+          <div class="step-body">
+            <div class="act">交付归档；优质术语/检查清单提运营上架</div>
+            <div class="click">Takeaway：可交接的战役作业包 + 可复跑的初译/合规入口。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="journey">
+        <div class="head">
+          <div>
+            <h3>旅程 C · 服务经理「阿凯」——客诉口径统一</h3>
+            <div class="meta">场景 customer-service · 金案 portal-case-service-battery · /客诉</div>
+          </div>
+          <span class="badge">S5 服务</span>
+        </div>
+        <div class="step-row">
+          <div class="step-ph">学习</div>
+          <div class="step-body">
+            <div class="act">找案例 →「客诉服务与一线话术」→ 电池过热 SOP 金案</div>
+            <div class="click">班长学结构与禁忌口径；只读访客（新一线）可只看不跑。</div>
+          </div>
+        </div>
+        <div class="step-row">
+          <div class="step-ph">准备</div>
+          <div class="step-body">
+            <div class="act">学习包下发班组；准备层标明知识检索位</div>
+            <div class="click">群文件「最新版」让位给场景上的单一学习入口。</div>
+          </div>
+        </div>
+        <div class="step-row hot">
+          <div class="step-ph">开干</div>
+          <div class="step-body">
+            <div class="act">一键打样 <code>/客诉</code> → 任务中心出标准应答草案</div>
+            <div class="click">经理审核后推送一线；高峰期复跑模板，禁止每人另开通用对话各说各话。</div>
+          </div>
+        </div>
+        <div class="step-row">
+          <div class="step-ph">沉淀</div>
+          <div class="step-body">
+            <div class="act">高频好打样 → 提精选挂载场景开干层</div>
+            <div class="click">组织资产：官方推荐客诉技能挂在场景上，人走口径源不走。</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="s3">
+      <h2><span>03</span>沉淀带走什么（不再另起「用得留回」）</h2>
+      <p>
+        闭环不必再喊第四套四字。走完主线后，只问一句：
+        <strong>「沉淀环节，他口袋里多了什么？」</strong>
+        答案固定三类，且都挂在<strong>沉淀</strong>上——依赖性由此产生，无需新口号。
+      </p>
+      <div class="loop-viz">
+        <div class="n"><b>交付物</b><span>当场能用的结果</span></div>
+        <div class="n"><b>方法</b><span>金案/学习包可教人</span></div>
+        <div class="n hot"><b>复跑入口</b><span>下周还从这开</span></div>
+        <div class="n"><b>（可选）回灌</b><span>提精选进货架</span></div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>岗位</th>
+            <th>交付物（开干产出）</th>
+            <th>方法（学习留下）</th>
+            <th>复跑入口（沉淀→依赖）</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>小陈</strong></td>
+            <td>差评周报 + 行动建议（旁证：价监异动清单）</td>
+            <td>三段式专家团方法</td>
+            <td>每周评论/价监从同一场景开</td>
+          </tr>
+          <tr>
+            <td><strong>林予</strong></td>
+            <td>卖点卡初译 + 合规风险清单</td>
+            <td>战役「出料→过闸」作业包</td>
+            <td>每场战役前回到本地化/合规金案</td>
+          </tr>
+          <tr>
+            <td><strong>阿凯</strong></td>
+            <td>标准客诉应答草案</td>
+            <td>SOP 金案 + 学习包</td>
+            <td>高峰复跑 /客诉；班组只认场景口径</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <strong>一句话收束：</strong>学了会干、干了有产出、产出和下周入口都留在平台——这就是闭环。
+        「好打样提精选」是运营加厚，口播点到即可，不必升格成与主线并列的第四段旅程。
+      </div>
+    </section>
+
+    <section id="s4">
+      <h2><span>04</span>备选角色与何时替换</h2>
+      <div class="grid2">
+        <div class="card">
+          <h4>若听众偏零售门店</h4>
+          <p>用<strong>门店赋能经理 + Nova 陪练</strong>替换营销经理：现成 <code>retail-training</code> 两步接力（培训内容→陪练），差异点同样强。</p>
+        </div>
+        <div class="card">
+          <h4>若听众偏经营分析</h4>
+          <p>用<strong>代表处运营 + MEA SO 周报</strong>替换营销经理：周度刚需极强，但编排演示弱于评论，适合「经营侧」专场。</p>
+        </div>
+        <div class="card">
+          <h4>不建议本轮主讲</h4>
+          <p>HR 简历、纯知识库 RAG：金案在，但离「商城/营销/服务」决策语境远，易把讨论带偏。</p>
+        </div>
+        <div class="card dark">
+          <h4>1.0 边界别夸大</h4>
+          <p>准备层仍是体外清单；依赖性建在「金案方法 + 任务复跑 + 货架精选」，不承诺本阶段代配全环境。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="s5">
+      <h2><span>05</span>汇报口播与 Demo 路径</h2>
+      <div class="card hot">
+        <h4>开场 90 秒（主线导入 + 岗位，校准版）</h4>
+        <p style="margin-top:8px">
+          「先定主线：用户之旅只有学习 → 准备 → 开干 → 沉淀这一条。1.0 准备要对照清单自备；2.0 内模进来后，准备会变薄，但学了再干、干完要留下，不变。
+          找案例和做任务是两端，不是两条产品。
+          下面三个岗位走同一条线——商城电渠用亚太评论三段接力看见编排；营销用 MEA 初译加欧洲合规过战役闸；服务用电池过热 SOP 统一口径。」
+        </p>
+      </div>
+      <h3>现场最短 Demo</h3>
+      <ol>
+        <li>业务用户登录 → 找案例 → <strong>电渠评论</strong> → 亚太金案 → 一键打样看三段接力（主）</li>
+        <li>口播闪过：价监「2天→4小时」（旁证）</li>
+        <li>如有时间：客诉金案打样 或 只打开 MEA/合规金案封面讲战役闸</li>
+      </ol>
+    </section>
+
+    <div class="footer">
+      <span>MSSClaw · Persona Journey · 金案校准版</span>
+      <a href="./persona-journey-value-loop.html">打开一页示意 PPT →</a>
+    </div>
+  </article>
+</body>
+</html>

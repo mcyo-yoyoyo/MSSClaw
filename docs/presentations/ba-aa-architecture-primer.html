@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSSClaw · BA/AA 架构导入 · 一页</title>
+  <style>
+    :root {
+      --bg: #f4f4f4;
+      --panel: #ffffff;
+      --ink: #1a1a1a;
+      --muted: #5c5c5c;
+      --muted-2: #8a8a8a;
+      --line: rgba(26, 26, 26, 0.12);
+      --accent: #cf0a2c;
+      --accent-soft: #fdecef;
+      --shadow: 0 12px 32px -20px rgba(26, 26, 26, 0.35);
+      --font: "Microsoft YaHei", "微软雅黑", "PingFang SC", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; height: 100%;
+      background: #111; color: var(--ink);
+      font-family: var(--font);
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    .slide {
+      width: 100vw; height: 100vh;
+      padding: clamp(14px, 1.8vh, 22px) clamp(22px, 3vw, 40px) clamp(10px, 1.4vh, 16px);
+      background:
+        radial-gradient(900px 420px at 92% -8%, rgba(207, 10, 44, 0.07), transparent 55%),
+        linear-gradient(180deg, #fafafa 0%, var(--bg) 100%);
+      display: flex; flex-direction: column;
+    }
+    .inner {
+      flex: 1; min-height: 0; max-width: 1480px; width: 100%; margin: 0 auto;
+      display: grid;
+      grid-template-rows: auto 1fr auto auto;
+      gap: clamp(8px, 1.1vh, 12px);
+    }
+    .top {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr;
+      gap: 14px; align-items: end;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+    }
+    .brand {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 600; color: var(--muted);
+    }
+    .brand i {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+    }
+    .kicker {
+      margin: 6px 0 0;
+      font-size: 12px; font-weight: 700; letter-spacing: .1em; color: var(--accent);
+    }
+    h1 {
+      margin: 4px 0 0;
+      font-size: clamp(24px, 2.6vw, 34px);
+      font-weight: 700; line-height: 1.15;
+    }
+    h1 em { font-style: normal; color: var(--accent); }
+    .so-what {
+      background: #1a1a1a; color: #fff;
+      border-radius: 10px;
+      padding: 12px 14px 12px 16px;
+      border-left: 4px solid var(--accent);
+      box-shadow: var(--shadow);
+    }
+    .so-what .lab {
+      font-size: 10px; letter-spacing: .12em; color: rgba(255,255,255,.5); font-weight: 700;
+    }
+    .so-what p {
+      margin: 5px 0 0; font-size: 14px; font-weight: 700; line-height: 1.4;
+    }
+
+    .board {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1.05fr 1.15fr 0.95fr;
+      gap: clamp(8px, 1vw, 14px);
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 12px 13px;
+      min-height: 0;
+      display: flex; flex-direction: column;
+    }
+    .ph {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+      margin-bottom: 8px;
+    }
+    .ph h3 { margin: 0; font-size: 13px; font-weight: 700; }
+    .ph span { font-size: 11px; color: var(--muted-2); font-weight: 600; }
+
+    /* Q → principle cards */
+    .qs {
+      flex: 1; min-height: 0;
+      display: grid; gap: 7px;
+    }
+    .q {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 8px; align-items: start;
+      padding: 8px 9px;
+      border-radius: 9px;
+      background: #f7f7f7;
+      border: 1px solid var(--line);
+    }
+    .q .n {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: #1a1a1a; color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700;
+    }
+    .q.hot {
+      background: var(--accent-soft);
+      border-color: rgba(207,10,44,.22);
+    }
+    .q.hot .n { background: var(--accent); }
+    .q .ask {
+      font-size: 11px; color: var(--muted-2); font-weight: 600; line-height: 1.2;
+    }
+    .q .ans {
+      margin-top: 2px; font-size: 12.5px; font-weight: 700; line-height: 1.3; color: var(--ink);
+    }
+
+    /* BA → AA bridge */
+    .bridge {
+      flex: 1; min-height: 0;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .ba-box, .aa-box {
+      border-radius: 10px; padding: 10px 11px;
+      border: 1px solid var(--line);
+      position: relative;
+    }
+    .ba-box {
+      background: #1a1a1a; color: #fff;
+      flex: 1.05;
+    }
+    .aa-box {
+      background: #fafafa;
+      flex: 1.15;
+      border-top: 3px solid var(--accent);
+    }
+    .box-lab {
+      font-size: 10px; font-weight: 700; letter-spacing: .08em;
+      opacity: .55; margin-bottom: 4px;
+    }
+    .ba-box .box-lab { color: rgba(255,255,255,.55); opacity: 1; }
+    .box-title {
+      font-size: 15px; font-weight: 700; margin-bottom: 6px;
+    }
+    .chips {
+      display: flex; flex-wrap: wrap; gap: 5px;
+    }
+    .chip {
+      font-size: 11px; font-weight: 600;
+      padding: 4px 8px; border-radius: 999px;
+      background: rgba(255,255,255,.12); color: rgba(255,255,255,.9);
+    }
+    .aa-box .chip {
+      background: #efefef; color: #3a3a3a;
+    }
+    .aa-box .chip.hot {
+      background: var(--accent-soft); color: var(--accent);
+    }
+    .arrow-down {
+      align-self: center;
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--accent-soft); color: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700; flex: none;
+      margin: -2px 0;
+    }
+    .map-note {
+      font-size: 11px; color: var(--muted); line-height: 1.35;
+      padding-left: 8px; border-left: 2px solid var(--accent);
+    }
+
+    /* refs + evolution */
+    .right {
+      flex: 1; min-height: 0;
+      display: grid;
+      grid-template-rows: 1fr 1.15fr;
+      gap: 8px;
+    }
+    .refs {
+      display: grid; gap: 6px;
+    }
+    .ref {
+      display: grid;
+      grid-template-columns: 8px 1fr;
+      gap: 8px;
+      padding: 7px 8px;
+      border-radius: 8px;
+      background: #f7f7f7;
+      border: 1px solid var(--line);
+    }
+    .ref i {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent); margin-top: 4px;
+    }
+    .ref b {
+      display: block; font-size: 12px; font-weight: 700; line-height: 1.25;
+    }
+    .ref span {
+      display: block; font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.3;
+    }
+
+    .evo {
+      display: flex; flex-direction: column; gap: 0;
+      position: relative;
+      padding-left: 4px;
+    }
+    .evo::before {
+      content: "";
+      position: absolute;
+      left: 15px; top: 12px; bottom: 12px;
+      width: 2px; background: #e0e0e0;
+    }
+    .node {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 8px;
+      align-items: start;
+      padding: 6px 0;
+      position: relative;
+    }
+    .node .dot {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: #d0d0d0; color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 700;
+      z-index: 1;
+    }
+    .node.now .dot { background: var(--accent); }
+    .node.now .t { color: var(--accent); }
+    .node .t { font-size: 12px; font-weight: 700; line-height: 1.25; }
+    .node .d { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.3; }
+
+    .verdict {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 14px; align-items: center;
+      background: #1a1a1a; color: #fff;
+      border-radius: 12px;
+      padding: 12px 16px;
+      box-shadow: var(--shadow);
+    }
+    .verdict .mark {
+      width: 48px; height: 48px; border-radius: 50%;
+      background: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; line-height: 1.1; text-align: center;
+    }
+    .verdict h2 {
+      margin: 0; font-size: clamp(16px, 1.8vw, 20px); font-weight: 700;
+    }
+    .verdict p {
+      margin: 3px 0 0; font-size: 12.5px; color: rgba(255,255,255,.72); line-height: 1.4;
+      max-width: 70ch;
+    }
+    .next {
+      display: flex; flex-direction: column; gap: 5px;
+    }
+    .next span {
+      white-space: nowrap;
+      font-size: 11px; font-weight: 700;
+      padding: 6px 10px; border-radius: 999px;
+      background: rgba(255,255,255,.1);
+      text-align: center;
+    }
+    .next span.on { background: var(--accent); }
+
+    .footer {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 11px; color: var(--muted-2);
+    }
+    .footer a {
+      color: var(--muted); text-decoration: none;
+      border-bottom: 1px solid var(--line);
+    }
+    .footer a:hover { color: var(--accent); }
+
+    @media (max-width: 1100px) {
+      body { overflow: auto; }
+      .slide { height: auto; min-height: 100vh; }
+      .top, .board, .verdict { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <section class="slide">
+    <div class="inner">
+
+      <div class="top">
+        <div>
+          <div class="brand"><i></i>MSSClaw · 4A 架构研讨 · 看图前导入</div>
+          <p class="kicker">BA / AA PRIMER · BEFORE THE DIAGRAM</p>
+          <h1>先对齐<em>设计逻辑</em><br>再打开架构图讨论</h1>
+        </div>
+        <aside class="so-what">
+          <div class="lab">HOW TO USE THIS PAGE</div>
+          <p>用三问、一张映射、一条演进轴，建立共同语言——然后再看 BA / AA 图。</p>
+        </aside>
+      </div>
+
+      <div class="board">
+        <!-- 1: design questions -->
+        <div class="panel">
+          <div class="ph">
+            <h3>① 架构为何长这样？</h3>
+            <span>设计三问</span>
+          </div>
+          <div class="qs">
+            <div class="q">
+              <div class="n">Q1</div>
+              <div>
+                <div class="ask">价值如何发生？</div>
+                <div class="ans">主路径驱动：学习 → 准备 → 开干 → 沉淀</div>
+              </div>
+            </div>
+            <div class="q">
+              <div class="n">Q2</div>
+              <div>
+                <div class="ask">谁用 / 谁配？</div>
+                <div class="ans">双壳分域：业务使用 ≠ 能力运营</div>
+              </div>
+            </div>
+            <div class="q hot">
+              <div class="n">Q3</div>
+              <div>
+                <div class="ask">最小价值单元是什么？</div>
+                <div class="ans">场景样板间 = 可发现、可学习、可打样</div>
+              </div>
+            </div>
+            <div class="q">
+              <div class="n">⇒</div>
+              <div>
+                <div class="ask">因此不成「技术堆叠图」</div>
+                <div class="ans">先 BA（业务能力）再 AA（应用分层）</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2: BA to AA -->
+        <div class="panel">
+          <div class="ph">
+            <h3>② BA 如何落到 AA？</h3>
+            <span>一张映射</span>
+          </div>
+          <div class="bridge">
+            <div class="ba-box">
+              <div class="box-lab">BUSINESS ARCHITECTURE</div>
+              <div class="box-title">BA · 回答「做什么、为谁创造价值」</div>
+              <div class="chips">
+                <span class="chip">角色 / 干系人</span>
+                <span class="chip">价值流</span>
+                <span class="chip">BC 能力域</span>
+                <span class="chip">1.0 业务结果</span>
+              </div>
+            </div>
+            <div class="arrow-down">↓</div>
+            <div class="aa-box">
+              <div class="box-lab">APPLICATION ARCHITECTURE</div>
+              <div class="box-title">AA · 回答「用哪些应用模块承载」</div>
+              <div class="chips">
+                <span class="chip hot">L1 门户</span>
+                <span class="chip hot">L2 业务应用</span>
+                <span class="chip">L3 能力货架</span>
+                <span class="chip">L4 治理</span>
+                <span class="chip">L5 共享编排</span>
+              </div>
+            </div>
+            <p class="map-note">读图顺序建议：价值流 → 能力域（BA）→ 分层模块（AA）→ 外部边界。不先抠技术栈。</p>
+          </div>
+        </div>
+
+        <!-- 3: refs + evolution -->
+        <div class="panel">
+          <div class="ph">
+            <h3>③ 参照与可演进</h3>
+            <span>为何可扩展</span>
+          </div>
+          <div class="right">
+            <div>
+              <div class="ph" style="margin-bottom:6px">
+                <h3 style="font-size:12px;color:var(--muted-2)">业界锚点（借鉴而非照搬）</h3>
+              </div>
+              <div class="refs">
+                <div class="ref">
+                  <i></i>
+                  <div>
+                    <b>4A / TOGAF 分层</b>
+                    <span>业务架构先于应用架构，能力域驱动模块</span>
+                  </div>
+                </div>
+                <div class="ref">
+                  <i></i>
+                  <div>
+                    <b>AI 平台双轨</b>
+                    <span>Consumer / Builder 分面（使用 vs 配置）</span>
+                  </div>
+                </div>
+                <div class="ref">
+                  <i></i>
+                  <div>
+                    <b>Agent 货架模式</b>
+                    <span>Agent · Skill · Tool 可上架、精选、挂载</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="ph" style="margin-bottom:2px">
+                <h3 style="font-size:12px;color:var(--muted-2)">演进轴 · 换层不换骨架</h3>
+              </div>
+              <div class="evo">
+                <div class="node now">
+                  <div class="dot">1</div>
+                  <div>
+                    <div class="t">1.0 骨架落地</div>
+                    <div class="d">主路径统一 · 准备层体外清单 · 内网样板</div>
+                  </div>
+                </div>
+                <div class="node">
+                  <div class="dot">2</div>
+                  <div>
+                    <div class="t">2.0 能力加深</div>
+                    <div class="d">准备内化 · 货架加厚 · 连接器扩展（L3/边界）</div>
+                  </div>
+                </div>
+                <div class="node">
+                  <div class="dot">3</div>
+                  <div>
+                    <div class="t">3.0 组织放大</div>
+                    <div class="d">多区域复用 · 治理精细化 · 不推翻 L1–L2</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="verdict">
+        <div class="mark">看<br>图</div>
+        <div>
+          <h2>下一步：带问题打开 BA → 再对照 AA</h2>
+          <p>讨论焦点不是「框多不多」，而是：价值流是否闭环、双壳是否必要、场景单元是否可扩展、L3–L5 是否留出演进空间。</p>
+        </div>
+        <div class="next">
+          <span class="on">① BA 业务架构图</span>
+          <span>② AA 应用架构图</span>
+        </div>
+      </div>
+
+      <div class="footer">
+        <span>配套长文可展开论证 · 黑白灰 + 华为红</span>
+        <a href="./ba-aa-architecture-primer-brief.html">打开体系化导入分析 →</a>
+      </div>
+    </div>
+  </section>
+</body>
+</html>

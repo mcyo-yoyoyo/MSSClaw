@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import type { PrototypeAgentSeed, PrototypeSkillSeed, PrototypeToolSeed } from '@/domain/prototype/types';
 import {
+  buildScenarioBundles,
   FEATURED_SCENARIOS,
   filterAiMapCards,
 } from '@/domain/portalMap';
@@ -9,8 +10,11 @@ import {
   resolveCaseItemsForScenarioId,
   resolvePrimaryCaseIdForScenario,
 } from '@/domain/portalCase';
-import { downloadScenarioCasePack } from '@/domain/caseExport';
+import { downloadScenarioUnifiedPack } from '@/domain/caseExport';
 import { getScenarioEnv } from '@/domain/scenarioEnv';
+import { CenterModal } from '@/components/center/CenterShell';
+import { ScenarioShowcasePanel } from '@/components/content/ScenarioShowcasePanel';
+import { showcaseTabOf } from '@/domain/scenarioShowcase';
 import {
   AI_TOOL_NAV_CATEGORIES,
   isHomeAiTool,
@@ -37,11 +41,12 @@ import {
 } from '@/domain/scenarioCapabilities';
 import { heatScore, sortByRankMode } from '@/domain/contentEngagement';
 import {
+  anyItemMatchesOrgPerspective,
   emptyOrgPerspectiveSelection,
   getScenarioOrgAxisTags,
-  scenarioMatchesOrgPerspectiveSelection,
   type OrgPerspectiveSelection,
 } from '@/domain/orgAxisTags';
+import { canViewAsset } from '@/domain/assetVisibility';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import {
   CardPageCarousel,
@@ -265,6 +270,11 @@ export function HomeScenePortal({
     emptyOrgPerspectiveSelection,
   );
 
+  // 切换账号时清空视角筛选（含全球轴勾选）
+  useEffect(() => {
+    setOrgSelection(emptyOrgPerspectiveSelection());
+  }, [user?.id]);
+
   useEffect(() => {
     if (!pendingBusinessScenario) return;
     const id = consumeBusinessScenario();
@@ -272,6 +282,7 @@ export function HomeScenePortal({
   }, [pendingBusinessScenario, consumeBusinessScenario]);
   const [toolCat, setToolCat] = useState<AiToolNavCategoryId>('chat');
   const [howToTool, setHowToTool] = useState<PrototypeToolSeed | null>(null);
+  const [showcaseScenarioId, setShowcaseScenarioId] = useState<string | null>(null);
 
   const orgResetKey = useMemo(
     () =>
@@ -312,16 +323,25 @@ export function HomeScenePortal({
   );
 
   const rankedScenarios = useMemo(() => {
+    const viewer = {
+      userId: user?.id,
+      userName: user?.name,
+      affiliation,
+      role: user?.platformRole,
+    };
     const mapped = discoverScenarios
       .filter((s) => scenarioBelongsToBusiness(s.id, businessFilter))
       .map((s) => {
+        const taggedItems = resolveCaseItemsForScenarioId(s.id);
+        const visibleItems = taggedItems.filter((item) => canViewAsset(item, viewer));
         const caseId = resolvePrimaryCaseIdForScenario(s.id);
-        const caseItem = caseId
-          ? portalContent.find((p) => p.id === caseId)
-          : undefined;
-        const primarySkillId = caseItem?.primarySkillId || caseItem?.skillId || null;
-        const ownerDeptIds = caseItem?.ownerDeptIds;
-        const ownerRegionId = caseItem?.ownerRegionId ?? null;
+        const primaryVisible =
+          (caseId ? visibleItems.find((p) => p.id === caseId) : undefined) ??
+          visibleItems[0];
+        const primarySkillId =
+          primaryVisible?.primarySkillId || primaryVisible?.skillId || null;
+        const ownerDeptIds = primaryVisible?.ownerDeptIds;
+        const ownerRegionId = primaryVisible?.ownerRegionId ?? null;
         const businessId = getPrimaryBusinessScenario(s.id);
         const orgTags = getScenarioOrgAxisTags({
           primarySkillId,
@@ -332,27 +352,30 @@ export function HomeScenePortal({
           ...s,
           publishedAt: SCENARIO_PUBLISHED_AT[s.id as DiscoverScenarioId],
           primaryCaseId: caseId,
-          primaryCaseTitle: caseItem?.title,
+          primaryCaseTitle: primaryVisible?.title,
           primarySkillId,
           ownerDeptIds,
           ownerRegionId,
           businessId,
           businessLabel: businessId ? getBusinessScenarioMeta(businessId).label : null,
           orgTags,
+          visibleItems,
         };
       })
-      .filter((s) =>
-        scenarioMatchesOrgPerspectiveSelection(
-          {
-            primarySkillId: s.primarySkillId,
-            ownerDeptIds: s.ownerDeptIds,
-            ownerRegionId: s.ownerRegionId,
-          },
-          orgSelection,
-        ),
-      );
+      // 任一可见叙事项即可展示（不因主案例不可见而整场景抹掉）
+      .filter((s) => s.visibleItems.length > 0)
+      .filter((s) => anyItemMatchesOrgPerspective(s.visibleItems, orgSelection));
     return sortByRankMode(mapped, 'trending', engagementOf);
-  }, [discoverScenarios, businessFilter, orgSelection, engagementOf, engagementById, portalContent]);
+  }, [
+    discoverScenarios,
+    businessFilter,
+    orgSelection,
+    engagementOf,
+    engagementById,
+    portalContent,
+    affiliation,
+    user,
+  ]);
 
   const hotTop3Ids = useMemo(() => {
     return [...rankedScenarios]
@@ -416,10 +439,91 @@ export function HomeScenePortal({
 
   const openScenario = (scenarioId: string) => {
     bumpUse(scenarioId);
+    setShowcaseScenarioId(scenarioId);
+  };
+
+  const openScenarioDetail = (scenarioId: string) => {
     const caseId = resolvePrimaryCaseIdForScenario(scenarioId);
     focusScenario(scenarioId);
     if (caseId) focusCase(caseId);
+    setShowcaseScenarioId(null);
     openResourceWithReturn('ai-map');
+  };
+
+  const showcaseBundle = useMemo(() => {
+    if (!showcaseScenarioId) return null;
+    const list = buildScenarioBundles({
+      agents,
+      skills,
+      tools,
+      portalContent,
+      affiliation,
+      userId: user?.id ?? '',
+      userName: user?.name ?? '',
+      role: user?.platformRole,
+      filter: 'all',
+      search: '',
+    });
+    return list.find((b) => b.id === showcaseScenarioId) ?? null;
+  }, [
+    showcaseScenarioId,
+    agents,
+    skills,
+    tools,
+    portalContent,
+    affiliation,
+    user,
+  ]);
+
+  const showcaseItems = useMemo(
+    () => (showcaseScenarioId ? resolveCaseItemsForScenarioId(showcaseScenarioId) : []),
+    [showcaseScenarioId, portalContent],
+  );
+
+  const downloadScenarioPack = (scenarioId: string, scenarioLabel?: string) => {
+    const items = resolveCaseItemsForScenarioId(scenarioId);
+    const bundles = buildScenarioBundles({
+      agents,
+      skills,
+      tools,
+      portalContent,
+      affiliation,
+      userId: user?.id ?? '',
+      userName: user?.name ?? '',
+      role: user?.platformRole,
+      filter: 'all',
+      search: '',
+    });
+    const bundle = bundles.find((b) => b.id === scenarioId);
+    const label =
+      scenarioLabel ||
+      bundle?.label ||
+      FEATURED_SCENARIOS.find((s) => s.id === scenarioId)?.label ||
+      '场景';
+    if (!items.length && !bundle?.env && !getScenarioEnv(scenarioId)) {
+      showToast('该场景暂无可下载内容');
+      return;
+    }
+    const caseItems = items.filter((i) => i.type === 'case');
+    downloadScenarioUnifiedPack({
+      scenarioId,
+      scenarioLabel: label,
+      learnItems: items,
+      env: bundle?.env ?? getScenarioEnv(scenarioId),
+      agents: bundle?.agents ?? [],
+      skills: bundle?.skills ?? [],
+      tools: bundle?.tools ?? [],
+      architectureDocs: bundle?.architectureDocs ?? [],
+      caseItems,
+    });
+    const bump = useContentEngagementStore.getState().bumpDownload;
+    items.forEach((i) => bump(i.id));
+    showToast('已下载学习包（含准备与打样参照）');
+  };
+
+  const downloadShowcase = () => {
+    if (!showcaseScenarioId) return;
+    downloadScenarioPack(showcaseScenarioId, showcaseBundle?.label);
   };
 
   return (
@@ -456,21 +560,7 @@ export function HomeScenePortal({
               contentId={s.id}
               isNew={isNewScenario(s.id)}
               isHot={hotTop3Ids.includes(s.id)}
-              onDownload={() => {
-                const items = resolveCaseItemsForScenarioId(s.id);
-                if (!items.length) {
-                  showToast('该场景暂无可下载的案例包');
-                  return;
-                }
-                downloadScenarioCasePack(s.label, items, getScenarioEnv(s.id));
-                const bump = useContentEngagementStore.getState().bumpDownload;
-                items.forEach((i) => bump(i.id));
-                showToast(
-                  items.length === 1
-                    ? `已下载学习包：${items[0]!.title}`
-                    : `已下载场景学习包（${items.length} 个）`,
-                );
-              }}
+              onDownload={() => downloadScenarioPack(s.id, s.label)}
               onAfterAction={(action) => {
                 if (action === 'dislike') showToast('已反馈，运营将关注优化');
               }}
@@ -519,6 +609,73 @@ export function HomeScenePortal({
           onOpenGuide={openGuideResource}
         />
       ) : null}
+
+      <CenterModal
+        open={!!showcaseScenarioId}
+        title={
+          showcaseBundle?.label ||
+          FEATURED_SCENARIOS.find((s) => s.id === showcaseScenarioId)?.label ||
+          '样板间预览'
+        }
+        onClose={() => setShowcaseScenarioId(null)}
+        size="lg"
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={downloadShowcase}
+              className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium"
+            >
+              <i className="fa-solid fa-download mr-1 text-[10px]" />
+              下载学习
+            </button>
+            <button
+              type="button"
+              onClick={() => showcaseScenarioId && openScenarioDetail(showcaseScenarioId)}
+              className="rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white"
+            >
+              进入样板间
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowcaseScenarioId(null)}
+              className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium"
+            >
+              关闭
+            </button>
+          </>
+        }
+      >
+        {showcaseScenarioId ? (
+          <ScenarioShowcasePanel
+            scenarioLabel={
+              showcaseBundle?.label ||
+              FEATURED_SCENARIOS.find((s) => s.id === showcaseScenarioId)?.label ||
+              '场景'
+            }
+            items={showcaseItems}
+            bundle={
+              showcaseBundle ?? {
+                label:
+                  FEATURED_SCENARIOS.find((s) => s.id === showcaseScenarioId)?.label || '场景',
+                layers: {
+                  thought: showcaseItems.length > 0,
+                  toolkit: Boolean(getScenarioEnv(showcaseScenarioId)),
+                  capability: false,
+                },
+                agents: [],
+                skills: [],
+                tools: [],
+                env: getScenarioEnv(showcaseScenarioId) ?? null,
+              }
+            }
+            initialTab={
+              showcaseItems[0] ? showcaseTabOf(showcaseItems[0].type) : undefined
+            }
+            initialItemId={showcaseItems[0]?.id}
+          />
+        ) : null}
+      </CenterModal>
     </div>
   );
 }

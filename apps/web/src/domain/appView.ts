@@ -50,8 +50,8 @@ export const APP_VIEW_NAV: AppViewNavItem[] = [
   { id: 'task', label: '任务记录', subtitle: '进度 · 结果 · 历史会话', icon: 'fa-list-check', section: 'workspace' },
   {
     id: 'ai-map',
-    label: '案例样板间',
-    subtitle: '完整案例库 · 由找案例/场景卡进入',
+    label: '场景案例',
+    subtitle: '学习/准备/开干预览 · 内容由门户运营上架',
     icon: 'fa-map',
     section: 'platform',
   },

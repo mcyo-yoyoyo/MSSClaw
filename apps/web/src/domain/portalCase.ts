@@ -180,6 +180,16 @@ export function resolvePrimaryCaseIdForScenario(scenarioId: string): string | nu
   return resolveCaseItemsForScenarioId(scenarioId)[0]?.id ?? null;
 }
 
+/** 门户内容 → 命中的业务场景（用于运营「前端预览」深链） */
+export function resolveScenarioIdForPortalItem(
+  item: Pick<PortalContentItem, 'scenarioTags'>,
+): string | null {
+  const tags = item.scenarioTags ?? [];
+  if (!tags.length) return null;
+  const hit = FEATURED_SCENARIOS.find((s) => tags.some((t) => s.matchTags.includes(t)));
+  return hit?.id ?? null;
+}
+
 /** 场景「一键打样」：优先金牌案例的主 Skill / Agent */
 export function resolveScenarioDemoTarget(bundle: ScenarioBundle): {
   skill?: PrototypeSkillSeed;

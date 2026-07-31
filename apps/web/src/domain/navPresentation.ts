@@ -3,7 +3,7 @@ import { APP_VIEWS } from '@/domain/appView';
 import { WORKSPACE_CONFIG_VIEW } from '@/domain/workspaceConfig';
 import { PlatformRoleSchema, ROLE_LABELS, type PlatformRole } from '@/domain/rbac';
 
-/** 展示配置页本身：仅超级管理员 */
+/** 展示配置页本身：仅平台运营 */
 export const PRESENTATION_CONFIG_VIEW = 'presentation' as const satisfies AppView;
 
 export type NavPresetId = 'full' | 'customer' | 'standard' | 'custom';
@@ -44,7 +44,7 @@ export interface NavPresentationMeta {
   locked?: boolean;
   /** 不在侧栏展示（仍可深链） */
   hiddenFromSidebar?: boolean;
-  /** 仅超级管理员角色可配置为开启 */
+  /** 仅平台运营角色可配置为开启 */
   adminOnly?: boolean;
 }
 
@@ -74,10 +74,11 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   },
   {
     id: 'ai-map',
-    label: '案例样板间',
-    subtitle: '完整案例库 · 由找案例/场景卡进入',
+    label: '场景案例',
+    subtitle: '学习/准备/开干预览 · 内容由门户运营上架',
     icon: 'fa-map',
     section: 'platform',
+    /** 业务从「找案例」进入；配置入口在系统设置 · 门户运营 */
     hiddenFromSidebar: true,
   },
   { id: 'agents', label: '配置专家', subtitle: '上架 · 发布 · 编排（运营）', icon: 'fa-robot', section: 'platform' },
@@ -113,7 +114,7 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   {
     id: 'portal-ops',
     label: '门户运营',
-    subtitle: '前沿洞察与培训赋能上架',
+    subtitle: '场景方案包 · 三槽分责上架',
     icon: 'fa-newspaper',
     section: 'system',
     locked: true,
@@ -139,7 +140,7 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   {
     id: WORKSPACE_CONFIG_VIEW,
     label: '租户配置',
-    subtitle: '数据空间 · 租户（仅超级管理员）',
+    subtitle: '数据空间 · 租户（仅平台运营）',
     icon: 'fa-building',
     section: 'system',
     locked: true,
@@ -155,16 +156,17 @@ export const NAV_PRESET_LABELS: Record<NavPresetId, { title: string; description
   customer: {
     title: 'MVP演示',
     description:
-      '业务=找案例/做任务/任务记录；运营=专家/技能/工具；超管=+组织/展示/租户/门户（非完整能力集）',
+      '业务=找案例/做任务/任务记录；能力开发能力配置仅「配置技能」；超管=+专家/工具/组织/展示/租户/门户',
   },
   standard: {
     title: '标准能力',
-    description: '在 MVP 上为运营/超管增加管理知识 · 自动化设置（业务仍无协作空间）',
+    description:
+      '能力开发能力配置仍仅「配置技能」（无专家/工具/知识/协作空间）；超管另开知识·自动化等',
   },
   full: {
     title: '完整产品',
     description:
-      '业务可开协作空间；运营/超管开放记忆/工作流等完整能力配置（提示词仍默认关）',
+      '业务可开协作空间；能力开发开放配置专家/工具/知识/记忆/工作流等完整能力配置（提示词仍默认关）',
   },
   custom: {
     title: '自定义',
@@ -192,12 +194,29 @@ function withAdminLocks(base: Record<NavSlotId, boolean>, role: PlatformRole): R
  * MVP 菜单矩阵（三方案递增；超管 ≠ 直接完整版）：
  * - 业务用户：工作平台 = 找案例 · 做任务 · 任务记录（协作空间关）
  * - 只读访客：工作平台 = 找案例
- * - 能力运营：工作平台 + 配置专家/技能/工具
- * - 超级管理员：同能力运营 MVP + 系统治理项（展示/租户/组织/门户）
+ * - 能力开发：工作平台 + 仅「配置技能」（无专家/工具/知识/协作空间；完整产品再开）
+ * - 平台运营：专家/技能/工具 + 系统治理项（展示/租户/组织/门户）
  */
 function mvpForRole(role: PlatformRole): Record<NavSlotId, boolean> {
   const off = allSlots(false);
-  if (role === 'super_admin' || role === 'capability_ops') {
+  if (role === 'capability_ops') {
+    return withAdminLocks(
+      {
+        ...off,
+        home: true,
+        task: true,
+        warroom: false,
+        messages: true,
+        'ai-map': true,
+        agents: false,
+        skills: true,
+        tools: false,
+        kb: false,
+      },
+      role,
+    );
+  }
+  if (role === 'super_admin') {
     return withAdminLocks(
       {
         ...off,
@@ -270,11 +289,9 @@ export function clampBusinessMvpSlots(matrix: RoleNavMatrix): RoleNavMatrix {
 
 function standardForRole(role: PlatformRole): Record<NavSlotId, boolean> {
   const base = mvpForRole(role);
-  if (role === 'super_admin' || role === 'capability_ops') {
-    return withAdminLocks(
-      { ...base, tools: true, kb: true, automation: true },
-      role,
-    );
+  // 标准能力：仅超管加开知识/自动化；能力开发仍维持「仅配置技能」
+  if (role === 'super_admin') {
+    return withAdminLocks({ ...base, tools: true, kb: true, automation: true }, role);
   }
   return base;
 }
@@ -362,37 +379,43 @@ export function migrateLegacyEnabled(enabled: Partial<Record<string, boolean>>):
   return matrix;
 }
 
-/** @deprecated 仅用于旧 preset 结构兼容；请用 buildRoleNavPreset */
-export const NAV_PRESET_ENABLED: Record<Exclude<NavPresetId, 'custom'>, Record<AppView, boolean>> = {
-  full: Object.fromEntries(APP_VIEWS.map((v) => [v, v !== 'cases' && v !== 'agent-studio'])) as Record<
+function navPresetFlags(
+  overrides: Partial<Record<AppView, boolean>>,
+  defaultEnabled = false,
+): Record<AppView, boolean> {
+  const base = Object.fromEntries(APP_VIEWS.map((v) => [v, defaultEnabled])) as Record<
     AppView,
     boolean
-  >,
-  customer: {
-    ...Object.fromEntries(APP_VIEWS.map((v) => [v, false])),
+  >;
+  return { ...base, ...overrides };
+}
+
+/** @deprecated 仅用于旧 preset 结构兼容；请用 buildRoleNavPreset */
+export const NAV_PRESET_ENABLED: Record<Exclude<NavPresetId, 'custom'>, Record<AppView, boolean>> = {
+  full: navPresetFlags(
+    Object.fromEntries(
+      APP_VIEWS.map((v) => [v, v !== 'cases' && v !== 'agent-studio']),
+    ) as Partial<Record<AppView, boolean>>,
+    true,
+  ),
+  customer: navPresetFlags({
     home: true,
     task: true,
     messages: true,
     'ai-map': true,
-    agents: true,
     skills: true,
     'portal-ops': true,
     admin: true,
-  } as Record<AppView, boolean>,
-  standard: {
-    ...Object.fromEntries(APP_VIEWS.map((v) => [v, false])),
+  }),
+  standard: navPresetFlags({
     home: true,
     task: true,
     messages: true,
     'ai-map': true,
-    agents: true,
     skills: true,
-    tools: true,
-    kb: true,
-    automation: true,
     'portal-ops': true,
     admin: true,
-  } as Record<AppView, boolean>,
+  }),
 };
 
 export const NAV_FALLBACK_ORDER: AppView[] = [

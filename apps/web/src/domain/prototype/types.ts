@@ -66,14 +66,28 @@ export interface PrototypeAgentSeed {
 
 export interface PrototypeSkillSeed extends AssetOwnershipFields {
   id: string;
+  /**
+   * 主展示名（兼容旧数据）——写入时与 nameZh 同步；列表默认展示中文。
+   */
   name: string;
   desc: string;
+  /** 中文名称（默认展示） */
+  nameZh?: string;
+  /** 英文名称 */
+  nameEn?: string;
+  /** 中文描述（默认展示） */
+  descZh?: string;
+  /** 英文描述 */
+  descEn?: string;
   category: EfficiencyCategory;
   command: string;
   author: string;
   version: string;
   connector: string;
-  /** 能力上架：通过审批后可供调用（目录可见） */
+  /**
+   * 能力上架：通过审批后可供模型/对话调用。
+   * 1.0 默认 false；勾选「申请上架可调用」才进审批。
+   */
   published: boolean;
   /**
    * 精选露出：出现在业务「做任务 · 场景技能」。
@@ -84,7 +98,12 @@ export interface PrototypeSkillSeed extends AssetOwnershipFields {
   businessScenarioId?: BusinessScenarioId;
   invokes: number;
   icon: string;
+  /** 卡片标识色（创建时可选预设色，替代复杂 Logo） */
+  accentColor?: string;
+  /** 业务/运营手打标签 */
   tags: string[];
+  /** 模型/启发式识别的搜索关键词（可编辑） */
+  searchKeywords?: string[];
   /** 平台对话执行时注入的 Skill 正文（可 run） */
   instructions?: string;
   /** 挂载该 Skill 时的默认执行计划步骤 */

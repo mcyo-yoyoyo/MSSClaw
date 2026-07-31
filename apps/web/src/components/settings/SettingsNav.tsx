@@ -1,4 +1,4 @@
-import { SETTINGS_TABS, type SettingsTab } from '@/domain/rbac';
+import { normalizeSettingsTab, SETTINGS_TABS, type SettingsTab } from '@/domain/rbac';
 import { cn } from '@/lib/utils';
 import { StudioListPanelHeader } from '@/components/studio/StudioShell';
 
@@ -8,9 +8,10 @@ interface SettingsNavProps {
 }
 
 export function SettingsNav({ activeTab, onChange }: SettingsNavProps) {
+  const current = normalizeSettingsTab(activeTab);
   return (
     <aside className="studio-list-panel w-[220px]">
-      <StudioListPanelHeader title="组织治理" subtitle="组织 · 部门 · 角色" />
+      <StudioListPanelHeader title="组织治理" subtitle="成员 · 角色 · 部门 · 审计" />
       <nav className="flex-grow p-2">
         {SETTINGS_TABS.map((tab) => (
           <button
@@ -19,7 +20,7 @@ export function SettingsNav({ activeTab, onChange }: SettingsNavProps) {
             onClick={() => onChange(tab.id)}
             className={cn(
               'mb-0.5 flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] transition',
-              activeTab === tab.id
+              current === tab.id
                 ? 'bg-claw-50 font-semibold text-zinc-700'
                 : 'text-[#6e6e73] hover:bg-black/[0.03]',
             )}

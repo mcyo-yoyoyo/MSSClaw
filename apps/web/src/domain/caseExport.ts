@@ -166,7 +166,7 @@ export function buildScenarioLearnMd(
     '',
     '1. 学习：先读「场景方案」与「前沿洞察」，对齐业务口径',
     TOOLKIT_LAYER_COPY.learnPathStep,
-    '3. 学习：完成「培训案例」或外链授课',
+    '3. 学习：完成「培训课件」或外链授课',
     '4. 开干：结合能力沉淀自行打样，或回到平台「一键打样」',
     '',
   ].join('\n');
@@ -345,6 +345,71 @@ export function downloadScenarioDemoPack(input: ScenarioDemoPackInput) {
 
   const bytes = zipSync(zipped, { level: 6 });
   downloadBinary(`${slug}.demo.zip`, bytes, 'application/zip');
+}
+
+export interface ScenarioUnifiedPackInput extends ScenarioDemoPackInput {
+  learnItems: PortalContentItem[];
+  env?: ScenarioEnv | null;
+}
+
+/**
+ * 一键下载学习包：学习材料 + 准备清单 + 打样参照（合并原 learn / demo 两卷）
+ */
+export function downloadScenarioUnifiedPack(input: ScenarioUnifiedPackInput) {
+  const packItems = pickLearnPackItems(input.learnItems);
+  const hasLearn = packItems.length > 0 || isScenarioEnvFilled(input.env);
+  const hasDemo =
+    input.agents.length +
+      input.skills.length +
+      input.tools.length +
+      input.architectureDocs.length +
+      input.caseItems.length >
+    0;
+  if (!hasLearn && !hasDemo) return;
+
+  const slug = scenarioSlug(input.scenarioLabel);
+  const zipped: Record<string, Uint8Array> = {};
+
+  for (const item of packItems) {
+    const files = buildCasePackageFiles(item);
+    for (const [path, content] of Object.entries(files)) {
+      zipped[`${slug}/learn/${path}`] = strToU8(content);
+    }
+  }
+  zipped[`${slug}/LEARN.md`] = strToU8(
+    buildScenarioLearnMd(input.scenarioLabel, packItems, input.env),
+  );
+
+  if (hasDemo) {
+    zipped[`${slug}/DEMO.md`] = strToU8(buildScenarioDemoMd(input));
+    for (const d of input.architectureDocs) {
+      zipped[`${slug}/architecture/${d.id}.md`] = strToU8(d.markdown);
+    }
+    for (const item of input.caseItems) {
+      const files = buildCasePackageFiles(item);
+      for (const [path, content] of Object.entries(files)) {
+        zipped[`${slug}/cases/${path}`] = strToU8(content);
+      }
+    }
+  }
+
+  zipped[`${slug}/README.md`] = strToU8(
+    [
+      `# ${input.scenarioLabel} · 学习包（一键下载）`,
+      '',
+      '本卷合并**学习材料 / 准备清单 / 打样参照**，供体外学习与配置。',
+      '在线跑模型任务请回到平台使用「一键打样」。',
+      '',
+      `- 学习材料：${packItems.length} 个`,
+      `- 打样参照：架构 ${input.architectureDocs.length} · 案例 ${input.caseItems.length}`,
+      '',
+      '入口：先读 LEARN.md；需要能力对照时再读 DEMO.md。',
+      '',
+    ].join('\n'),
+  );
+
+  const bytes = zipSync(zipped, { level: 6 });
+  downloadBinary(`${slug}.zip`, bytes, 'application/zip');
 }
 
 function asStringArray(v: unknown): string[] | undefined {

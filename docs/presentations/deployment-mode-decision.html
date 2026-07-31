@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSSClaw · 部署决策 · 一页</title>
+  <style>
+    :root {
+      --bg: #f4f4f4;
+      --panel: #ffffff;
+      --ink: #1a1a1a;
+      --muted: #5c5c5c;
+      --muted-2: #8a8a8a;
+      --line: rgba(26, 26, 26, 0.12);
+      --accent: #cf0a2c;
+      --accent-soft: #fdecef;
+      --shadow: 0 12px 32px -20px rgba(26, 26, 26, 0.35);
+      --font: "Microsoft YaHei", "微软雅黑", "PingFang SC", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; height: 100%;
+      background: #111; color: var(--ink);
+      font-family: var(--font);
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    .slide {
+      width: 100vw; height: 100vh;
+      padding: clamp(16px, 2vh, 24px) clamp(24px, 3.2vw, 44px) clamp(12px, 1.6vh, 18px);
+      background:
+        radial-gradient(900px 420px at 8% -10%, rgba(207, 10, 44, 0.06), transparent 55%),
+        linear-gradient(180deg, #fafafa 0%, var(--bg) 100%);
+      display: flex; flex-direction: column;
+    }
+    .inner {
+      flex: 1; min-height: 0; max-width: 1480px; width: 100%; margin: 0 auto;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto auto;
+      gap: clamp(8px, 1.2vh, 14px);
+    }
+
+    /* header */
+    .top {
+      display: flex; justify-content: space-between; align-items: flex-end; gap: 16px;
+    }
+    .brand {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 600; color: var(--muted);
+    }
+    .brand i {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+    }
+    .kicker {
+      margin: 6px 0 0;
+      font-size: 12px; font-weight: 700; letter-spacing: .1em; color: var(--accent);
+    }
+    h1 {
+      margin: 4px 0 0;
+      font-size: clamp(26px, 2.8vw, 36px);
+      font-weight: 700; line-height: 1.15; max-width: 18ch;
+    }
+    h1 em {
+      font-style: normal; color: var(--accent);
+    }
+    .so-what {
+      max-width: 340px;
+      background: #1a1a1a;
+      color: #fff;
+      border-radius: 10px;
+      padding: 14px 16px 14px 18px;
+      border-left: 4px solid var(--accent);
+      box-shadow: var(--shadow);
+    }
+    .so-what .lab {
+      font-size: 10px; letter-spacing: .12em; color: rgba(255,255,255,.5); font-weight: 700;
+    }
+    .so-what p {
+      margin: 6px 0 0; font-size: 15px; font-weight: 700; line-height: 1.4;
+    }
+
+    /* main visual board */
+    .board {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1.05fr 1.2fr 0.95fr;
+      gap: clamp(10px, 1.2vw, 16px);
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: clamp(12px, 1.4vh, 16px);
+      min-height: 0;
+      display: flex; flex-direction: column;
+    }
+    .panel .ph {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+      margin-bottom: 10px;
+    }
+    .panel .ph h3 {
+      margin: 0; font-size: 13px; font-weight: 700;
+    }
+    .panel .ph span {
+      font-size: 11px; color: var(--muted-2); font-weight: 600;
+    }
+
+    /* fork visual */
+    .fork {
+      flex: 1; min-height: 0;
+      display: grid;
+      grid-template-rows: 1fr auto 1fr;
+      gap: 8px;
+    }
+    .lane {
+      position: relative;
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex; flex-direction: column; justify-content: center;
+      overflow: hidden;
+    }
+    .lane.cloud {
+      background: linear-gradient(135deg, #1a1a1a 0%, #2e2e2e 100%);
+      color: #fff;
+      box-shadow: inset 0 0 0 2px var(--accent);
+    }
+    .lane.local {
+      background: #ececec;
+      color: var(--muted);
+      border: 1px dashed rgba(26,26,26,.22);
+    }
+    .lane .badge {
+      align-self: flex-start;
+      font-size: 10px; font-weight: 700; letter-spacing: .08em;
+      padding: 3px 8px; border-radius: 999px; margin-bottom: 6px;
+    }
+    .lane.cloud .badge {
+      background: var(--accent); color: #fff;
+    }
+    .lane.local .badge {
+      background: #d8d8d8; color: #666;
+    }
+    .lane .name {
+      font-size: clamp(18px, 1.8vw, 22px); font-weight: 700; line-height: 1.2;
+    }
+    .lane .meta {
+      margin-top: 4px; font-size: 12px; line-height: 1.35; opacity: .78;
+    }
+    .lane.cloud .meta { color: rgba(255,255,255,.75); }
+    .vs {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      font-size: 11px; font-weight: 700; color: var(--muted-2); letter-spacing: .08em;
+    }
+    .vs::before, .vs::after {
+      content: ""; flex: 1; height: 1px; background: var(--line);
+    }
+    .note-mini {
+      margin-top: 8px;
+      font-size: 11px; color: var(--muted-2); line-height: 1.35;
+      padding-left: 8px; border-left: 2px solid var(--accent);
+    }
+
+    /* score bars */
+    .scores {
+      flex: 1; min-height: 0;
+      display: flex; flex-direction: column; justify-content: space-between; gap: 6px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 92px 1fr 52px;
+      gap: 8px; align-items: center;
+    }
+    .row .dim {
+      font-size: 12px; font-weight: 700; color: var(--ink);
+    }
+    .track {
+      height: 18px; border-radius: 6px; background: #ececec; overflow: hidden;
+      display: grid; grid-template-columns: 1fr 1fr; position: relative;
+    }
+    .track .c, .track .l {
+      height: 100%; display: flex; align-items: center; justify-content: center;
+      font-size: 9px; font-weight: 700; letter-spacing: .02em;
+    }
+    .track .c { background: #2a2a2a; color: #fff; }
+    .track .l { background: #cfcfcf; color: #555; }
+    .track .fill-cloud {
+      position: absolute; left: 0; top: 0; bottom: 0;
+      background: linear-gradient(90deg, #1a1a1a, var(--accent));
+      border-radius: 6px;
+    }
+    .track .fill-local {
+      position: absolute; right: 0; top: 0; bottom: 0;
+      background: #bdbdbd;
+      border-radius: 6px;
+    }
+    .winner {
+      font-size: 11px; font-weight: 700; text-align: right;
+    }
+    .winner.cloud { color: var(--accent); }
+    .winner.local { color: var(--muted-2); }
+    .legend {
+      display: flex; gap: 14px; margin-top: 4px;
+      font-size: 11px; color: var(--muted-2); font-weight: 600;
+    }
+    .legend i {
+      display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+      margin-right: 5px; vertical-align: -1px;
+    }
+    .legend .a { background: linear-gradient(90deg, #1a1a1a, var(--accent)); }
+    .legend .b { background: #bdbdbd; }
+
+    /* funnel */
+    .funnel {
+      flex: 1; min-height: 0;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .step {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      gap: 10px; align-items: center;
+      border-radius: 10px;
+      padding: 8px 10px;
+      background: #f7f7f7;
+      border: 1px solid var(--line);
+      position: relative;
+    }
+    .step::after {
+      content: "↓";
+      position: absolute; left: 18px; bottom: -12px;
+      color: var(--accent); font-weight: 700; font-size: 12px; z-index: 1;
+    }
+    .step:last-child::after { display: none; }
+    .step .n {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: #1a1a1a; color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+    }
+    .step:last-child {
+      background: var(--accent-soft);
+      border-color: rgba(207, 10, 44, 0.25);
+    }
+    .step:last-child .n { background: var(--accent); }
+    .step .t { font-size: 13px; font-weight: 700; line-height: 1.25; }
+    .step .d { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.3; }
+
+    /* bottom verdict strip */
+    .verdict {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 16px; align-items: center;
+      background: #1a1a1a;
+      color: #fff;
+      border-radius: 12px;
+      padding: 14px 18px;
+      box-shadow: var(--shadow);
+    }
+    .verdict .mark {
+      width: 54px; height: 54px; border-radius: 50%;
+      background: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; font-weight: 700;
+    }
+    .verdict h2 {
+      margin: 0; font-size: clamp(18px, 2vw, 24px); font-weight: 700;
+    }
+    .verdict p {
+      margin: 4px 0 0; font-size: 13px; color: rgba(255,255,255,.72); line-height: 1.4;
+      max-width: 62ch;
+    }
+    .chips {
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .chip {
+      white-space: nowrap;
+      font-size: 11px; font-weight: 700;
+      padding: 6px 10px; border-radius: 999px;
+      background: rgba(255,255,255,.1);
+      color: rgba(255,255,255,.88);
+      text-align: center;
+    }
+    .chip.on {
+      background: var(--accent);
+      color: #fff;
+    }
+    .chip.off {
+      text-decoration: line-through;
+      opacity: .45;
+    }
+
+    .footer {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 11px; color: var(--muted-2);
+    }
+    .footer a {
+      color: var(--muted); text-decoration: none;
+      border-bottom: 1px solid var(--line);
+    }
+    .footer a:hover { color: var(--accent); }
+
+    /* bar chart rewrite - cleaner dual bars */
+    .metric {
+      display: grid;
+      grid-template-columns: 88px 1fr;
+      gap: 10px;
+      align-items: center;
+      padding: 4px 0;
+    }
+    .metric .label {
+      font-size: 12px; font-weight: 700; line-height: 1.2;
+    }
+    .bars {
+      display: grid; gap: 4px;
+    }
+    .barline {
+      display: grid;
+      grid-template-columns: 28px 1fr 28px;
+      gap: 6px; align-items: center;
+      font-size: 10px; font-weight: 700; color: var(--muted-2);
+    }
+    .barline .g {
+      height: 9px; border-radius: 99px; background: #ececec; overflow: hidden;
+    }
+    .barline .g > i {
+      display: block; height: 100%; border-radius: 99px;
+    }
+    .barline.cloud .g > i {
+      background: linear-gradient(90deg, #2a2a2a, var(--accent));
+    }
+    .barline.local .g > i {
+      background: #b8b8b8;
+    }
+
+    @media (max-width: 1100px) {
+      body { overflow: auto; }
+      .slide { height: auto; min-height: 100vh; }
+      .board { grid-template-columns: 1fr; }
+      .top { flex-direction: column; align-items: flex-start; }
+      .verdict { grid-template-columns: 1fr; }
+      .chips { flex-direction: row; flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <section class="slide">
+    <div class="inner">
+
+      <div class="top">
+        <div>
+          <div class="brand"><i></i>MSSClaw · 部署策略研讨</div>
+          <p class="kicker">ONE PAGE · DECISION</p>
+          <h1>不是「要不要本地」<br>而是<em>组织 OS</em>与<em>个人助手</em>如何分域</h1>
+        </div>
+        <aside class="so-what">
+          <div class="lab">SO WHAT</div>
+          <p>目标是组织能力沉淀，不是本机自动化 → 云端（含内网云）即可达成。</p>
+        </aside>
+      </div>
+
+      <div class="board">
+        <!-- 1: fork -->
+        <div class="panel">
+          <div class="ph">
+            <h3>① 先分清两种形态</h3>
+            <span>常见混淆点</span>
+          </div>
+          <div class="fork">
+            <div class="lane cloud">
+              <span class="badge">主路径 · 推荐</span>
+              <div class="name">组织云端</div>
+              <div class="meta">浏览器访问 · 服务端模型与权限<br>含：公有云 / 私有云 / 内网 VPC</div>
+            </div>
+            <div class="vs">VS</div>
+            <div class="lane local">
+              <span class="badge">非主路径</span>
+              <div class="name">本地端 Agent</div>
+              <div class="meta">装在个人电脑 · 读文件 / 跑 CLI<br>个人助手范式，非组织平台</div>
+            </div>
+          </div>
+          <p class="note-mini">内网托管 ≠ 本地端。数据不出域，仍是云端形态。</p>
+        </div>
+
+        <!-- 2: fit chart -->
+        <div class="panel">
+          <div class="ph">
+            <h3>② 谁更匹配平台目标？</h3>
+            <span>适配度对比</span>
+          </div>
+          <div class="legend">
+            <span><i class="a"></i>组织云端</span>
+            <span><i class="b"></i>本地端</span>
+          </div>
+          <div class="scores">
+            <div class="metric">
+              <div class="label">场景沉淀<br>可复演</div>
+              <div class="bars">
+                <div class="barline cloud"><span>云</span><div class="g"><i style="width:92%"></i></div><span>92</span></div>
+                <div class="barline local"><span>本</span><div class="g"><i style="width:28%"></i></div><span>28</span></div>
+              </div>
+            </div>
+            <div class="metric">
+              <div class="label">权限审计<br>组织管控</div>
+              <div class="bars">
+                <div class="barline cloud"><span>云</span><div class="g"><i style="width:95%"></i></div><span>95</span></div>
+                <div class="barline local"><span>本</span><div class="g"><i style="width:30%"></i></div><span>30</span></div>
+              </div>
+            </div>
+            <div class="metric">
+              <div class="label">模型资源<br>供给稳定</div>
+              <div class="bars">
+                <div class="barline cloud"><span>云</span><div class="g"><i style="width:90%"></i></div><span>90</span></div>
+                <div class="barline local"><span>本</span><div class="g"><i style="width:35%"></i></div><span>35</span></div>
+              </div>
+            </div>
+            <div class="metric">
+              <div class="label">本机文件<br>本地 CLI</div>
+              <div class="bars">
+                <div class="barline cloud"><span>云</span><div class="g"><i style="width:22%"></i></div><span>22</span></div>
+                <div class="barline local"><span>本</span><div class="g"><i style="width:96%"></i></div><span>96</span></div>
+              </div>
+            </div>
+          </div>
+          <p class="note-mini">最后一项强项归<strong style="color:var(--ink)">员工助手</strong>——正是我们刻意不做的边界。</p>
+        </div>
+
+        <!-- 3: logic funnel -->
+        <div class="panel">
+          <div class="ph">
+            <h3>③ 三问推出结论</h3>
+            <span>决策漏斗</span>
+          </div>
+          <div class="funnel">
+            <div class="step">
+              <div class="n">1</div>
+              <div>
+                <div class="t">目标是什么？</div>
+                <div class="d">组织场景能力 · 学习→准备→开干</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="n">2</div>
+              <div>
+                <div class="t">和谁分域？</div>
+                <div class="d">本机文件 / CLI → 员工助手</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="n">3</div>
+              <div>
+                <div class="t">治理要什么？</div>
+                <div class="d">模型保障 · RBAC · 审计留痕</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="n">→</div>
+              <div>
+                <div class="t" style="color:var(--accent)">因此：仅云端即可</div>
+                <div class="d">含内网云 / VPC · 不做默认本地端</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="verdict">
+        <div class="mark">云</div>
+        <div>
+          <h2>建议拍板：仅云端部署（优先内网云）</h2>
+          <p>本地端不是做不到，而是与产品定位冲突。MSSClaw 做组织 OS；员工助手做个人本机能力——分域后，云端路径已足够支撑 1.0 目标。</p>
+        </div>
+        <div class="chips">
+          <span class="chip on">✓ 组织云端 / 内网 VPC</span>
+          <span class="chip off">本地端 Agent</span>
+          <span class="chip off">默认混合连接器</span>
+        </div>
+      </div>
+
+      <div class="footer">
+        <span>分析细节见配套长文 · 黑白灰 + 华为红</span>
+        <a href="./deployment-mode-analysis-brief.html">打开体系化分析方案 →</a>
+      </div>
+    </div>
+  </section>
+</body>
+</html>

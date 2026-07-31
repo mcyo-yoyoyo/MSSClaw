@@ -45,7 +45,7 @@ const VIEW_LABELS: Partial<Record<AppView, string>> = {
   home: '首页',
   task: '任务记录',
   messages: '我的消息',
-  'ai-map': '案例地图',
+  'ai-map': '场景案例',
   agents: '专家',
   'agent-studio': '专家',
   skills: '技能',

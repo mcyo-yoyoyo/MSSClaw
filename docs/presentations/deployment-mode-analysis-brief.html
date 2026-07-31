@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSSClaw · 部署方式体系化分析方案</title>
+  <style>
+    :root {
+      --bg: #f7f7f7;
+      --panel: #ffffff;
+      --ink: #1a1a1a;
+      --muted: #5c5c5c;
+      --muted-2: #8a8a8a;
+      --line: rgba(26, 26, 26, 0.12);
+      --accent: #cf0a2c;
+      --accent-soft: #fdecef;
+      --font: "Microsoft YaHei", "微软雅黑", "PingFang SC", sans-serif;
+      --shadow: 0 8px 24px -16px rgba(26, 26, 26, 0.28);
+      --radius: 10px;
+      --col: 880px;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--font);
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page {
+      max-width: var(--col);
+      margin: 0 auto;
+      padding: 48px 28px 80px;
+    }
+    .brand {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 13px; font-weight: 600; margin-bottom: 18px;
+    }
+    .brand i {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent);
+    }
+    .kicker {
+      margin: 0 0 8px;
+      font-size: 12px; font-weight: 700;
+      letter-spacing: .1em; color: var(--accent);
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(28px, 4vw, 36px);
+      font-weight: 700; line-height: 1.25;
+    }
+    .lede {
+      margin: 0 0 28px;
+      font-size: 16px; color: var(--muted);
+      max-width: 62ch;
+    }
+    .verdict {
+      background: #1a1a1a; color: #f5f5f5;
+      border-radius: var(--radius);
+      border-left: 4px solid var(--accent);
+      padding: 20px 22px;
+      margin-bottom: 36px;
+      box-shadow: var(--shadow);
+    }
+    .verdict .lab {
+      font-size: 11px; letter-spacing: .1em;
+      color: rgba(245,245,245,.55); font-weight: 700;
+    }
+    .verdict h2 {
+      margin: 6px 0 8px; font-size: 20px; color: #fff;
+    }
+    .verdict p { margin: 0; color: rgba(245,245,245,.82); font-size: 14.5px; }
+    .verdict strong { color: #fff; }
+
+    nav.toc {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      margin-bottom: 40px;
+      box-shadow: var(--shadow);
+    }
+    nav.toc h3 {
+      margin: 0 0 10px; font-size: 14px;
+    }
+    nav.toc ol {
+      margin: 0; padding-left: 1.2em;
+      font-size: 14px; color: var(--muted);
+    }
+    nav.toc a {
+      color: var(--ink); text-decoration: none;
+      border-bottom: 1px solid transparent;
+    }
+    nav.toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+    section {
+      margin-bottom: 40px;
+      padding-top: 8px;
+    }
+    section > h2 {
+      margin: 0 0 14px;
+      font-size: 22px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+    }
+    section > h2 span {
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      margin-right: 8px;
+    }
+    h3 {
+      margin: 22px 0 8px;
+      font-size: 16px;
+    }
+    p, li { font-size: 14.5px; color: var(--muted); }
+    p strong, li strong { color: var(--ink); }
+    ul, ol { padding-left: 1.25em; }
+    li + li { margin-top: 6px; }
+
+    .grid2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 14px 0;
+    }
+    @media (max-width: 720px) {
+      .grid2 { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      box-shadow: var(--shadow);
+    }
+    .card.hot { border-top: 3px solid var(--accent); }
+    .card.mute { opacity: .92; background: #f3f3f3; }
+    .card h4 {
+      margin: 0 0 8px; font-size: 15px; color: var(--ink);
+    }
+    .card p, .card li { font-size: 13.5px; margin: 0; }
+    .card ul { margin: 8px 0 0; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      margin: 14px 0;
+      font-size: 13.5px;
+    }
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #efefef;
+      font-size: 12px;
+      letter-spacing: .04em;
+      color: var(--muted-2);
+    }
+    td strong { color: var(--ink); }
+    .yes { color: var(--accent); font-weight: 700; }
+    .no { color: var(--muted-2); }
+    .mid { color: #3a3a3a; font-weight: 600; }
+
+    .callout {
+      margin: 16px 0;
+      padding: 14px 16px;
+      border-radius: 8px;
+      background: #f0f0f0;
+      border-left: 3px solid var(--accent);
+      font-size: 14.5px;
+    }
+    .callout strong { color: var(--accent); }
+
+    .footer {
+      margin-top: 48px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      color: var(--muted-2);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .footer a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    @media print {
+      body { background: #fff; }
+      .page { padding: 24px 0; }
+      .card, table, .verdict, nav.toc { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <article class="page">
+    <div class="brand"><i></i>MSSClaw · 资深 AI 架构 / 企业孵化咨询视角</div>
+    <p class="kicker">DEPLOYMENT STRATEGY BRIEF</p>
+    <h1>部署方式体系化分析方案：云端为主是否足够？</h1>
+    <p class="lede">
+      面向公司内部 IT 与产品共建研讨：客观比较常见 AI 平台部署形态，结合 MSSClaw 拟解决的问题、1.0 目标，以及与「员工助手」的职责边界，给出可拍板的部署策略建议。
+    </p>
+
+    <div class="verdict">
+      <div class="lab">EXECUTIVE SUMMARY</div>
+      <h2>建议结论：本阶段仅云端部署即可（含内网私有云 / VPC）</h2>
+      <p>
+        MSSClaw 的主价值是<strong>组织级场景能力沉淀与任务闭环</strong>，不是个人桌面 Agent。
+        本机文件读写与 CLI 自动化已由员工助手覆盖；平台侧优先保障<strong>模型资源、组织权限、审计管控与版本一致性</strong>。
+        因此产品主路径采用云端（优先内网云）即可达成目标；本地端客户端列为明确非目标，避免能力重叠与治理风险。
+      </p>
+    </div>
+
+    <nav class="toc">
+      <h3>目录</h3>
+      <ol>
+        <li><a href="#s1">研讨背景与问题定义</a></li>
+        <li><a href="#s2">部署形态谱系（客观分类）</a></li>
+        <li><a href="#s3">使用场景与优劣势对照</a></li>
+        <li><a href="#s4">项目目标与能力边界</a></li>
+        <li><a href="#s5">我司场景研判</a></li>
+        <li><a href="#s6">决策建议与实施口径</a></li>
+        <li><a href="#s7">风险、例外与演进条件</a></li>
+      </ol>
+    </nav>
+
+    <section id="s1">
+      <h2><span>01</span>研讨背景与问题定义</h2>
+      <p>内部 IT 提出的核心问题通常可表述为：</p>
+      <ul>
+        <li><strong>是否只做云端部署？</strong></li>
+        <li><strong>是否还需要本地端（桌面客户端 / 本机 Agent / 本地 CLI）？</strong></li>
+      </ul>
+      <p>要答好这两个问题，必须先澄清一个常见混淆：</p>
+      <div class="callout">
+        <strong>关键澄清：</strong>「内网部署 / 私有化」属于<strong>云端形态的托管位置选择</strong>（服务仍在服务端，用户浏览器访问），
+        并不等于「本地端 Agent」（安装在员工电脑上、读写本机文件、执行本机命令）。两者治理模型完全不同。
+      </div>
+      <p>本方案采用咨询常用的「先分型 → 再对场景 → 后贴目标 → 再给决策」方法，避免用单一口号代替架构选择。</p>
+    </section>
+
+    <section id="s2">
+      <h2><span>02</span>部署形态谱系（客观分类）</h2>
+      <p>结合业界 AI 平台与 Copilot / Agent 产品实践，建议将选项收敛为四类：</p>
+
+      <div class="grid2">
+        <div class="card hot">
+          <h4>A. 组织云端（推荐主形态）</h4>
+          <p>公有云 SaaS、企业租户或托管集群；浏览器访问；模型与业务逻辑在服务端。</p>
+          <ul>
+            <li>典型：企业 AI 门户、知识库、任务编排平台</li>
+            <li>治理：统一身份、配额、审计、发布门禁</li>
+          </ul>
+        </div>
+        <div class="card hot">
+          <h4>B. 内网托管 / 私有云（仍属云端）</h4>
+          <p>部署于公司 VPC / 专有云 / 机房 K8s；数据与推理可不出域。</p>
+          <ul>
+            <li>解决：合规、数据主权、内网可达</li>
+            <li>不改变：仍是服务端平台，不是桌面 Agent</li>
+          </ul>
+        </div>
+        <div class="card mute">
+          <h4>C. 本地端 Agent（本阶段不主推）</h4>
+          <p>桌面端 / 本地 Runtime / CLI；可访问本机文件系统与命令环境。</p>
+          <ul>
+            <li>典型：个人编程助手、本机文件整理机器人</li>
+            <li>治理难点：终端异构、密钥分散、行为难审计</li>
+          </ul>
+        </div>
+        <div class="card mute">
+          <h4>D. 混合连接器（高成本选项）</h4>
+          <p>云端大脑 + 受控本地插件 / 企业连接器。</p>
+          <ul>
+            <li>能力最全，但审批、安全、运维成本显著上升</li>
+            <li>适合有明确本机刚需且可单独立项时再议</li>
+          </ul>
+        </div>
+      </div>
+
+      <p>另需区分<strong>研发本地调试</strong>（如 <code>npm run dev</code>）与<strong>产品部署形态</strong>：前者是工程手段，不构成对最终用户提供「本地端产品」的承诺。</p>
+    </section>
+
+    <section id="s3">
+      <h2><span>03</span>使用场景与优劣势对照</h2>
+
+      <h3>3.1 场景适配矩阵</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>使用场景</th>
+            <th>云端 A/B</th>
+            <th>本地端 C</th>
+            <th>混合 D</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>组织案例学习 / 场景货架 / 培训沉淀</strong></td>
+            <td class="yes">优</td>
+            <td class="no">弱</td>
+            <td class="mid">中</td>
+          </tr>
+          <tr>
+            <td><strong>统一模型供给、成本与版本管理</strong></td>
+            <td class="yes">优</td>
+            <td class="no">难</td>
+            <td class="mid">中</td>
+          </tr>
+          <tr>
+            <td><strong>组织级 RBAC、发布精选、审计留痕</strong></td>
+            <td class="yes">优</td>
+            <td class="no">弱</td>
+            <td class="mid">中高成本</td>
+          </tr>
+          <tr>
+            <td><strong>跨角色协同（业务使用 / 能力配置分离）</strong></td>
+            <td class="yes">优</td>
+            <td class="no">弱</td>
+            <td class="mid">中</td>
+          </tr>
+          <tr>
+            <td><strong>读写本机文件、执行本地 CLI</strong></td>
+            <td class="no">非主场</td>
+            <td class="yes">优</td>
+            <td class="yes">优（贵）</td>
+          </tr>
+          <tr>
+            <td><strong>断网环境下的重度本机自动化</strong></td>
+            <td class="mid">视内网</td>
+            <td class="yes">优</td>
+            <td class="mid">中</td>
+          </tr>
+          <tr>
+            <td><strong>与既有「员工助手」边界清晰、避免重叠</strong></td>
+            <td class="yes">优</td>
+            <td class="no">易冲突</td>
+            <td class="mid">需严格分域</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>3.2 优劣势摘要</h3>
+      <div class="grid2">
+        <div class="card">
+          <h4>云端（A/B）优势</h4>
+          <ul>
+            <li>模型资源可集中保障与弹性扩缩</li>
+            <li>组织权限、审计、发布流程可落地</li>
+            <li>版本一致，升级一次全员受益</li>
+            <li>与浏览器工作流天然契合「学习→准备→开干」</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>云端（A/B）代价</h4>
+          <ul>
+            <li>依赖网络与平台可用性</li>
+            <li>对「深度本机上下文」支持弱</li>
+            <li>内网化时需 IT 提供算力/网络/身份对接</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>本地端（C）优势</h4>
+          <ul>
+            <li>本机文件与命令环境触达深</li>
+            <li>部分场景可离线运行</li>
+            <li>个人效率工具体验直接</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>本地端（C）代价</h4>
+          <ul>
+            <li>终端环境异构，质量难统一</li>
+            <li>密钥、日志、行为审计分散</li>
+            <li>安全面扩大（命令执行、文件读写）</li>
+            <li>易与员工助手功能重叠，职责不清</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="s4">
+      <h2><span>04</span>项目目标与能力边界</h2>
+      <h3>4.1 拟解决的问题</h3>
+      <ul>
+        <li>个人会用 AI，但方法难复用、难传承，组织能力沉淀不足。</li>
+        <li>案例、准备条件、任务执行割裂，缺少统一主路径。</li>
+        <li>需要可运营的能力货架（Agent / Skill / 知识 / 权限展示），而不是散落的个人工具。</li>
+      </ul>
+
+      <h3>4.2 拟达成的目标意图（对齐 1.0）</h3>
+      <ul>
+        <li><strong>主路径：</strong>学习 → 准备 → 开干（找案例与做任务两端贯通）。</li>
+        <li><strong>建设目标：</strong>内网可达样板、区域案例包、洞察工具与 How-to、角色权限与开放策略可管。</li>
+        <li><strong>价值主张：</strong>把个人 AI 能力沉淀为可复演的组织能力。</li>
+      </ul>
+
+      <h3>4.3 本阶段明确非目标</h3>
+      <div class="callout">
+        <strong>非目标：</strong>安装后读取访问本机文件、代用户执行本地 CLI——此类能力与公司<strong>员工助手</strong>定位重叠，且会显著抬高安全与合规门槛，不纳入 MSSClaw 1.0 主产品范围。
+      </div>
+    </section>
+
+    <section id="s5">
+      <h2><span>05</span>我司场景研判</h2>
+      <p>将「客观优劣」落到「我司是否需要」时，建议采用三条判定标准：</p>
+      <ol>
+        <li><strong>目标匹配度：</strong>该能力是否直接服务 1.0 组织样板与场景闭环？</li>
+        <li><strong>职责分域度：</strong>是否与员工助手形成清晰互补，而非重复建设？</li>
+        <li><strong>治理可达成度：</strong>模型、权限、审计能否以可接受成本落地？</li>
+      </ol>
+
+      <table>
+        <thead>
+          <tr>
+            <th>判定项</th>
+            <th>云端 A/B</th>
+            <th>本地端 C</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>服务 1.0 目标</strong></td>
+            <td class="yes">直接匹配</td>
+            <td class="no">非关键路径</td>
+          </tr>
+          <tr>
+            <td><strong>与员工助手分域</strong></td>
+            <td class="yes">清晰互补</td>
+            <td class="no">易冲突</td>
+          </tr>
+          <tr>
+            <td><strong>模型与权限治理</strong></td>
+            <td class="yes">易保障</td>
+            <td class="no">难统一</td>
+          </tr>
+          <tr>
+            <td><strong>本阶段投入产出</strong></td>
+            <td class="yes">高</td>
+            <td class="no">低（且增加边界风险）</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>因此，从产品战略而非技术偏好出发：<strong>我司场景下「仅云端（含内网云）」足以支撑 MSSClaw 要解决的问题与要达成的目标。</strong></p>
+    </section>
+
+    <section id="s6">
+      <h2><span>06</span>决策建议与实施口径</h2>
+      <div class="card hot">
+        <h4>拍板口径（建议直接用于 IT 对齐）</h4>
+        <ul>
+          <li><strong>产品部署策略：</strong>仅云端部署；1.0 优先内网云 / VPC 托管，保障内网可达与合规。</li>
+          <li><strong>用户交付形态：</strong>浏览器访问组织平台；不提供默认本地端 Agent 安装包。</li>
+          <li><strong>能力边界：</strong>平台不主动读写员工本机文件、不执行本机 CLI；相关诉求归员工助手。</li>
+          <li><strong>工程例外：</strong>研发本地调试环境保留，但不作为业务用户部署方案宣传。</li>
+        </ul>
+      </div>
+
+      <h3>对 IT 的协作含义（非开发清单，是责任界面）</h3>
+      <ul>
+        <li><strong>平台侧：</strong>应用、身份对接、RBAC、审计日志、模型网关/配额、发布流程。</li>
+        <li><strong>IT 侧：</strong>内网网络与证书、主机/容器资源、出站模型访问策略（若用外部模型）、备份与可用性。</li>
+        <li><strong>安全侧：</strong>以服务端威胁模型为主；无需按「全员终端 Agent」级别做端点管控扩面。</li>
+      </ul>
+    </section>
+
+    <section id="s7">
+      <h2><span>07</span>风险、例外与演进条件</h2>
+      <h3>7.1 需主动管理的风险</h3>
+      <ul>
+        <li><strong>把「内网」误等同于「必须本地端」</strong>——应用澄清会持续沟通。</li>
+        <li><strong>业务侧临时要求本机自动化</strong>——先导向员工助手；确属平台缺口再评估连接器。</li>
+        <li><strong>外网 Demo 与内网生产口径混淆</strong>——Demo 用于形态验证；生产以 1.0 内网样板为准。</li>
+      </ul>
+
+      <h3>7.2 何时才值得重新打开「本地端 / 混合」讨论</h3>
+      <p>建议设置触发条件（满足多数再立项，避免口头蔓延）：</p>
+      <ul>
+        <li>存在高频、刚需、且员工助手明确无法覆盖的本机操作场景；</li>
+        <li>安全与合规可接受「受控连接器」模型（最小权限、可审计、可撤销）；</li>
+        <li>有独立资源与运维责任人，不挤占 1.0 主路径交付。</li>
+      </ul>
+
+      <div class="callout">
+        <strong>最终表述建议：</strong>MSSClaw 现阶段采用<strong>仅云端部署策略（含内网私有云）</strong>；
+        本地端不是技术做不到，而是<strong>与产品定位、员工助手边界、组织治理目标不一致</strong>，故不纳入本阶段范围。
+      </div>
+    </section>
+
+    <div class="footer">
+      <span>MSSClaw · Deployment Strategy Brief · 黑白灰 + 华为红</span>
+      <a href="./deployment-mode-decision.html">打开一页决策 PPT →</a>
+    </div>
+  </article>
+</body>
+</html>

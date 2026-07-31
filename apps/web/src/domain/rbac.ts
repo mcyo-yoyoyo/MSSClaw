@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
 import { PROTOTYPE_WORKSPACE_ID } from '@/domain/prototype/constants';
 
-/** 四角色：超管（含原空间管理）· 能力运营 · 业务用户 · 只读访客 */
+/** 四角色：平台运营（含原超管）· 能力开发 · 业务用户 · 只读访客 */
 export const PlatformRoleSchema = z.enum([
   'super_admin',
   'capability_ops',
@@ -62,15 +62,16 @@ export type WorkspaceMember = z.infer<typeof WorkspaceMemberSchema> & {
 };
 
 export const ROLE_LABELS: Record<PlatformRole, string> = {
-  super_admin: '超级管理员',
-  capability_ops: '能力运营',
+  super_admin: '平台运营',
+  capability_ops: '能力开发',
   business_user: '业务用户',
   viewer: '只读访客',
 };
 
 export const ROLE_DESCRIPTIONS: Record<PlatformRole, string> = {
-  super_admin: '管人、管空间、管租户/门户/展示；拥有平台与本空间全部治理权',
-  capability_ops: '运营壳：工作平台 + 能力配置（专家/技能/工具等）；完整产品能力在此配置',
+  super_admin: '平台运营：可查看/创建全部 Skill 与治理配置（租户/门户/展示/组织权限）',
+  capability_ops:
+    '能力开发：配置专家/技能/工具；仅可访问公开 Skill 与本人所属组织（职能/区域）内未公开资产，避免跨部门窥见',
   business_user: '业务壳：仅工作平台（找案例/做任务/任务记录；协作空间在完整产品可开）',
   viewer: '业务壳：工作平台仅找案例，不可发起执行或修改配置',
 };
@@ -265,13 +266,22 @@ export function getRoleBadgeClass(role: PlatformRole) {
   return classes[role];
 }
 
-export type SettingsTab = 'org' | 'depts' | 'roles' | 'members' | 'rbac' | 'audit';
+/** 组织权限页签；`org`/`rbac` 为旧 id，导航时归一到 members/roles */
+export type SettingsTab = 'members' | 'roles' | 'depts' | 'audit' | 'org' | 'rbac';
 
-export const SETTINGS_TABS: { id: SettingsTab; label: string; icon: string }[] = [
-  { id: 'members', label: '成员管理', icon: 'fa-users' },
-  { id: 'roles', label: '角色说明', icon: 'fa-user-shield' },
-  { id: 'rbac', label: '权限矩阵', icon: 'fa-table-cells' },
-  { id: 'org', label: '组织概览', icon: 'fa-sitemap' },
+export function normalizeSettingsTab(tab: SettingsTab): Exclude<SettingsTab, 'org' | 'rbac'> {
+  if (tab === 'org') return 'members';
+  if (tab === 'rbac') return 'roles';
+  return tab;
+}
+
+export const SETTINGS_TABS: {
+  id: Exclude<SettingsTab, 'org' | 'rbac'>;
+  label: string;
+  icon: string;
+}[] = [
+  { id: 'members', label: '成员与组织', icon: 'fa-users' },
+  { id: 'roles', label: '角色与权限', icon: 'fa-user-shield' },
   { id: 'depts', label: '部门区域', icon: 'fa-building' },
   { id: 'audit', label: '审计日志', icon: 'fa-clipboard-list' },
 ];

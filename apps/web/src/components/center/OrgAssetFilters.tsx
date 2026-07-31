@@ -18,6 +18,8 @@ interface OrgAssetFilterBarProps {
   regionFilter: RegionFilter;
   efficiencyFilter?: EfficiencyFilter;
   scopeFilter?: AssetScopeFilter;
+  /** 覆盖默认范围选项（如技能页用可见范围口径） */
+  scopeOptions?: { id: AssetScopeFilter; label: string }[];
   /** 场景列表范围：与我相关 / 全部场景（案例样板间） */
   scenarioFilter?: ScenarioScopeFilter;
   onDeptChange: (v: DeptFilter) => void;
@@ -25,7 +27,7 @@ interface OrgAssetFilterBarProps {
   onEfficiencyChange?: (v: EfficiencyFilter) => void;
   onScopeChange?: (v: AssetScopeFilter) => void;
   onScenarioFilterChange?: (v: ScenarioScopeFilter) => void;
-  /** 是否展示「范围」行（外部/内部等），默认不展示 */
+  /** 是否展示「范围」行，默认不展示 */
   showScope?: boolean;
   /** 默认折叠为摘要，点击展开双轴筛选 */
   collapsible?: boolean;
@@ -38,6 +40,7 @@ export function OrgAssetFilterBar({
   regionFilter,
   efficiencyFilter = 'all',
   scopeFilter = 'all',
+  scopeOptions = ASSET_SCOPE_OPTIONS,
   scenarioFilter = 'all',
   onDeptChange,
   onRegionChange,
@@ -67,7 +70,7 @@ export function OrgAssetFilterBar({
       );
     }
     if (showScope && onScopeChange && scopeFilter !== 'all') {
-      parts.push(ASSET_SCOPE_OPTIONS.find((o) => o.id === scopeFilter)?.label ?? scopeFilter);
+      parts.push(scopeOptions.find((o) => o.id === scopeFilter)?.label ?? scopeFilter);
     }
     return parts.length ? parts.join(' · ') : '全部';
   }, [
@@ -75,6 +78,7 @@ export function OrgAssetFilterBar({
     regionFilter,
     efficiencyFilter,
     scopeFilter,
+    scopeOptions,
     scenarioFilter,
     onEfficiencyChange,
     onScenarioFilterChange,
@@ -180,7 +184,7 @@ export function OrgAssetFilterBar({
               ) : null}
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="mr-0.5 text-[10px] font-semibold text-zinc-400">范围</span>
-                {ASSET_SCOPE_OPTIONS.map((o) => (
+                {scopeOptions.map((o) => (
                   <button
                     key={o.id}
                     type="button"

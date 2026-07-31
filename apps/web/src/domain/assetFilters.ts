@@ -2,7 +2,15 @@ import type { AssetSourceType, DeptId, OrgAffiliation, RegionId } from '@/domain
 import type { PlatformRole } from '@/domain/rbac';
 import { canViewAsset } from '@/domain/assetVisibility';
 
-export type AssetScopeFilter = 'all' | 'mine' | 'external' | 'internal';
+export type AssetScopeFilter =
+  | 'all'
+  | 'mine'
+  | 'external'
+  | 'internal'
+  /** Skill 可见范围筛选（与创建技能口径对齐） */
+  | 'visibility_org'
+  | 'visibility_public'
+  | 'visibility_private';
 export type DeptFilter = DeptId | 'all';
 export type RegionFilter = RegionId | 'all';
 /** 提效场景：办公 / 管理 / 流程（不含体验，与产品口径对齐） */
@@ -74,6 +82,10 @@ export function matchesAssetOrgFilters(asset: OwnableAsset, input: AssetFilterIn
       (asset.publisher === currentUserName || asset.author === currentUserName);
     if (!mineById && !mineByName) return false;
   }
+  const visibility = asset.visibility ?? 'org';
+  if (scopeFilter === 'visibility_org' && visibility !== 'org') return false;
+  if (scopeFilter === 'visibility_public' && visibility !== 'public') return false;
+  if (scopeFilter === 'visibility_private' && visibility !== 'private') return false;
 
   if (deptFilter !== 'all') {
     const depts = asset.ownerDeptIds ?? [];
@@ -95,4 +107,12 @@ export const ASSET_SCOPE_OPTIONS: { id: AssetScopeFilter; label: string }[] = [
   { id: 'mine', label: '我构建的' },
   { id: 'internal', label: '内部能力' },
   { id: 'external', label: '外部工具' },
+];
+
+/** 配置技能页：范围与创建技能可见口径对齐 */
+export const SKILL_VISIBILITY_SCOPE_OPTIONS: { id: AssetScopeFilter; label: string }[] = [
+  { id: 'all', label: '全部' },
+  { id: 'mine', label: '我自己' },
+  { id: 'visibility_org', label: '本组织' },
+  { id: 'visibility_public', label: '公开可见' },
 ];

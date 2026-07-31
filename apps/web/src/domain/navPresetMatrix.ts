@@ -87,8 +87,21 @@ export function validateNamedPresetMatrices(): string[] {
     if (!stdOps.has(id)) errors.push(`standard/capability_ops 应包含 MVP 的 ${id}`);
     if (!fullOps.has(id)) errors.push(`full/capability_ops 应包含 MVP 的 ${id}`);
   }
-  for (const id of ['kb', 'automation'] as NavSlotId[]) {
-    if (!stdOps.has(id)) errors.push(`standard/capability_ops 应启用 ${id}`);
+  if (!stdOps.has('skills')) {
+    errors.push('standard/capability_ops 应启用 skills（配置技能）');
+  }
+  for (const id of ['agents', 'tools', 'kb', 'warroom', 'automation'] as NavSlotId[]) {
+    if (mvpOps.has(id)) {
+      errors.push(`customer/capability_ops 默认不应启用 ${id}（标准能力线仅配置技能）`);
+    }
+    if (stdOps.has(id)) {
+      errors.push(`standard/capability_ops 默认不应启用 ${id}（标准能力线仅配置技能）`);
+    }
+  }
+  for (const id of ['agents', 'tools', 'kb', 'warroom'] as NavSlotId[]) {
+    if (!fullOps.has(id)) {
+      errors.push(`full/capability_ops 应启用 ${id}`);
+    }
   }
   for (const id of ['memory', 'workflow'] as NavSlotId[]) {
     if (!fullOps.has(id)) errors.push(`full/capability_ops 应启用 ${id}`);

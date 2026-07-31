@@ -71,7 +71,7 @@ export function AppShellSidebar() {
     return acc;
   }, [isViewEnabled]);
 
-  /** 能力配置：历史 platform + ops 槽位合并展示（全角色同一一级类） */
+  /** 能力配置：历史 platform + ops 槽位合并；场景内容配置归门户运营，不在此注入 ai-map */
   const capabilityItems = useMemo(() => {
     const merge = [...itemsBySection.platform, ...itemsBySection.ops];
     return merge.filter((i) => i.id !== 'ai-map' && i.id !== 'home');
@@ -79,7 +79,11 @@ export function AppShellSidebar() {
 
   const systemNavNodes = useMemo(() => {
     const byId = new Map(itemsBySection.system.map((i) => [i.id, i]));
-    const renderItem = (item: (typeof APP_VIEW_NAV)[number]) => (
+    const renderItem = (item: {
+      id: AppView;
+      label: string;
+      icon: string;
+    }) => (
       <button
         key={item.id}
         type="button"
@@ -125,10 +129,9 @@ export function AppShellSidebar() {
   const showHomeNav = isViewEnabled('home');
   const executeAllowed = canExecuteChat(user?.platformRole);
   const homeMode = useHomeStore((s) => s.homeMode);
-  const findCasesActive = (appView === 'home' && homeMode === 'portal') || appView === 'ai-map';
+  const findCasesActive = appView === 'home' && homeMode === 'portal';
   const doTaskActive = appView === 'home' && homeMode === 'assistant';
-  const previewPlazaActive =
-    (appView === 'home' && homeMode === 'portal') || appView === 'ai-map';
+  const previewPlazaActive = appView === 'home' && homeMode === 'portal';
 
   const hasWorkspaceBody = showHomeNav || showTaskNav || showWarroomNav;
   const hasCapabilityBody = capabilityItems.length > 0;
