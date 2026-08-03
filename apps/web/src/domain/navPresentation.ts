@@ -20,6 +20,10 @@ export type NavSlotId = AppView | 'warroom';
  */
 export const BUSINESS_SHELL_SLOT_IDS: readonly NavSlotId[] = [
   'home',
+  'market-external',
+  'market-internal',
+  'market-projects',
+  'market-tool',
   'task',
   'warroom',
   'messages',
@@ -52,9 +56,41 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   {
     id: 'home',
     label: '首页',
-    subtitle: '业务：找案例 · 做任务；运营：预览广场（学/用）',
+    subtitle: '入口总览 · 最近任务',
     icon: 'fa-house',
     section: 'workspace',
+  },
+  {
+    id: 'market-external',
+    label: '外部工具',
+    subtitle: '外部 / SaaS 工具货架 · 顶栏入口',
+    icon: 'fa-globe',
+    section: 'workspace',
+    hiddenFromSidebar: true,
+  },
+  {
+    id: 'market-internal',
+    label: '内部工具集市',
+    subtitle: '内部工具货架 · 顶栏入口',
+    icon: 'fa-building',
+    section: 'workspace',
+    hiddenFromSidebar: true,
+  },
+  {
+    id: 'market-projects',
+    label: 'AI 项目中心',
+    subtitle: '样板项目货架 · 顶栏入口',
+    icon: 'fa-layer-group',
+    section: 'workspace',
+    hiddenFromSidebar: true,
+  },
+  {
+    id: 'market-tool',
+    label: '工具详情',
+    subtitle: '货架工具详情 · 深链入口',
+    icon: 'fa-circle-info',
+    section: 'workspace',
+    hiddenFromSidebar: true,
   },
   { id: 'task', label: '任务记录', subtitle: '进度 · 结果 · 历史会话', icon: 'fa-list-check', section: 'workspace' },
   {
@@ -75,10 +111,10 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   {
     id: 'ai-map',
     label: '场景案例',
-    subtitle: '学习/准备/开干预览 · 内容由门户运营上架',
+    subtitle: '样板间进阶 · 内容由门户运营上架',
     icon: 'fa-map',
     section: 'platform',
-    /** 业务从「找案例」进入；配置入口在系统设置 · 门户运营 */
+    /** 项目详情进阶；配置入口在系统设置 · 门户运营 */
     hiddenFromSidebar: true,
   },
   { id: 'agents', label: '配置专家', subtitle: '上架 · 发布 · 编排（运营）', icon: 'fa-robot', section: 'platform' },
@@ -156,7 +192,7 @@ export const NAV_PRESET_LABELS: Record<NavPresetId, { title: string; description
   customer: {
     title: 'MVP演示',
     description:
-      '业务=找案例/做任务/任务记录；能力开发能力配置仅「配置技能」；超管=+专家/工具/组织/展示/租户/门户',
+      '业务=三货架/任务记录；能力开发能力配置仅「配置技能」；超管=+专家/工具/组织/展示/租户/门户',
   },
   standard: {
     title: '标准能力',
@@ -192,16 +228,26 @@ function withAdminLocks(base: Record<NavSlotId, boolean>, role: PlatformRole): R
 
 /**
  * MVP 菜单矩阵（三方案递增；超管 ≠ 直接完整版）：
- * - 业务用户：工作平台 = 找案例 · 做任务 · 任务记录（协作空间关）
- * - 只读访客：工作平台 = 找案例
+ * - 业务用户：工作平台 = 首页 · 三货架 · 任务记录（协作空间关）
+ * - 只读访客：工作平台 = 首页 · 三货架
  * - 能力开发：工作平台 + 仅「配置技能」（无专家/工具/知识/协作空间；完整产品再开）
  * - 平台运营：专家/技能/工具 + 系统治理项（展示/租户/组织/门户）
  */
+function marketSlotsOn(base: Record<NavSlotId, boolean>): Record<NavSlotId, boolean> {
+  return {
+    ...base,
+    'market-external': true,
+    'market-internal': true,
+    'market-projects': true,
+    'market-tool': true,
+  };
+}
+
 function mvpForRole(role: PlatformRole): Record<NavSlotId, boolean> {
   const off = allSlots(false);
   if (role === 'capability_ops') {
     return withAdminLocks(
-      {
+      marketSlotsOn({
         ...off,
         home: true,
         task: true,
@@ -212,13 +258,13 @@ function mvpForRole(role: PlatformRole): Record<NavSlotId, boolean> {
         skills: true,
         tools: false,
         kb: false,
-      },
+      }),
       role,
     );
   }
   if (role === 'super_admin') {
     return withAdminLocks(
-      {
+      marketSlotsOn({
         ...off,
         home: true,
         task: true,
@@ -228,33 +274,33 @@ function mvpForRole(role: PlatformRole): Record<NavSlotId, boolean> {
         agents: true,
         skills: true,
         tools: true,
-      },
+      }),
       role,
     );
   }
   if (role === 'viewer') {
     return withAdminLocks(
-      {
+      marketSlotsOn({
         ...off,
         home: true,
         task: false,
         warroom: false,
         messages: true,
         'ai-map': true,
-      },
+      }),
       role,
     );
   }
-  // 业务用户：找案例 · 做任务 · 任务记录；无协作空间
+  // 业务用户：首页 · 三货架 · 任务记录；无协作空间
   return withAdminLocks(
-    {
+    marketSlotsOn({
       ...off,
       home: true,
       task: true,
       warroom: false,
       messages: true,
       'ai-map': true,
-    },
+    }),
     role,
   );
 }
@@ -311,25 +357,25 @@ function fullForRole(role: PlatformRole): Record<NavSlotId, boolean> {
   // 业务壳完整版：工作平台可开协作空间，绝不塞运营配置项
   if (role === 'business_user') {
     return withAdminLocks(
-      {
+      marketSlotsOn({
         ...allSlots(false),
         home: true,
         task: true,
         warroom: true,
         messages: true,
         'ai-map': true,
-      },
+      }),
       role,
     );
   }
   if (role === 'viewer') {
     return withAdminLocks(
-      {
+      marketSlotsOn({
         ...allSlots(false),
         home: true,
         messages: true,
         'ai-map': true,
-      },
+      }),
       role,
     );
   }
@@ -400,6 +446,9 @@ export const NAV_PRESET_ENABLED: Record<Exclude<NavPresetId, 'custom'>, Record<A
   ),
   customer: navPresetFlags({
     home: true,
+    'market-external': true,
+    'market-internal': true,
+    'market-projects': true,
     task: true,
     messages: true,
     'ai-map': true,
@@ -409,6 +458,9 @@ export const NAV_PRESET_ENABLED: Record<Exclude<NavPresetId, 'custom'>, Record<A
   }),
   standard: navPresetFlags({
     home: true,
+    'market-external': true,
+    'market-internal': true,
+    'market-projects': true,
     task: true,
     messages: true,
     'ai-map': true,
@@ -420,6 +472,10 @@ export const NAV_PRESET_ENABLED: Record<Exclude<NavPresetId, 'custom'>, Record<A
 
 export const NAV_FALLBACK_ORDER: AppView[] = [
   'home',
+  'market-external',
+  'market-internal',
+  'market-projects',
+  'market-tool',
   'task',
   'messages',
   'ai-map',

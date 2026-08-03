@@ -12,6 +12,8 @@ import {
   LazyAiMapPage,
   LazyAutomationCenterPage,
   LazyKnowledgeCenterPage,
+  LazyMarketShelfPage,
+  LazyMarketToolDetailPage,
   LazyMemoryCenterPage,
   LazyPresentationConfigPage,
   LazyPortalContentOpsPage,
@@ -43,6 +45,9 @@ interface AppViewRouterProps {
 
 const VIEW_LABELS: Partial<Record<AppView, string>> = {
   home: '首页',
+  'market-external': '外部工具',
+  'market-internal': '内部工具集市',
+  'market-projects': 'AI 项目中心',
   task: '任务记录',
   messages: '我的消息',
   'ai-map': '场景案例',
@@ -85,6 +90,35 @@ export function AppViewRouter({ appView, handlers }: AppViewRouterProps) {
   const label = VIEW_LABELS[appView] ?? '页面';
 
   switch (appView) {
+    case 'market-external':
+      return (
+        <LazyView label={label}>
+          <LazyMarketShelfPage kind="external" />
+        </LazyView>
+      );
+    case 'market-internal':
+      return (
+        <LazyView label={label}>
+          <LazyMarketShelfPage kind="internal" />
+        </LazyView>
+      );
+    case 'market-projects':
+      return (
+        <LazyView label={label}>
+          <LazyMarketShelfPage
+            kind="projects"
+            onInvokeAgent={handlers.onInvokeAgent}
+            onInvokeSkill={handlers.onInvokeSkill}
+            onStartExpertTeam={handlers.onStartExpertTeam}
+          />
+        </LazyView>
+      );
+    case 'market-tool':
+      return (
+        <LazyView label="工具详情">
+          <LazyMarketToolDetailPage />
+        </LazyView>
+      );
     case 'task':
       return (
         <LazyView label={label}>

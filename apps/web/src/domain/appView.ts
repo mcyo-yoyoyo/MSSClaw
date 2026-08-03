@@ -1,5 +1,9 @@
 ﻿export const APP_VIEWS = [
   'home',
+  'market-external',
+  'market-internal',
+  'market-projects',
+  'market-tool',
   'ai-map',
   'task',
   'messages',
@@ -43,7 +47,7 @@ export const APP_VIEW_NAV: AppViewNavItem[] = [
   {
     id: 'home',
     label: '首页',
-    subtitle: '业务：找案例 · 做任务；运营：预览广场（学/用）',
+    subtitle: '入口总览 · 最近任务',
     icon: 'fa-house',
     section: 'workspace',
   },
@@ -51,7 +55,7 @@ export const APP_VIEW_NAV: AppViewNavItem[] = [
   {
     id: 'ai-map',
     label: '场景案例',
-    subtitle: '学习/准备/开干预览 · 内容由门户运营上架',
+    subtitle: '样板间进阶 · 内容由门户运营上架',
     icon: 'fa-map',
     section: 'platform',
   },

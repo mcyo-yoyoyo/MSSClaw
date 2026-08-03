@@ -23,8 +23,9 @@ import type { PlatformRole } from '@/domain/rbac';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
-/** v7: 业务壳仅工作平台可配；完整能力在运营/超管角色上配置 */
-const LS_KEY = 'mssclaw_nav_presentation_v7';
+/** v8: 业务壳增加三货架槽位（顶栏）；完整能力在运营/超管角色上配置 */
+const LS_KEY = 'mssclaw_nav_presentation_v8';
+const LS_KEY_V7 = 'mssclaw_nav_presentation_v7';
 const LS_KEY_V6 = 'mssclaw_nav_presentation_v6';
 const LS_KEY_V5 = 'mssclaw_nav_presentation_v5';
 const LS_KEY_V4 = 'mssclaw_nav_presentation_v4';
@@ -62,7 +63,20 @@ function normalizePersisted(preset: NavPresetId, roleEnabled: RoleNavMatrix): Pe
 
 function loadPersisted(): PersistedNavPresentation {
   try {
-    const v7 = localStorage.getItem(LS_KEY);
+    const v8 = localStorage.getItem(LS_KEY);
+    if (v8) {
+      const parsed = JSON.parse(v8) as Partial<PersistedNavPresentation>;
+      const preset =
+        parsed.preset === 'customer' ||
+        parsed.preset === 'standard' ||
+        parsed.preset === 'custom' ||
+        parsed.preset === 'full'
+          ? parsed.preset
+          : 'customer';
+      return normalizePersisted(preset, mergeRoleEnabled(parsed.roleEnabled));
+    }
+
+    const v7 = localStorage.getItem(LS_KEY_V7);
     if (v7) {
       const parsed = JSON.parse(v7) as Partial<PersistedNavPresentation>;
       const preset =
@@ -72,7 +86,10 @@ function loadPersisted(): PersistedNavPresentation {
         parsed.preset === 'full'
           ? parsed.preset
           : 'customer';
-      return normalizePersisted(preset, mergeRoleEnabled(parsed.roleEnabled));
+      // 命名预设以代码为准（写入三货架）；custom 合并后由 clamp 补齐
+      const next = normalizePersisted(preset, mergeRoleEnabled(parsed.roleEnabled));
+      persist(next);
+      return next;
     }
 
     const v6 = localStorage.getItem(LS_KEY_V6);

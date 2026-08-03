@@ -2,13 +2,22 @@
 
 import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
 
-export type RankMode = 'trending' | 'newest' | 'top_rated' | 'most_used';
+export type RankMode = 'trending' | 'newest' | 'top_rated' | 'most_used' | 'most_downloaded';
 
 export const RANK_MODE_OPTIONS: { id: RankMode; label: string }[] = [
-  { id: 'trending', label: '最热' },
-  { id: 'newest', label: '最新' },
-  { id: 'top_rated', label: '好评' },
+  { id: 'trending', label: '热门推荐' },
+  { id: 'newest', label: '最新上线' },
+  { id: 'most_downloaded', label: '最多下载' },
+  { id: 'top_rated', label: '最高评分' },
   { id: 'most_used', label: '最多使用' },
+];
+
+/** 首页排行 Tab（不含「最多使用」以免与热门过于重叠） */
+export const HOME_RANK_TABS: { id: RankMode; label: string }[] = [
+  { id: 'trending', label: '热门推荐' },
+  { id: 'newest', label: '最新上线' },
+  { id: 'most_downloaded', label: '最多下载' },
+  { id: 'top_rated', label: '最高评分' },
 ];
 
 export interface ContentEngagement {
@@ -124,6 +133,8 @@ export function sortByRankMode<T extends RankableContent>(
         return ratingNet(b.e) - ratingNet(a.e) || b.e.likes - a.e.likes;
       case 'most_used':
         return b.e.uses - a.e.uses;
+      case 'most_downloaded':
+        return b.e.downloads - a.e.downloads || b.e.uses - a.e.uses;
       default:
         return 0;
     }

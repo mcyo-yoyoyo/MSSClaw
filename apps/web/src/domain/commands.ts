@@ -1,5 +1,5 @@
 ﻿import type { AppView } from '@/domain/appView';
-import { openFindCases, openUseSkills } from '@/domain/openHomeJourney';
+import { openFindCases, openMarketShelf, openUseSkills } from '@/domain/openHomeJourney';
 
 export interface AppCommand {
   id: string;
@@ -28,11 +28,43 @@ export interface AppCommandMarketplace {
 
 const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
   {
+    id: 'goto-home',
+    label: '首页',
+    icon: 'fa-house',
+    keywords: '首页 home 总览',
+    view: 'home',
+    run: () => h.goto('home'),
+  },
+  {
+    id: 'goto-market-external',
+    label: '外部工具',
+    icon: 'fa-globe',
+    keywords: '外部工具 货架 SaaS 找案例 外链',
+    view: 'market-external',
+    run: () => openMarketShelf('external'),
+  },
+  {
+    id: 'goto-market-internal',
+    label: '内部工具集市',
+    icon: 'fa-building',
+    keywords: '内部工具 集市 connector 货架',
+    view: 'market-internal',
+    run: () => openMarketShelf('internal'),
+  },
+  {
+    id: 'goto-market-projects',
+    label: 'AI 项目中心',
+    icon: 'fa-layer-group',
+    keywords: 'AI项目 项目中心 样板 场景 找案例',
+    view: 'market-projects',
+    run: () => openMarketShelf('projects'),
+  },
+  {
     id: 'goto-find-cases',
-    label: '找案例',
+    label: '找案例（外部工具）',
     icon: 'fa-compass',
     keywords: '案例 学 找案例 预览广场 portal 场景 样板 发现 广场',
-    view: 'home',
+    view: 'market-external',
     run: () => openFindCases(),
   },
   {

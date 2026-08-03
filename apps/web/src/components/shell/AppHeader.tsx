@@ -1,17 +1,46 @@
 import { MssZhishuMark } from '@/components/brand/MssZhishuMark';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
+import type { AppView } from '@/domain/appView';
 import { writeAppRouteToLocation } from '@/domain/appRoute';
+import { MARKET_SHELF_META } from '@/domain/marketShelf';
+import { canExecuteChat } from '@/domain/permissions';
 import { ROLE_LABELS } from '@/domain/rbac';
 import { formatRolePerspective } from '@/domain/rolePerspective';
+import { defaultShellPerspective, isOpsOnlyView } from '@/domain/shellPerspective';
+import { WORKSPACE_LOCALE_LABELS } from '@/domain/workspaceConfig';
 import { ROUTE_PREFETCH } from '@/features/lazyPages';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useWorkspaceConfigStore } from '@/stores/workspaceConfigStore';
-import { WORKSPACE_LOCALE_LABELS } from '@/domain/workspaceConfig';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useCommandPaletteStore } from '@/stores/commandPaletteStore';
+import { useHomeStore } from '@/stores/homeStore';
 import { useInboxStore } from '@/stores/inboxStore';
+import { useMarketplaceStore } from '@/stores/marketplaceStore';
+import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
+import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useSessionStore } from '@/stores/sessionStore';
+
+const TOP_SHELF_NAV: { view: AppView; label: string }[] = [
+  { view: 'home', label: '首页' },
+  { view: MARKET_SHELF_META.external.view, label: MARKET_SHELF_META.external.label },
+  { view: MARKET_SHELF_META.internal.view, label: MARKET_SHELF_META.internal.label },
+  { view: MARKET_SHELF_META.projects.view, label: MARKET_SHELF_META.projects.label },
+];
+
+const ADMIN_MENU_ITEMS: { view: AppView; label: string }[] = [
+  { view: 'portal-ops', label: '门户运营' },
+  { view: 'skills', label: '配置技能' },
+  { view: 'agents', label: '配置专家' },
+  { view: 'tools', label: '配置工具' },
+  { view: 'kb', label: '管理知识' },
+  { view: 'automation', label: '自动化设置' },
+  { view: 'workflow', label: '工作流设置' },
+  { view: 'memory', label: '管理记忆' },
+  { view: 'admin', label: '组织权限' },
+  { view: 'presentation', label: '展示配置' },
+  { view: 'workspace-config', label: '工作区配置' },
+];
 
 interface AppHeaderProps {
   apiConnected: boolean;
@@ -24,8 +53,36 @@ export function AppHeader({ apiConnected, onWorkspaceSwitch }: AppHeaderProps) {
   const openSettings = useAppViewStore((s) => s.openSettings);
   const setAppView = useAppViewStore((s) => s.setAppView);
   const openPalette = useCommandPaletteStore((s) => s.openPalette);
+  const isViewEnabled = useNavPresentationStore((s) => s.isViewEnabled);
+  const pendingToolId = useNavigationIntentStore((s) => s.pendingToolId);
+  const returnTarget = useNavigationIntentStore((s) => s.returnTarget);
+  const tools = useMarketplaceStore((s) => s.tools);
+  const marketToolShelfHighlight = useMemo((): AppView | null => {
+    if (appView !== 'market-tool') return null;
+    if (
+      returnTarget?.view === 'market-external' ||
+      returnTarget?.view === 'market-internal' ||
+      returnTarget?.view === 'market-projects'
+    ) {
+      return returnTarget.view;
+    }
+    const tool = tools.find((t) => t.id === pendingToolId);
+    if (!tool) return 'market-external';
+    return tool.sourceType === 'internal' || tool.tags?.includes('hw-internal')
+      ? 'market-internal'
+      : 'market-external';
+  }, [appView, returnTarget, tools, pendingToolId]);
   const user = useSessionStore((s) => s.user);
   const logout = useSessionStore((s) => s.logout);
+  const isOpsShell = defaultShellPerspective(user?.platformRole) === 'ops';
+  const executeAllowed = canExecuteChat(user?.platformRole);
+  const showTaskEntry = executeAllowed && isViewEnabled('task');
+  const adminItems = useMemo(
+    () => ADMIN_MENU_ITEMS.filter((i) => isViewEnabled(i.view)),
+    [isViewEnabled],
+  );
+  const canOpenAdmin = isOpsShell && adminItems.length > 0;
+  const adminActive = isOpsOnlyView(appView);
   const inboxMessages = useInboxStore((s) => s.messages);
   const unreadMessages = useMemo(() => {
     void inboxMessages;
@@ -33,8 +90,10 @@ export function AppHeader({ apiConnected, onWorkspaceSwitch }: AppHeaderProps) {
   }, [inboxMessages, user?.id]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const adminRef = useRef<HTMLDivElement>(null);
 
   const getLocale = useWorkspaceConfigStore((s) => s.getLocale);
 
@@ -60,20 +119,32 @@ export function AppHeader({ apiConnected, onWorkspaceSwitch }: AppHeaderProps) {
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) setUserMenuOpen(false);
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node))
+        setUserMenuOpen(false);
+      if (adminRef.current && !adminRef.current.contains(e.target as Node)) setAdminOpen(false);
     };
     document.addEventListener('click', onDocClick);
     return () => document.removeEventListener('click', onDocClick);
   }, []);
 
+  const goView = (view: AppView) => {
+    if (view === 'home') {
+      useHomeStore.getState().setHomeMode('portal');
+    }
+    writeAppRouteToLocation({ view });
+    setAppView(view);
+  };
+
   return (
     <header className="apple-header z-50 flex h-[52px] shrink-0 items-center justify-between px-6">
       <div className="flex items-center gap-5">
         <div className="flex items-center gap-3">
-          <MssZhishuMark size={32} className="shrink-0" title="MSS AI提效作战平台" />
+          <MssZhishuMark size={32} className="shrink-0" title="MSS AI 工具平台" />
           <div className="flex items-baseline gap-2.5">
             <span className="text-[15px] font-semibold tracking-tight text-zinc-900">MSS AI</span>
-            <span className="hidden text-[11px] font-medium text-zinc-400 sm:inline">提效作战平台</span>
+            <span className="hidden text-[11px] font-medium text-zinc-400 sm:inline">
+              工具平台
+            </span>
           </div>
         </div>
 
@@ -136,6 +207,69 @@ export function AppHeader({ apiConnected, onWorkspaceSwitch }: AppHeaderProps) {
         </div>
       </div>
 
+      <nav
+        className="mx-3 hidden min-w-0 flex-1 items-center justify-center gap-0.5 lg:flex"
+        aria-label="平台导航"
+      >
+        {TOP_SHELF_NAV.filter((item) => isViewEnabled(item.view)).map((item) => (
+          <button
+            key={item.view}
+            type="button"
+            onClick={() => goView(item.view)}
+            onMouseEnter={() => ROUTE_PREFETCH[item.view]?.()}
+            className={cn(
+              'truncate rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition',
+              appView === item.view || marketToolShelfHighlight === item.view
+                ? 'bg-zinc-900 text-white'
+                : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900',
+            )}
+          >
+            {item.label}
+          </button>
+        ))}
+        {canOpenAdmin ? (
+          <div className="relative" ref={adminRef}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setAdminOpen((v) => !v);
+              }}
+              className={cn(
+                'truncate rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition',
+                adminActive
+                  ? 'bg-zinc-900 text-white'
+                  : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900',
+              )}
+            >
+              管理后台
+              <i className="fa-solid fa-chevron-down ml-1 text-[9px] opacity-70" />
+            </button>
+            {adminOpen ? (
+              <div className="absolute left-1/2 top-full z-[60] mt-2 w-52 -translate-x-1/2 rounded-xl border border-zinc-200/80 bg-white py-1.5 shadow-apple-lg">
+                {adminItems.map((item) => (
+                  <button
+                    key={item.view}
+                    type="button"
+                    onClick={() => {
+                      setAdminOpen(false);
+                      goView(item.view);
+                    }}
+                    onMouseEnter={() => ROUTE_PREFETCH[item.view]?.()}
+                    className={cn(
+                      'flex w-full px-4 py-2 text-left text-[12px] font-medium hover:bg-zinc-50',
+                      appView === item.view ? 'text-zinc-900' : 'text-zinc-600',
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </nav>
+
       <div className="flex items-center gap-1.5">
         <div className="mr-1 hidden items-center gap-2 rounded-full border border-zinc-200/80 bg-white px-3 py-1 text-[11px] text-zinc-500 md:flex">
           <span
@@ -159,7 +293,6 @@ export function AppHeader({ apiConnected, onWorkspaceSwitch }: AppHeaderProps) {
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            // 先写 hash 再切视图，避免任务深链同步把页面抢回去
             writeAppRouteToLocation({ view: 'messages' });
             setAppView('messages');
           }}
@@ -202,6 +335,19 @@ export function AppHeader({ apiConnected, onWorkspaceSwitch }: AppHeaderProps) {
                 <p className="truncate text-[11px] text-zinc-500">{user.email}</p>
                 <p className="mt-1 text-[10px] text-zinc-400">{ROLE_LABELS[user.platformRole]}</p>
               </div>
+              {showTaskEntry ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    goView('task');
+                  }}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-left text-[13px] text-zinc-700 hover:bg-zinc-50"
+                >
+                  <i className="fa-solid fa-list-check w-4 text-center text-[11px] text-zinc-400" />
+                  任务记录
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => {

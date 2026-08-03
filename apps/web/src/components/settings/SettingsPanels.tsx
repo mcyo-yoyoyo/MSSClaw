@@ -146,12 +146,12 @@ function MembersAndOrgPanel({
             />
           </label>
           {canManage ? (
-            <button
-              type="button"
-              onClick={() => {
-                const next = nameDraft.trim();
-                if (!next) return;
-                updateWorkspace(workspace.id, { name: next });
+          <button
+            type="button"
+            onClick={() => {
+              const next = nameDraft.trim();
+              if (!next) return;
+              updateWorkspace(workspace.id, { name: next });
                 recordAudit({
                   category: 'org',
                   action: 'org.rename',
@@ -159,11 +159,11 @@ function MembersAndOrgPanel({
                   detail: `更新组织显示名为「${next}」`,
                   workspaceId: workspace.id,
                 });
-              }}
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white"
-            >
-              保存名称
-            </button>
+            }}
+            className="rounded-lg bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white"
+          >
+            保存名称
+          </button>
           ) : null}
         </div>
         <dl className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
@@ -1258,9 +1258,9 @@ function AuditPanel({ workspace }: { workspace: Workspace }) {
                         {ROLE_LABELS[log.role]}
                       </span>
                     ) : null}
-                    <span className="rounded bg-black/[0.04] px-2 py-0.5 text-[10px] font-bold uppercase text-[#86868b]">
+              <span className="rounded bg-black/[0.04] px-2 py-0.5 text-[10px] font-bold uppercase text-[#86868b]">
                       {AUDIT_CATEGORY_LABELS[log.category]}
-                    </span>
+              </span>
                     {(log.deptIds?.length || log.regionId !== undefined) && (
                       <span className="rounded border border-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-500">
                         {(log.deptIds ?? []).map(getDeptLabel).join('·') || '未指定领域'}
@@ -1268,7 +1268,7 @@ function AuditPanel({ workspace }: { workspace: Workspace }) {
                         {log.regionId ? getRegionLabel(log.regionId) : '机关'}
                       </span>
                     )}
-                  </div>
+            </div>
                   <p className="mt-0.5 text-[13px] text-[#6e6e73]">{log.detail}</p>
                   <p className="mt-0.5 font-mono text-[10px] text-zinc-400">
                     {log.action} · {log.module}

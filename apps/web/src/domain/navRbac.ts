@@ -21,6 +21,10 @@ function hasAtLeast(level: PermissionLevel, min: PermissionLevel): boolean {
 /** 侧栏视图 → 权限模块与最低级别（home/task/案例对业务始终按 chat 放行） */
 const VIEW_RBAC: Partial<Record<AppView, { module: ResourceModule; min: PermissionLevel }>> = {
   home: { module: 'chat', min: 'read' },
+  'market-external': { module: 'chat', min: 'read' },
+  'market-internal': { module: 'chat', min: 'read' },
+  'market-projects': { module: 'chat', min: 'read' },
+  'market-tool': { module: 'chat', min: 'read' },
   task: { module: 'chat', min: 'read' },
   messages: { module: 'chat', min: 'read' },
   'ai-map': { module: 'chat', min: 'read' },

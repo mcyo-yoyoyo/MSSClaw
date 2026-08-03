@@ -21,6 +21,16 @@ export const LazyAiMapPage = lazy(() =>
   import('@/features/ai-map/AiMapPage').then((m) => ({ default: m.AiMapPage })),
 );
 
+export const LazyMarketShelfPage = lazy(() =>
+  import('@/features/market/MarketShelfPage').then((m) => ({ default: m.MarketShelfPage })),
+);
+
+export const LazyMarketToolDetailPage = lazy(() =>
+  import('@/features/market/MarketToolDetailPage').then((m) => ({
+    default: m.MarketToolDetailPage,
+  })),
+);
+
 export const LazyKnowledgeCenterPage = lazy(() =>
   import('@/features/knowledge/KnowledgeCenterPage').then((m) => ({ default: m.KnowledgeCenterPage })),
 );
@@ -89,6 +99,10 @@ export const ROUTE_PREFETCH: Partial<Record<AppView, () => void>> = {
   'agent-studio': () => void import('@/features/_legacy/agent/AgentStudioPage'),
   skills: () => void import('@/features/skill/SkillCenterPage'),
   'ai-map': () => void import('@/features/ai-map/AiMapPage'),
+  'market-external': () => void import('@/features/market/MarketShelfPage'),
+  'market-internal': () => void import('@/features/market/MarketShelfPage'),
+  'market-projects': () => void import('@/features/market/MarketShelfPage'),
+  'market-tool': () => void import('@/features/market/MarketToolDetailPage'),
   kb: () => void import('@/features/knowledge/KnowledgeCenterPage'),
   cases: () => void import('@/features/cases/CaseLibraryPage'),
   automation: () => void import('@/features/automation/AutomationCenterPage'),

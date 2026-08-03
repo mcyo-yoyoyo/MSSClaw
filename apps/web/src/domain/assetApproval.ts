@@ -1,6 +1,12 @@
 /** 能力沉淀资产上架审批：提交人 → 业务主管 → MSS 质量与运营 */
 
-export type AssetApprovalKind = 'agent' | 'skill' | 'tool' | 'kb' | 'automation';
+export type AssetApprovalKind =
+  | 'agent'
+  | 'skill'
+  | 'tool'
+  | 'kb'
+  | 'automation'
+  | 'portal';
 
 export type ApprovalNodeStatus = 'done' | 'active' | 'pending' | 'rejected';
 
@@ -42,6 +48,7 @@ export const ASSET_APPROVAL_KIND_LABELS: Record<AssetApprovalKind, string> = {
   tool: '工具',
   kb: '知识文档',
   automation: '自动化设置',
+  portal: 'AI 项目',
 };
 
 /** 审批事由：上架可调用 / 公开可见（可多选） */

@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   CenterPageHeader,
@@ -39,9 +39,10 @@ import {
 } from '@/stores/contentEngagementStore';
 import { usePlazaToolGuideStore } from '@/stores/plazaToolGuideStore';
 import { PortalHowToOpsPanel } from '@/features/ops/PortalHowToOpsPanel';
+import { PortalMarketFeaturedPanel } from '@/features/ops/PortalMarketFeaturedPanel';
 
 type EditorTarget = string | 'new' | null;
-type OpsSurface = 'packs' | 'howto';
+type OpsSurface = 'packs' | 'howto' | 'featured';
 
 /** 运营视角：全部 / 只展开某负责人槽位 */
 type SlotFocus = 'all' | ScenarioPackSlotId;
@@ -232,13 +233,19 @@ export function PortalContentOpsPage() {
           subtitle={
             opsSurface === 'packs'
               ? '按场景方案包配置 · 三槽分责维护'
-              : '常用 AI 工具 How to · 找案例精选指引'
+              : opsSurface === 'featured'
+                ? '货架精选置顶 · 首页与货架推荐位'
+                : '常用 AI 工具 How to · 找案例精选指引'
           }
           tip={
             opsSurface === 'packs' ? (
               <>
                 用户在找案例看到的是<strong className="font-semibold">一张场景卡 = 完整学习包</strong>
                 （洞察 + 案例 + 课件）。运营侧按三槽分责填写；「用户侧预览」打开前端真实学习层。
+              </>
+            ) : opsSurface === 'featured' ? (
+              <>
+                配置三货架「精选」置顶项；保存后立即影响首页精选横滑与货架精选条。不造假涨跌数据。
               </>
             ) : (
               <>
@@ -387,6 +394,7 @@ export function PortalContentOpsPage() {
             [
               { id: 'packs' as const, label: '场景方案包' },
               { id: 'howto' as const, label: '工具 How to' },
+              { id: 'featured' as const, label: '货架推荐位' },
             ] as const
           ).map((tab) => (
             <button
@@ -412,6 +420,7 @@ export function PortalContentOpsPage() {
         ) : null}
 
         {opsSurface === 'howto' ? <PortalHowToOpsPanel /> : null}
+        {opsSurface === 'featured' ? <PortalMarketFeaturedPanel /> : null}
 
         {opsSurface === 'packs' ? <StatCardGrid items={stats} /> : null}
 

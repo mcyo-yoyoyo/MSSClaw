@@ -130,6 +130,8 @@ export interface PrototypeToolSeed extends AssetOwnershipFields {
    * 未设置时回退 PLAZA_TOOL_PICKS 静态精选。
    */
   featuredInFindCases?: boolean;
+  /** 货架业务场景筛选；缺省回退 toolBusinessScenarios 静态映射 */
+  businessScenarioIds?: BusinessScenarioId[];
   invokes: number;
   icon: string;
   /** 官方/品牌 Logo URL（业界 SaaS） */

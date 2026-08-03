@@ -6,6 +6,7 @@ import type {
 } from '@/domain/assetApproval';
 import { getCurrentUserName } from '@/domain/currentUser';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
+import { usePortalContentStore } from '@/stores/portalContentStore';
 
 interface AssetApprovalState {
   current: AssetApprovalRequest | null;
@@ -55,6 +56,16 @@ function applyApproval(kind: AssetApprovalKind, assetId: string, reasons: AssetA
   } else if (kind === 'automation') {
     const auto = market.automations.find((a) => a.id === assetId);
     if (auto) market.upsertAutomation({ ...auto, enabled: true });
+  } else if (kind === 'portal') {
+    const portal = usePortalContentStore.getState();
+    const item = portal.items.find((i) => i.id === assetId);
+    if (item) {
+      portal.upsertItem({
+        ...item,
+        ...(wantPublish ? { published: true } : {}),
+        ...(wantPublic ? { visibility: 'public' as const } : {}),
+      });
+    }
   }
 }
 
@@ -82,7 +93,7 @@ export const useAssetApprovalStore = create<AssetApprovalState>((set, get) => ({
     if (next >= 3) {
       const reasons = cur.reasons?.length ? cur.reasons : (['publish_executable'] as AssetApprovalReason[]);
       applyApproval(cur.kind, cur.assetId, reasons);
-      useMarketplaceStore.getState().showToast(`${cur.assetName} ?????`);
+      useMarketplaceStore.getState().showToast(`「${cur.assetName}」已通过上架审批`);
       set({ current: null });
       return;
     }

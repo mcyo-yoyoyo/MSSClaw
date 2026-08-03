@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type {
   PrototypeAgentSeed,
@@ -474,6 +474,7 @@ export function AiMapPage({
       showToast('该场景暂无可打样的技能或能力');
       return;
     }
+    // 样板间保留专家团确认弹层；货架执行走 onStartExpertTeam 直达
     if (plan.mode === 'team') {
       setTeamPlan(plan);
       return;

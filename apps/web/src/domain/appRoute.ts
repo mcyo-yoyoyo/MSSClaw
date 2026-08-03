@@ -5,9 +5,11 @@ export interface AppRouteParams {
   view: AppView;
   /** Deep link to a task session: #/task?chat=<chatId> */
   chat?: string;
+  /** Deep link to tool detail: #/market-tool?id=<toolId> */
+  id?: string;
 }
 
-/** Hash 路由：`#/home`、`#/task?chat=xxx` */
+/** Hash 路由：`#/home`、`#/task?chat=xxx`、`#/market-tool?id=xxx` */
 export function parseAppRoute(rawHash: string): AppRouteParams {
   const hash = rawHash.replace(/^#/, '').replace(/^\//, '').trim();
   if (!hash) return { view: 'home' };
@@ -16,14 +18,23 @@ export function parseAppRoute(rawHash: string): AppRouteParams {
   const viewCandidate = (pathPart || 'home').toLowerCase() as AppView;
   const view = APP_VIEWS.includes(viewCandidate) ? viewCandidate : 'home';
 
-  const chat = queryPart ? new URLSearchParams(queryPart).get('chat') ?? undefined : undefined;
-  return { view, chat: chat || undefined };
+  const qs = queryPart ? new URLSearchParams(queryPart) : null;
+  const chat = qs?.get('chat') ?? undefined;
+  const id = qs?.get('id') ?? undefined;
+  return {
+    view,
+    chat: chat || undefined,
+    id: id || undefined,
+  };
 }
 
 export function buildAppRoute(params: AppRouteParams): string {
   const qs = new URLSearchParams();
   if (params.view === 'task' && params.chat) {
     qs.set('chat', params.chat);
+  }
+  if (params.view === 'market-tool' && params.id) {
+    qs.set('id', params.id);
   }
   const query = qs.toString();
   return `#/${params.view}${query ? `?${query}` : ''}`;

@@ -99,6 +99,45 @@ export function resolvePipelineStepTargets(step: ScenarioPipelineStep): {
   return { agent, skill };
 }
 
+/** 货架 / 样板间共用：按打样计划拉起站内执行 */
+export type ScenarioDemoHandlers = {
+  onInvokeSkill: (skill: PrototypeSkillSeed) => void;
+  onInvokeAgent: (agent: PrototypeAgentSeed, prompt?: string) => void;
+  onStartExpertTeam: (plan: ScenarioDemoPlan, fromIndex?: number) => void;
+};
+
+/**
+ * 执行场景打样计划。
+ * @returns 用户可见结果文案；null 表示无可执行能力
+ */
+export function runScenarioDemoPlan(
+  plan: ScenarioDemoPlan | null,
+  handlers: ScenarioDemoHandlers,
+): string | null {
+  if (!plan) return null;
+  if (plan.mode === 'team') {
+    handlers.onStartExpertTeam(plan, 0);
+    return `已启动专家团：${plan.label}`;
+  }
+  if (plan.soloSkill) {
+    handlers.onInvokeSkill(plan.soloSkill);
+    return `已启动执行：${plan.label}`;
+  }
+  if (plan.soloAgent) {
+    handlers.onInvokeAgent(plan.soloAgent);
+    return `已启动执行：${plan.soloAgent.name}`;
+  }
+  return null;
+}
+
+/** 从 ScenarioBundle 解析并执行（无计划返回 null） */
+export function runScenarioBundleDemo(
+  bundle: ScenarioBundle,
+  handlers: ScenarioDemoHandlers,
+): string | null {
+  return runScenarioDemoPlan(resolveScenarioDemoPlan(bundle), handlers);
+}
+
 /** 构建专家团某一步的同会话接力提示（可附带上一步输出） */
 export function buildExpertTeamStepPrompt(
   plan: Pick<ScenarioDemoPlan, 'scenarioLabel' | 'steps'>,

@@ -3,9 +3,10 @@ import type { AppView } from '@/domain/appView';
 import { parseAppRoute, writeAppRouteToLocation } from '@/domain/appRoute';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useConversationStore } from '@/stores/conversationStore';
+import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 
 /**
- * 同步 AppView 与 URL hash（#/home、#/task?chat=xxx），支持浏览器前进/后退。
+ * 同步 AppView 与 URL hash（#/home、#/task?chat=xxx、#/market-tool?id=xxx），支持浏览器前进/后退。
  */
 export function useAppRouting() {
   const appView = useAppViewStore((s) => s.appView);
@@ -21,9 +22,15 @@ export function useAppRouting() {
       const { chats, switchChat } = useConversationStore.getState();
       if (chats[initial.chat]) switchChat(initial.chat);
     }
+    if (initial.view === 'market-tool' && initial.id) {
+      useNavigationIntentStore.getState().focusTool(initial.id);
+    }
 
     if (!window.location.hash) {
-      writeAppRouteToLocation({ view: initial.view, chat: initial.chat }, true);
+      writeAppRouteToLocation(
+        { view: initial.view, chat: initial.chat, id: initial.id },
+        true,
+      );
     }
   }, [setAppView]);
 
@@ -35,7 +42,11 @@ export function useAppRouting() {
 
     const current = parseAppRoute(window.location.hash);
     const chat = appView === 'task' ? current.chat : undefined;
-    writeAppRouteToLocation({ view: appView, chat }, appView === current.view);
+    const id =
+      appView === 'market-tool'
+        ? useNavigationIntentStore.getState().peekToolId() ?? current.id
+        : undefined;
+    writeAppRouteToLocation({ view: appView, chat, id }, appView === current.view);
   }, [appView]);
 
   useEffect(() => {
@@ -48,6 +59,9 @@ export function useAppRouting() {
       if (route.view === 'task' && route.chat) {
         const { chats, switchChat } = useConversationStore.getState();
         if (chats[route.chat]) switchChat(route.chat);
+      }
+      if (route.view === 'market-tool' && route.id) {
+        useNavigationIntentStore.getState().focusTool(route.id);
       }
     };
     window.addEventListener('hashchange', onNavigate);
