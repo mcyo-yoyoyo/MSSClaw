@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { AssetAccentMark, assetAccentBorderStyle } from '@/components/brand/AssetAccentMark';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
 import type { MarketShelfCard as MarketShelfCardModel } from '@/domain/marketShelf';
@@ -21,13 +22,14 @@ export function MarketShelfCard({
   howToLabel?: string;
 }) {
   const featured = variant === 'featured';
+  const showBrandLogo = card.kind === 'external' || card.kind === 'internal';
   const primaryLabel =
     primaryLabelOverride ??
     (card.kind === 'projects'
-      ? '\u4e0b\u8f7d\u4f7f\u7528'
+      ? '下载使用'
       : card.primaryAction === 'howto'
-        ? '\u67e5\u770b How to'
-        : '\u7acb\u5373\u4f7f\u7528');
+        ? '查看 How to'
+        : '立即使用');
 
   return (
     <article
@@ -36,23 +38,28 @@ export function MarketShelfCard({
         'hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-[0_10px_28px_-16px_rgba(24,24,27,0.35)]',
         featured ? 'p-5' : 'p-4',
       )}
+      style={showBrandLogo ? undefined : assetAccentBorderStyle(card.id)}
     >
       <button type="button" onClick={onOpen} className="flex min-h-0 flex-1 flex-col text-left">
         <div className="flex items-start gap-3">
-          <div
-            className={cn(
-              'flex shrink-0 items-center justify-center rounded-2xl bg-zinc-50 ring-1 ring-zinc-100',
-              featured ? 'h-14 w-14' : 'h-11 w-11',
-            )}
-          >
-            <ToolLogo
-              name={card.productName || card.title}
-              logoUrl={card.logoUrl}
-              icon={card.icon}
-              size={featured ? 40 : 32}
-              className="rounded-xl"
-            />
-          </div>
+          {showBrandLogo ? (
+            <div
+              className={cn(
+                'flex shrink-0 items-center justify-center rounded-2xl bg-zinc-50 ring-1 ring-zinc-100',
+                featured ? 'h-14 w-14' : 'h-11 w-11',
+              )}
+            >
+              <ToolLogo
+                name={card.productName || card.title}
+                logoUrl={card.logoUrl}
+                icon={card.icon}
+                size={featured ? 40 : 32}
+                className="rounded-xl"
+              />
+            </div>
+          ) : (
+            <AssetAccentMark id={card.id} />
+          )}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5">
               <h3
@@ -65,12 +72,12 @@ export function MarketShelfCard({
               </h3>
               {card.featured ? (
                 <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold text-amber-800">
-                  {'\u7cbe\u9009'}
+                  精选
                 </span>
               ) : null}
               {card.runnable ? (
                 <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-800">
-                  {'\u53ef\u6267\u884c'}
+                  可执行
                 </span>
               ) : null}
             </div>
@@ -92,13 +99,11 @@ export function MarketShelfCard({
             </p>
             {featured && card.hasHowto ? (
               <p className="mt-2 text-[11px] leading-snug text-zinc-400">
-                How to {'\u00b7'} {'\u542b\u5feb\u901f\u4e0a\u624b\u6750\u6599\uff0c\u53ef\u5148\u9884\u89c8\u518d\u4f7f\u7528'}
+                How to · 含快速上手材料，可先预览再使用
               </p>
             ) : null}
             {card.kind === 'projects' && card.updatedAt ? (
-              <p className="mt-1.5 text-[10px] text-zinc-400">
-                {'\u66f4\u65b0'} {card.updatedAt}
-              </p>
+              <p className="mt-1.5 text-[10px] text-zinc-400">更新 {card.updatedAt}</p>
             ) : null}
           </div>
         </div>

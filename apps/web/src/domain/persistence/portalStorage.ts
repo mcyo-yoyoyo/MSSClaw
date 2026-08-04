@@ -50,12 +50,13 @@ export async function loadPortalContent(workspaceId: string): Promise<PortalCont
     try {
       const remote = await fetchPortalContentApi(workspaceId);
       if (remote?.items) {
-        return {
-          items: mergeCatalog(demoDefaults(PROTOTYPE_PORTAL_CONTENT), remote.items),
-        };
+        // 共享 API 为权威源：远端用户上传（含附件 dataUrl）优先，再补演示种子缺项
+        const merged = mergeCatalog(demoDefaults(PROTOTYPE_PORTAL_CONTENT), remote.items);
+        writeLocalPortalContent(workspaceId, { items: merged });
+        return { items: merged };
       }
     } catch {
-      /* fall through */
+      /* fall through to local cache */
     }
   }
   return readLocalPortalContent(workspaceId);
@@ -64,14 +65,19 @@ export async function loadPortalContent(workspaceId: string): Promise<PortalCont
 export async function savePortalContent(
   workspaceId: string,
   snapshot: PortalContentSnapshot,
-): Promise<void> {
+): Promise<{ synced: boolean; error?: string }> {
   writeLocalPortalContent(workspaceId, snapshot);
-  if (useWorkspaceStore.getState().apiConnected) {
-    try {
-      await savePortalContentApi(workspaceId, snapshot);
-    } catch {
-      /* local already saved */
-    }
+  if (!useWorkspaceStore.getState().apiConnected) {
+    return { synced: false, error: 'api_offline' };
+  }
+  try {
+    await savePortalContentApi(workspaceId, snapshot);
+    return { synced: true };
+  } catch (err) {
+    return {
+      synced: false,
+      error: err instanceof Error ? err.message : 'save_failed',
+    };
   }
 }
 
@@ -89,7 +95,14 @@ export function scheduleSavePortalContent(
     key,
     setTimeout(() => {
       debounceTimers.delete(key);
-      void savePortalContent(workspaceId, snapshot);
+      void savePortalContent(workspaceId, snapshot).then((result) => {
+        if (result.synced) return;
+        if (result.error && result.error !== 'api_offline') {
+          useWorkspaceStore.getState(); // keep import live
+          // 同步失败时写控制台，避免静默丢附件
+          console.warn('[portal] shared API sync failed:', result.error);
+        }
+      });
     }, ms),
   );
 }

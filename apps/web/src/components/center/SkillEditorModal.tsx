@@ -9,7 +9,7 @@ import {
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
 import type { AssetVisibility, DeptId, RegionId } from '@/domain/orgTaxonomy';
 import { ASSET_VISIBILITY_LABELS, HQ_DEPTS, REGIONS } from '@/domain/orgTaxonomy';
-import { DEFAULT_SKILL_ACCENT, SKILL_ACCENT_PRESETS } from '@/domain/skillAccent';
+import { DEFAULT_SKILL_ACCENT } from '@/domain/skillAccent';
 import { cn } from '@/lib/utils';
 import {
   listVisibleBusinessScenarioCategories,
@@ -541,28 +541,6 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                 {form.publisher || getCurrentUserName() || '当前用户'}
               </span>
             </div>
-            <FormField label="标识色" hint="列表用色点区分，无需上传 Logo">
-              <div className="flex flex-wrap gap-2">
-                {SKILL_ACCENT_PRESETS.map((p) => {
-                  const active = (form.accentColor || DEFAULT_SKILL_ACCENT) === p.color;
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      title={p.label}
-                      onClick={() => setForm({ ...form, accentColor: p.color })}
-                      className={cn(
-                        'flex h-8 w-8 items-center justify-center rounded-full border-2 transition',
-                        active ? 'border-zinc-900 scale-105' : 'border-transparent hover:border-zinc-300',
-                      )}
-                      style={{ backgroundColor: p.color }}
-                    >
-                      {active ? <i className="fa-solid fa-check text-[10px] text-white" /> : null}
-                    </button>
-                  );
-                })}
-              </div>
-            </FormField>
             <FormField
               label="Skill 正文（对话执行时注入）"
               hint="标准化包中的 SKILL.md 正文会填到这里"

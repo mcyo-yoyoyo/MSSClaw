@@ -17,7 +17,7 @@ import {
   getLocalWorkspaceCatalogs,
 } from '@/api/workspaceApi';
 import { fetchApiHealth } from '@/api/persistenceApi';
-import { isApiEnabled } from '@/api/client';
+import { isApiEnabled, isForceLocalDemo } from '@/api/client';
 
 interface WorkspaceState {
   workspaceId: string;
@@ -26,6 +26,8 @@ interface WorkspaceState {
   catalogReady: boolean;
   catalogLoading: boolean;
   apiConnected: boolean;
+  /** connected | unreachable | local-demo（强制本地） */
+  apiStatus: 'unknown' | 'connected' | 'unreachable' | 'local-demo';
   expandedSections: Record<ExplorerSection, boolean>;
   selectedResourceId: string | null;
   switchToast: string | null;
@@ -58,6 +60,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   catalogReady: false,
   catalogLoading: false,
   apiConnected: false,
+  apiStatus: 'unknown',
   expandedSections: DEFAULT_EXPANDED,
   selectedResourceId: null,
   switchToast: null,
@@ -67,7 +70,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
     set({ catalogLoading: true });
 
-    const finishLocal = () => {
+    const finishLocal = (status: 'unreachable' | 'local-demo') => {
       const config = useWorkspaceConfigStore.getState();
       set({
         workspaceList: config.getVisibleWorkspaces(),
@@ -75,18 +78,25 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         catalogReady: true,
         catalogLoading: false,
         apiConnected: false,
+        apiStatus: status,
       });
     };
 
     try {
-      if (!isApiEnabled()) {
-        finishLocal();
+      if (!isApiEnabled() || isForceLocalDemo()) {
+        finishLocal('local-demo');
         return;
       }
 
       const healthy = await fetchApiHealth();
       if (!healthy) {
-        finishLocal();
+        // 本机只开前端时：安静本地模式，不惊吓普通用户
+        const loopback =
+          typeof location !== 'undefined' &&
+          (location.hostname === 'localhost' ||
+            location.hostname === '127.0.0.1' ||
+            location.hostname === '[::1]');
+        finishLocal(loopback ? 'local-demo' : 'unreachable');
         return;
       }
 
@@ -104,9 +114,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         catalogReady: true,
         catalogLoading: false,
         apiConnected: true,
+        apiStatus: 'connected',
       });
     } catch {
-      finishLocal();
+      finishLocal('unreachable');
     }
   },
 

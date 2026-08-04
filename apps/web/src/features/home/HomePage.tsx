@@ -71,6 +71,7 @@ import { useAppViewStore } from '@/stores/appViewStore';
 import { useMarketFilterStore } from '@/stores/marketFilterStore';
 import { useRecentMarketStore } from '@/stores/recentMarketStore';
 import { useMarketFeaturedStore } from '@/stores/marketFeaturedStore';
+import { AssetAccentMark } from '@/components/brand/AssetAccentMark';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { greetingForNow } from '@/domain/timeGreeting';
 
@@ -653,13 +654,17 @@ export function HomePage({
                       className="flex w-[76px] flex-col items-center gap-1.5 rounded-2xl border border-transparent p-2 transition hover:border-zinc-200 hover:bg-white hover:shadow-sm"
                     >
                       <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-50 ring-1 ring-zinc-100">
-                        <ToolLogo
-                          name={item.title}
-                          logoUrl={item.logoUrl}
-                          icon={item.icon}
-                          size={36}
-                          className="rounded-xl"
-                        />
+                        {item.kind === 'external' || item.kind === 'internal' ? (
+                          <ToolLogo
+                            name={item.title}
+                            logoUrl={item.logoUrl}
+                            icon={item.icon}
+                            size={36}
+                            className="rounded-xl"
+                          />
+                        ) : (
+                          <AssetAccentMark id={item.id} className="mt-0 h-2.5 w-2.5" />
+                        )}
                       </div>
                       <span className="w-full truncate text-center text-[10px] text-zinc-600">
                         {item.title}

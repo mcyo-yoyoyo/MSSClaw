@@ -4,7 +4,7 @@
 # 推荐拓扑（64G / 2T 机器绰绰有余）：
 #   浏览器 → Nginx(TLS + 静态 apps/web/dist) → [可选] Nest API :3000
 #
-# 说明：当前原型默认每用户 localStorage；勿把 SQLite API 当 500 人共享写库。
+# 说明：内网多用户必须反代 /api；小团队可用 SQLite，≥50 并发写建议 Postgres。
 
 worker_processes auto;
 worker_rlimit_nofile 65535;
@@ -66,9 +66,11 @@ http {
       try_files $uri $uri/ /index.html;
     }
 
-    # 可选：反代 Nest（仅小规模共享 / 演示持久化；生产多用户写请换 Postgres）
+    # 可选：反代 Nest（内网多用户共享必须开启；勿把 /api 交给 SPA try_files）
+    # 健康检查须返回 JSON：GET /api/v1/health → {"status":"ok","service":"mss-claw-api",...}
     location /api/ {
       limit_req zone=mss_api burst=40 nodelay;
+      client_max_body_size 12m; # 案例附件 dataUrl
       proxy_http_version 1.1;
       proxy_set_header Host $host;
       proxy_set_header X-Real-IP $remote_addr;

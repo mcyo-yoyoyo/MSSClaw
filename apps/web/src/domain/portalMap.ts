@@ -57,8 +57,6 @@ export interface PortalMapCard {
   title: string;
   desc: string;
   icon: string;
-  /** 可选品牌 Logo（业界 SaaS） */
-  logoUrl?: string;
   kindLabel: string;
   meta?: string;
   publishedAt?: string;
@@ -152,7 +150,6 @@ function fromTool(t: PrototypeToolSeed): PortalMapCard {
     title: t.name,
     desc: t.desc,
     icon: t.icon,
-    logoUrl: t.logoUrl,
     kindLabel: kindLabel(external || aiSaas ? 'external_tool' : 'tool'),
     meta: t.scenarioTags?.[0] || t.publisher || t.author,
     ownerDeptIds: t.ownerDeptIds,

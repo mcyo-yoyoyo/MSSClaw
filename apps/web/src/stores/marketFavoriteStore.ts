@@ -9,7 +9,6 @@ export type MarketFavoriteItem = {
   kind: MarketShelfKind;
   title: string;
   icon?: string;
-  logoUrl?: string;
   at: number;
 };
 

@@ -45,6 +45,9 @@ export const usePortalContentStore = create<PortalContentState>((set, get) => ({
         : s.items.map((row) => (row.id === item.id ? item : row)),
     }));
     get().persist();
+    if (!useWorkspaceStore.getState().apiConnected) {
+      get().showToast('已保存到本机；未连共享 API，其他电脑看不到此附件');
+    }
   },
 
   deleteItem: (id) => {

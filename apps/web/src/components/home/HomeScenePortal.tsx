@@ -53,6 +53,7 @@ import {
 } from '@/domain/orgAxisTags';
 import { canViewAsset } from '@/domain/assetVisibility';
 import { ToolLogo } from '@/components/brand/ToolLogo';
+import { resolveToolLogoUrl } from '@/domain/toolLogo';
 import {
   CardPageCarousel,
   HOME_SECONDARY_PANEL_H,
@@ -176,7 +177,12 @@ function ToolIconRow({
               onClick={() => onOpen(t.id)}
               className="flex w-[52px] flex-col items-center justify-center gap-1 rounded-md py-0.5 transition hover:bg-zinc-100/70"
             >
-              <ToolLogo name={t.name} logoUrl={t.logoUrl} icon={t.icon} size={22} />
+              <ToolLogo
+                name={t.name}
+                logoUrl={resolveToolLogoUrl(t)}
+                icon={t.icon}
+                size={22}
+              />
               <span className="w-full truncate text-center text-[10px] font-semibold text-zinc-800">
                 {t.name}
               </span>

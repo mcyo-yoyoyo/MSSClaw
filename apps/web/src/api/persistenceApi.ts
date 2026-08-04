@@ -3,14 +3,22 @@ import type { MarketplaceSnapshot } from '@/domain/persistence/storage';
 import type { PortalContentItem } from '@/domain/prototype/portalContent';
 import { apiUrl, isApiEnabled } from '@/api/client';
 
+/** 校验真实 Nest health JSON，避免 SPA fallback 把 HTML 200 当成已连接 */
 export async function fetchApiHealth(): Promise<boolean> {
   if (!isApiEnabled()) return false;
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 3000);
-    const res = await fetch(apiUrl('/api/v1/health'), { signal: controller.signal });
+    const res = await fetch(apiUrl('/api/v1/health'), {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
     clearTimeout(timer);
-    return res.ok;
+    if (!res.ok) return false;
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) return false;
+    const body = (await res.json()) as { status?: string; service?: string };
+    return body?.status === 'ok' && body?.service === 'mss-claw-api';
   } catch {
     return false;
   }

@@ -14,7 +14,10 @@ import {
 } from '@/components/center/CenterShell';
 import { OrgAssetFilterBar } from '@/components/center/OrgAssetFilters';
 import { ToolEditorModal, type ToolEditorTarget } from '@/components/center/ToolEditorModal';
-import { accentColorFromId } from '@/domain/skillAccent';
+import { AssetAccentMark, assetAccentBorderStyle } from '@/components/brand/AssetAccentMark';
+import { ToolLogo } from '@/components/brand/ToolLogo';
+import { resolveToolLogoUrl } from '@/domain/toolLogo';
+import { resolveToolMarketShelf } from '@/domain/aiToolCategories';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { isAiSaasTool } from '@/domain/portalNavigation';
@@ -150,19 +153,26 @@ export function ToolCenterPage() {
         <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
           {list.length ? (
             list.map((t) => {
-              const accent = accentColorFromId(t.id);
+              const shelf = resolveToolMarketShelf(t);
+              const showLogo = shelf === 'external' || shelf === 'internal';
               return (
                 <div
                   key={t.id}
                   className="market-card apple-card flex flex-col px-3 py-2.5"
-                  style={{ borderLeft: `3px solid ${accent}` }}
+                  style={showLogo ? undefined : assetAccentBorderStyle(t.id)}
                 >
                   <div className="flex items-start gap-2">
-                    <span
-                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: accent }}
-                      title="标识色"
-                    />
+                    {showLogo ? (
+                      <ToolLogo
+                        name={t.name}
+                        logoUrl={resolveToolLogoUrl(t)}
+                        icon={t.icon}
+                        size={28}
+                        className="mt-0.5 rounded-lg"
+                      />
+                    ) : (
+                      <AssetAccentMark id={t.id} />
+                    )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-2">
                         <h3 className="truncate text-[13px] font-semibold leading-tight text-zinc-900">

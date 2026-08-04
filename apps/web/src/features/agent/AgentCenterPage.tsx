@@ -10,7 +10,7 @@ import {
 } from '@/components/center/CenterShell';
 import { OrgAssetFilterBar } from '@/components/center/OrgAssetFilters';
 import { AgentEditorModal, type AgentEditorTarget } from '@/components/center/AgentEditorModal';
-import { accentColorFromId } from '@/domain/skillAccent';
+import { AssetAccentMark, assetAccentBorderStyle } from '@/components/brand/AssetAccentMark';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import type { EfficiencyFilter } from '@/domain/assetFilters';
 import { downloadAgentFile, downloadAllAgentsFile } from '@/domain/agentExport';
@@ -160,19 +160,14 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
             list.map((a) => {
               const pack = getAgentPack(a.id);
               const runnable = Boolean(a.systemPrompt || pack?.systemPrompt);
-              const accent = accentColorFromId(a.id);
               return (
                 <div
                   key={a.id}
                   className="market-card apple-card flex flex-col px-3 py-2.5"
-                  style={{ borderLeft: `3px solid ${accent}` }}
+                  style={assetAccentBorderStyle(a.id)}
                 >
                   <div className="flex items-start gap-2">
-                    <span
-                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: accent }}
-                      title="标识色"
-                    />
+                    <AssetAccentMark id={a.id} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-2">
                         <h3 className="truncate text-[13px] font-semibold leading-tight text-zinc-900">

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { getApiBase, LS_API_KEY } from '@/api/client';
+import { clearApiBaseOverride } from '@/api/client';
 import { isSystemAdmin } from '@/domain/currentUser';
 import {
   clearDemoContentAndDisable,
@@ -16,6 +16,7 @@ import { useAppViewStore } from '@/stores/appViewStore';
 import { useLlmConfigStore } from '@/stores/llmConfigStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useSessionStore } from '@/stores/sessionStore';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 interface SettingsDrawerBodyProps {
   onClose: () => void;
@@ -49,13 +50,11 @@ export function SettingsDrawerBody({ onClose }: SettingsDrawerBodyProps) {
   const isAdmin = isSystemAdmin(role);
   const showModelApi = canConfigureModelApi(role);
   const showToast = useMarketplaceStore((s) => s.showToast);
+  const apiConnected = useWorkspaceStore((s) => s.apiConnected);
   const { statusLabel, openSettings: openLlmSettings } = useLlmConfigStore();
   const llmStatus = statusLabel();
 
   const [security, setSecurity] = useState(loadSecurityPolicy);
-  const [apiInput, setApiInput] = useState(
-    () => localStorage.getItem(LS_API_KEY) || getApiBase() || 'http://localhost:3000',
-  );
   const [webhookInput, setWebhookInput] = useState(() => loadWarroomWebhookUrl());
 
   const patchSecurity = (patch: Partial<typeof security>) => {
@@ -63,11 +62,6 @@ export function SettingsDrawerBody({ onClose }: SettingsDrawerBodyProps) {
     setSecurity(next);
     saveSecurityPolicy(patch);
     showToast('安全策略已保存');
-  };
-
-  const saveApi = () => {
-    localStorage.setItem(LS_API_KEY, apiInput.trim());
-    showToast('API 地址已保存，后续请求将立即生效');
   };
 
   const saveWebhook = () => {
@@ -233,23 +227,31 @@ export function SettingsDrawerBody({ onClose }: SettingsDrawerBodyProps) {
             )}
           </SettingsCard>
 
-          <SettingsCard title="Runtime" hint="后端地址与作战室推送（可选）。">
-            <label className="mb-1 block text-[12px] text-[#86868b]">API 地址（可选）</label>
-            <input
-              type="text"
-              value={apiInput}
-              onChange={(e) => setApiInput(e.target.value)}
-              className="mono mb-2 w-full rounded-xl border border-black/8 px-3 py-2 text-[12px] text-[#1d1d1f] focus:outline-none focus:ring-2 focus:ring-zinc-900/20"
-              placeholder="http://localhost:3000"
-            />
+          <SettingsCard
+            title="数据同步"
+            hint="系统自动连接服务器，普通用户无需任何设置。若曾手动填过地址，可一键恢复自动。"
+          >
+            <p className="mb-3 text-[12px] leading-relaxed text-[#1d1d1f]">
+              {apiConnected ? '已自动连接，多用户数据可互通。' : '当前为本机浏览模式（未连共享服务）。'}
+            </p>
             <button
               type="button"
-              onClick={saveApi}
-              className={cn('flow-link-btn w-full py-2 text-[12px] font-semibold')}
+              onClick={() => {
+                clearApiBaseOverride();
+                useWorkspaceStore.setState({
+                  catalogReady: false,
+                  catalogLoading: false,
+                  apiConnected: false,
+                  apiStatus: 'unknown',
+                });
+                void useWorkspaceStore.getState().bootstrap();
+                showToast('已恢复自动连接');
+              }}
+              className={cn('flow-link-btn mb-3 w-full py-2 text-[12px] font-semibold')}
             >
-              保存 API 地址
+              恢复自动连接
             </button>
-            <label className="mb-1 mt-3 block text-[12px] text-[#86868b]">作战室 Webhook（可选）</label>
+            <label className="mb-1 block text-[12px] text-[#86868b]">作战室 Webhook（可选）</label>
             <input
               type="url"
               value={webhookInput}

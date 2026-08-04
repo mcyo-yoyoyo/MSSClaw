@@ -1,7 +1,7 @@
 import type { ExecutionStep } from '@/domain/chat';
 import type { StreamEvent } from '@/domain/stream';
 import { parseSSEStream } from '@/domain/stream';
-import { apiUrl, isApiEnabled } from '@/api/client';
+import { apiUrl } from '@/api/client';
 import { isLlmConfigured, llmExecutionStream } from '@/api/llmClient';
 import { resolveAgentType } from '@/lib/utils';
 import { getSkillPack, getSkillPackByCommand } from '@/domain/skills/catalog';
@@ -9,6 +9,7 @@ import { planStepsToExecSteps } from '@/domain/skills/types';
 import { resolveSkillFromText } from '@/domain/skillRuntime';
 import { getAgentPack } from '@/domain/agents/catalog';
 import { getAgentMockReport } from '@/domain/agents/runtime';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 const MARKETING_STEPS: ExecutionStep[] = [
   { skill: 'Intent_Parser', time: '120ms', label: '多模态意图识别', detail: '解析协作空间上下文，提取实体与 Action。' },
@@ -26,7 +27,8 @@ const KNOWLEDGE_STEPS: ExecutionStep[] = [
 ];
 
 function shouldUseRemoteStream() {
-  return isApiEnabled();
+  // 仅在共享 API 已探活成功时走 SSE，避免静态托管刷 404
+  return useWorkspaceStore.getState().apiConnected;
 }
 
 function sleep(ms: number) {

@@ -23,7 +23,18 @@ import {
 import { FEATURED_SCENARIOS } from '@/domain/portalMap';
 import { DISCOVER_SCENARIO_IDS } from '@/domain/scenarioCapabilities';
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
-import { accentColorFromId } from '@/domain/skillAccent';
+import { ToolLogo } from '@/components/brand/ToolLogo';
+import { resolveToolLogoUrl } from '@/domain/toolLogo';
+import { AssetAccentMark } from '@/components/brand/AssetAccentMark';
+
+type PinCandidate = {
+  id: string;
+  title: string;
+  description: string;
+  productName?: string;
+  logoUrl?: string;
+  icon?: string;
+};
 
 const TOOL_KINDS: Array<Extract<MarketShelfKind, 'external' | 'internal'>> = [
   'external',
@@ -61,7 +72,7 @@ export function PortalMarketFeaturedPanel() {
 
   const scenarioCats = listVisibleBusinessScenarioCategories();
 
-  const projectCandidates = useMemo(() => {
+  const projectCandidates = useMemo((): PinCandidate[] => {
     return listMarketProjectCards(emptyOrgPerspectiveSelection(), 'all').map((c) => ({
       id: c.id,
       title: c.title,
@@ -102,7 +113,7 @@ export function PortalMarketFeaturedPanel() {
       });
   }, [kind, publishedTools, q]);
 
-  const pinCandidates = useMemo(() => {
+  const pinCandidates = useMemo((): PinCandidate[] => {
     if (kind === 'projects') {
       const needle = q.trim().toLowerCase();
       if (!needle) return projectCandidates;
@@ -118,6 +129,9 @@ export function PortalMarketFeaturedPanel() {
         id: t.id,
         title: t.marketTitle?.trim() || t.name,
         description: t.desc,
+        productName: t.name,
+        logoUrl: resolveToolLogoUrl(t),
+        icon: t.icon,
       }));
   }, [kind, projectCandidates, assignList, q]);
 
@@ -243,13 +257,15 @@ export function PortalMarketFeaturedPanel() {
           {assignList.map((t) => {
             const shelf = resolveToolMarketShelf(t);
             const onShelf = shelf === kind;
-            const accent = accentColorFromId(t.id);
             return (
               <li key={t.id} className="space-y-2 px-3 py-3">
                 <div className="flex items-start gap-2">
-                  <span
-                    className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: accent }}
+                  <ToolLogo
+                    name={t.name}
+                    logoUrl={resolveToolLogoUrl(t)}
+                    icon={t.icon}
+                    size={28}
+                    className="mt-0.5 rounded-lg"
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -407,13 +423,19 @@ export function PortalMarketFeaturedPanel() {
             {pinCandidates.map((c) => {
               const on = pinnedSet.has(c.id);
               const full = !on && pinnedIds.length >= MARKET_FEATURED_MAX;
-              const accent = accentColorFromId(c.id);
               return (
                 <li key={c.id} className="flex items-center gap-3 px-3 py-2.5">
-                  <span
-                    className="h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: accent }}
-                  />
+                  {kind === 'projects' ? (
+                    <AssetAccentMark id={c.id} className="mt-0" />
+                  ) : (
+                    <ToolLogo
+                      name={c.productName || c.title}
+                      logoUrl={c.logoUrl}
+                      icon={c.icon}
+                      size={28}
+                      className="rounded-lg"
+                    />
+                  )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-semibold text-zinc-900">{c.title}</p>
                     <p className="truncate text-[11px] text-zinc-400">{c.description}</p>

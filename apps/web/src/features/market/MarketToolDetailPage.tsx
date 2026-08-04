@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ToolLogo } from '@/components/brand/ToolLogo';
+import { resolveToolLogoUrl } from '@/domain/toolLogo';
 import {
   HowToDrawer,
   HowToGuidePreviewModal,
@@ -99,7 +100,7 @@ export function MarketToolDetailPage() {
       kind,
       title: tool.name,
       icon: tool.icon,
-      logoUrl: tool.logoUrl,
+      logoUrl: resolveToolLogoUrl(tool),
     });
     if (!win) showToast('浏览器拦截了弹窗，请允许后重试');
     else showToast(`已打开：${tool.name}`);
@@ -168,7 +169,7 @@ export function MarketToolDetailPage() {
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white ring-1 ring-zinc-100">
                   <ToolLogo
                     name={tool.name}
-                    logoUrl={tool.logoUrl}
+                    logoUrl={resolveToolLogoUrl(tool)}
                     icon={tool.icon}
                     size={48}
                     className="rounded-xl"
@@ -202,7 +203,7 @@ export function MarketToolDetailPage() {
                     >
                       查看 How to
                     </button>
-                                      </div>
+                  </div>
                 </div>
               </div>
             </div>

@@ -9,10 +9,11 @@ import { PromptSchema, getPromptsByWorkspace, type Prompt } from '@/domain/promp
 import { getSkillsByWorkspace, SkillSchema, type Skill } from '@/domain/skill';
 import { getToolsByWorkspace, PlatformToolSchema, type PlatformTool } from '@/domain/tool';
 import { getWorkflowsByWorkspace, WorkflowSchema, type Workflow } from '@/domain/workflow';
-import { apiUrl, isApiEnabled } from '@/api/client';
+import { apiUrl } from '@/api/client';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 async function fetchJson<T>(url: string, fallback: T): Promise<T> {
-  if (!isApiEnabled()) return fallback;
+  if (!useWorkspaceStore.getState().apiConnected) return fallback;
 
   try {
     const response = await fetch(url);
@@ -24,7 +25,7 @@ async function fetchJson<T>(url: string, fallback: T): Promise<T> {
 }
 
 async function mutateJson<T>(url: string, init: RequestInit, fallback: () => T | Promise<T>): Promise<T> {
-  if (!isApiEnabled()) return fallback();
+  if (!useWorkspaceStore.getState().apiConnected) return fallback();
 
   try {
     const response = await fetch(url, init);

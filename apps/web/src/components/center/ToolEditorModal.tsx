@@ -26,8 +26,29 @@ import {
 } from '@/domain/businessScenarios';
 import { resolveToolBusinessScenarios } from '@/domain/toolBusinessScenarios';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
+import { resolveToolLogoUrl } from '@/domain/toolLogo';
+import { ToolLogo } from '@/components/brand/ToolLogo';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
+
+const LOGO_MAX_BYTES = 512 * 1024;
+
+function readLogoFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (file.size > LOGO_MAX_BYTES) {
+      reject(new Error('Logo 请小于 512KB'));
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      reject(new Error('请选择图片文件'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('读取失败'));
+    reader.readAsDataURL(file);
+  });
+}
 
 type EditorTarget = string | 'new' | 'new-external' | null;
 
@@ -205,6 +226,62 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
             onChange={(e) => setForm({ ...form, desc: e.target.value })}
           />
         </FormField>
+        {(shelf === 'external' ||
+          shelf === 'internal' ||
+          form.sourceType === 'external' ||
+          form.marketShelf === 'internal') && (
+          <FormField
+            label="品牌 Logo"
+            hint={
+              shelf === 'internal' || form.marketShelf === 'internal'
+                ? '公司工具推荐统一使用华为 Logo，无需单独上传。'
+                : '外精选展示用。可上传；不传则按官网地址自动取 favicon。'
+            }
+          >
+            <div className="flex items-center gap-3">
+              <ToolLogo
+                name={form.name || '工具'}
+                logoUrl={resolveToolLogoUrl(form)}
+                icon={form.icon}
+                size={40}
+                className="rounded-xl"
+              />
+              {shelf === 'internal' || form.marketShelf === 'internal' ? (
+                <p className="text-[11px] leading-relaxed text-zinc-500">
+                  已绑定华为品牌标识，与货架展示一致。
+                </p>
+              ) : (
+                <div className="min-w-0 flex-1 space-y-2">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon"
+                    className="block w-full text-[12px] text-zinc-600 file:mr-2 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-[11px] file:font-semibold file:text-white"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (!file) return;
+                      void readLogoFile(file)
+                        .then((dataUrl) => {
+                          setForm({ ...form, logoUrl: dataUrl });
+                          showToast('Logo 已上传');
+                        })
+                        .catch((err: Error) => showToast(err.message || '上传失败'));
+                    }}
+                  />
+                  {form.logoUrl ? (
+                    <button
+                      type="button"
+                      className="text-[11px] font-medium text-zinc-500 hover:text-zinc-800"
+                      onClick={() => setForm({ ...form, logoUrl: undefined })}
+                    >
+                      清除上传，改用官网自动 Logo
+                    </button>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          </FormField>
+        )}
         <FormField label="标签（逗号分隔）">
           <FormInput
             value={form.tags.join(', ')}

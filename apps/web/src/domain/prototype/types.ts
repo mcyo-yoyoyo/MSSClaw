@@ -105,7 +105,7 @@ export interface PrototypeSkillSeed extends AssetOwnershipFields {
   businessScenarioId?: BusinessScenarioId;
   invokes: number;
   icon: string;
-  /** 卡片标识色（创建时可选预设色，替代复杂 Logo） */
+  /** 列表左边线统一黑色；不再使用多色标识 */
   accentColor?: string;
   /** 业务/运营手打标签 */
   tags: string[];
@@ -151,7 +151,7 @@ export interface PrototypeToolSeed extends AssetOwnershipFields {
   marketTitle?: string;
   invokes: number;
   icon: string;
-  /** 官方/品牌 Logo URL（业界 SaaS） */
+  /** 外精选 / 公司工具 Logo（可上传；缺省可由官网 URL 初始化 favicon） */
   logoUrl?: string;
   tags: string[];
   /** 内部连接器类型提示 */

@@ -1,28 +1,14 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
+export { faviconUrl, resolveToolLogoUrl } from '@/domain/toolLogo';
+
 interface ToolLogoProps {
   name: string;
   logoUrl?: string;
   icon?: string;
   size?: number;
   className?: string;
-}
-
-const BRAND_COLORS = [
-  'bg-zinc-800',
-  'bg-emerald-700',
-  'bg-sky-700',
-  'bg-violet-700',
-  'bg-amber-700',
-  'bg-rose-700',
-  'bg-teal-700',
-];
-
-function brandColor(name: string): string {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h + name.charCodeAt(i) * (i + 1)) % BRAND_COLORS.length;
-  return BRAND_COLORS[h]!;
 }
 
 function initial(name: string): string {
@@ -33,7 +19,10 @@ function initial(name: string): string {
   return trimmed.slice(0, 1);
 }
 
-/** 工具品牌 Logo：优先 logoUrl，失败回退字标 / FA 图标 */
+/**
+ * 外精选 / 公司推荐：品牌 Logo（可上传或由官网初始化）。
+ * 无图时回退字标。
+ */
 export function ToolLogo({ name, logoUrl, icon, size = 32, className }: ToolLogoProps) {
   const [failed, setFailed] = useState(false);
   const px = `${size}px`;
@@ -57,8 +46,7 @@ export function ToolLogo({ name, logoUrl, icon, size = 32, className }: ToolLogo
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center justify-center rounded-lg text-white',
-        brandColor(name),
+        'flex shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-white',
         className,
       )}
       style={{ width: px, height: px }}
@@ -71,9 +59,4 @@ export function ToolLogo({ name, logoUrl, icon, size = 32, className }: ToolLogo
       )}
     </div>
   );
-}
-
-/** 业界 SaaS favicon 助手 */
-export function faviconUrl(domain: string, size = 128): string {
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=${size}`;
 }

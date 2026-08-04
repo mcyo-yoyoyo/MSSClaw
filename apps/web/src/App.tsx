@@ -200,7 +200,13 @@ export function App() {
   }, [switchWorkspace, loadWorkspace]);
 
   const handleApiRetry = useCallback(() => {
-    useWorkspaceStore.setState({ catalogReady: false, catalogLoading: false });
+    hydratedRef.current = false;
+    useWorkspaceStore.setState({
+      catalogReady: false,
+      catalogLoading: false,
+      apiConnected: false,
+      apiStatus: 'unknown',
+    });
     void bootstrap();
   }, [bootstrap]);
 

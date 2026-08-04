@@ -8,6 +8,7 @@ import {
   resolveAiToolNavCategories,
   resolveToolMarketShelf,
 } from '@/domain/aiToolCategories';
+import { companyToolLogoUrl, resolveToolLogoUrl } from '@/domain/toolLogo';
 import { canViewAsset, type AssetViewerContext } from '@/domain/assetVisibility';
 import {
   DISCOVER_TO_BUSINESS_SCENARIO,
@@ -75,6 +76,7 @@ export type MarketShelfCard = {
   /** 外部工具：真实产品名（弱化展示在场景标题下） */
   productName?: string;
   icon: string;
+  /** 外精选 / 公司推荐：品牌 Logo（可上传或由官网初始化） */
   logoUrl?: string;
   /** 领域 / 区域 / 类型 */
   badges: { label: string; tone?: 'dept' | 'region' | 'type' }[];
@@ -227,7 +229,7 @@ export function listMarketToolCards(
         description: presentation.description,
         productName: presentation.productName,
         icon: t.icon || 'fa-plug',
-        logoUrl: t.logoUrl,
+        logoUrl: kind === 'internal' ? companyToolLogoUrl() : resolveToolLogoUrl(t),
         badges: toolBadges(t),
         featured: resolveToolFeaturedInFindCases(t),
         heat: eng
