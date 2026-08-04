@@ -3,6 +3,7 @@ import {
   APP_VIEW_NAV,
   NAV_SECTION_LABELS,
   NAV_SECTIONS,
+  sortByAdminMenuOrder,
   type AppView,
   type NavSection,
 } from '@/domain/appView';
@@ -29,7 +30,6 @@ export function AppShellSidebar() {
   } = useAppViewStore();
   const isViewEnabled = useNavPresentationStore((s) => s.isViewEnabled);
   const user = useSessionStore((s) => s.user);
-  const logout = useSessionStore((s) => s.logout);
   const perspective = useShellPerspectiveStore((s) => s.perspective);
   const hydrate = useShellPerspectiveStore((s) => s.hydrate);
 
@@ -70,11 +70,13 @@ export function AppShellSidebar() {
 
   const capabilityItems = useMemo(() => {
     const merge = [...itemsBySection.platform, ...itemsBySection.ops];
-    return merge.filter((i) => i.id !== 'ai-map' && i.id !== 'home');
+    return sortByAdminMenuOrder(
+      merge.filter((i) => i.id !== 'ai-map' && i.id !== 'home'),
+    );
   }, [itemsBySection.platform, itemsBySection.ops]);
 
   const systemNavNodes = useMemo(() => {
-    const byId = new Map(itemsBySection.system.map((i) => [i.id, i]));
+    const sorted = sortByAdminMenuOrder(itemsBySection.system);
     const renderItem = (item: { id: AppView; label: string; icon: string }) => (
       <button
         key={item.id}
@@ -88,13 +90,7 @@ export function AppShellSidebar() {
         <span className="nav-label">{item.label}</span>
       </button>
     );
-    const nodes: ReactNode[] = [];
-    const portal = byId.get('portal-ops');
-    if (portal) nodes.push(renderItem(portal));
-    for (const id of ['admin', 'presentation', 'workspace-config'] as AppView[]) {
-      const item = byId.get(id);
-      if (item) nodes.push(renderItem(item));
-    }
+    const nodes: ReactNode[] = sorted.map((item) => renderItem(item));
     if (nodes.length > 0) {
       nodes.push(
         <button
@@ -147,7 +143,7 @@ export function AppShellSidebar() {
         </button>
       </div>
 
-      <nav className="flex min-h-0 flex-1 flex-col overflow-hidden px-1.5 py-2">
+      <nav className="flex min-h-0 flex-1 flex-col overflow-hidden px-1.5 py-1.5">
         {showOpsConfigNav ? (
           <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto scroll-hidden">
             {!sidebarCollapsed ? (
@@ -192,36 +188,25 @@ export function AppShellSidebar() {
       </nav>
 
       <div className="border-t border-black/[0.06] p-1.5">
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={openSettings}
-            className="sidebar-footer-user flex min-w-0 flex-1 items-center gap-2 rounded-xl px-2 py-2 text-left transition hover:bg-black/[0.04]"
-            title="偏好设置"
+        <button
+          type="button"
+          onClick={openSettings}
+          className="sidebar-footer-user flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left transition hover:bg-black/[0.04]"
+          title="偏好设置"
+        >
+          <div
+            className={cn(
+              'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white',
+              user?.avatar || 'bg-zinc-900',
+            )}
           >
-            <div
-              className={cn(
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white',
-                user?.avatar || 'bg-zinc-900',
-              )}
-            >
-              {initial}
-            </div>
-            <div className="sidebar-footer-user-text min-w-0 flex-1">
-              <p className="truncate text-[13px] font-semibold">{user?.name ?? '未登录'}</p>
-              <p className="truncate text-[10px] text-zinc-500">{roleLabel}</p>
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={logout}
-            className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-[11px] font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800"
-            title="退出登录"
-          >
-            <i className="fa-solid fa-right-from-bracket text-[11px]" />
-            <span className="sidebar-collapse-label">退出</span>
-          </button>
-        </div>
+            {initial}
+          </div>
+          <div className="sidebar-footer-user-text min-w-0 flex-1">
+            <p className="truncate text-[12px] font-semibold leading-snug">{user?.name ?? '未登录'}</p>
+            <p className="truncate text-[10px] leading-snug text-zinc-500">{roleLabel}</p>
+          </div>
+        </button>
       </div>
     </aside>
   );

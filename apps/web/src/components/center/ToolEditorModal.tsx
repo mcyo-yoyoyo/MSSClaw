@@ -10,8 +10,21 @@ import {
 import { OwnershipFormFields } from '@/components/center/OrgAssetFilters';
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import type { AssetSourceType, AssetVisibility, DeptId, RegionId } from '@/domain/orgTaxonomy';
-import { FIND_CASES_FEATURED_HINT } from '@/domain/capabilityShelf';
+import {
+  FIND_CASES_FEATURED_HINT,
+  MARKET_SHELF_SLOT_HINT,
+} from '@/domain/capabilityShelf';
+import {
+  ensureMarketShelfTags,
+  resolveToolMarketShelf,
+  type MarketShelfSlot,
+} from '@/domain/aiToolCategories';
 import { resolveToolFeaturedInFindCases } from '@/domain/plazaToolPicks';
+import {
+  listVisibleBusinessScenarioCategories,
+  type BusinessScenarioId,
+} from '@/domain/businessScenarios';
+import { resolveToolBusinessScenarios } from '@/domain/toolBusinessScenarios';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
@@ -31,13 +44,17 @@ function emptyTool(asExternal: boolean): PrototypeToolSeed {
     published: true,
     invokes: 0,
     icon: asExternal ? 'fa-arrow-up-right-from-square' : 'fa-plug',
-    tags: asExternal ? ['外部'] : [],
+    tags: asExternal ? ['外部', 'ai-saas'] : [],
     sourceType: asExternal ? 'external' : 'internal',
     visibility: asExternal ? 'org' : 'public',
     ownerDeptIds: [],
     ownerRegionId: null,
     homepageUrl: '',
     connectorType: asExternal ? undefined : 'http',
+    marketShelf: asExternal ? 'external' : 'none',
+    marketTitle: '',
+    businessScenarioIds: [],
+    featuredInFindCases: false,
   };
 }
 
@@ -61,11 +78,17 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
       return;
     }
     const existing = tools.find((t) => t.id === target);
-    setForm(
-      existing
-        ? { ...existing, featuredInFindCases: resolveToolFeaturedInFindCases(existing) }
-        : emptyTool(false),
-    );
+    if (!existing) {
+      setForm(emptyTool(false));
+      return;
+    }
+    setForm({
+      ...existing,
+      marketShelf: existing.marketShelf ?? resolveToolMarketShelf(existing),
+      marketTitle: existing.marketTitle ?? '',
+      businessScenarioIds: resolveToolBusinessScenarios(existing),
+      featuredInFindCases: resolveToolFeaturedInFindCases(existing),
+    });
   }, [target, tools]);
 
   if (!target) return null;
@@ -78,22 +101,38 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
         ? '登记工具'
         : '编辑工具';
 
+  const shelf = (form.marketShelf ?? 'none') as MarketShelfSlot;
+  const scenarioCats = listVisibleBusinessScenarioCategories();
+
   const handleSave = () => {
     const name = form.name.trim();
     if (!name) {
       showToast('请填写工具名称');
       return;
     }
-    const sourceType = (form.sourceType ?? 'internal') as AssetSourceType;
+    const marketShelf = (form.marketShelf ?? 'none') as MarketShelfSlot;
+    const sourceType = (
+      marketShelf === 'external'
+        ? 'external'
+        : marketShelf === 'internal'
+          ? 'internal'
+          : (form.sourceType ?? 'internal')
+    ) as AssetSourceType;
     if (sourceType === 'external' && !form.homepageUrl?.trim()) {
       showToast('外部工具请填写访问链接');
       return;
+    }
+    if (marketShelf !== 'none' && form.featuredInFindCases && !(form.businessScenarioIds?.length)) {
+      // 精选不强制场景，但建议有场景；不阻塞保存
     }
     const prev = !isNew ? tools.find((t) => t.id === target) : null;
     const userName = getCurrentUserName() || 'Mcyo';
     const userId = getCurrentUserId();
     const id = isNew ? `tool-${Date.now()}` : (target as string);
     const needsApproval = isNew || (form.published && !prev?.published);
+    const tags = ensureMarketShelfTags(form.tags ?? [], marketShelf);
+    const marketTitle = form.marketTitle?.trim() || undefined;
+    const businessScenarioIds = (form.businessScenarioIds ?? []) as BusinessScenarioId[];
 
     upsertTool(
       {
@@ -101,8 +140,13 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
         id,
         name,
         desc: form.desc.trim(),
-        category: sourceType === 'external' ? 'external' : form.category === 'platform' ? 'platform' : 'connector',
-        tags: form.tags,
+        category:
+          sourceType === 'external'
+            ? 'external'
+            : form.category === 'platform'
+              ? 'platform'
+              : 'connector',
+        tags,
         author: prev?.author ?? userName,
         publisher: form.publisher || userName,
         publisherUserId: form.publisherUserId || userId || undefined,
@@ -116,6 +160,10 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
         ownerRegionId: (form.ownerRegionId ?? null) as RegionId | null,
         homepageUrl: form.homepageUrl?.trim() || undefined,
         published: needsApproval ? false : form.published,
+        marketShelf,
+        marketTitle: marketShelf === 'external' ? marketTitle : undefined,
+        businessScenarioIds: businessScenarioIds.length ? businessScenarioIds : undefined,
+        featuredInFindCases: marketShelf === 'none' ? false : Boolean(form.featuredInFindCases),
       },
       isNew,
     );
@@ -132,6 +180,13 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
     }
   };
 
+  const toggleScenario = (id: BusinessScenarioId) => {
+    const cur = new Set(form.businessScenarioIds ?? []);
+    if (cur.has(id)) cur.delete(id);
+    else cur.add(id);
+    setForm({ ...form, businessScenarioIds: [...cur] as BusinessScenarioId[] });
+  };
+
   return (
     <CenterModal
       open
@@ -140,7 +195,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
       actions={<ModalActions onCancel={onClose} onSave={handleSave} saveLabel="保存并提交审批" />}
     >
       <div className="space-y-3 text-left">
-        <FormField label="工具名称">
+        <FormField label="工具名称（产品名）">
           <FormInput value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </FormField>
         <FormField label="描述">
@@ -164,7 +219,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
             }
           />
         </FormField>
-        {form.sourceType !== 'external' && (
+        {form.sourceType !== 'external' && shelf !== 'external' && (
           <FormField label="连接器类型">
             <FormSelect
               value={form.connectorType ?? 'http'}
@@ -195,9 +250,99 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
                   : form.ownerRegionId,
               category:
                 (patch.sourceType ?? form.sourceType) === 'external' ? 'external' : form.category,
+              marketShelf:
+                patch.sourceType === 'external'
+                  ? 'external'
+                  : patch.sourceType === 'internal' && form.marketShelf === 'external'
+                    ? 'internal'
+                    : form.marketShelf,
             })
           }
         />
+
+        <div className="rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-3 py-2.5 space-y-2.5">
+          <FormField label="上架货架">
+            <FormSelect
+              value={shelf}
+              onChange={(e) => {
+                const next = e.target.value as MarketShelfSlot;
+                setForm({
+                  ...form,
+                  marketShelf: next,
+                  sourceType:
+                    next === 'external'
+                      ? 'external'
+                      : next === 'internal'
+                        ? 'internal'
+                        : form.sourceType,
+                  category: next === 'external' ? 'external' : form.category,
+                  featuredInFindCases: next === 'none' ? false : form.featuredInFindCases,
+                });
+              }}
+            >
+              <option value="none">不上架（仅配置目录）</option>
+              <option value="external">外部工具精选</option>
+              <option value="internal">公司工具推荐</option>
+            </FormSelect>
+            <p className="mt-1 text-[11px] leading-snug text-zinc-500">{MARKET_SHELF_SLOT_HINT}</p>
+          </FormField>
+
+          {shelf === 'external' ? (
+            <FormField label="应用场景标题（外精选卡主标题）">
+              <FormInput
+                value={form.marketTitle ?? ''}
+                placeholder="例：竞品舆情监控 · 市场洞察"
+                onChange={(e) => setForm({ ...form, marketTitle: e.target.value })}
+              />
+              <p className="mt-1 text-[11px] leading-snug text-zinc-500">
+                卡片主标题展示此文案；产品名弱化显示在下方。留空则按 AI 能力分类 + 业务场景自动推断。
+              </p>
+            </FormField>
+          ) : null}
+
+          {shelf !== 'none' ? (
+            <FormField label="业务场景（货架筛选）">
+              <div className="flex flex-wrap gap-1.5">
+                {scenarioCats.map((c) => {
+                  const on = (form.businessScenarioIds ?? []).includes(c.id);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => toggleScenario(c.id)}
+                      className={
+                        on
+                          ? 'rounded-lg border border-claw-500/40 bg-claw-50 px-2 py-1 text-[11px] font-medium text-claw-800'
+                          : 'rounded-lg border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-600 hover:border-zinc-300'
+                      }
+                    >
+                      {c.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </FormField>
+          ) : null}
+
+          {shelf !== 'none' ? (
+            <label className="flex cursor-pointer items-start gap-2">
+              <input
+                type="checkbox"
+                className="mt-0.5 accent-claw-600"
+                checked={Boolean(form.featuredInFindCases)}
+                onChange={(e) => setForm({ ...form, featuredInFindCases: e.target.checked })}
+              />
+              <span>
+                <span className="block text-[13px] font-medium text-zinc-800">
+                  精选露出到货架「精选推荐」
+                </span>
+                <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500">
+                  {FIND_CASES_FEATURED_HINT}
+                </span>
+              </span>
+            </label>
+          ) : null}
+        </div>
 
         <label className="flex cursor-pointer items-center gap-2">
           <input
@@ -207,21 +352,6 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
             onChange={(e) => setForm({ ...form, published: e.target.checked })}
           />
           <span className="text-[13px]">提交上架审批（能力上架）</span>
-        </label>
-
-        <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-3 py-2.5">
-          <input
-            type="checkbox"
-            className="mt-0.5 accent-claw-600"
-            checked={Boolean(form.featuredInFindCases)}
-            onChange={(e) => setForm({ ...form, featuredInFindCases: e.target.checked })}
-          />
-          <span>
-            <span className="block text-[13px] font-medium text-zinc-800">精选露出到「找案例 · 场景工具」</span>
-            <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500">
-              {FIND_CASES_FEATURED_HINT}
-            </span>
-          </span>
         </label>
       </div>
     </CenterModal>

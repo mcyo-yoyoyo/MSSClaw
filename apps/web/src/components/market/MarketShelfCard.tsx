@@ -6,29 +6,28 @@ import type { MarketShelfCard as MarketShelfCardModel } from '@/domain/marketShe
 export function MarketShelfCard({
   card,
   variant = 'grid',
-  favorited,
   onOpen,
   onPrimary,
   onHowTo,
-  onRun,
-  onFavorite,
+  primaryLabel: primaryLabelOverride,
+  howToLabel = 'How to',
 }: {
   card: MarketShelfCardModel;
   variant?: 'grid' | 'featured';
-  favorited?: boolean;
   onOpen: () => void;
   onPrimary?: () => void;
   onHowTo?: () => void;
-  onRun?: () => void;
-  onFavorite?: () => void;
+  primaryLabel?: string;
+  howToLabel?: string;
 }) {
   const featured = variant === 'featured';
   const primaryLabel =
-    card.kind === 'projects'
-      ? '\u67e5\u770b\u8be6\u60c5'
+    primaryLabelOverride ??
+    (card.kind === 'projects'
+      ? '\u4e0b\u8f7d\u4f7f\u7528'
       : card.primaryAction === 'howto'
         ? '\u67e5\u770b How to'
-        : '\u7acb\u5373\u4f7f\u7528';
+        : '\u7acb\u5373\u4f7f\u7528');
 
   return (
     <article
@@ -47,7 +46,7 @@ export function MarketShelfCard({
             )}
           >
             <ToolLogo
-              name={card.title}
+              name={card.productName || card.title}
               logoUrl={card.logoUrl}
               icon={card.icon}
               size={featured ? 40 : 32}
@@ -75,10 +74,18 @@ export function MarketShelfCard({
                 </span>
               ) : null}
             </div>
+            {card.productName ? (
+              <p className="mt-0.5 truncate text-[11px] text-zinc-400">{card.productName}</p>
+            ) : null}
             <p
               className={cn(
-                'mt-1.5 leading-relaxed text-zinc-500',
-                featured ? 'line-clamp-3 text-[12px]' : 'line-clamp-2 text-[12px]',
+                'leading-relaxed text-zinc-500',
+                card.productName ? 'mt-1' : 'mt-1.5',
+                card.kind === 'external' || card.productName
+                  ? 'line-clamp-1 text-[12px]'
+                  : featured
+                    ? 'line-clamp-3 text-[12px]'
+                    : 'line-clamp-2 text-[12px]',
               )}
             >
               {card.description}
@@ -119,37 +126,7 @@ export function MarketShelfCard({
             onClick={onHowTo}
             className="rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 transition hover:bg-zinc-50"
           >
-            How to
-          </button>
-        ) : null}
-        {onFavorite ? (
-          <button
-            type="button"
-            onClick={onFavorite}
-            title={favorited ? '\u53d6\u6d88\u6536\u85cf' : '\u6536\u85cf'}
-            className={cn(
-              'rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition',
-              favorited
-                ? 'border-amber-200 bg-amber-50 text-amber-900'
-                : 'border-zinc-200 text-zinc-600 hover:bg-zinc-50',
-            )}
-          >
-            <i
-              className={cn(
-                'mr-1 text-[10px]',
-                favorited ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark',
-              )}
-            />
-            {favorited ? '\u5df2\u6536\u85cf' : '\u6536\u85cf'}
-          </button>
-        ) : null}
-        {onRun && card.runnable ? (
-          <button
-            type="button"
-            onClick={onRun}
-            className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-900 transition hover:bg-emerald-100"
-          >
-            {'\u6267\u884c'}
+            {howToLabel}
           </button>
         ) : null}
         <button

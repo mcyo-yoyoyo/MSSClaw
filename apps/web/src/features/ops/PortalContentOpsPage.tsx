@@ -40,9 +40,14 @@ import {
 import { usePlazaToolGuideStore } from '@/stores/plazaToolGuideStore';
 import { PortalHowToOpsPanel } from '@/features/ops/PortalHowToOpsPanel';
 import { PortalMarketFeaturedPanel } from '@/features/ops/PortalMarketFeaturedPanel';
+import { PortalStationAnnouncePanel } from '@/features/ops/PortalStationAnnouncePanel';
+import { PortalSceneCategoryPanel } from '@/features/ops/PortalSceneCategoryPanel';
+import { PortalBuildStatsCopyPanel } from '@/features/ops/PortalBuildStatsCopyPanel';
+import { useBusinessScenarioCatalogStore } from '@/stores/businessScenarioCatalogStore';
+import { useStationAnnouncementStore } from '@/stores/stationAnnouncementStore';
 
 type EditorTarget = string | 'new' | null;
-type OpsSurface = 'packs' | 'howto' | 'featured';
+type OpsSurface = 'packs' | 'howto' | 'featured' | 'announce' | 'scenes' | 'buildstats';
 
 /** 运营视角：全部 / 只展开某负责人槽位 */
 type SlotFocus = 'all' | ScenarioPackSlotId;
@@ -91,6 +96,8 @@ export function PortalContentOpsPage() {
 
   useEffect(() => {
     bootstrapHowto();
+    useBusinessScenarioCatalogStore.getState().hydrate();
+    useStationAnnouncementStore.getState().hydrate();
   }, [bootstrapHowto]);
 
   useEffect(() => {
@@ -234,22 +241,43 @@ export function PortalContentOpsPage() {
             opsSurface === 'packs'
               ? '按场景方案包配置 · 三槽分责维护'
               : opsSurface === 'featured'
-                ? '货架精选置顶 · 首页与货架推荐位'
-                : '常用 AI 工具 How to · 找案例精选指引'
+                ? '货架精选置顶 · 三货架推荐位'
+                : opsSurface === 'announce'
+                  ? '首页站内公告跑马灯 · 同步我的消息'
+                  : opsSurface === 'scenes'
+                    ? 'MSS 场景分类字典 · 文案 / 图标 / 顺序'
+                    : opsSurface === 'buildstats'
+                      ? 'MSS 建设概况 · 统计口径与建设目标'
+                      : '外部 / 公司工具 How to · 货架上手指引'
           }
           tip={
             opsSurface === 'packs' ? (
               <>
-                用户在找案例看到的是<strong className="font-semibold">一张场景卡 = 完整学习包</strong>
-                （洞察 + 案例 + 课件）。运营侧按三槽分责填写；「用户侧预览」打开前端真实学习层。
+                业务用户在 <strong className="font-semibold">MSS工具集市</strong> 看到的是
+                <strong className="font-semibold">场景分类 → 项目卡 → 文档预览 / How to</strong>
+                。运营侧按三槽分责填写材料；「用户侧预览」打开对应场景学习内容。
               </>
             ) : opsSurface === 'featured' ? (
               <>
-                配置三货架「精选」置顶项；保存后立即影响首页精选横滑与货架精选条。不造假涨跌数据。
+                配置三货架「精选」置顶项；保存后立即影响货架精选条与首页三栏排序权重。不造假涨跌数据。
+              </>
+            ) : opsSurface === 'announce' ? (
+              <>
+                维护首页横向站内公告。关闭演示内容后仍可配置真实公告；仅上架项对业务用户露出。
+              </>
+            ) : opsSurface === 'scenes' ? (
+              <>
+                调整 MSS 集市场景分类的展示名、简介、图标与顺序。编码 S1–S8 固定，避免打断项目 /
+                Skill 归属映射。
+              </>
+            ) : opsSurface === 'buildstats' ? (
+              <>
+                解释建设概况数字含义与建设目标文案；项目数 / 可执行 / 场景覆盖仍由真实列表推导。
               </>
             ) : (
               <>
-                维护找案例「常用 AI 工具（精选）」的 How to：可上传文件或填链接（图片 / PDF / PPT / 短视频 / 文字），「链接」类型仅填 URL；保存后首页立即生效。
+                维护外部工具精选 / 公司工具推荐的 How to：可上传文件或填链接（图片 / PDF / PPT /
+                短视频 / 文字），「链接」类型仅填 URL；保存后货架卡「How to」立即生效。
               </>
             )
           }
@@ -393,6 +421,9 @@ export function PortalContentOpsPage() {
           {(
             [
               { id: 'packs' as const, label: '场景方案包' },
+              { id: 'scenes' as const, label: '场景分类' },
+              { id: 'buildstats' as const, label: '建设概况口径' },
+              { id: 'announce' as const, label: '站内公告' },
               { id: 'howto' as const, label: '工具 How to' },
               { id: 'featured' as const, label: '货架推荐位' },
             ] as const
@@ -421,6 +452,9 @@ export function PortalContentOpsPage() {
 
         {opsSurface === 'howto' ? <PortalHowToOpsPanel /> : null}
         {opsSurface === 'featured' ? <PortalMarketFeaturedPanel /> : null}
+        {opsSurface === 'announce' ? <PortalStationAnnouncePanel /> : null}
+        {opsSurface === 'scenes' ? <PortalSceneCategoryPanel /> : null}
+        {opsSurface === 'buildstats' ? <PortalBuildStatsCopyPanel /> : null}
 
         {opsSurface === 'packs' ? <StatCardGrid items={stats} /> : null}
 

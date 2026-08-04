@@ -3,7 +3,7 @@ import type { PortalCasePreviewFile } from '@/domain/prototype/portalContent';
 const MAX_BYTES = 3 * 1024 * 1024;
 
 const ACCEPT =
-  '.pdf,.pptx,.ppt,.docx,.doc,.xlsx,.xls,.png,.jpg,.jpeg,.webp,.gif,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*';
+  '.pdf,.pptx,.ppt,.docx,.doc,.xlsx,.xls,.png,.jpg,.jpeg,.webp,.gif,.mp4,.webm,.mov,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*,video/*';
 
 export const CASE_PREVIEW_ACCEPT = ACCEPT;
 export const CASE_PREVIEW_MAX_MB = 3;
@@ -21,6 +21,7 @@ export function detectPreviewKind(file: File): PortalCasePreviewFile['kind'] {
   }
   if (mime.includes('word') || name.endsWith('.docx') || name.endsWith('.doc')) return 'docx';
   if (mime.includes('sheet') || name.endsWith('.xlsx') || name.endsWith('.xls')) return 'xlsx';
+  if (mime.startsWith('video/') || /\.(mp4|webm|mov|m4v)$/.test(name)) return 'video';
   if (mime.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/.test(name)) return 'image';
   return 'other';
 }
@@ -31,7 +32,7 @@ export function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function previewKindLabel(kind: PortalCasePreviewFile['kind']): string {
+export function previewKindLabel(kind: PortalCasePreviewFile['kind'] | 'link'): string {
   switch (kind) {
     case 'pdf':
       return 'PDF';
@@ -43,12 +44,16 @@ export function previewKindLabel(kind: PortalCasePreviewFile['kind']): string {
       return 'Excel';
     case 'image':
       return '图片';
+    case 'video':
+      return '视频';
+    case 'link':
+      return '链接';
     default:
       return '文件';
   }
 }
 
-export function previewKindIcon(kind: PortalCasePreviewFile['kind']): string {
+export function previewKindIcon(kind: PortalCasePreviewFile['kind'] | 'link'): string {
   switch (kind) {
     case 'pdf':
       return 'fa-file-pdf';
@@ -60,6 +65,10 @@ export function previewKindIcon(kind: PortalCasePreviewFile['kind']): string {
       return 'fa-file-excel';
     case 'image':
       return 'fa-file-image';
+    case 'video':
+      return 'fa-file-video';
+    case 'link':
+      return 'fa-link';
     default:
       return 'fa-file';
   }

@@ -6,7 +6,7 @@ export interface PortalCasePreviewFile {
   mimeType: string;
   size: number;
   dataUrl: string;
-  kind: 'pdf' | 'pptx' | 'docx' | 'xlsx' | 'image' | 'other';
+  kind: 'pdf' | 'pptx' | 'docx' | 'xlsx' | 'image' | 'video' | 'other';
 }
 
 /** 门户知识地图内容（场景方案 / 场景案例 / 培训 / 前沿洞察） */

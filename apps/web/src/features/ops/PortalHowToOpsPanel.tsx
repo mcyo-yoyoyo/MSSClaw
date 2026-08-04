@@ -33,6 +33,15 @@ function emptyDraft(toolId: string): PlazaToolGuideRecord {
   };
 }
 
+/** How to 可配置范围：外/内货架工具（含待上架但已指定货架位） */
+function isHowtoOpsTool(tool: { published: boolean; marketShelf?: string; tags?: string[] }): boolean {
+  if (tool.marketShelf === 'none') return false;
+  if (tool.marketShelf === 'external' || tool.marketShelf === 'internal') return true;
+  if (isHomeAiTool(tool as never)) return true;
+  const tags = tool.tags ?? [];
+  return tags.includes('ai-saas') || tags.includes('hw-internal');
+}
+
 export function PortalHowToOpsPanel() {
   const tools = useMarketplaceStore((s) => s.tools);
   const records = usePlazaToolGuideStore((s) => s.records);
@@ -51,15 +60,15 @@ export function PortalHowToOpsPanel() {
     bootstrap();
   }, [bootstrap]);
 
-  const homeTools = useMemo(
-    () => tools.filter(isHomeAiTool).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
+  const shelfTools = useMemo(
+    () => tools.filter(isHowtoOpsTool).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
     [tools],
   );
 
   const toolName = useMemo(() => {
-    const map = new Map(homeTools.map((t) => [t.id, t.name]));
+    const map = new Map(shelfTools.map((t) => [t.id, t.name]));
     return (id: string) => map.get(id) ?? id;
-  }, [homeTools]);
+  }, [shelfTools]);
 
   const list = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -141,10 +150,10 @@ export function PortalHowToOpsPanel() {
     <div className="space-y-4">
       <div className="rounded-2xl border border-zinc-200/90 bg-white p-4">
         <p className="text-[12px] leading-relaxed text-zinc-500">
-          维护找案例「常用 AI 工具（精选）」的{' '}
+          维护外部工具精选 / 公司工具的{' '}
           <strong className="font-semibold text-zinc-700">How to</strong>
           ：支持上传或填链接（图片 / PDF / PPT / 短视频 / 文字附件）；「链接」类型仅填
-          URL。单文件 ≤ {HOWTO_UPLOAD_MAX_MB}MB，大文件请用外链。保存后首页立刻生效。
+          URL。单文件 ≤ {HOWTO_UPLOAD_MAX_MB}MB，大文件请用外链。保存后货架卡「How to」立刻生效。
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <input
@@ -159,7 +168,7 @@ export function PortalHowToOpsPanel() {
             className="rounded-xl border border-zinc-200 px-3 py-2 text-[12px]"
           >
             <option value="all">全部工具</option>
-            {homeTools.map((t) => (
+            {shelfTools.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
               </option>
@@ -168,7 +177,7 @@ export function PortalHowToOpsPanel() {
           <button
             type="button"
             onClick={() =>
-              setDraft(emptyDraft(toolFilter !== 'all' ? toolFilter : homeTools[0]?.id ?? ''))
+              setDraft(emptyDraft(toolFilter !== 'all' ? toolFilter : shelfTools[0]?.id ?? ''))
             }
             className="rounded-xl bg-zinc-900 px-3 py-2 text-[12px] font-semibold text-white"
           >
@@ -206,7 +215,7 @@ export function PortalHowToOpsPanel() {
                 onChange={(e) => setDraft({ ...draft, toolId: e.target.value })}
                 className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2.5 py-2 text-[12px] text-zinc-800"
               >
-                {homeTools.map((t) => (
+                {shelfTools.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
                   </option>

@@ -235,7 +235,7 @@ export const useNavPresentationStore = create<NavPresentationState>((set, get) =
       if (isBusinessShellRole(role) && !isBusinessShellSlot(slot) && on) {
         return;
       }
-      // 业务壳首页是找案例/做任务总闸，不可关
+      // 业务壳首页为三货架流量入口，不可关
       if (isBusinessShellRole(role) && slot === 'home' && !on) {
         return;
       }

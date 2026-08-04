@@ -130,18 +130,46 @@ export function toolBelongsToNavCategory(
 }
 
 export function toolBelongsToScope(tool: PrototypeToolSeed, scope: AiToolScopeId): boolean {
-  const src = tool.sourceType ?? (tool.tags?.includes('hw-internal') ? 'internal' : 'external');
-  return src === scope;
+  return resolveToolMarketShelf(tool) === scope;
 }
 
 export function getNavCategoryMeta(categoryId: AiToolNavCategoryId) {
   return AI_TOOL_NAV_CATEGORIES.find((c) => c.id === categoryId);
 }
 
-export function isHomeAiTool(tool: PrototypeToolSeed): boolean {
-  if (!tool.published) return false;
+/** 业务货架位：外精选 / 公司推荐 / 不上架 */
+export type MarketShelfSlot = NonNullable<PrototypeToolSeed['marketShelf']>;
+
+/**
+ * 解析工具上架货架。
+ * - 未能力上架 → none
+ * - 显式 `marketShelf` 优先
+ * - 缺省：带 ai-saas / hw-internal 标签时，按 sourceType 归入外/内货架
+ */
+export function resolveToolMarketShelf(tool: PrototypeToolSeed): MarketShelfSlot {
+  if (!tool.published) return 'none';
+  if (tool.marketShelf) return tool.marketShelf;
   const tags = tool.tags ?? [];
-  return tags.includes('ai-saas') || tags.includes('hw-internal');
+  if (!tags.includes('ai-saas') && !tags.includes('hw-internal')) return 'none';
+  const src = tool.sourceType ?? (tags.includes('hw-internal') ? 'internal' : 'external');
+  return src === 'internal' ? 'internal' : 'external';
+}
+
+/** 是否出现在外精选或公司工具货架（兼容旧 isHomeAiTool 调用点） */
+export function isHomeAiTool(tool: PrototypeToolSeed): boolean {
+  const shelf = resolveToolMarketShelf(tool);
+  return shelf === 'external' || shelf === 'internal';
+}
+
+/** 保存时按货架位补齐兼容标签，避免旧筛选漏掉 */
+export function ensureMarketShelfTags(
+  tags: string[],
+  marketShelf: MarketShelfSlot,
+): string[] {
+  const next = [...tags];
+  if (marketShelf === 'external' && !next.includes('ai-saas')) next.push('ai-saas');
+  if (marketShelf === 'internal' && !next.includes('hw-internal')) next.push('hw-internal');
+  return next;
 }
 
 /** 调用量展示：210000 → 21万（数据层保留，发现页外链区不用于排行） */

@@ -1,6 +1,11 @@
 import {
+  CHINA_REGION_ID,
+  HQ_REGION_ID,
   getDeptLabel,
   getRegionLabel,
+  regionMatchesSelection,
+  sortDeptIdsByLabel,
+  sortRegionIdsByLabel,
   type DeptId,
   type OrgAffiliation,
   type RegionId,
@@ -20,10 +25,18 @@ const ROLE_LABEL = Object.fromEntries(
   SKILL_ROLE_CATEGORIES.map((r) => [r.id, r.label]),
 ) as Record<SkillRoleId, string>;
 
-/** 展示用区域（不含中国区演示入口时仍可映射） */
-const REGION_SHOW: RegionId[] = ['apac', 'mea', 'latam', 'europe', 'eurasia', 'china'];
+/** 展示用区域 */
+const REGION_SHOW: RegionId[] = [
+  HQ_REGION_ID,
+  'apac',
+  'mea',
+  'latam',
+  'europe',
+  'eurasia',
+  CHINA_REGION_ID,
+];
 
-/** 展示用领域（与演示口径对齐） */
+/** 展示用领域（与左栏展示序对齐） */
 const DEPT_SHOW: DeptId[] = [
   'gtm',
   'mkt',
@@ -87,12 +100,13 @@ export function getScenarioOrgAxisTags(input: {
 
 /** 筛选下拉：区域二级（全量字典；UI 应按账号裁剪） */
 export const REGION_FILTER_OPTIONS: RegionId[] = [
-  'china',
+  HQ_REGION_ID,
   'apac',
   'mea',
   'latam',
   'europe',
   'eurasia',
+  CHINA_REGION_ID,
 ];
 
 /** 筛选下拉：领域二级（全量字典；UI 应按账号裁剪） */
@@ -101,28 +115,32 @@ export const DEPT_FILTER_OPTIONS: DeptId[] = DEPT_SHOW;
 /**
  * 视角筛选项 · 领域：平台运营看全量；其余仅本人所属职能（无归属时不展示可选领域，避免越权筛选）。
  * 内容侧另有 public/org 可见性闸门，空选=权限范围内的「全部」。
+ * 返回已按展示序排序。
  */
 export function getScopedDeptFilterOptions(
   affiliation: OrgAffiliation,
   role?: PlatformRole,
 ): DeptId[] {
-  if (hasGlobalOrgScope(role)) return [...DEPT_FILTER_OPTIONS];
+  if (hasGlobalOrgScope(role)) return sortDeptIdsByLabel([...DEPT_FILTER_OPTIONS]);
   const mine = (affiliation.deptIds ?? []).filter((d) => DEPT_FILTER_OPTIONS.includes(d));
-  return mine;
+  return sortDeptIdsByLabel(mine);
 }
 
 /**
- * 视角筛选项 · 区域：平台运营看全量；一线人员仅本区域；机关岗（无区域）不开放区域多选。
+ * 视角筛选项 · 区域：
+ * - 平台运营：全量（机关置顶、中国区置底、其余拼音）
+ * - 一线：仅本区域
+ * - 机关岗（无 regionId）：至少可选「机关」
  */
 export function getScopedRegionFilterOptions(
   affiliation: OrgAffiliation,
   role?: PlatformRole,
 ): RegionId[] {
-  if (hasGlobalOrgScope(role)) return [...REGION_FILTER_OPTIONS];
+  if (hasGlobalOrgScope(role)) return sortRegionIdsByLabel([...REGION_FILTER_OPTIONS]);
   if (affiliation.regionId && REGION_FILTER_OPTIONS.includes(affiliation.regionId)) {
-    return [affiliation.regionId];
+    return sortRegionIdsByLabel([affiliation.regionId]);
   }
-  return [];
+  return [HQ_REGION_ID];
 }
 
 /** 去掉已越权的勾选（换账号 / 改归属后）；全球轴随账号重置由调用方清空 */
@@ -175,8 +193,7 @@ export function skillMatchesOrgPerspectiveSelection(
   if (isOrgPerspectiveEmpty(sel)) return true;
   const role = SKILL_ROLE_BY_ID[skill.id];
   const roleOk = !sel.global.length || (!!role && sel.global.includes(role));
-  const regionOk =
-    !sel.region.length || (!!skill.ownerRegionId && sel.region.includes(skill.ownerRegionId));
+  const regionOk = regionMatchesSelection(skill.ownerRegionId, sel.region);
   const deptOk =
     !sel.dept.length || (skill.ownerDeptIds ?? []).some((d) => sel.dept.includes(d));
   return roleOk && regionOk && deptOk;
@@ -195,9 +212,7 @@ export function scenarioMatchesOrgPerspectiveSelection(
   sel: OrgPerspectiveSelection,
 ): boolean {
   if (isOrgPerspectiveEmpty(sel)) return true;
-  const regionOk =
-    !sel.region.length ||
-    (!!input.ownerRegionId && sel.region.includes(input.ownerRegionId));
+  const regionOk = regionMatchesSelection(input.ownerRegionId, sel.region);
   const deptOk =
     !sel.dept.length || (input.ownerDeptIds ?? []).some((d) => sel.dept.includes(d));
   if (!regionOk || !deptOk) return false;

@@ -1,5 +1,6 @@
 import {
-  BUSINESS_SCENARIO_CATEGORIES,
+  getBusinessScenarioMeta,
+  listVisibleBusinessScenarioCategories,
   type BusinessScenarioId,
 } from '@/domain/businessScenarios';
 import { getSkillBusinessScenario } from '@/domain/skillBusinessScenarios';
@@ -71,7 +72,7 @@ export function getAgentBusinessScenario(agent: PrototypeAgentSeed): BusinessSce
 export function getAgentBusinessLabel(agent: PrototypeAgentSeed): string | null {
   const id = getAgentBusinessScenario(agent);
   if (!id) return null;
-  return BUSINESS_SCENARIO_CATEGORIES.find((c) => c.id === id)?.label ?? null;
+  return getBusinessScenarioMeta(id).label;
 }
 
 /** 未显式配置时：短名单内视为精选露出 */
@@ -111,7 +112,7 @@ export function listRecommendedAgentIdsForBusiness(
   if (businessId !== 'all') {
     return (HOME_BUSINESS_AGENTS[businessId] ?? []).slice(0, limit);
   }
-  const buckets = BUSINESS_SCENARIO_CATEGORIES.filter((c) => c.tabVisible)
+  const buckets = listVisibleBusinessScenarioCategories()
     .map((c) => HOME_BUSINESS_AGENTS[c.id] ?? [])
     .filter((ids) => ids.length > 0);
   const out: string[] = [];

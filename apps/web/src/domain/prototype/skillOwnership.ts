@@ -68,6 +68,8 @@ export function applyCanonicalSkillOwnership(skill: PrototypeSkillSeed): Prototy
       // 未显式关精选时，交给 HOME_BUSINESS_SKILLS 静态表判断
       featuredInDoTask:
         typeof skill.featuredInDoTask === 'boolean' ? skill.featuredInDoTask : undefined,
+      featuredInMssMarket:
+        typeof skill.featuredInMssMarket === 'boolean' ? skill.featuredInMssMarket : undefined,
       published: skill.published !== false,
     };
   }

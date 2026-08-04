@@ -3,6 +3,8 @@ import {
   MARKET_SHELF_META,
   type MarketShelfKind,
 } from '@/domain/marketShelf';
+import { emptyOrgPerspectiveSelection } from '@/domain/orgAxisTags';
+import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
 import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
 import { openResourceWithReturn } from '@/domain/openResourceNav';
 import { useAppViewStore } from '@/stores/appViewStore';
@@ -20,13 +22,36 @@ export type HomeJourneyOpts = {
   shelf?: MarketShelfKind;
 };
 
-/** 打开货架（外部 / 内部 / AI 项目） */
+/** 打开货架（外部 / 内部 / MSS工具集市） */
 export function openMarketShelf(kind: MarketShelfKind = 'external', opts?: HomeJourneyOpts) {
   if (opts?.businessId) {
     useMarketFilterStore.getState().setBusinessFilter(opts.businessId);
     useNavigationIntentStore.getState().focusBusinessScenario(opts.businessId);
   }
   useAppViewStore.getState().setAppView(MARKET_SHELF_META[kind].view);
+}
+
+/**
+ * 从首页 / 外部精选 / 公司推荐点击左栏领域或区域：
+ * 跳转 MSS工具集市，并带上组织轴筛选（场景回到全部分类卡）。
+ */
+export function openMssMarketHub(opts?: {
+  deptId?: DeptId | null;
+  regionId?: RegionId | null;
+  clearOrg?: boolean;
+}) {
+  const store = useMarketFilterStore.getState();
+  store.setBusinessFilter('all');
+  if (opts?.clearOrg) {
+    store.setOrgSelection(emptyOrgPerspectiveSelection());
+  } else {
+    const next = emptyOrgPerspectiveSelection();
+    if (opts?.deptId) next.dept = [opts.deptId];
+    if (opts?.regionId) next.region = [opts.regionId];
+    store.setOrgSelection(next);
+  }
+  useHomeStore.getState().setHomeMode('portal');
+  useAppViewStore.getState().setAppView(MARKET_SHELF_META.projects.view);
 }
 
 /** 找案例 → 外部工具货架（深链别名兼容） */

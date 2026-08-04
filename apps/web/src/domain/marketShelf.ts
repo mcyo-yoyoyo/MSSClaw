@@ -1,9 +1,13 @@
 /**
  * MSS AI 工具平台 · 货架
- * 统一卡片模型：外部工具 / 内部工具 / AI 项目
+ * 统一卡片模型：外部工具精选 / 公司工具推荐 / MSS工具集市
  */
 
-import { toolBelongsToScope, isHomeAiTool } from '@/domain/aiToolCategories';
+import {
+  getNavCategoryMeta,
+  resolveAiToolNavCategories,
+  resolveToolMarketShelf,
+} from '@/domain/aiToolCategories';
 import { canViewAsset, type AssetViewerContext } from '@/domain/assetVisibility';
 import {
   DISCOVER_TO_BUSINESS_SCENARIO,
@@ -24,9 +28,18 @@ import {
   DISCOVER_SCENARIO_IDS,
   type DiscoverScenarioId,
 } from '@/domain/scenarioCapabilities';
-import { getDeptLabel, getRegionLabel, type DeptId, type RegionId } from '@/domain/orgTaxonomy';
+import {
+  getDeptLabel,
+  getRegionLabel,
+  regionMatchesSelection,
+  type DeptId,
+  type RegionId,
+} from '@/domain/orgTaxonomy';
 import { heatScore, type ContentEngagement } from '@/domain/contentEngagement';
-import { toolMatchesBusinessScenario } from '@/domain/toolBusinessScenarios';
+import {
+  resolveToolBusinessScenarios,
+  toolMatchesBusinessScenario,
+} from '@/domain/toolBusinessScenarios';
 
 export type MarketShelfKind = 'external' | 'internal' | 'projects';
 
@@ -36,18 +49,18 @@ export const MARKET_SHELF_META: Record<
 > = {
   external: {
     view: 'market-external',
-    label: '外部工具',
-    shortLabel: '外部',
+    label: '外部工具精选',
+    shortLabel: '外精选',
   },
   internal: {
     view: 'market-internal',
-    label: '内部工具集市',
-    shortLabel: '内部',
+    label: '公司工具推荐',
+    shortLabel: '公司',
   },
   projects: {
     view: 'market-projects',
-    label: 'AI 项目中心',
-    shortLabel: '项目',
+    label: 'MSS工具集市',
+    shortLabel: 'MSS',
   },
 };
 
@@ -59,6 +72,8 @@ export type MarketShelfCard = {
   kind: MarketShelfKind;
   title: string;
   description: string;
+  /** 外部工具：真实产品名（弱化展示在场景标题下） */
+  productName?: string;
   icon: string;
   logoUrl?: string;
   /** 领域 / 区域 / 类型 */
@@ -76,6 +91,49 @@ export type MarketShelfCard = {
   updatedAt?: string;
   primaryAction: MarketPrimaryAction;
 };
+
+/** 外部工具卡：场景/能力作主标题，产品名弱化；运营可配 marketTitle */
+function externalToolPresentation(tool: PrototypeToolSeed): {
+  title: string;
+  productName: string;
+  description: string;
+} {
+  const configured = tool.marketTitle?.trim();
+  if (configured) {
+    const oneLine = (tool.desc || '')
+      .replace(/\s+/g, ' ')
+      .split(/[。！？.!?\n]/)[0]
+      .trim();
+    return {
+      title: configured,
+      productName: tool.name,
+      description: oneLine || tool.desc || '',
+    };
+  }
+  const caps = resolveAiToolNavCategories(tool);
+  const capLabel = caps
+    .map((id) => getNavCategoryMeta(id)?.label)
+    .filter(Boolean)
+    .slice(0, 2)
+    .join(' · ');
+  const biz = resolveToolBusinessScenarios(tool)[0];
+  const bizLabel = biz ? getBusinessScenarioMeta(biz).label : '';
+  // 主标题优先 AI 应用能力；辅以业务场景，避免大量卡片同名「日常办公」
+  const title = capLabel
+    ? bizLabel && bizLabel !== '日常办公'
+      ? `${capLabel} · ${bizLabel}`
+      : capLabel
+    : bizLabel || tool.name;
+  const oneLine = (tool.desc || '')
+    .replace(/\s+/g, ' ')
+    .split(/[。！？.!?\n]/)[0]
+    .trim();
+  return {
+    title,
+    productName: tool.name,
+    description: oneLine || tool.desc || '',
+  };
+}
 
 export function marketKindFromView(view: string): MarketShelfKind | null {
   if (view === 'market-external') return 'external';
@@ -118,9 +176,7 @@ function toolMatchesFilters(
   if (!isOrgPerspectiveEmpty(org)) {
     const deptOk =
       !org.dept.length || (tool.ownerDeptIds ?? []).some((d) => org.dept.includes(d));
-    const regionOk =
-      !org.region.length ||
-      (!!tool.ownerRegionId && org.region.includes(tool.ownerRegionId));
+    const regionOk = regionMatchesSelection(tool.ownerRegionId, org.region);
     if (!deptOk || !regionOk) return false;
   }
   return toolMatchesBusinessScenario(tool, business);
@@ -152,21 +208,24 @@ export function listMarketToolCards(
   engagementOf?: (id: string) => ContentEngagement,
   howtoToolIds?: Set<string>,
 ): MarketShelfCard[] {
-  const scope = kind;
   return tools
-    .filter(isHomeAiTool)
-    .filter((t) => toolBelongsToScope(t, scope))
+    .filter((t) => resolveToolMarketShelf(t) === kind)
     .filter((t) => canViewAsset(t, viewer))
     .filter((t) => toolMatchesFilters(t, org, business))
     .map((t) => {
       const eng = engagementOf?.(t.id);
       const canOpen = toolHasLaunchUrl(t);
       const hasHowto = howtoToolIds?.has(t.id) ?? false;
+      const presentation =
+        kind === 'external'
+          ? externalToolPresentation(t)
+          : { title: t.name, productName: undefined as string | undefined, description: t.desc };
       return {
         id: t.id,
         kind,
-        title: t.name,
-        description: t.desc,
+        title: presentation.title,
+        description: presentation.description,
+        productName: presentation.productName,
         icon: t.icon || 'fa-plug',
         logoUrl: t.logoUrl,
         badges: toolBadges(t),

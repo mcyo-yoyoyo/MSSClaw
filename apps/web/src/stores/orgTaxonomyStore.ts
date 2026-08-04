@@ -1,8 +1,12 @@
 import { create } from 'zustand';
 import {
+  CHINA_REGION_ID,
   DEFAULT_HQ_DEPTS,
   DEFAULT_REGIONS,
+  HQ_REGION_ID,
   setOrgTaxonomy,
+  sortDeptIdsByLabel,
+  sortRegionIdsByLabel,
   type DeptId,
   type OrgUnit,
   type RegionId,
@@ -20,6 +24,37 @@ function slugFromLabel(label: string, prefix: 'd' | 'r'): string {
   return `${prefix}_${Date.now().toString(36)}`;
 }
 
+/** 兼容旧字典：中国→中国区；补齐机关；按展示序重排 */
+function migrateRegions(regions: OrgUnit[]): OrgUnit[] {
+  const byId = new Map<string, OrgUnit>();
+  for (const r of regions) {
+    if (!r?.id || !r?.label) continue;
+    if (r.id === CHINA_REGION_ID) {
+      byId.set(r.id, { ...r, label: '中国区' });
+    } else {
+      byId.set(r.id, r);
+    }
+  }
+  if (!byId.has(HQ_REGION_ID)) {
+    byId.set(HQ_REGION_ID, { id: HQ_REGION_ID, label: '机关' });
+  }
+  const orderedIds = sortRegionIdsByLabel([...byId.keys()] as RegionId[]);
+  return orderedIds.map((id) => byId.get(id)!);
+}
+
+function migrateDepts(depts: OrgUnit[]): OrgUnit[] {
+  const valid = depts
+    .filter((d) => d?.id && d?.label)
+    .map((d) =>
+      d.id === 'quality' && (d.label === '质量与运营' || d.label === '质量运营')
+        ? { ...d, label: '质运' }
+        : d,
+    );
+  const ordered = sortDeptIdsByLabel(valid.map((d) => d.id as DeptId));
+  const byId = new Map(valid.map((d) => [d.id, d]));
+  return ordered.map((id) => byId.get(id)!);
+}
+
 function load(): { depts: OrgUnit[]; regions: OrgUnit[] } {
   try {
     const raw = localStorage.getItem(LS_KEY);
@@ -27,11 +62,11 @@ function load(): { depts: OrgUnit[]; regions: OrgUnit[] } {
     const parsed = JSON.parse(raw) as { depts?: OrgUnit[]; regions?: OrgUnit[] };
     const depts =
       Array.isArray(parsed.depts) && parsed.depts.length
-        ? parsed.depts.filter((d) => d?.id && d?.label)
+        ? migrateDepts(parsed.depts)
         : [...DEFAULT_HQ_DEPTS];
     const regions =
       Array.isArray(parsed.regions) && parsed.regions.length
-        ? parsed.regions.filter((r) => r?.id && r?.label)
+        ? migrateRegions(parsed.regions)
         : [...DEFAULT_REGIONS];
     return { depts, regions };
   } catch {

@@ -12,7 +12,7 @@ import { ASSET_VISIBILITY_LABELS, HQ_DEPTS, REGIONS } from '@/domain/orgTaxonomy
 import { DEFAULT_SKILL_ACCENT, SKILL_ACCENT_PRESETS } from '@/domain/skillAccent';
 import { cn } from '@/lib/utils';
 import {
-  BUSINESS_SCENARIO_CATEGORIES,
+  listVisibleBusinessScenarioCategories,
   type BusinessScenarioId,
 } from '@/domain/businessScenarios';
 import { DO_TASK_FEATURED_HINT } from '@/domain/capabilityShelf';
@@ -242,7 +242,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       return true;
     }
     if (s === 3 && form.featuredInDoTask && !form.businessScenarioId) {
-      showToast('精选露出到做任务时请选择业务场景篮子');
+      showToast('精选露出到 MSS 场景技能时请选择业务场景');
       return false;
     }
     return true;
@@ -313,6 +313,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       homepageUrl: undefined,
       published: needsApproval ? false : wantPublish,
       featuredInDoTask: wantPublish ? form.featuredInDoTask : false,
+      featuredInMssMarket: wantPublish ? form.featuredInDoTask : false,
     });
 
     if (!draft.searchKeywords?.length) {
@@ -612,7 +613,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                 label="所属职能（单选）"
                 hint={
                   isPlatformOps
-                    ? '每个技能只挂一个领域，避免做任务列表出现多职能误会'
+                    ? '每个技能只挂一个领域，避免 MSS 场景技能列表出现多职能误会'
                     : '能力开发仅可归属本人组织职能（单选）'
                 }
               >
@@ -787,7 +788,9 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                     onChange={(e) => setForm({ ...form, featuredInDoTask: e.target.checked })}
                   />
                   <span>
-                    <span className="block text-[13px] font-medium text-zinc-800">精选露出到「做任务」</span>
+                    <span className="block text-[13px] font-medium text-zinc-800">
+                      精选露出到「MSS工具集市 · 场景技能」
+                    </span>
                     <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500">
                       {DO_TASK_FEATURED_HINT}
                     </span>
@@ -807,7 +810,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                       }
                     >
                       <option value="">— 请选择场景 —</option>
-                      {BUSINESS_SCENARIO_CATEGORIES.filter((c) => c.tabVisible).map((c) => (
+                      {listVisibleBusinessScenarioCategories().map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.label}
                         </option>

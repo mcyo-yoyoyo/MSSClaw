@@ -22,6 +22,11 @@ interface ScenarioShowcasePanelProps {
   initialTab?: ShowcaseTabId;
   initialItemId?: string;
   onEditItem?: (id: string) => void;
+  /**
+   * full：样板间完整信息
+   * docs：仅文档在线预览（MSS 集市弹窗）
+   */
+  mode?: 'full' | 'docs';
   className?: string;
 }
 
@@ -32,8 +37,10 @@ export function ScenarioShowcasePanel({
   initialTab,
   initialItemId,
   onEditItem,
+  mode = 'full',
   className,
 }: ScenarioShowcasePanelProps) {
+  const docsOnly = mode === 'docs';
   const grouped = useMemo(() => groupItemsByShowcaseTab(items), [items]);
 
   const availableTabs = useMemo(
@@ -74,21 +81,26 @@ export function ScenarioShowcasePanel({
 
   const journey = useMemo(
     () =>
-      buildJourneySummary({
-        label: bundle?.label ?? scenarioLabel,
-        layers: bundle?.layers ?? { thought: items.length > 0, toolkit: false, capability: false },
-        agents: bundle?.agents ?? [],
-        skills: bundle?.skills ?? [],
-        tools: bundle?.tools ?? [],
-        env: bundle?.env ?? null,
-        items,
-      }),
-    [bundle, scenarioLabel, items],
+      docsOnly
+        ? []
+        : buildJourneySummary({
+            label: bundle?.label ?? scenarioLabel,
+            layers: bundle?.layers ?? {
+              thought: items.length > 0,
+              toolkit: false,
+              capability: false,
+            },
+            agents: bundle?.agents ?? [],
+            skills: bundle?.skills ?? [],
+            tools: bundle?.tools ?? [],
+            env: bundle?.env ?? null,
+            items,
+          }),
+    [bundle, scenarioLabel, items, docsOnly],
   );
 
   return (
     <div className={cn('space-y-4 text-left', className)}>
-      {/* Tabs */}
       <div className="flex flex-wrap gap-1 border-b border-zinc-100 pb-2">
         {SHOWCASE_TABS.map((t) => {
           const count = grouped[t.id].length;
@@ -117,10 +129,9 @@ export function ScenarioShowcasePanel({
         })}
       </div>
 
-      {/* Content carousel */}
       {!current || !card ? (
         <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-4 py-10 text-center text-[12px] text-zinc-400">
-          当前类型暂无上架内容
+          {docsOnly ? '暂无上传的项目文档' : '当前类型暂无上架内容'}
         </div>
       ) : (
         <div className="space-y-3">
@@ -142,7 +153,7 @@ export function ScenarioShowcasePanel({
                     type="button"
                     onClick={() => setIndex(i)}
                     className={cn(
-                      'max-w-[120px] truncate rounded-full px-2 py-0.5 text-[10px] font-medium',
+                      'max-w-[140px] truncate rounded-full px-2 py-0.5 text-[10px] font-medium',
                       i === index
                         ? 'bg-zinc-900 text-white'
                         : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200',
@@ -168,13 +179,19 @@ export function ScenarioShowcasePanel({
           {card.previewFile ? (
             <CaseDocumentPreview file={card.previewFile} />
           ) : (
-            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50/80 px-4 py-7 text-center">
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50/80 px-4 py-10 text-center">
               <i className="fa-solid fa-book-open mb-2 text-lg text-zinc-300" />
               <p className="text-[12px] font-medium text-zinc-600">暂无在线预览文档</p>
-              <p className="mt-1 text-[11px] text-zinc-400">
-                可先读下方简介；运营侧上传 PPT / PDF 后可在此预览
-              </p>
-              {card.homepageUrl ? (
+              {!docsOnly ? (
+                <p className="mt-1 text-[11px] text-zinc-400">
+                  可先读下方简介；运营侧上传 PPT / PDF 后可在此预览
+                </p>
+              ) : (
+                <p className="mt-1 text-[11px] text-zinc-400">
+                  运营侧上传项目文档后可在此预览
+                </p>
+              )}
+              {!docsOnly && card.homepageUrl ? (
                 <a
                   href={card.homepageUrl}
                   target="_blank"
@@ -187,83 +204,88 @@ export function ScenarioShowcasePanel({
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-semibold text-zinc-600">
-              {card.typeLabel}
-            </span>
-            {card.isGold ? (
-              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
-                金案例 · 样板间
-              </span>
-            ) : null}
-            {card.publisher ? (
-              <span className="text-[11px] text-zinc-400">
-                {card.publisher}
-                {card.publishedAt ? ` · ${card.publishedAt}` : ''}
-              </span>
-            ) : null}
-            {onEditItem ? (
-              <button
-                type="button"
-                onClick={() => onEditItem(card.id)}
-                className="ml-auto text-[11px] font-medium text-zinc-500 underline-offset-2 hover:underline"
-              >
-                去配置
-              </button>
-            ) : null}
-          </div>
+          {!docsOnly ? (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-semibold text-zinc-600">
+                  {card.typeLabel}
+                </span>
+                {card.isGold ? (
+                  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                    金案例 · 样板间
+                  </span>
+                ) : null}
+                {card.publisher ? (
+                  <span className="text-[11px] text-zinc-400">
+                    {card.publisher}
+                    {card.publishedAt ? ` · ${card.publishedAt}` : ''}
+                  </span>
+                ) : null}
+                {onEditItem ? (
+                  <button
+                    type="button"
+                    onClick={() => onEditItem(card.id)}
+                    className="ml-auto text-[11px] font-medium text-zinc-500 underline-offset-2 hover:underline"
+                  >
+                    去配置
+                  </button>
+                ) : null}
+              </div>
 
-          <h3 className="text-[15px] font-semibold text-zinc-900">{card.title}</h3>
-          <p className="text-[13px] leading-relaxed text-zinc-600">{card.desc}</p>
+              <h3 className="text-[15px] font-semibold text-zinc-900">{card.title}</h3>
+              <p className="text-[13px] leading-relaxed text-zinc-600">{card.desc}</p>
 
-          <div className="grid gap-2 sm:grid-cols-2">
-            <p className="rounded-lg border border-zinc-100 bg-zinc-50/80 px-3 py-2 text-[12px] text-zinc-700">
-              {card.applicable}
-            </p>
-            <p className="rounded-lg border border-zinc-100 bg-zinc-50/80 px-3 py-2 text-[12px] text-zinc-700">
-              {card.audience}
-            </p>
-          </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <p className="rounded-lg border border-zinc-100 bg-zinc-50/80 px-3 py-2 text-[12px] text-zinc-700">
+                  {card.applicable}
+                </p>
+                <p className="rounded-lg border border-zinc-100 bg-zinc-50/80 px-3 py-2 text-[12px] text-zinc-700">
+                  {card.audience}
+                </p>
+              </div>
+            </>
+          ) : null}
         </div>
       )}
 
-      {/* 学 / 准备 / 开干概要 */}
-      <section className="rounded-xl border border-zinc-200/80 bg-gradient-to-b from-zinc-50/80 to-white p-3">
-        <div className="mb-2 flex items-baseline justify-between gap-2">
-          <h4 className="text-[12px] font-semibold text-zinc-800">
-            如何学习 · 准备 · 开干
-          </h4>
-          <span className="text-[10px] text-zinc-400">关闭后可在样板间逐项查看详情</span>
-        </div>
-        <div className="grid gap-2 md:grid-cols-3">
-          {journey.map((block) => (
-            <div
-              key={block.id}
-              className="rounded-lg border border-zinc-100 bg-white px-2.5 py-2"
-            >
-              <div className="mb-1 flex items-center gap-1.5">
-                <span className="rounded-full bg-zinc-900 px-1.5 py-px text-[9px] font-bold text-white">
-                  {block.label}
-                </span>
-                <span className="truncate text-[11px] font-semibold text-zinc-800">
-                  {block.title}
-                </span>
+      {!docsOnly && journey.length ? (
+        <section className="rounded-xl border border-zinc-200/80 bg-gradient-to-b from-zinc-50/80 to-white p-3">
+          <div className="mb-2 flex items-baseline justify-between gap-2">
+            <h4 className="text-[12px] font-semibold text-zinc-800">
+              如何学习 · 准备 · 开干
+            </h4>
+            <span className="text-[10px] text-zinc-400">关闭后可在样板间逐项查看详情</span>
+          </div>
+          <div className="grid gap-2 md:grid-cols-3">
+            {journey.map((block) => (
+              <div
+                key={block.id}
+                className="rounded-lg border border-zinc-100 bg-white px-2.5 py-2"
+              >
+                <div className="mb-1 flex items-center gap-1.5">
+                  <span className="rounded-full bg-zinc-900 px-1.5 py-px text-[9px] font-bold text-white">
+                    {block.label}
+                  </span>
+                  <span className="truncate text-[11px] font-semibold text-zinc-800">
+                    {block.title}
+                  </span>
+                </div>
+                <ul className="space-y-1">
+                  {block.bullets.map((b, i) => (
+                    <li key={i} className="text-[11px] leading-snug text-zinc-600">
+                      · {b}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-1.5 text-[10px] text-zinc-400">{block.hint}</p>
               </div>
-              <ul className="space-y-1">
-                {block.bullets.map((b, i) => (
-                  <li key={i} className="text-[11px] leading-snug text-zinc-600">
-                    · {b}
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-1.5 text-[10px] text-zinc-400">{block.hint}</p>
-            </div>
-          ))}
-        </div>
-        <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">
-          体外执行请「下载学习」；在线跑模型任务请用「一键打样」。关闭弹窗后，可按需展开样板间①学习 / ②准备 / ③开干详情。
-        </p>
-      </section>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">
+            体外执行请「下载学习」；在线跑模型任务请用「一键打样」。关闭弹窗后，可按需展开样板间①学习 / ②准备 / ③开干详情。
+          </p>
+        </section>
+      ) : null}
     </div>
   );
 }

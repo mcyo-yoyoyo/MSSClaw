@@ -45,9 +45,9 @@ interface AppViewRouterProps {
 
 const VIEW_LABELS: Partial<Record<AppView, string>> = {
   home: '首页',
-  'market-external': '外部工具',
-  'market-internal': '内部工具集市',
-  'market-projects': 'AI 项目中心',
+  'market-external': '外部工具精选',
+  'market-internal': '公司工具推荐',
+  'market-projects': 'MSS工具集市',
   task: '任务记录',
   messages: '我的消息',
   'ai-map': '场景案例',

@@ -1,5 +1,6 @@
 import {
-  BUSINESS_SCENARIO_CATEGORIES,
+  getBusinessScenarioMeta,
+  listVisibleBusinessScenarioCategories,
   type BusinessScenarioId,
 } from '@/domain/businessScenarios';
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
@@ -118,14 +119,19 @@ export function resolveSkillBusinessScenario(
 }
 
 /**
- * 是否精选露出到「做任务」：
- * - 显式 featuredInDoTask
+ * 是否精选露出到「MSS工具集市 · 场景技能」：
+ * - 显式 featuredInMssMarket（优先）
+ * - 显式 featuredInDoTask（兼容旧字段）
  * - 未设置时回退 HOME_BUSINESS_SKILLS 静态精选
  */
 export function resolveSkillFeaturedInDoTask(skill: PrototypeSkillSeed): boolean {
+  if (typeof skill.featuredInMssMarket === 'boolean') return skill.featuredInMssMarket;
   if (typeof skill.featuredInDoTask === 'boolean') return skill.featuredInDoTask;
   return Object.values(HOME_BUSINESS_SKILLS).some((ids) => ids.includes(skill.id));
 }
+
+/** @alias resolveSkillFeaturedInDoTask — MSS 场景技能露出 */
+export const resolveSkillFeaturedInMssMarket = resolveSkillFeaturedInDoTask;
 
 export function getSkillBusinessLabel(
   skillOrId: string | Pick<PrototypeSkillSeed, 'id' | 'businessScenarioId'>,
@@ -135,14 +141,14 @@ export function getSkillBusinessLabel(
       ? getSkillBusinessScenario(skillOrId)
       : resolveSkillBusinessScenario(skillOrId);
   if (!id) return null;
-  return BUSINESS_SCENARIO_CATEGORIES.find((c) => c.id === id)?.label ?? null;
+  return getBusinessScenarioMeta(id).label;
 }
 
 function staticFeaturedIdsForBusiness(businessId: BusinessScenarioId | 'all'): string[] {
   if (businessId !== 'all') {
     return [...(HOME_BUSINESS_SKILLS[businessId] ?? [])];
   }
-  const buckets = BUSINESS_SCENARIO_CATEGORIES.filter((c) => c.tabVisible)
+  const buckets = listVisibleBusinessScenarioCategories()
     .map((c) => HOME_BUSINESS_SKILLS[c.id] ?? [])
     .filter((ids) => ids.length > 0);
   const out: string[] = [];
@@ -172,7 +178,7 @@ export function listRecommendedSkillIdsForBusiness(
   return staticFeaturedIdsForBusiness(businessId).slice(0, limit);
 }
 
-/** 做任务 · 场景技能：能力上架 + 精选露出 */
+/** 做任务 / MSS 场景技能：能力上架 + 精选露出 */
 export function listFeaturedDoTaskSkillIds(
   skills: PrototypeSkillSeed[],
   businessId: BusinessScenarioId | 'all',

@@ -1,9 +1,13 @@
 import type { AiToolNavCategoryId } from '@/domain/aiToolCategories';
-import { isHomeAiTool, toolBelongsToNavCategory } from '@/domain/aiToolCategories';
+import {
+  isHomeAiTool,
+  resolveToolMarketShelf,
+  toolBelongsToNavCategory,
+} from '@/domain/aiToolCategories';
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
 
 /**
- * 找案例 · 场景工具：静态精选基线（每侧最多 2 个）。
+ * 货架精选推荐：静态精选基线（每侧最多 2 个）。
  * 运营可在配置工具勾选 featuredInFindCases 追加/覆盖精选露出。
  */
 export type PlazaToolPicks = {
@@ -68,7 +72,7 @@ export function resolveToolFeaturedInFindCases(tool: PrototypeToolSeed): boolean
 }
 
 /**
- * 找案例橱窗工具：已上架 ∩ 精选露出 ∩ 当前分类，静态序优先。
+ * 货架精选工具：已上架到对应货架 ∩ 精选露出 ∩ 当前分类，静态序优先。
  */
 export function listFeaturedFindCaseTools(
   tools: PrototypeToolSeed[],
@@ -90,14 +94,14 @@ export function listFeaturedFindCaseTools(
     for (const id of ids) {
       const tool = byId.get(id);
       if (!tool) continue;
+      if (resolveToolMarketShelf(tool) !== scope) continue;
       out.push(tool);
       seen.add(id);
       if (out.length >= limitPerSide) return out;
     }
     for (const tool of eligible) {
       if (seen.has(tool.id)) continue;
-      const src = tool.sourceType ?? (tool.tags?.includes('hw-internal') ? 'internal' : 'external');
-      if (src !== scope) continue;
+      if (resolveToolMarketShelf(tool) !== scope) continue;
       out.push(tool);
       seen.add(tool.id);
       if (out.length >= limitPerSide) break;

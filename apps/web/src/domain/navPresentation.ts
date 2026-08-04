@@ -62,7 +62,7 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   },
   {
     id: 'market-external',
-    label: '外部工具',
+    label: '外部工具精选',
     subtitle: '外部 / SaaS 工具货架 · 顶栏入口',
     icon: 'fa-globe',
     section: 'workspace',
@@ -70,16 +70,16 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   },
   {
     id: 'market-internal',
-    label: '内部工具集市',
-    subtitle: '内部工具货架 · 顶栏入口',
+    label: '公司工具推荐',
+    subtitle: '公司办公工具货架 · 顶栏入口',
     icon: 'fa-building',
     section: 'workspace',
     hiddenFromSidebar: true,
   },
   {
     id: 'market-projects',
-    label: 'AI 项目中心',
-    subtitle: '样板项目货架 · 顶栏入口',
+    label: 'MSS工具集市',
+    subtitle: 'MSS 建设集市 · 顶栏入口',
     icon: 'fa-layer-group',
     section: 'workspace',
     hiddenFromSidebar: true,
@@ -111,12 +111,13 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   {
     id: 'ai-map',
     label: '场景案例',
-    subtitle: '样板间进阶 · 内容由门户运营上架',
+    subtitle: '样板间进阶深潜 · 内容由门户运营上架（业务默认可关）',
     icon: 'fa-map',
     section: 'platform',
     /** 项目详情进阶；配置入口在系统设置 · 门户运营 */
     hiddenFromSidebar: true,
   },
+  { id: 'skills', label: '配置技能', subtitle: '上架 · 挂载 · 导出（运营）', icon: 'fa-cube', section: 'platform' },
   { id: 'agents', label: '配置专家', subtitle: '上架 · 发布 · 编排（运营）', icon: 'fa-robot', section: 'platform' },
   {
     id: 'agent-studio',
@@ -126,9 +127,10 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
     section: 'platform',
     hiddenFromSidebar: true,
   },
-  { id: 'skills', label: '配置技能', subtitle: '上架 · 挂载 · 导出（运营）', icon: 'fa-cube', section: 'platform' },
   { id: 'tools', label: '配置工具', subtitle: '连接器 · 外部 API · 上架', icon: 'fa-plug', section: 'platform' },
   { id: 'kb', label: '管理知识', subtitle: '企业文档 · RAG · 溯源治理', icon: 'fa-book-open', section: 'platform' },
+  { id: 'automation', label: '自动化设置', subtitle: '定时 · 告警 · 周报', icon: 'fa-bolt', section: 'platform' },
+  { id: 'workflow', label: '工作流设置', subtitle: 'LangGraph · 专家编排', icon: 'fa-diagram-project', section: 'platform' },
   { id: 'memory', label: '管理记忆', subtitle: 'Agent 长期记忆 · Reflection', icon: 'fa-brain', section: 'platform' },
   {
     id: 'prompts',
@@ -145,8 +147,6 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
     section: 'platform',
     hiddenFromSidebar: true,
   },
-  { id: 'automation', label: '自动化设置', subtitle: '定时 · 告警 · 周报', icon: 'fa-bolt', section: 'platform' },
-  { id: 'workflow', label: '工作流设置', subtitle: 'LangGraph · 专家编排', icon: 'fa-diagram-project', section: 'platform' },
   {
     id: 'portal-ops',
     label: '门户运营',

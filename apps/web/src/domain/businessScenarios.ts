@@ -1,11 +1,22 @@
 import type { DiscoverScenarioId } from '@/domain/scenarioCapabilities';
 import { isDiscoverScenarioId } from '@/domain/scenarioCapabilities';
-
+import { FEATURED_SCENARIOS } from '@/domain/portalMap';
 /**
- * 业务场景篮子（广场 / AI任务主线）
- * 一级 Tab 统一四字业务名；能力轴降为次要标签。
+ * 业务场景篮子（MSS 集市分类 / 广场筛选）
+ * 默认字典可被门户运营覆盖（文案、图标、可见性、顺序）；id 稳定以兼容映射。
  */
-export const BUSINESS_SCENARIO_CATEGORIES = [
+export type BusinessScenarioId = 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6' | 'S7' | 'S8';
+
+export type BusinessScenarioCategory = {
+  id: BusinessScenarioId;
+  label: string;
+  fullLabel: string;
+  icon: string;
+  blurb: string;
+  tabVisible: boolean;
+};
+
+export const DEFAULT_BUSINESS_SCENARIO_CATEGORIES: BusinessScenarioCategory[] = [
   {
     id: 'S1',
     label: '市场洞察',
@@ -70,13 +81,26 @@ export const BUSINESS_SCENARIO_CATEGORIES = [
     blurb: '会议纪要、工作总结、招聘与归档',
     tabVisible: true,
   },
-] as const;
+];
 
-export type BusinessScenarioId = (typeof BUSINESS_SCENARIO_CATEGORIES)[number]['id'];
+/** @deprecated 使用 getBusinessScenarioCatalog()；保留兼容旧引用 */
+export const BUSINESS_SCENARIO_CATEGORIES = DEFAULT_BUSINESS_SCENARIO_CATEGORIES;
 
-/** 一级筛选可见的业务场景（不含建设中空篮） */
+let RUNTIME_CATALOG: BusinessScenarioCategory[] = DEFAULT_BUSINESS_SCENARIO_CATEGORIES.map(
+  (c) => ({ ...c }),
+);
+
+export function setBusinessScenarioCatalog(categories: BusinessScenarioCategory[]) {
+  RUNTIME_CATALOG = categories.map((c) => ({ ...c }));
+}
+
+export function getBusinessScenarioCatalog(): BusinessScenarioCategory[] {
+  return RUNTIME_CATALOG;
+}
+
+/** 一级筛选可见的业务场景 */
 export function listVisibleBusinessScenarioCategories() {
-  return BUSINESS_SCENARIO_CATEGORIES.filter((c) => c.tabVisible);
+  return getBusinessScenarioCatalog().filter((c) => c.tabVisible);
 }
 
 /** 发现场景 → 主业务篮子 */
@@ -106,12 +130,15 @@ export const BUSINESS_SCENARIO_FEATURED_DISCOVER: Partial<
   S8: 'ops-analytics',
 };
 
-export function isBusinessScenarioId(id: string): id is BusinessScenarioId {
-  return BUSINESS_SCENARIO_CATEGORIES.some((c) => c.id === id);
+export function isBusinessScenarioId(value: string): value is BusinessScenarioId {
+  return DEFAULT_BUSINESS_SCENARIO_CATEGORIES.some((c) => c.id === value);
 }
 
-export function getBusinessScenarioMeta(id: BusinessScenarioId) {
-  return BUSINESS_SCENARIO_CATEGORIES.find((c) => c.id === id)!;
+export function getBusinessScenarioMeta(id: BusinessScenarioId): BusinessScenarioCategory {
+  return (
+    getBusinessScenarioCatalog().find((c) => c.id === id) ??
+    DEFAULT_BUSINESS_SCENARIO_CATEGORIES.find((c) => c.id === id)!
+  );
 }
 
 export function getPrimaryBusinessScenario(
@@ -149,4 +176,26 @@ export function listHotBusinessScenarioEntries(): Array<{
       comingSoon: !discoverId,
     };
   });
+}
+
+/** 业务篮子 → 门户 scenarioTags（命中 FEATURED_SCENARIOS.matchTags） */
+export function scenarioTagsForBusiness(biz: BusinessScenarioId): string[] {
+  const discoverId = BUSINESS_SCENARIO_FEATURED_DISCOVER[biz];
+  const def = FEATURED_SCENARIOS.find((s) => s.id === discoverId);
+  return def?.matchTags?.length ? [...def.matchTags] : [biz];
+}
+
+/** 从已有 tags 反推业务篮子（编辑表单回填用） */
+export function inferBusinessScenarioFromTags(
+  tags: string[] | undefined,
+): BusinessScenarioId | null {
+  if (!tags?.length) return null;
+  for (const t of tags) {
+    if (isBusinessScenarioId(t)) return t;
+  }
+  for (const cat of DEFAULT_BUSINESS_SCENARIO_CATEGORIES) {
+    const matchTags = scenarioTagsForBusiness(cat.id);
+    if (matchTags.some((t) => tags.includes(t))) return cat.id;
+  }
+  return null;
 }

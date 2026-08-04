@@ -19,7 +19,6 @@ import {
   usePlazaToolGuideStore,
 } from '@/stores/plazaToolGuideStore';
 import { useRecentMarketStore } from '@/stores/recentMarketStore';
-import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { parseAppRoute } from '@/domain/appRoute';
 import type { PlazaToolGuide } from '@/domain/plazaToolGuides';
 import { groupGuidesIntoSteps } from '@/domain/howtoSteps';
@@ -36,9 +35,6 @@ export function MarketToolDetailPage() {
   const focusTool = useNavigationIntentStore((s) => s.focusTool);
   const guideRecords = usePlazaToolGuideStore((s) => s.records);
   const pushRecent = useRecentMarketStore((s) => s.push);
-  const favoriteItems = useMarketFavoriteStore((s) => s.items);
-  const hydrateFavorites = useMarketFavoriteStore((s) => s.hydrate);
-  const toggleFavorite = useMarketFavoriteStore((s) => s.toggle);
 
   const [tab, setTab] = useState<DetailTab>('overview');
   const [howToOpen, setHowToOpen] = useState(false);
@@ -47,8 +43,7 @@ export function MarketToolDetailPage() {
 
   useEffect(() => {
     ensurePlazaToolGuidesBootstrapped();
-    hydrateFavorites();
-  }, [hydrateFavorites]);
+  }, []);
 
   useEffect(() => {
     const route = parseAppRoute(window.location.hash);
@@ -89,20 +84,6 @@ export function MarketToolDetailPage() {
       return;
     }
     openMarketShelf(kind);
-  };
-
-  const favorited = favoriteItems.some((x) => x.id === toolId && x.kind === kind);
-
-  const onToggleFavorite = () => {
-    if (!tool) return;
-    const added = toggleFavorite({
-      id: tool.id,
-      kind,
-      title: tool.name,
-      icon: tool.icon,
-      logoUrl: tool.logoUrl,
-    });
-    showToast(added ? `已收藏：${tool.name}` : `已取消收藏：${tool.name}`);
   };
 
   const openUrl = () => {
@@ -221,25 +202,7 @@ export function MarketToolDetailPage() {
                     >
                       查看 How to
                     </button>
-                    <button
-                      type="button"
-                      onClick={onToggleFavorite}
-                      className={cn(
-                        'rounded-xl border px-4 py-2.5 text-[12px] font-medium transition',
-                        favorited
-                          ? 'border-amber-200 bg-amber-50 text-amber-900'
-                          : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50',
-                      )}
-                    >
-                      <i
-                        className={cn(
-                          'mr-1.5 text-[11px]',
-                          favorited ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark',
-                        )}
-                      />
-                      {favorited ? '已收藏' : '收藏'}
-                    </button>
-                  </div>
+                                      </div>
                 </div>
               </div>
             </div>

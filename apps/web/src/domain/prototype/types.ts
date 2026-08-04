@@ -92,11 +92,16 @@ export interface PrototypeSkillSeed extends AssetOwnershipFields {
    */
   published: boolean;
   /**
-   * 精选露出：出现在业务「做任务 · 场景技能」。
+   * 精选露出：出现在「MSS工具集市 · 场景技能」。
    * 未设置时回退静态 HOME_BUSINESS_SKILLS 白名单。
+   * @deprecated 语义等同 featuredInMssMarket；保留字段兼容旧数据
    */
   featuredInDoTask?: boolean;
-  /** 做任务场景篮子（精选露出时用于筛选；缺省回退静态映射表） */
+  /**
+   * 精选露出到 MSS 场景技能（优先于 featuredInDoTask）。
+   */
+  featuredInMssMarket?: boolean;
+  /** MSS 场景技能所属业务场景（精选露出时用于筛选；缺省回退静态映射表） */
   businessScenarioId?: BusinessScenarioId;
   invokes: number;
   icon: string;
@@ -126,12 +131,24 @@ export interface PrototypeToolSeed extends AssetOwnershipFields {
   /** 能力上架：进入工具目录 / 可被技能挂载 */
   published: boolean;
   /**
-   * 精选露出：可出现在找案例「场景工具」。
+   * 精选露出：可出现在对应货架「精选推荐」。
    * 未设置时回退 PLAZA_TOOL_PICKS 静态精选。
    */
   featuredInFindCases?: boolean;
   /** 货架业务场景筛选；缺省回退 toolBusinessScenarios 静态映射 */
   businessScenarioIds?: BusinessScenarioId[];
+  /**
+   * 上架到哪一业务货架。
+   * - external → 外部工具精选
+   * - internal → 公司工具推荐
+   * - none → 仅配置目录
+   * 缺省按 sourceType + 标签（ai-saas / hw-internal）推断。
+   */
+  marketShelf?: 'external' | 'internal' | 'none';
+  /**
+   * 外精选卡主标题（应用场景名）。缺省按 AI 能力分类 + 业务场景推断。
+   */
+  marketTitle?: string;
   invokes: number;
   icon: string;
   /** 官方/品牌 Logo URL（业界 SaaS） */

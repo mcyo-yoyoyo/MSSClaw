@@ -1,17 +1,15 @@
 import { MssZhishuMark } from '@/components/brand/MssZhishuMark';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import type { AppView } from '@/domain/appView';
+import { ADMIN_MENU_VIEWS, type AppView } from '@/domain/appView';
 import { writeAppRouteToLocation } from '@/domain/appRoute';
 import { MARKET_SHELF_META } from '@/domain/marketShelf';
+import { NAV_PRESENTATION_META } from '@/domain/navPresentation';
 import { canExecuteChat } from '@/domain/permissions';
 import { ROLE_LABELS } from '@/domain/rbac';
 import { formatRolePerspective } from '@/domain/rolePerspective';
 import { defaultShellPerspective, isOpsOnlyView } from '@/domain/shellPerspective';
-import { WORKSPACE_LOCALE_LABELS } from '@/domain/workspaceConfig';
 import { ROUTE_PREFETCH } from '@/features/lazyPages';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
-import { useWorkspaceConfigStore } from '@/stores/workspaceConfigStore';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useCommandPaletteStore } from '@/stores/commandPaletteStore';
 import { useHomeStore } from '@/stores/homeStore';
@@ -28,27 +26,19 @@ const TOP_SHELF_NAV: { view: AppView; label: string }[] = [
   { view: MARKET_SHELF_META.projects.view, label: MARKET_SHELF_META.projects.label },
 ];
 
-const ADMIN_MENU_ITEMS: { view: AppView; label: string }[] = [
-  { view: 'portal-ops', label: '门户运营' },
-  { view: 'skills', label: '配置技能' },
-  { view: 'agents', label: '配置专家' },
-  { view: 'tools', label: '配置工具' },
-  { view: 'kb', label: '管理知识' },
-  { view: 'automation', label: '自动化设置' },
-  { view: 'workflow', label: '工作流设置' },
-  { view: 'memory', label: '管理记忆' },
-  { view: 'admin', label: '组织权限' },
-  { view: 'presentation', label: '展示配置' },
-  { view: 'workspace-config', label: '工作区配置' },
-];
+const ADMIN_MENU_ITEMS: { view: AppView; label: string }[] = ADMIN_MENU_VIEWS.map((view) => ({
+  view,
+  label: NAV_PRESENTATION_META.find((m) => m.id === view)?.label ?? view,
+}));
 
 interface AppHeaderProps {
   apiConnected: boolean;
   onWorkspaceSwitch?: (workspaceId: string) => void;
 }
 
-export function AppHeader({ apiConnected, onWorkspaceSwitch }: AppHeaderProps) {
-  const { workspaceId, switchWorkspace, workspaceList } = useWorkspaceStore();
+export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onWorkspaceSwitch }: AppHeaderProps) {
+  void _apiConnected;
+  void _onWorkspaceSwitch;
   const appView = useAppViewStore((s) => s.appView);
   const openSettings = useAppViewStore((s) => s.openSettings);
   const setAppView = useAppViewStore((s) => s.setAppView);
@@ -88,17 +78,13 @@ export function AppHeader({ apiConnected, onWorkspaceSwitch }: AppHeaderProps) {
     void inboxMessages;
     return useInboxStore.getState().unreadCount(user?.id);
   }, [inboxMessages, user?.id]);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const adminRef = useRef<HTMLDivElement>(null);
 
-  const getLocale = useWorkspaceConfigStore((s) => s.getLocale);
-
   const perspectiveLabel = useMemo(() => {
-    if (!user) return '未登录视角';
+    if (!user) return '未登录';
     return formatRolePerspective({
       platformRole: user.platformRole,
       deptIds: user.deptIds,
@@ -106,19 +92,10 @@ export function AppHeader({ apiConnected, onWorkspaceSwitch }: AppHeaderProps) {
     });
   }, [user]);
 
-  const currentWs = workspaceList.find((w) => w.id === workspaceId) ?? workspaceList[0] ?? {
-    id: workspaceId,
-    name: '工作区',
-    namespace: 'default',
-    description: '',
-    memberCount: 0,
-  };
-
   const initial = (user?.name?.trim()?.[0] ?? 'U').toUpperCase();
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node))
         setUserMenuOpen(false);
       if (adminRef.current && !adminRef.current.contains(e.target as Node)) setAdminOpen(false);
@@ -135,151 +112,81 @@ export function AppHeader({ apiConnected, onWorkspaceSwitch }: AppHeaderProps) {
     setAppView(view);
   };
 
+  const navBtn = (active: boolean) =>
+    cn(
+      'relative truncate rounded-full px-3.5 py-1.5 text-[13px] font-medium tracking-tight transition',
+      active
+        ? 'bg-zinc-900 text-white shadow-[0_6px_16px_-8px_rgba(24,24,27,0.55)]'
+        : 'text-zinc-600 hover:bg-zinc-100/90 hover:text-zinc-900',
+    );
+
   return (
     <header className="apple-header z-50 flex h-[52px] shrink-0 items-center justify-between px-6">
-      <div className="flex items-center gap-5">
-        <div className="flex items-center gap-3">
-          <MssZhishuMark size={32} className="shrink-0" title="MSS AI 工具平台" />
-          <div className="flex items-baseline gap-2.5">
-            <span className="text-[15px] font-semibold tracking-tight text-zinc-900">MSS AI</span>
-            <span className="hidden text-[11px] font-medium text-zinc-400 sm:inline">
-              工具平台
-            </span>
-          </div>
-        </div>
-
-        <div className="hidden h-4 w-px bg-zinc-200 sm:block" />
-
-        <div className="relative hidden sm:block" ref={menuRef}>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMenuOpen((v) => !v);
-            }}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900"
-          >
-            <span className="max-w-[220px] truncate font-medium">{perspectiveLabel}</span>
-            <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-500">
-              {WORKSPACE_LOCALE_LABELS[getLocale(workspaceId)]}
-            </span>
-            <i className="fa-solid fa-chevron-down text-[9px] text-zinc-400" />
-          </button>
-          {menuOpen && (
-            <div className="workspace-menu absolute left-0 top-full z-[60] mt-2 w-80 rounded-xl border border-zinc-200/80 bg-white py-1.5 shadow-apple-lg">
-              <p className="px-4 py-1.5 text-[10px] font-semibold tracking-wide text-zinc-400">
-                组织视角（当前登录角色）
-              </p>
-              <div className="border-b border-zinc-100 px-4 py-2">
-                <p className="text-[13px] font-semibold text-zinc-900">{perspectiveLabel}</p>
-                <p className="mt-0.5 text-[11px] text-zinc-500">
-                  {user ? ROLE_LABELS[user.platformRole] : ''} · 数据空间：{currentWs.name}
-                </p>
-              </div>
-              <p className="px-4 py-1.5 text-[10px] font-semibold tracking-wide text-zinc-400">
-                切换数据空间
-              </p>
-              {workspaceList.map((ws) => (
-                <button
-                  key={ws.id}
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    if (onWorkspaceSwitch) onWorkspaceSwitch(ws.id);
-                    else switchWorkspace(ws.id);
-                  }}
-                  className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[13px] text-zinc-800 hover:bg-zinc-50"
-                >
-                  <i
-                    className={cn(
-                      'fa-solid fa-check text-[10px] text-zinc-900',
-                      ws.id !== workspaceId && 'text-transparent',
-                    )}
-                  />
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium">{ws.name}</span>
-                    <span className="block truncate text-[10px] text-zinc-400">{ws.description}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
+      <div className="flex min-w-0 items-center gap-3">
+        <MssZhishuMark size={32} className="shrink-0" title="MSS AI提效作战平台" />
+        <div className="min-w-0 leading-tight">
+          <p className="truncate text-[14px] font-semibold tracking-tight text-zinc-900">
+            MSS AI提效作战平台
+          </p>
         </div>
       </div>
 
       <nav
-        className="mx-3 hidden min-w-0 flex-1 items-center justify-center gap-0.5 lg:flex"
+        className="mx-3 hidden min-w-0 flex-1 items-center justify-center lg:flex"
         aria-label="平台导航"
       >
-        {TOP_SHELF_NAV.filter((item) => isViewEnabled(item.view)).map((item) => (
-          <button
-            key={item.view}
-            type="button"
-            onClick={() => goView(item.view)}
-            onMouseEnter={() => ROUTE_PREFETCH[item.view]?.()}
-            className={cn(
-              'truncate rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition',
-              appView === item.view || marketToolShelfHighlight === item.view
-                ? 'bg-zinc-900 text-white'
-                : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900',
-            )}
-          >
-            {item.label}
-          </button>
-        ))}
-        {canOpenAdmin ? (
-          <div className="relative" ref={adminRef}>
+        <div className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-zinc-200/80 bg-zinc-50/80 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+          {TOP_SHELF_NAV.filter((item) => isViewEnabled(item.view)).map((item) => (
             <button
+              key={item.view}
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setAdminOpen((v) => !v);
-              }}
-              className={cn(
-                'truncate rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition',
-                adminActive
-                  ? 'bg-zinc-900 text-white'
-                  : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900',
-              )}
+              onClick={() => goView(item.view)}
+              onMouseEnter={() => ROUTE_PREFETCH[item.view]?.()}
+              className={navBtn(appView === item.view || marketToolShelfHighlight === item.view)}
             >
-              管理后台
-              <i className="fa-solid fa-chevron-down ml-1 text-[9px] opacity-70" />
+              {item.label}
             </button>
-            {adminOpen ? (
-              <div className="absolute left-1/2 top-full z-[60] mt-2 w-52 -translate-x-1/2 rounded-xl border border-zinc-200/80 bg-white py-1.5 shadow-apple-lg">
-                {adminItems.map((item) => (
-                  <button
-                    key={item.view}
-                    type="button"
-                    onClick={() => {
-                      setAdminOpen(false);
-                      goView(item.view);
-                    }}
-                    onMouseEnter={() => ROUTE_PREFETCH[item.view]?.()}
-                    className={cn(
-                      'flex w-full px-4 py-2 text-left text-[12px] font-medium hover:bg-zinc-50',
-                      appView === item.view ? 'text-zinc-900' : 'text-zinc-600',
-                    )}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+          ))}
+          {canOpenAdmin ? (
+            <div className="relative" ref={adminRef}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAdminOpen((v) => !v);
+                }}
+                className={navBtn(adminActive)}
+              >
+                管理后台
+                <i className="fa-solid fa-chevron-down ml-1 text-[9px] opacity-70" />
+              </button>
+              {adminOpen ? (
+                <div className="absolute left-1/2 top-full z-[60] mt-2 w-52 -translate-x-1/2 rounded-xl border border-zinc-200/80 bg-white py-1.5 shadow-apple-lg">
+                  {adminItems.map((item) => (
+                    <button
+                      key={item.view}
+                      type="button"
+                      onClick={() => {
+                        setAdminOpen(false);
+                        goView(item.view);
+                      }}
+                      onMouseEnter={() => ROUTE_PREFETCH[item.view]?.()}
+                      className={cn(
+                        'flex w-full px-4 py-2 text-left text-[12px] font-medium hover:bg-zinc-50',
+                        appView === item.view ? 'text-zinc-900' : 'text-zinc-600',
+                      )}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </nav>
 
       <div className="flex items-center gap-1.5">
-        <div className="mr-1 hidden items-center gap-2 rounded-full border border-zinc-200/80 bg-white px-3 py-1 text-[11px] text-zinc-500 md:flex">
-          <span
-            className={cn(
-              'h-1.5 w-1.5 rounded-full',
-              apiConnected ? 'bg-emerald-500/80' : 'bg-amber-400/90',
-            )}
-          />
-          <span>{apiConnected ? '已连接' : '本地模式'}</span>
-        </div>
         <button
           type="button"
           onClick={openPalette}
@@ -329,11 +236,14 @@ export function AppHeader({ apiConnected, onWorkspaceSwitch }: AppHeaderProps) {
             {initial}
           </button>
           {userMenuOpen && user && (
-            <div className="absolute right-0 top-full z-[60] mt-2 w-56 rounded-xl border border-zinc-200/80 bg-white py-1.5 shadow-apple-lg">
+            <div className="absolute right-0 top-full z-[60] mt-2 w-64 rounded-xl border border-zinc-200/80 bg-white py-1.5 shadow-apple-lg">
               <div className="border-b border-zinc-100 px-4 py-2.5">
                 <p className="truncate text-[13px] font-semibold text-zinc-900">{user.name}</p>
                 <p className="truncate text-[11px] text-zinc-500">{user.email}</p>
-                <p className="mt-1 text-[10px] text-zinc-400">{ROLE_LABELS[user.platformRole]}</p>
+                <p className="mt-1.5 text-[11px] font-medium leading-snug text-zinc-700">
+                  {perspectiveLabel}
+                </p>
+                <p className="mt-0.5 text-[10px] text-zinc-400">{ROLE_LABELS[user.platformRole]}</p>
               </div>
               {showTaskEntry ? (
                 <button

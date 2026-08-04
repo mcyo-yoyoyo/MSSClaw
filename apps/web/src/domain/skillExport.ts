@@ -176,8 +176,8 @@ export function skillOpsAnalyticsRow(skill: PrototypeSkillSeed) {
     visibility: skill.visibility || 'org',
     /** 是否已上架可调用（可执行模型任务） */
     publishedExecutable: published,
-    /** 是否精选露出到「做任务」 */
-    featuredInDoTask: !!skill.featuredInDoTask,
+    /** 是否精选露出到「MSS · 场景技能」 */
+    featuredInDoTask: !!(skill.featuredInMssMarket ?? skill.featuredInDoTask),
     businessScenarioId: skill.businessScenarioId ?? null,
     /** 累计被调用执行次数（平台内 bump 计数） */
     invokeCount,
@@ -227,7 +227,7 @@ export function downloadAllSkillsFile(skills: PrototypeSkillSeed[]) {
             所属区域: r.ownerRegionId ? getRegionLabel(r.ownerRegionId as RegionId) : '',
             可见范围: ASSET_VISIBILITY_LABELS[vis] ?? String(vis),
             已上架可调用: r.publishedExecutable ? '是' : '否',
-            精选做任务: r.featuredInDoTask ? '是' : '否',
+            精选MSS场景技能: r.featuredInDoTask ? '是' : '否',
             业务场景篮子: r.businessScenarioId ?? '',
             累计调用次数: r.invokeCount,
             具备执行正文: r.hasExecutableBody ? '是' : '否',
@@ -243,7 +243,7 @@ export function downloadAllSkillsFile(skills: PrototypeSkillSeed[]) {
     { 指标: 'Skill 总数', 值: rows.length },
     { 指标: '已上架可调用数', 值: executableCount },
     { 指标: '当前可对话执行数', 值: runnableCount },
-    { 指标: '精选做任务数', 值: featuredCount },
+    { 指标: '精选MSS场景技能数', 值: featuredCount },
     { 指标: '累计调用总次数', 值: totalInvokes },
     { 指标: '可见-全员', 值: byVisibility.public || 0 },
     { 指标: '可见-本组织', 值: byVisibility.org || 0 },

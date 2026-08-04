@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   ensureStationAnnouncementInbox,
-  getStationAnnouncements,
   openStationAnnouncement,
   openStationAnnouncementList,
 } from '@/domain/stationAnnouncements';
+import { useStationAnnouncementStore } from '@/stores/stationAnnouncementStore';
 
 const BADGE_CLASS: Record<string, string> = {
   上线: 'text-[#C8102E]',
@@ -16,11 +16,24 @@ const BADGE_CLASS: Record<string, string> = {
 /** 站内公告广播条：压缩高度、无消息卡片外框 */
 export function StationAnnounceBanner({ className }: { className?: string }) {
   const [paused, setPaused] = useState(false);
-  const items = getStationAnnouncements();
+  const rawItems = useStationAnnouncementStore((s) => s.items);
+  const items = useMemo(
+    () =>
+      rawItems
+        .filter((a) => a.published)
+        .map(({ published: _p, ...rest }) => rest)
+        .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)),
+    [rawItems],
+  );
+
+  useEffect(() => {
+    useStationAnnouncementStore.getState().hydrate();
+    ensureStationAnnouncementInbox();
+  }, []);
 
   useEffect(() => {
     ensureStationAnnouncementInbox();
-  }, []);
+  }, [items]);
 
   const track = useMemo(() => {
     if (!items.length) return [];

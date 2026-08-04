@@ -499,7 +499,8 @@ export function parseCaseImport(raw: unknown): PortalContentItem | null {
                 f.kind === 'pptx' ||
                 f.kind === 'docx' ||
                 f.kind === 'xlsx' ||
-                f.kind === 'image'
+                f.kind === 'image' ||
+                f.kind === 'video'
                   ? f.kind
                   : 'other',
             };

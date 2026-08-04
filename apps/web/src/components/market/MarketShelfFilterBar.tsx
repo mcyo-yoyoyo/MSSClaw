@@ -14,8 +14,8 @@ export function MarketShelfFilterBar({
   const setSearch = useMarketFilterStore((s) => s.setSearch);
 
   return (
-    <div className={cn('flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center', className)}>
-      <label className="relative min-w-[220px] flex-1 sm:max-w-md">
+    <div className={cn('flex items-center gap-2', className)}>
+      <label className="relative min-w-0 flex-1">
         <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[11px] text-zinc-400" />
         <input
           value={search}

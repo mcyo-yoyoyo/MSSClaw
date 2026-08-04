@@ -7,8 +7,8 @@ interface CenterModalProps {
   onClose: () => void;
   children: ReactNode;
   actions?: ReactNode;
-  /** 弹层宽度：编辑长文案时可用 wider */
-  size?: 'md' | 'lg';
+  /** 弹层宽度：fullscreen 近全屏遮罩，适合文档预览 */
+  size?: 'md' | 'lg' | 'fullscreen';
   /** 叠在其它弹层之上（如详情→编辑） */
   elevate?: boolean;
 }
@@ -24,29 +24,53 @@ export function CenterModal({
 }: CenterModalProps) {
   if (!open) return null;
 
+  const fullscreen = size === 'fullscreen';
+
   return (
     <div
       className={cn(
-        'modal-backdrop fixed inset-0 flex items-center justify-center p-4',
+        'modal-backdrop fixed inset-0 flex items-center justify-center',
+        fullscreen ? 'bg-black/55 p-2 md:p-3' : 'p-4',
         elevate ? 'z-[120]' : 'z-[100]',
       )}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
         className={cn(
-          'max-h-[85vh] w-full overflow-hidden rounded-2xl border border-black/5 bg-white shadow-apple-lg',
-          size === 'lg' ? 'max-w-2xl' : 'max-w-lg',
+          'flex w-full flex-col overflow-hidden rounded-2xl border border-black/5 bg-white shadow-apple-lg',
+          fullscreen
+            ? 'h-[min(96vh,calc(100%-1rem))] max-h-none max-w-none'
+            : 'max-h-[85vh]',
+          !fullscreen && (size === 'lg' ? 'max-w-2xl' : 'max-w-lg'),
         )}
       >
-        <div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-4">
-          <h3 className="text-[15px] font-semibold text-[#1d1d1f]">{title}</h3>
+        <div
+          className={cn(
+            'flex shrink-0 items-center justify-between border-b border-black/[0.06]',
+            fullscreen ? 'px-5 py-3' : 'px-5 py-4',
+          )}
+        >
+          <h3 className="truncate text-[15px] font-semibold text-[#1d1d1f]">{title}</h3>
           <button type="button" onClick={onClose} className="text-[#86868b] transition hover:text-[#1d1d1f]">
             <i className="fa-solid fa-xmark" />
           </button>
         </div>
-        <div className="max-h-[60vh] overflow-y-auto p-5">{children}</div>
+        <div
+          className={cn(
+            fullscreen
+              ? 'min-h-0 flex-1 overflow-hidden p-3 md:p-4'
+              : 'max-h-[60vh] overflow-y-auto p-5',
+          )}
+        >
+          {children}
+        </div>
         {actions && (
-          <div className="flex justify-end gap-2 border-t border-black/[0.06] bg-[#fafafa]/50 px-5 py-4">
+          <div
+            className={cn(
+              'flex shrink-0 justify-end gap-2 border-t border-black/[0.06] bg-[#fafafa]/50',
+              fullscreen ? 'px-5 py-3' : 'px-5 py-4',
+            )}
+          >
             {actions}
           </div>
         )}

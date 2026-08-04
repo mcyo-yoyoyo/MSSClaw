@@ -44,20 +44,21 @@ import {
 } from '@/stores/contentEngagementStore';
 import {
   heatScore,
-  HOME_RANK_TABS,
   sortByRankMode,
   type RankMode,
 } from '@/domain/contentEngagement';
 import { isNewSkill } from '@/domain/contentBadges';
 import { downloadSkillFile } from '@/domain/skillExport';
 import {
-  listCrossShelfMarketCards,
+  applyMarketFeaturedPins,
+  listMarketProjectCards,
+  listMarketToolCards,
   type MarketShelfCard as MarketShelfCardModel,
   type MarketShelfKind,
 } from '@/domain/marketShelf';
 import { openMarketShelf, openMarketToolDetail } from '@/domain/openHomeJourney';
 import { resolveCaseItemsForScenarioId } from '@/domain/portalCase';
-import { MarketShelfCard } from '@/components/market/MarketShelfCard';
+import { HomeMarketChannels } from '@/components/home/HomeMarketChannels';
 import {
   ensurePlazaToolGuidesBootstrapped,
   usePlazaToolGuideStore,
@@ -69,10 +70,15 @@ import { useConversationStore } from '@/stores/conversationStore';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useMarketFilterStore } from '@/stores/marketFilterStore';
 import { useRecentMarketStore } from '@/stores/recentMarketStore';
-import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useMarketFeaturedStore } from '@/stores/marketFeaturedStore';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { greetingForNow } from '@/domain/timeGreeting';
+
+const DEFAULT_RANK_BY_KIND: Record<MarketShelfKind, RankMode> = {
+  external: 'trending',
+  internal: 'trending',
+  projects: 'trending',
+};
 
 interface HomePageProps {
   onSubmitTask: (text: string, agent?: PrototypeAgentSeed | null) => void;
@@ -113,21 +119,17 @@ export function HomePage({
   const setAppView = useAppViewStore((s) => s.setAppView);
   const tools = useMarketplaceStore((s) => s.tools);
   const portalContent = usePortalContentStore((s) => s.items);
-  const marketOrgSelection = useMarketFilterStore((s) => s.orgSelection);
-  const marketBusinessFilter = useMarketFilterStore((s) => s.businessFilter);
   const marketSearch = useMarketFilterStore((s) => s.search);
   const setMarketSearch = useMarketFilterStore((s) => s.setSearch);
   const setMarketBusinessFilter = useMarketFilterStore((s) => s.setBusinessFilter);
   const recentItems = useRecentMarketStore((s) => s.items);
   const hydrateRecent = useRecentMarketStore((s) => s.hydrate);
   const pushRecent = useRecentMarketStore((s) => s.push);
-  const favoriteItems = useMarketFavoriteStore((s) => s.items);
-  const hydrateFavorites = useMarketFavoriteStore((s) => s.hydrate);
-  const toggleFavorite = useMarketFavoriteStore((s) => s.toggle);
   const featuredPins = useMarketFeaturedStore((s) => s.pins);
   const hydrateFeaturedPins = useMarketFeaturedStore((s) => s.hydrate);
   const guideRecords = usePlazaToolGuideStore((s) => s.records);
-  const [rankMode, setRankMode] = useState<RankMode>('trending');
+  const [rankByKind, setRankByKind] =
+    useState<Record<MarketShelfKind, RankMode>>(DEFAULT_RANK_BY_KIND);
   const [businessFilter, setBusinessFilter] = useState<BusinessScenarioId | 'all'>('all');
   const pendingBusinessScenario = useNavigationIntentStore((s) => s.pendingBusinessScenario);
   const consumeBusinessScenario = useNavigationIntentStore((s) => s.consumeBusinessScenario);
@@ -148,10 +150,9 @@ export function HomePage({
 
   useEffect(() => {
     hydrateRecent();
-    hydrateFavorites();
     hydrateFeaturedPins();
     ensurePlazaToolGuidesBootstrapped();
-  }, [hydrateRecent, hydrateFavorites, hydrateFeaturedPins]);
+  }, [hydrateRecent, hydrateFeaturedPins]);
 
   useEffect(() => {
     if (!user) return;
@@ -259,40 +260,83 @@ export function HomePage({
     };
   }, [portalContent]);
 
-  const portalCards = useMemo(() => {
+  const channelCards = useMemo(() => {
     const eng = (id: string) => engagementOf(id);
-    const raw = listCrossShelfMarketCards({
-      tools,
-      viewer,
-      org: marketOrgSelection,
-      business: marketBusinessFilter,
-      search: marketSearch,
-      engagementOf: eng,
-      howtoToolIds,
-      portalByScenario,
-      featuredPins,
-    });
-    return sortByRankMode(raw, rankMode, eng);
+    const org = emptyOrgPerspectiveSelection();
+    const q = marketSearch.trim().toLowerCase();
+    const matchSearch = (c: MarketShelfCardModel) =>
+      !q ||
+      c.title.toLowerCase().includes(q) ||
+      c.description.toLowerCase().includes(q) ||
+      c.badges.some((b) => b.label.toLowerCase().includes(q));
+
+    const external = sortByRankMode(
+      applyMarketFeaturedPins(
+        listMarketToolCards(
+          tools,
+          'external',
+          viewer,
+          org,
+          'all',
+          eng,
+          howtoToolIds,
+        ),
+        featuredPins.external,
+      ).filter(matchSearch),
+      rankByKind.external,
+      eng,
+    );
+    const internal = sortByRankMode(
+      applyMarketFeaturedPins(
+        listMarketToolCards(
+          tools,
+          'internal',
+          viewer,
+          org,
+          'all',
+          eng,
+          howtoToolIds,
+        ),
+        featuredPins.internal,
+      )
+        .map((c) => ({ ...c, featured: false }))
+        .filter(matchSearch),
+      rankByKind.internal,
+      eng,
+    );
+    const projects = sortByRankMode(
+      applyMarketFeaturedPins(
+        listMarketProjectCards(org, 'all', eng, portalByScenario),
+        featuredPins.projects,
+      ).filter(matchSearch),
+      rankByKind.projects,
+      eng,
+    );
+
+    return { external, internal, projects } satisfies Record<
+      MarketShelfKind,
+      MarketShelfCardModel[]
+    >;
   }, [
     tools,
     viewer,
-    marketOrgSelection,
-    marketBusinessFilter,
     marketSearch,
     engagementOf,
     engagementById,
     howtoToolIds,
     portalByScenario,
     featuredPins,
-    rankMode,
+    rankByKind,
   ]);
 
   useEffect(() => {
-    if (portalCards.length) ensureEngagementSeeds(portalCards.map((c) => c.id));
-  }, [portalCards]);
-
-  const isFavorited = (card: MarketShelfCardModel) =>
-    favoriteItems.some((x) => x.id === card.id && x.kind === card.kind);
+    const ids = [
+      ...channelCards.external,
+      ...channelCards.internal,
+      ...channelCards.projects,
+    ].map((c) => c.id);
+    if (ids.length) ensureEngagementSeeds(ids);
+  }, [channelCards]);
 
   const rememberCard = (card: MarketShelfCardModel) => {
     pushRecent({
@@ -314,17 +358,6 @@ export function HomePage({
       return true;
     }
     return false;
-  };
-
-  const onToggleFavorite = (card: MarketShelfCardModel) => {
-    const added = toggleFavorite({
-      id: card.id,
-      kind: card.kind,
-      title: card.title,
-      icon: card.icon,
-      logoUrl: card.logoUrl,
-    });
-    showToast(added ? `已收藏：${card.title}` : `已取消收藏：${card.title}`);
   };
 
   const openPortalCard = (card: MarketShelfCardModel) => {
@@ -368,14 +401,6 @@ export function HomePage({
     openMarketToolDetail(id, kind);
   };
 
-  const portalEmptyHint =
-    marketSearch.trim() ||
-    marketOrgSelection.dept.length ||
-    marketOrgSelection.region.length ||
-    marketBusinessFilter !== 'all'
-      ? '当前筛选下暂无推荐。可清空左侧领域/区域/场景，或调整搜索关键词。'
-      : '权限范围内暂无上架内容。若预期应可见，请联系运营确认可见性与上架状态。';
-
   const selectSkill = (skill: PrototypeSkillSeed) => {
     setSelectedSkillId(skill.id);
     setSelectedAgentId(null);
@@ -410,16 +435,16 @@ export function HomePage({
     <div className="home-surface flex min-h-0 flex-1 flex-col overflow-y-auto scroll-hidden">
       <div
         className={cn(
-          'mx-auto flex w-full flex-1 flex-col overflow-x-visible py-4 md:py-5',
+          'mx-auto flex w-full flex-1 flex-col overflow-x-visible py-3 md:py-4',
           showAssistant
             ? 'max-w-[960px] px-8 md:px-11'
-            : 'max-w-[1280px] px-5 md:px-7',
+            : 'max-w-[1360px] px-5 md:px-7',
         )}
       >
         {showAssistant ? (
           <header className="mb-3 text-center">
             <h1 className="home-slogan-art">
-              <span className="home-slogan-gradient">MSS AI 工具平台</span>
+              <span className="home-slogan-gradient">MSS AI提效作战平台</span>
             </h1>
             <p className="mx-auto mt-2 max-w-xl text-[12px] leading-relaxed text-zinc-500">
               {askSubtitle}
@@ -560,92 +585,64 @@ export function HomePage({
             ) : null}
           </div>
         ) : (
-          <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-9 pb-8">
-            <section className="relative overflow-hidden rounded-[28px] border border-zinc-200/80 bg-gradient-to-b from-white via-zinc-50/70 to-zinc-100/40 px-5 py-8 text-center shadow-[0_12px_40px_-28px_rgba(24,24,27,0.35)] md:px-10 md:py-10">
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(ellipse_at_top,rgba(24,24,27,0.05),transparent_70%)]"
-              />
-              <p className="relative text-[13px] font-medium text-zinc-500">
-                {greetingForNow()}
-                {user?.name ? `，${user.name}` : ''}
-              </p>
-              <h1 className="relative mt-2 text-[28px] font-semibold tracking-tight text-zinc-900 md:text-[32px]">
-                探索 AI 的无限可能
-              </h1>
-              <p className="relative mx-auto mt-2 max-w-lg text-[13px] leading-relaxed text-zinc-500">
-                发现最热门的 AI 工具、内部应用和创新项目
-              </p>
-              <form
-                className="relative mx-auto mt-6 flex max-w-xl gap-2"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  openMarketShelf('external');
-                }}
-              >
-                <label className="relative min-w-0 flex-1">
-                  <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[12px] text-zinc-400" />
-                  <input
-                    value={marketSearch}
-                    onChange={(e) => setMarketSearch(e.target.value)}
-                    placeholder="搜索工具或项目（权限范围内）…"
-                    className="w-full rounded-2xl border border-zinc-200/90 bg-white py-3.5 pl-11 pr-4 text-[14px] text-zinc-800 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-300 focus:ring-2 focus:ring-zinc-100"
-                  />
-                </label>
-                <button
-                  type="submit"
-                  className="shrink-0 rounded-2xl bg-zinc-900 px-5 py-3.5 text-[13px] font-semibold text-white shadow-sm transition hover:bg-zinc-800"
+          <div className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 pb-6 md:gap-5">
+            <StationAnnounceBanner className="rounded-xl border border-zinc-200/80 bg-white/90 px-3.5 py-1.5 shadow-[0_6px_18px_-16px_rgba(24,24,27,0.35)]" />
+
+            <section className="relative overflow-hidden rounded-2xl border border-zinc-200/80 bg-gradient-to-r from-white via-zinc-50/60 to-white px-4 py-4 shadow-[0_10px_28px_-24px_rgba(24,24,27,0.35)] md:px-5 md:py-4">
+              <div className="relative flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-5">
+                <div className="min-w-0 md:max-w-[52%]">
+                  <p className="text-[12px] font-medium text-zinc-500">
+                    {greetingForNow()}
+                    {user?.name ? `，${user.name}` : ''}
+                  </p>
+                  <h1 className="mt-0.5 text-[20px] font-semibold tracking-tight text-zinc-900 md:text-[22px]">
+                    探索 AI 的无限可能
+                  </h1>
+                  <p className="mt-1 text-[12px] leading-snug text-zinc-500">
+                    工具分三类：外部工具精选 · 公司工具推荐 · MSS工具集市
+                  </p>
+                </div>
+                <form
+                  className="flex w-full gap-2 md:max-w-md md:flex-1"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    openMarketShelf('external');
+                  }}
                 >
-                  搜索
-                </button>
-              </form>
-            </section>
-
-            <section>
-              <div className="mb-5 flex justify-center">
-                <div className="inline-flex flex-wrap justify-center gap-1 rounded-2xl border border-zinc-200/90 bg-white/80 p-1 shadow-sm backdrop-blur">
-                  {HOME_RANK_TABS.map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setRankMode(tab.id)}
-                      className={cn(
-                        'rounded-xl px-4 py-2 text-[12px] font-medium transition',
-                        rankMode === tab.id
-                          ? 'bg-zinc-900 text-white shadow-sm'
-                          : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800',
-                      )}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {portalCards.length > 0 ? (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {portalCards.map((c) => (
-                    <MarketShelfCard
-                      key={`${c.kind}-${c.id}`}
-                      card={c}
-                      favorited={isFavorited(c)}
-                      onOpen={() => openPortalCard(c)}
-                      onPrimary={() => openPortalPrimary(c)}
-                      onHowTo={() => openPortalHowTo(c)}
-                      onFavorite={() => onToggleFavorite(c)}
+                  <label className="relative min-w-0 flex-1">
+                    <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[12px] text-zinc-400" />
+                    <input
+                      value={marketSearch}
+                      onChange={(e) => setMarketSearch(e.target.value)}
+                      placeholder="搜索工具或项目（权限范围内）…"
+                      className="w-full rounded-xl border border-zinc-200/90 bg-white py-2.5 pl-10 pr-3 text-[13px] text-zinc-800 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-300 focus:ring-2 focus:ring-zinc-100"
                     />
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-dashed border-zinc-200 bg-white/80 px-4 py-16 text-center text-[13px] text-zinc-400">
-                  {portalEmptyHint}
-                </div>
-              )}
+                  </label>
+                  <button
+                    type="submit"
+                    className="shrink-0 rounded-xl bg-zinc-900 px-4 py-2.5 text-[12px] font-semibold text-white shadow-sm transition hover:bg-zinc-800"
+                  >
+                    搜索
+                  </button>
+                </form>
+              </div>
             </section>
+
+            <HomeMarketChannels
+              cardsByKind={channelCards}
+              rankByKind={rankByKind}
+              onRankChange={(kind, mode) =>
+                setRankByKind((prev) => ({ ...prev, [kind]: mode }))
+              }
+              onOpen={openPortalCard}
+              onPrimary={openPortalPrimary}
+              onHowTo={openPortalHowTo}
+              searchActive={Boolean(marketSearch.trim())}
+            />
 
             {recentItems.length > 0 ? (
-              <section className="border-t border-zinc-100 pt-7">
-                <h2 className="mb-3 text-[13px] font-semibold text-zinc-800">最近使用</h2>
+              <section className="border-t border-zinc-100 pt-4">
+                <h2 className="mb-2.5 text-[13px] font-semibold text-zinc-800">最近使用</h2>
                 <div className="flex flex-wrap gap-3">
                   {recentItems.slice(0, 8).map((item) => (
                     <button
@@ -673,39 +670,9 @@ export function HomePage({
               </section>
             ) : null}
 
-            {favoriteItems.length > 0 ? (
-              <section id="home-favorites" className="border-t border-zinc-100 pt-7">
-                <h2 className="mb-3 text-[13px] font-semibold text-zinc-800">我的收藏</h2>
-                <div className="flex flex-wrap gap-3">
-                  {favoriteItems.slice(0, 8).map((item) => (
-                    <button
-                      key={`fav-${item.kind}-${item.id}`}
-                      type="button"
-                      title={item.title}
-                      onClick={() => openMarketItem(item.kind, item.id)}
-                      className="flex w-[76px] flex-col items-center gap-1.5 rounded-2xl border border-transparent p-2 transition hover:border-zinc-200 hover:bg-white hover:shadow-sm"
-                    >
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-50 ring-1 ring-zinc-100">
-                        <ToolLogo
-                          name={item.title}
-                          logoUrl={item.logoUrl}
-                          icon={item.icon}
-                          size={36}
-                          className="rounded-xl"
-                        />
-                      </div>
-                      <span className="w-full truncate text-center text-[10px] text-zinc-600">
-                        {item.title}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            ) : null}
-
             {executeAllowed && recentTasks.length > 0 ? (
-              <section className="border-t border-zinc-100 pt-7">
-                <div className="mb-3 flex items-center justify-between">
+              <section className="border-t border-zinc-100 pt-4">
+                <div className="mb-2.5 flex items-center justify-between">
                   <h2 className="text-[13px] font-semibold text-zinc-800">最近任务</h2>
                   <button
                     type="button"
