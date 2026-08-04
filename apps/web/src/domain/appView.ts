@@ -1,4 +1,4 @@
-﻿export const APP_VIEWS = [
+export const APP_VIEWS = [
   'home',
   'market-external',
   'market-internal',

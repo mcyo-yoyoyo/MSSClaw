@@ -1,4 +1,4 @@
-﻿import type { AppView, NavSection } from '@/domain/appView';
+import type { AppView, NavSection } from '@/domain/appView';
 import { APP_VIEWS } from '@/domain/appView';
 import { WORKSPACE_CONFIG_VIEW } from '@/domain/workspaceConfig';
 import { PlatformRoleSchema, ROLE_LABELS, type PlatformRole } from '@/domain/rbac';
