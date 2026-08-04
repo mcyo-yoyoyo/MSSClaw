@@ -99,7 +99,12 @@ export function WorkspaceConfigPage() {
       <div className="mx-auto max-w-3xl">
         <CenterPageHeader
           title="租户配置"
-          subtitle="租户生命周期 · 组织双轴（部门 × 区域）· 语言与顶栏可见性"
+          subtitle="数据空间开关与顶栏租户列表（战区/业务空间）。不控制工具、案例、Skill 的「全员/本组织」可见性——那由各资产的归属与可见性字段决定。"
+          tip={
+            <>
+              短期生态繁荣阶段可保持全部租户启用即可；HR 等「仅组织内可见」场景请在配置技能/专家/工具里设可见性为「本组织」，无需改租户配置。
+            </>
+          }
           actions={
             <div className="flex flex-wrap gap-2">
               <button

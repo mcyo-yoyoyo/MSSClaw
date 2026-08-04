@@ -260,88 +260,107 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
           }
         />
 
-        <div className="rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-3 py-2.5 space-y-2.5">
-          <FormField label="上架货架">
-            <FormSelect
-              value={shelf}
-              onChange={(e) => {
-                const next = e.target.value as MarketShelfSlot;
-                setForm({
-                  ...form,
-                  marketShelf: next,
-                  sourceType:
-                    next === 'external'
-                      ? 'external'
-                      : next === 'internal'
-                        ? 'internal'
-                        : form.sourceType,
-                  category: next === 'external' ? 'external' : form.category,
-                  featuredInFindCases: next === 'none' ? false : form.featuredInFindCases,
-                });
-              }}
-            >
-              <option value="none">不上架（仅配置目录）</option>
-              <option value="external">外部工具精选</option>
-              <option value="internal">公司工具推荐</option>
-            </FormSelect>
-            <p className="mt-1 text-[11px] leading-snug text-zinc-500">{MARKET_SHELF_SLOT_HINT}</p>
-          </FormField>
-
-          {shelf === 'external' ? (
-            <FormField label="应用场景标题（外精选卡主标题）">
-              <FormInput
-                value={form.marketTitle ?? ''}
-                placeholder="例：竞品舆情监控 · 市场洞察"
-                onChange={(e) => setForm({ ...form, marketTitle: e.target.value })}
-              />
-              <p className="mt-1 text-[11px] leading-snug text-zinc-500">
-                卡片主标题展示此文案；产品名弱化显示在下方。留空则按 AI 能力分类 + 业务场景自动推断。
-              </p>
-            </FormField>
-          ) : null}
-
+        <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-3 py-2.5 space-y-2">
+          <p className="text-[11px] font-semibold text-zinc-700">货架陈列</p>
+          <p className="text-[11px] leading-relaxed text-zinc-500">
+            上架到「外部工具精选 / 公司工具推荐」、场景标题、精选角标与置顶，请在{' '}
+            <strong className="font-semibold text-zinc-700">门户运营 · 货架运营</strong>{' '}
+            配置。本页只维护工具主数据（名称、链接、归属、发布）。
+          </p>
           {shelf !== 'none' ? (
-            <FormField label="业务场景（货架筛选）">
-              <div className="flex flex-wrap gap-1.5">
-                {scenarioCats.map((c) => {
-                  const on = (form.businessScenarioIds ?? []).includes(c.id);
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => toggleScenario(c.id)}
-                      className={
-                        on
-                          ? 'rounded-lg border border-claw-500/40 bg-claw-50 px-2 py-1 text-[11px] font-medium text-claw-800'
-                          : 'rounded-lg border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-600 hover:border-zinc-300'
-                      }
-                    >
-                      {c.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </FormField>
-          ) : null}
-
-          {shelf !== 'none' ? (
-            <label className="flex cursor-pointer items-start gap-2">
-              <input
-                type="checkbox"
-                className="mt-0.5 accent-claw-600"
-                checked={Boolean(form.featuredInFindCases)}
-                onChange={(e) => setForm({ ...form, featuredInFindCases: e.target.checked })}
-              />
-              <span>
-                <span className="block text-[13px] font-medium text-zinc-800">
-                  精选露出到货架「精选推荐」
-                </span>
-                <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500">
-                  {FIND_CASES_FEATURED_HINT}
-                </span>
-              </span>
-            </label>
-          ) : null}
+            <p className="rounded-lg border border-emerald-100 bg-emerald-50/70 px-2.5 py-1.5 text-[11px] text-emerald-800">
+              当前货架：
+              {shelf === 'external' ? '外部工具精选' : '公司工具推荐'}
+              {form.marketTitle?.trim() ? ` · ${form.marketTitle.trim()}` : ''}
+              {form.featuredInFindCases ? ' · 精选角标开' : ''}
+            </p>
+          ) : (
+            <p className="text-[11px] text-zinc-400">当前未上架到业务货架（可在门户运营上架）。</p>
+          )}
+          <details className="rounded-lg border border-zinc-200 bg-white px-2.5 py-2">
+            <summary className="cursor-pointer text-[11px] font-medium text-zinc-600">
+              高级：本工具建议货架（可选，仍推荐以门户为准）
+            </summary>
+            <div className="mt-2 space-y-2.5">
+              <FormField label="建议货架">
+                <FormSelect
+                  value={shelf}
+                  onChange={(e) => {
+                    const next = e.target.value as MarketShelfSlot;
+                    setForm({
+                      ...form,
+                      marketShelf: next,
+                      sourceType:
+                        next === 'external'
+                          ? 'external'
+                          : next === 'internal'
+                            ? 'internal'
+                            : form.sourceType,
+                      category: next === 'external' ? 'external' : form.category,
+                      featuredInFindCases: next === 'none' ? false : form.featuredInFindCases,
+                    });
+                  }}
+                >
+                  <option value="none">不上架（仅配置目录）</option>
+                  <option value="external">外部工具精选</option>
+                  <option value="internal">公司工具推荐</option>
+                </FormSelect>
+                <p className="mt-1 text-[11px] leading-snug text-zinc-500">{MARKET_SHELF_SLOT_HINT}</p>
+              </FormField>
+              {shelf === 'external' ? (
+                <FormField label="应用场景标题">
+                  <FormInput
+                    value={form.marketTitle ?? ''}
+                    placeholder="例：竞品舆情监控 · 市场洞察"
+                    onChange={(e) => setForm({ ...form, marketTitle: e.target.value })}
+                  />
+                </FormField>
+              ) : null}
+              {shelf !== 'none' ? (
+                <FormField label="业务场景">
+                  <div className="flex flex-wrap gap-1.5">
+                    {scenarioCats.map((c) => {
+                      const on = (form.businessScenarioIds ?? []).includes(c.id);
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => toggleScenario(c.id)}
+                          className={
+                            on
+                              ? 'rounded-lg border border-claw-500/40 bg-claw-50 px-2 py-1 text-[11px] font-medium text-claw-800'
+                              : 'rounded-lg border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-600 hover:border-zinc-300'
+                          }
+                        >
+                          {c.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </FormField>
+              ) : null}
+              {shelf !== 'none' ? (
+                <label className="flex cursor-pointer items-start gap-2">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 accent-claw-600"
+                    checked={Boolean(form.featuredInFindCases)}
+                    onChange={(e) =>
+                      setForm({ ...form, featuredInFindCases: e.target.checked })
+                    }
+                  />
+                  <span>
+                    <span className="block text-[13px] font-medium text-zinc-800">
+                      精选露出到货架「精选推荐」
+                    </span>
+                    <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500">
+                      {FIND_CASES_FEATURED_HINT}
+                    </span>
+                  </span>
+                </label>
+              ) : null}
+            </div>
+          </details>
         </div>
 
         <label className="flex cursor-pointer items-center gap-2">

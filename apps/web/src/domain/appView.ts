@@ -63,9 +63,9 @@ export const APP_VIEW_NAV: AppViewNavItem[] = [
   { id: 'agents', label: '配置专家', subtitle: '上架 · 发布 · 编排（运营）', icon: 'fa-robot', section: 'platform' },
   { id: 'tools', label: '配置工具', subtitle: '连接器 · 外部 API · 上架', icon: 'fa-plug', section: 'platform' },
   { id: 'kb', label: '管理知识', subtitle: '企业文档 · RAG · 溯源治理', icon: 'fa-book-open', section: 'platform' },
+  { id: 'memory', label: '管理记忆', subtitle: 'Agent 长期记忆 · Reflection', icon: 'fa-brain', section: 'platform' },
   { id: 'automation', label: '自动化设置', subtitle: '定时 · 告警 · 周报', icon: 'fa-bolt', section: 'platform' },
   { id: 'workflow', label: '工作流设置', subtitle: 'LangGraph · 专家编排', icon: 'fa-diagram-project', section: 'platform' },
-  { id: 'memory', label: '管理记忆', subtitle: 'Agent 长期记忆 · Reflection', icon: 'fa-brain', section: 'platform' },
   { id: 'prompts', label: '提示词', subtitle: '暂不开放 · 草稿/审批资产库（保留）', icon: 'fa-file-code', section: 'platform' },
 ];
 
@@ -79,9 +79,9 @@ export const ADMIN_MENU_VIEWS = [
   'agents',
   'tools',
   'kb',
+  'memory',
   'automation',
   'workflow',
-  'memory',
   'admin',
   'presentation',
   'workspace-config',

@@ -239,16 +239,16 @@ export function PortalContentOpsPage() {
           title="门户运营"
           subtitle={
             opsSurface === 'packs'
-              ? '按场景方案包配置 · 三槽分责维护'
+              ? '场景内容 · 方案包三槽分责维护'
               : opsSurface === 'featured'
-                ? '货架精选置顶 · 三货架推荐位'
+                ? '货架运营 · 上架选品 / 场景标题 / 精选置顶'
                 : opsSurface === 'announce'
-                  ? '首页站内公告跑马灯 · 同步我的消息'
+                  ? '站点触达 · 首页站内公告跑马灯'
                   : opsSurface === 'scenes'
-                    ? 'MSS 场景分类字典 · 文案 / 图标 / 顺序'
+                    ? '场景分类字典 · 文案 / 图标 / 顺序'
                     : opsSurface === 'buildstats'
-                      ? 'MSS 建设概况 · 统计口径与建设目标'
-                      : '外部 / 公司工具 How to · 货架上手指引'
+                      ? '站点触达 · MSS 建设概况口径'
+                      : '货架运营 · 外部 / 公司工具 How to'
           }
           tip={
             opsSurface === 'packs' ? (
@@ -259,7 +259,7 @@ export function PortalContentOpsPage() {
               </>
             ) : opsSurface === 'featured' ? (
               <>
-                配置三货架「精选」置顶项；保存后立即影响货架精选条与首页三栏排序权重。不造假涨跌数据。
+                在此完成货架陈列：将已发布工具上架到外精选/公司推荐、填写场景标题与精选角标，并配置精选条置顶。工具主数据请在「配置工具」维护。
               </>
             ) : opsSurface === 'announce' ? (
               <>
@@ -420,12 +420,12 @@ export function PortalContentOpsPage() {
         <div className="mb-4 flex flex-wrap gap-1.5">
           {(
             [
-              { id: 'packs' as const, label: '场景方案包' },
-              { id: 'scenes' as const, label: '场景分类' },
-              { id: 'buildstats' as const, label: '建设概况口径' },
-              { id: 'announce' as const, label: '站内公告' },
-              { id: 'howto' as const, label: '工具 How to' },
-              { id: 'featured' as const, label: '货架推荐位' },
+              { id: 'packs' as const, label: '场景内容', group: '场景' },
+              { id: 'scenes' as const, label: '场景分类', group: '场景' },
+              { id: 'featured' as const, label: '货架运营', group: '货架' },
+              { id: 'howto' as const, label: '工具 How to', group: '货架' },
+              { id: 'announce' as const, label: '站内公告', group: '站点' },
+              { id: 'buildstats' as const, label: '建设概况口径', group: '站点' },
             ] as const
           ).map((tab) => (
             <button
@@ -438,11 +438,15 @@ export function PortalContentOpsPage() {
                   ? 'bg-zinc-900 text-white'
                   : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200/80',
               )}
+              title={`${tab.group} · ${tab.label}`}
             >
               {tab.label}
             </button>
           ))}
         </div>
+        <p className="mb-4 text-[10px] leading-relaxed text-zinc-400">
+          分组：场景（内容/分类）→ 货架（上架选品·置顶 / How to）→ 站点（公告/建设口径）。工具主数据仍在「配置工具」；货架陈列以「货架运营」为准。
+        </p>
 
         {howtoToast ? (
           <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-800">

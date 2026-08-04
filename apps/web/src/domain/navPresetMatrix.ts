@@ -119,8 +119,14 @@ export function validateNamedPresetMatrices(): string[] {
   if (stdAdmin.size > fullAdmin.size) {
     errors.push(`super_admin standard(${stdAdmin.size}) 不应多于 full(${fullAdmin.size})`);
   }
-  for (const id of ['admin', 'presentation', 'workspace-config', 'portal-ops'] as NavSlotId[]) {
+  for (const id of ['admin', 'presentation', 'portal-ops'] as NavSlotId[]) {
     if (!mvpAdmin.has(id)) errors.push(`customer/super_admin 应启用治理项 ${id}`);
+  }
+  if (mvpAdmin.has('workspace-config')) {
+    errors.push('customer/super_admin 不应默认启用租户配置（MVP 弱化入口）');
+  }
+  if (!stdAdmin.has('workspace-config')) {
+    errors.push('standard/super_admin 应启用租户配置');
   }
 
   return errors;

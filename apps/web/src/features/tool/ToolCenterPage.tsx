@@ -14,7 +14,7 @@ import {
 } from '@/components/center/CenterShell';
 import { OrgAssetFilterBar } from '@/components/center/OrgAssetFilters';
 import { ToolEditorModal, type ToolEditorTarget } from '@/components/center/ToolEditorModal';
-import { ToolLogo } from '@/components/brand/ToolLogo';
+import { accentColorFromId } from '@/domain/skillAccent';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { isAiSaasTool } from '@/domain/portalNavigation';
@@ -86,8 +86,8 @@ export function ToolCenterPage() {
     <div className="center-surface center-page scroll-hidden flex-1 overflow-y-auto">
       <div className="mx-auto max-w-6xl">
         <CenterPageHeader
-          title="工具"
-          subtitle="能力上架进目录；勾选精选露出后出现在找案例「场景工具」（连接器多由技能调用）"
+          title="配置工具"
+          subtitle="登记主数据与上架；外精选 / 公司推荐的陈列与 How to 在「门户运营」维护"
           tip={
             <>
               各 NP 与区域可将内外部工具登记上架。可见性：全员 / 本组织（有区域则同区域）/ 仅发布方。欧洲账号默认看不到拉美「本组织」工具，但可看到全员公开工具。
@@ -147,75 +147,102 @@ export function ToolCenterPage() {
           showScope
         />
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
           {list.length ? (
-            list.map((t) => (
-              <div key={t.id} className="market-card apple-card flex flex-col p-4">
-                <div className="mb-2 flex items-start justify-between gap-2">
-                  <ToolLogo name={t.name} logoUrl={t.logoUrl} icon={t.icon} size={36} />
-                  <div className="flex flex-col items-end gap-1">
+            list.map((t) => {
+              const accent = accentColorFromId(t.id);
+              return (
+                <div
+                  key={t.id}
+                  className="market-card apple-card flex flex-col px-3 py-2.5"
+                  style={{ borderLeft: `3px solid ${accent}` }}
+                >
+                  <div className="flex items-start gap-2">
                     <span
-                      className={cn(
-                        'rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                        t.published
-                          ? 'border border-zinc-200 bg-claw-50 text-zinc-700'
-                          : 'bg-black/[0.04] text-[#86868b]',
-                      )}
+                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: accent }}
+                      title="标识色"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="truncate text-[13px] font-semibold leading-tight text-zinc-900">
+                          {t.name}
+                        </h3>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <span
+                            className={cn(
+                              'rounded px-1.5 py-0.5 text-[9px] font-semibold',
+                              t.published
+                                ? 'bg-claw-50 text-claw-700'
+                                : 'bg-zinc-100 text-zinc-500',
+                            )}
+                          >
+                            {t.published ? '已发布' : '草稿'}
+                          </span>
+                          {(t.sourceType === 'external' || isAiSaasTool(t)) && (
+                            <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700">
+                              {isAiSaasTool(t) ? 'AI SaaS' : '外部'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-zinc-500">
+                        {t.desc || '暂无描述'}
+                      </p>
+                      <p className="mt-1 truncate text-[10px] text-zinc-400">
+                        {(t.ownerDeptIds ?? []).slice(0, 2).map(getDeptLabel).join(' · ') ||
+                          '未指定职能'}
+                        {t.ownerRegionId ? ` · ${getRegionLabel(t.ownerRegionId)}` : ''}
+                        {' · '}
+                        {ASSET_VISIBILITY_LABELS[t.visibility ?? 'public']}
+                      </p>
+                      <p className="mt-0.5 truncate text-[10px] text-zinc-400">
+                        {t.publisher || t.author} · {t.invokes} 次
+                      </p>
+                      {t.tags.slice(0, 3).length ? (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {t.tags.slice(0, 3).map((tag) => (
+                            <span
+                              key={tag}
+                              className="rounded bg-zinc-100 px-1.5 py-0.5 text-[9px] text-zinc-600"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="mt-2 flex gap-1.5 border-t border-black/[0.04] pt-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpen(t)}
+                      className="apple-btn-primary flex-1 rounded-md py-1 text-[11px] font-semibold text-white transition"
                     >
-                      {t.published ? '已发布' : '草稿'}
-                    </span>
-                    {(t.sourceType === 'external' || isAiSaasTool(t)) && (
-                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-semibold text-emerald-700">
-                        {isAiSaasTool(t) ? 'AI SaaS' : '外部'}
-                      </span>
-                    )}
+                      {t.sourceType === 'external' ? '打开' : '查看说明'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDetail(t)}
+                      className="rounded-md border border-black/8 px-2.5 py-1 text-[11px] font-medium transition hover:bg-black/[0.03]"
+                    >
+                      详情
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditorTarget(t.id)}
+                      className="rounded-md border border-black/8 px-2.5 py-1 text-[11px] font-medium transition hover:bg-black/[0.03]"
+                    >
+                      编辑
+                    </button>
                   </div>
                 </div>
-                <h3 className="text-[13px] font-semibold text-zinc-900">{t.name}</h3>
-                <p className="mt-1 flex-1 text-[11px] text-zinc-500">{t.desc}</p>
-                <p className="mt-1.5 text-[10px] text-zinc-400">
-                  {(t.ownerDeptIds ?? []).slice(0, 2).map(getDeptLabel).join(' · ') || '未指定职能'}
-                  {t.ownerRegionId ? ` · ${getRegionLabel(t.ownerRegionId)}` : ''}
-                  {' · '}
-                  {ASSET_VISIBILITY_LABELS[t.visibility ?? 'public']}
-                </p>
-                <p className="mt-1 text-[10px] text-zinc-400">
-                  {t.publisher || t.author} · {t.invokes} 次
-                </p>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {t.tags.slice(0, 3).map((tag) => (
-                    <span key={tag} className="rounded-md bg-black/[0.04] px-1.5 py-0.5 text-[9px] text-[#1d1d1f]">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-                <div className="mt-3 flex gap-2 border-t border-black/[0.04] pt-2.5">
-                  <button
-                    type="button"
-                    onClick={() => handleOpen(t)}
-                    className="apple-btn-primary flex-1 rounded-lg py-1.5 text-[11px] font-semibold text-white transition"
-                  >
-                    {t.sourceType === 'external' ? '打开' : '查看说明'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDetail(t)}
-                    className="rounded-lg border border-black/8 px-2.5 py-1.5 text-[11px] font-medium transition hover:bg-black/[0.03]"
-                  >
-                    详情
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditorTarget(t.id)}
-                    className="rounded-lg border border-black/8 px-2.5 py-1.5 text-[11px] font-medium transition hover:bg-black/[0.03]"
-                  >
-                    编辑
-                  </button>
-                </div>
-              </div>
-            ))
+              );
+            })
           ) : (
-            <div className="apple-card col-span-3 p-8 text-center text-[#86868b]">未找到匹配的 Tool</div>
+            <div className="apple-card col-span-3 p-8 text-center text-[#86868b]">
+              未找到匹配的工具
+            </div>
           )}
         </div>
       </div>

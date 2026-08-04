@@ -10,7 +10,7 @@ import {
 } from '@/components/center/CenterShell';
 import { OrgAssetFilterBar } from '@/components/center/OrgAssetFilters';
 import { AgentEditorModal, type AgentEditorTarget } from '@/components/center/AgentEditorModal';
-import { AgentAvatar } from '@/components/brand/AgentAvatar';
+import { accentColorFromId } from '@/domain/skillAccent';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import type { EfficiencyFilter } from '@/domain/assetFilters';
 import { downloadAgentFile, downloadAllAgentsFile } from '@/domain/agentExport';
@@ -155,58 +155,77 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
           showScope
         />
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
           {list.length ? (
             list.map((a) => {
               const pack = getAgentPack(a.id);
               const runnable = Boolean(a.systemPrompt || pack?.systemPrompt);
+              const accent = accentColorFromId(a.id);
               return (
-                <div key={a.id} className="market-card apple-card flex flex-col p-4">
-                  <div className="mb-2 flex items-start justify-between gap-2">
-                    <AgentAvatar agentId={a.id} size={36} title={a.name} />
-                    <div className="flex flex-col items-end gap-1">
-                      <span
-                        className={cn(
-                          'rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                          a.published
-                            ? 'border border-zinc-200 bg-claw-50 text-zinc-700'
-                            : 'bg-black/[0.04] text-[#86868b]',
-                        )}
-                      >
-                        {a.published ? '已发布' : '草稿'}
-                      </span>
-                      {runnable ? (
-                        <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[9px] font-semibold text-sky-700">
-                          可对话执行
-                        </span>
+                <div
+                  key={a.id}
+                  className="market-card apple-card flex flex-col px-3 py-2.5"
+                  style={{ borderLeft: `3px solid ${accent}` }}
+                >
+                  <div className="flex items-start gap-2">
+                    <span
+                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: accent }}
+                      title="标识色"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="truncate text-[13px] font-semibold leading-tight text-zinc-900">
+                          {a.name}
+                        </h3>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <span
+                            className={cn(
+                              'rounded px-1.5 py-0.5 text-[9px] font-semibold',
+                              a.published
+                                ? 'bg-claw-50 text-claw-700'
+                                : 'bg-zinc-100 text-zinc-500',
+                            )}
+                          >
+                            {a.published ? '已发布' : '草稿'}
+                          </span>
+                          {runnable ? (
+                            <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[9px] font-semibold text-sky-700">
+                              可对话
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                      <p className="mt-0.5 truncate text-[10px] font-semibold text-claw-600">
+                        {getEfficiencyLabel(a.category)} · {a.bizLine}
+                      </p>
+                      <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-zinc-500">
+                        {a.desc || '暂无描述'}
+                      </p>
+                      <p className="mt-1 truncate text-[10px] text-zinc-400">
+                        {a.author} · {a.invokes.toLocaleString()} 次调用
+                      </p>
+                      {getSkillLabels(a.id).slice(0, 3).length ? (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {getSkillLabels(a.id)
+                            .slice(0, 3)
+                            .map((s) => (
+                              <span
+                                key={s}
+                                className="rounded bg-zinc-100 px-1.5 py-0.5 text-[9px] text-zinc-600"
+                              >
+                                {s}
+                              </span>
+                            ))}
+                        </div>
                       ) : null}
                     </div>
                   </div>
-                  <span className="text-[10px] font-semibold text-claw-600">
-                    {getEfficiencyLabel(a.category)} · {a.bizLine}
-                  </span>
-                  <h3 className="mt-0.5 text-[13px] font-semibold text-zinc-900">{a.name}</h3>
-                  <p className="mt-1 flex-1 text-[11px] leading-relaxed text-zinc-500">{a.desc}</p>
-                  <p className="mt-1.5 text-[10px] text-zinc-400">
-                    {a.author} · {a.invokes.toLocaleString()} 次调用
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {getSkillLabels(a.id)
-                      .slice(0, 4)
-                      .map((s) => (
-                        <span
-                          key={s}
-                          className="rounded-md bg-black/[0.04] px-1.5 py-0.5 text-[9px] text-[#1d1d1f]"
-                        >
-                          {s}
-                        </span>
-                      ))}
-                  </div>
-                  <div className="mt-3 flex gap-2 border-t border-black/[0.04] pt-2.5">
+                  <div className="mt-2 flex gap-1.5 border-t border-black/[0.04] pt-2">
                     <button
                       type="button"
                       onClick={() => handleInvoke(a)}
-                      className="apple-btn-primary flex-1 rounded-lg py-1.5 text-[11px] font-semibold text-white transition"
+                      className="apple-btn-primary flex-1 rounded-md py-1 text-[11px] font-semibold text-white transition"
                     >
                       调用
                     </button>
@@ -216,7 +235,7 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
                         downloadAgentFile(a);
                         showToast(`已下载专家包 ${a.name}.agent.zip`);
                       }}
-                      className="rounded-lg border border-black/8 px-2.5 py-1.5 text-[11px] font-medium transition hover:bg-black/[0.03]"
+                      className="rounded-md border border-black/8 px-2.5 py-1 text-[11px] font-medium transition hover:bg-black/[0.03]"
                       title="下载专家包（AGENT.md + reference/templates）"
                     >
                       <i className="fa-solid fa-download" />
@@ -224,14 +243,14 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
                     <button
                       type="button"
                       onClick={() => setDetail(a)}
-                      className="rounded-lg border border-black/8 px-2.5 py-1.5 text-[11px] font-medium transition hover:bg-black/[0.03]"
+                      className="rounded-md border border-black/8 px-2.5 py-1 text-[11px] font-medium transition hover:bg-black/[0.03]"
                     >
                       详情
                     </button>
                     <button
                       type="button"
                       onClick={() => setEditorTarget(a.id)}
-                      className="rounded-lg border border-black/8 px-2.5 py-1.5 text-[11px] font-medium transition hover:bg-black/[0.03]"
+                      className="rounded-md border border-black/8 px-2.5 py-1 text-[11px] font-medium transition hover:bg-black/[0.03]"
                     >
                       配置
                     </button>
@@ -240,7 +259,9 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
               );
             })
           ) : (
-            <div className="apple-card col-span-3 p-8 text-center text-[#86868b]">未找到匹配的 Agent</div>
+            <div className="apple-card col-span-3 p-8 text-center text-[#86868b]">
+              未找到匹配的专家
+            </div>
           )}
         </div>
       </div>

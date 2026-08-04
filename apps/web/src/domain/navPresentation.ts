@@ -129,9 +129,9 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   },
   { id: 'tools', label: '配置工具', subtitle: '连接器 · 外部 API · 上架', icon: 'fa-plug', section: 'platform' },
   { id: 'kb', label: '管理知识', subtitle: '企业文档 · RAG · 溯源治理', icon: 'fa-book-open', section: 'platform' },
+  { id: 'memory', label: '管理记忆', subtitle: 'Agent 长期记忆 · Reflection', icon: 'fa-brain', section: 'platform' },
   { id: 'automation', label: '自动化设置', subtitle: '定时 · 告警 · 周报', icon: 'fa-bolt', section: 'platform' },
   { id: 'workflow', label: '工作流设置', subtitle: 'LangGraph · 专家编排', icon: 'fa-diagram-project', section: 'platform' },
-  { id: 'memory', label: '管理记忆', subtitle: 'Agent 长期记忆 · Reflection', icon: 'fa-brain', section: 'platform' },
   {
     id: 'prompts',
     label: '提示词',
@@ -176,7 +176,7 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   {
     id: WORKSPACE_CONFIG_VIEW,
     label: '租户配置',
-    subtitle: '数据空间 · 租户（仅平台运营）',
+    subtitle: '数据空间启停 · 顶栏租户列表（非资产可见性）',
     icon: 'fa-building',
     section: 'system',
     locked: true,
@@ -263,7 +263,7 @@ function mvpForRole(role: PlatformRole): Record<NavSlotId, boolean> {
     );
   }
   if (role === 'super_admin') {
-    return withAdminLocks(
+    const locked = withAdminLocks(
       marketSlotsOn({
         ...off,
         home: true,
@@ -277,6 +277,8 @@ function mvpForRole(role: PlatformRole): Record<NavSlotId, boolean> {
       }),
       role,
     );
+    // MVP：弱化租户配置入口（能力保留，标准/完整方案再默认打开）
+    return { ...locked, 'workspace-config': false };
   }
   if (role === 'viewer') {
     return withAdminLocks(
@@ -335,9 +337,12 @@ export function clampBusinessMvpSlots(matrix: RoleNavMatrix): RoleNavMatrix {
 
 function standardForRole(role: PlatformRole): Record<NavSlotId, boolean> {
   const base = mvpForRole(role);
-  // 标准能力：仅超管加开知识/自动化；能力开发仍维持「仅配置技能」
+  // 标准能力：仅超管加开知识/自动化/租户配置；能力开发仍维持「仅配置技能」
   if (role === 'super_admin') {
-    return withAdminLocks({ ...base, tools: true, kb: true, automation: true }, role);
+    return withAdminLocks(
+      { ...base, tools: true, kb: true, automation: true, 'workspace-config': true },
+      role,
+    );
   }
   return base;
 }
@@ -479,13 +484,13 @@ export const NAV_FALLBACK_ORDER: AppView[] = [
   'task',
   'messages',
   'ai-map',
-  'agents',
   'skills',
-  'kb',
+  'agents',
   'tools',
+  'kb',
+  'memory',
   'automation',
   'workflow',
-  'memory',
   'prompts',
   'admin',
   PRESENTATION_CONFIG_VIEW,

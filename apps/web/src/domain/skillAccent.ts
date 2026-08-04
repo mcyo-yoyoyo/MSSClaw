@@ -18,3 +18,10 @@ export function resolveSkillAccentColor(accentColor?: string | null): string {
   }
   return DEFAULT_SKILL_ACCENT;
 }
+
+/** 无自定义色时按 id 稳定取色（专家/工具运营卡去 logo 用） */
+export function accentColorFromId(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i += 1) h = (h + id.charCodeAt(i) * (i + 1)) % 997;
+  return SKILL_ACCENT_PRESETS[h % SKILL_ACCENT_PRESETS.length].color;
+}
