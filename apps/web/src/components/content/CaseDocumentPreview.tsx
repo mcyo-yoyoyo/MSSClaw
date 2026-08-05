@@ -4,8 +4,10 @@ import type { PortalCasePreviewFile } from '@/domain/prototype/portalContent';
 import {
   downloadPreviewFile,
   formatFileSize,
+  hasPreviewPayload,
   previewKindIcon,
   previewKindLabel,
+  resolvePreviewSrc,
 } from '@/domain/casePreview';
 import {
   parseOfficePreview,
@@ -14,6 +16,8 @@ import {
 
 interface CaseDocumentPreviewProps {
   file: PortalCasePreviewFile;
+  /** 下载按钮指向的原件；缺省与 file 相同（双附件时传 PPT 原件） */
+  downloadFile?: PortalCasePreviewFile | null;
   className?: string;
   /** immersive：近全屏预览区，隐藏次要控件 */
   variant?: 'default' | 'immersive';
@@ -24,6 +28,7 @@ interface CaseDocumentPreviewProps {
 /** 场景案例附件在线预览：PDF/图片/视频原生；Office 本地解析正文；其它尝试嵌入 */
 export function CaseDocumentPreview({
   file,
+  downloadFile,
   className,
   variant = 'default',
   hideChrome = false,
@@ -31,6 +36,12 @@ export function CaseDocumentPreview({
   const [mode, setMode] = useState<'preview' | 'meta'>('preview');
   const kindLabel = previewKindLabel(file.kind);
   const immersive = variant === 'immersive';
+  const downloadTarget = hasPreviewPayload(downloadFile) ? downloadFile! : file;
+  const isTextOutlineKind = file.kind === 'pptx' || file.kind === 'docx';
+  const previewModeLabel = isTextOutlineKind
+    ? '文本大纲预览（非版式效果）'
+    : '在线预览';
+  const src = resolvePreviewSrc(file);
 
   return (
     <section
@@ -48,7 +59,10 @@ export function CaseDocumentPreview({
             <div className="min-w-0">
               <p className="truncate text-[12px] font-semibold text-zinc-800">{file.name}</p>
               <p className="text-[10px] text-zinc-400">
-                {kindLabel} · {formatFileSize(file.size)} · 在线预览
+                {kindLabel} · {formatFileSize(file.size)} · {previewModeLabel}
+                {downloadTarget !== file
+                  ? ` · 原件 ${previewKindLabel(downloadTarget.kind)}`
+                  : ''}
               </p>
             </div>
           </div>
@@ -57,7 +71,7 @@ export function CaseDocumentPreview({
               <div className="inline-flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5">
                 {(
                   [
-                    ['preview', '在线预览'],
+                    ['preview', isTextOutlineKind ? '文本大纲' : '在线预览'],
                     ['meta', '文件信息'],
                   ] as const
                 ).map(([id, label]) => (
@@ -79,8 +93,13 @@ export function CaseDocumentPreview({
             ) : null}
             <button
               type="button"
-              onClick={() => downloadPreviewFile(file)}
-              className="rounded-lg border border-black/8 px-2.5 py-1 text-[10px] font-medium text-zinc-600 hover:bg-black/[0.03]"
+              onClick={() => downloadPreviewFile(downloadTarget)}
+              className={cn(
+                'rounded-lg px-2.5 py-1 text-[10px] font-medium',
+                isTextOutlineKind || downloadTarget !== file
+                  ? 'bg-zinc-900 font-semibold text-white hover:bg-zinc-800'
+                  : 'border border-black/8 text-zinc-600 hover:bg-black/[0.03]',
+              )}
             >
               <i className="fa-solid fa-download mr-1" />
               下载原件
@@ -105,7 +124,7 @@ export function CaseDocumentPreview({
           </p>
         </div>
       ) : (
-        <PreviewBody file={file} immersive={immersive} kindLabel={kindLabel} />
+        <PreviewBody file={file} immersive={immersive} kindLabel={kindLabel} src={src} />
       )}
     </section>
   );
@@ -115,18 +134,28 @@ function PreviewBody({
   file,
   immersive,
   kindLabel,
+  src,
 }: {
   file: PortalCasePreviewFile;
   immersive: boolean;
   kindLabel: string;
+  src: string | null;
 }) {
   const frame = cn(
     'w-full rounded-xl border border-zinc-200 bg-white',
     immersive ? 'min-h-0 flex-1' : 'h-[42vh] min-h-[280px]',
   );
 
+  if (!src) {
+    return (
+      <div className={cn(frame, 'flex items-center justify-center text-[12px] text-zinc-500')}>
+        无可预览内容
+      </div>
+    );
+  }
+
   if (file.kind === 'pdf') {
-    return <iframe title={file.name} src={file.dataUrl} className={frame} />;
+    return <iframe title={file.name} src={src} className={frame} />;
   }
 
   if (file.kind === 'image') {
@@ -138,7 +167,7 @@ function PreviewBody({
         )}
       >
         <img
-          src={file.dataUrl}
+          src={src}
           alt={file.name}
           className={cn(
             'object-contain',
@@ -157,7 +186,7 @@ function PreviewBody({
           immersive ? 'min-h-0 flex-1' : 'h-[42vh] min-h-[280px]',
         )}
       >
-        <video controls playsInline src={file.dataUrl} className="max-h-full max-w-full">
+        <video controls playsInline src={src} className="max-h-full max-w-full">
           <track kind="captions" />
         </video>
       </div>
@@ -171,7 +200,7 @@ function PreviewBody({
   // other：尝试浏览器内嵌，失败则提示下载
   return (
     <div className={cn('flex flex-col gap-2', immersive && 'min-h-0 flex-1')}>
-      <object data={file.dataUrl} type={file.mimeType || undefined} className={frame}>
+      <object data={src} type={file.mimeType || undefined} className={frame}>
         <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
           <p className="text-[13px] text-zinc-600">
             当前浏览器无法直接预览「{kindLabel}」，请下载原件查看。
@@ -216,7 +245,7 @@ function OfficePreviewBody({
     return () => {
       cancelled = true;
     };
-  }, [file.dataUrl, file.kind, file.name]);
+  }, [file.dataUrl, file.url, file.kind, file.name]);
 
   const shell = cn(
     'overflow-y-auto rounded-xl border border-zinc-200 bg-[#f3f3f5] p-3',
@@ -256,7 +285,7 @@ function OfficePreviewBody({
           )}
         >
           <p className="mb-3 border-b border-zinc-100 pb-2 text-[10px] font-semibold text-zinc-500">
-            Word 在线预览 · {file.name}
+            文本大纲预览 · {file.name}
           </p>
           <div className="space-y-2.5 text-[13px] leading-relaxed text-zinc-700">
             {payload.paragraphs.map((p, i) => (
@@ -271,6 +300,24 @@ function OfficePreviewBody({
   if (payload.kind === 'pptx') {
     return (
       <div className={shell}>
+        <div
+          className={cn(
+            'mx-auto mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2',
+            immersive ? 'max-w-4xl' : 'max-w-[640px]',
+          )}
+        >
+          <p className="text-[11px] leading-snug text-amber-900/80">
+            当前为文本大纲预览，不保留幻灯片版式、图表与动画。
+          </p>
+          <button
+            type="button"
+            onClick={() => downloadPreviewFile(file)}
+            className="shrink-0 rounded-lg bg-zinc-900 px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-zinc-800"
+          >
+            <i className="fa-solid fa-download mr-1" />
+            下载原件查看幻灯片效果
+          </button>
+        </div>
         <div className="space-y-3">
           {payload.slides.map((slide, i) => (
             <div
@@ -282,7 +329,7 @@ function OfficePreviewBody({
             >
               <div className="mb-3 flex items-center justify-between border-b border-zinc-100 pb-2">
                 <span className="text-[10px] font-semibold text-zinc-500">
-                  PPT 预览 · 第 {i + 1} 页
+                  文本大纲 · 第 {i + 1} 页（非幻灯片效果）
                 </span>
                 <span className="truncate text-[10px] text-zinc-300">{file.name}</span>
               </div>

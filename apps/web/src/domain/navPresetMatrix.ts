@@ -72,6 +72,12 @@ export function validateNamedPresetMatrices(): string[] {
     if (snap[preset].viewer.includes('task') || snap[preset].viewer.includes('warroom')) {
       errors.push(`${preset}/viewer 不应启用 task/warroom`);
     }
+    if (preset === 'customer' && snap[preset].business_user.includes('task')) {
+      errors.push(`customer/business_user 不应默认启用 task（MVP 无任务记录）`);
+    }
+    if (preset !== 'customer' && !snap[preset].business_user.includes('task')) {
+      errors.push(`${preset}/business_user 应默认启用 task`);
+    }
     if (preset !== 'full' && snap[preset].business_user.includes('warroom')) {
       errors.push(`${preset}/business_user 不应默认启用 warroom`);
     }

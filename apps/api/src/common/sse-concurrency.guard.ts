@@ -6,9 +6,16 @@ import {
   Injectable,
 } from '@nestjs/common';
 
+const DEFAULT_SSE_LIMIT = 200;
+
+function sseLimit(): number {
+  const max = Number(process.env.MAX_CONCURRENT_SSE ?? DEFAULT_SSE_LIMIT);
+  return Number.isFinite(max) && max > 0 ? max : DEFAULT_SSE_LIMIT;
+}
+
 /**
  * 限制同时进行的 SSE 执行流数量，避免私服上连接占满。
- * 环境变量 MAX_CONCURRENT_SSE（默认 80，约覆盖演示级并发）。
+ * 环境变量 MAX_CONCURRENT_SSE（默认 200）。
  */
 @Injectable()
 export class SseConcurrencyGuard implements CanActivate {
@@ -19,8 +26,7 @@ export class SseConcurrencyGuard implements CanActivate {
   }
 
   static acquire(): boolean {
-    const max = Number(process.env.MAX_CONCURRENT_SSE ?? 80);
-    const limit = Number.isFinite(max) && max > 0 ? max : 80;
+    const limit = sseLimit();
     if (SseConcurrencyGuard.active >= limit) return false;
     SseConcurrencyGuard.active += 1;
     return true;
@@ -36,7 +42,7 @@ export class SseConcurrencyGuard implements CanActivate {
         {
           message: 'Too many concurrent execution streams',
           active: SseConcurrencyGuard.activeCount,
-          limit: Number(process.env.MAX_CONCURRENT_SSE ?? 80),
+          limit: sseLimit(),
         },
         HttpStatus.TOO_MANY_REQUESTS,
       );

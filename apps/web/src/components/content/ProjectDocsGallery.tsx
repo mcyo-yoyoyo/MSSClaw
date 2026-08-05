@@ -5,6 +5,8 @@ import {
   downloadPreviewFile,
   previewKindIcon,
   previewKindLabel,
+  resolveDownloadOriginalFile,
+  resolveOnlinePreviewFile,
 } from '@/domain/casePreview';
 import { CaseDocumentPreview } from '@/components/content/CaseDocumentPreview';
 
@@ -12,7 +14,10 @@ export type ProjectDocSlide = {
   id: string;
   title: string;
   kind: 'pdf' | 'pptx' | 'docx' | 'xlsx' | 'image' | 'video' | 'other' | 'link';
+  /** 在线展示用（视觉预览优先） */
   previewFile?: NonNullable<PortalContentItem['previewFile']>;
+  /** 下载原件（可与展示件不同） */
+  downloadFile?: NonNullable<PortalContentItem['previewFile']>;
   url?: string;
 };
 
@@ -20,12 +25,15 @@ export type ProjectDocSlide = {
 export function buildProjectDocSlides(items: PortalContentItem[]): ProjectDocSlide[] {
   const slides: ProjectDocSlide[] = [];
   for (const item of items) {
-    if (item.previewFile?.dataUrl) {
+    const online = resolveOnlinePreviewFile(item);
+    const original = resolveDownloadOriginalFile(item);
+    if (online) {
       slides.push({
         id: `${item.id}-file`,
-        title: item.title || item.previewFile.name,
-        kind: item.previewFile.kind,
-        previewFile: item.previewFile,
+        title: item.title || online.name,
+        kind: online.kind,
+        previewFile: online,
+        downloadFile: original ?? online,
         url: item.homepageUrl,
       });
       continue;
@@ -149,10 +157,12 @@ export function ProjectDocsGallery({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          {current.previewFile ? (
+          {current.downloadFile || current.previewFile ? (
             <button
               type="button"
-              onClick={() => downloadPreviewFile(current.previewFile!)}
+              onClick={() =>
+                downloadPreviewFile(current.downloadFile ?? current.previewFile!)
+              }
               className="rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 transition hover:bg-zinc-50"
             >
               <i className="fa-solid fa-download mr-1 text-[10px]" />
@@ -208,6 +218,7 @@ export function ProjectDocsGallery({
               {slide.previewFile ? (
                 <CaseDocumentPreview
                   file={slide.previewFile}
+                  downloadFile={slide.downloadFile}
                   variant="immersive"
                   hideChrome
                   className="h-full"

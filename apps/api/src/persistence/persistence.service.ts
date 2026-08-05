@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -12,6 +12,9 @@ export interface MarketplacePayload {
 
 export interface PortalContentPayload {
   items?: unknown[];
+  /** 乐观锁版本；客户端 PUT 时带 expectedRevision */
+  revision?: number;
+  expectedRevision?: number;
 }
 
 @Injectable()
@@ -66,23 +69,48 @@ export class PersistenceService {
       where: { workspaceId, kind: 'portal-content' },
     });
     if (!row) return null;
-    return row.payload as PortalContentPayload;
+    const payload = row.payload as PortalContentPayload;
+    return {
+      items: Array.isArray(payload.items) ? payload.items : [],
+      revision: typeof payload.revision === 'number' ? payload.revision : 0,
+    };
   }
 
   async putPortalContent(workspaceId: string, payload: PortalContentPayload) {
     const id = `portal-content-${workspaceId}`;
+    const existing = await this.prisma.centerRecord.findUnique({ where: { id } });
+    const current = (existing?.payload as PortalContentPayload | undefined) ?? {};
+    const currentRev = typeof current.revision === 'number' ? current.revision : 0;
+    const expected =
+      typeof payload.expectedRevision === 'number' ? payload.expectedRevision : undefined;
+
+    // 有 expectedRevision 时做乐观锁；缺省（旧客户端）仍允许写入并递增
+    if (expected != null && expected !== currentRev) {
+      throw new ConflictException({
+        message: 'portal_content_conflict',
+        revision: currentRev,
+        items: Array.isArray(current.items) ? current.items : [],
+      });
+    }
+
+    const nextRev = currentRev + 1;
+    const nextPayload: PortalContentPayload = {
+      items: Array.isArray(payload.items) ? payload.items : [],
+      revision: nextRev,
+    };
+
     await this.prisma.centerRecord.upsert({
       where: { id },
       create: {
         id,
         workspaceId,
         kind: 'portal-content',
-        payload: payload as Prisma.InputJsonValue,
+        payload: nextPayload as Prisma.InputJsonValue,
       },
       update: {
-        payload: payload as Prisma.InputJsonValue,
+        payload: nextPayload as Prisma.InputJsonValue,
       },
     });
-    return payload;
+    return nextPayload;
   }
 }

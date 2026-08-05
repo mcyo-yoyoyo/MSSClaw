@@ -2,6 +2,10 @@ import { cn } from '@/lib/utils';
 import type { CaseOutcomeCard } from '@/domain/portalCase';
 import { isReviewPipelineCase, REVIEW_PIPELINE_STEPS } from '@/domain/reviewPipeline';
 import { CaseDocumentPreview } from '@/components/content/CaseDocumentPreview';
+import {
+  resolveDownloadOriginalFile,
+  resolveOnlinePreviewFile,
+} from '@/domain/casePreview';
 import { EngagementActions } from '@/components/content/EngagementActions';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 
@@ -44,6 +48,8 @@ export function CaseOutcomePanel({
   const learnFocused = isLearnFocused(card.type);
   const hasLink = Boolean(card.homepageUrl && onOpenLink);
   const allowEngagementDownload = !viewOnlyHint && !onDownload;
+  const onlineFile = resolveOnlinePreviewFile(card);
+  const downloadFile = resolveDownloadOriginalFile(card);
 
   return (
     <div className={cn('space-y-4 text-left', className)}>
@@ -53,8 +59,8 @@ export function CaseOutcomePanel({
           {viewOnlyHint}
         </p>
       ) : null}
-      {card.previewFile ? (
-        <CaseDocumentPreview file={card.previewFile} />
+      {onlineFile ? (
+        <CaseDocumentPreview file={onlineFile} downloadFile={downloadFile} />
       ) : showDocumentSlot ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50/80 px-4 py-8 text-center">
           <i

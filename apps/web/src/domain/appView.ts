@@ -47,11 +47,11 @@ export const APP_VIEW_NAV: AppViewNavItem[] = [
   {
     id: 'home',
     label: '首页',
-    subtitle: '入口总览 · 最近任务',
+    subtitle: '入口总览 · 最近使用（最近任务见标准/完整）',
     icon: 'fa-house',
     section: 'workspace',
   },
-  { id: 'task', label: '任务记录', subtitle: '进度 · 结果 · 历史会话', icon: 'fa-list-check', section: 'workspace' },
+  { id: 'task', label: '任务记录', subtitle: '进度 · 结果 · 历史会话（标准/完整）', icon: 'fa-list-check', section: 'workspace' },
   {
     id: 'ai-map',
     label: '场景案例',

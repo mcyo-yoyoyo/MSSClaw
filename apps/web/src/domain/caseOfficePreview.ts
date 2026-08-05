@@ -1,14 +1,22 @@
 import { unzipSync, strFromU8 } from 'fflate';
 import * as XLSX from 'xlsx';
 import type { PortalCasePreviewFile } from '@/domain/prototype/portalContent';
+import { resolvePreviewSrc } from '@/domain/casePreview';
 
-function dataUrlToBytes(dataUrl: string): Uint8Array {
-  const comma = dataUrl.indexOf(',');
-  const b64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
-  return out;
+async function fileToBytes(file: PortalCasePreviewFile): Promise<Uint8Array | null> {
+  if (file.dataUrl?.startsWith('data:')) {
+    const comma = file.dataUrl.indexOf(',');
+    const b64 = comma >= 0 ? file.dataUrl.slice(comma + 1) : file.dataUrl;
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  const src = resolvePreviewSrc(file);
+  if (!src) return null;
+  const res = await fetch(src);
+  if (!res.ok) return null;
+  return new Uint8Array(await res.arrayBuffer());
 }
 
 function stripXml(xml: string): string {
@@ -33,13 +41,15 @@ export type OfficePreviewPayload =
   | { kind: 'pptx'; slides: { title: string; body: string }[] }
   | { kind: 'xlsx'; sheets: { name: string; rows: string[][] }[] };
 
-/** 从 dataUrl 解析 Office 附件为可渲染结构（演示环境本地解析，无需外链） */
+/** 从 dataUrl / blob url 解析 Office 附件为可渲染结构 */
 export async function parseOfficePreview(
   file: PortalCasePreviewFile,
 ): Promise<OfficePreviewPayload | null> {
   try {
+    const bytes = await fileToBytes(file);
+    if (!bytes) return null;
+
     if (file.kind === 'xlsx') {
-      const bytes = dataUrlToBytes(file.dataUrl);
       const wb = XLSX.read(bytes, { type: 'array' });
       const sheets = wb.SheetNames.slice(0, 6).map((name) => {
         const sheet = wb.Sheets[name];
@@ -58,7 +68,6 @@ export async function parseOfficePreview(
     }
 
     if (file.kind === 'docx' || file.kind === 'pptx') {
-      const bytes = dataUrlToBytes(file.dataUrl);
       const files = unzipSync(bytes);
       if (file.kind === 'docx') {
         const entry =

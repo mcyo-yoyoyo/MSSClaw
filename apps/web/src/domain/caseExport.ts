@@ -61,6 +61,19 @@ export function caseManifest(item: PortalContentItem) {
           size: item.previewFile.size,
           kind: item.previewFile.kind,
           dataUrl: item.previewFile.dataUrl,
+          url: item.previewFile.url,
+          blobId: item.previewFile.blobId,
+        }
+      : null,
+    layoutPreviewFile: item.layoutPreviewFile
+      ? {
+          name: item.layoutPreviewFile.name,
+          mimeType: item.layoutPreviewFile.mimeType,
+          size: item.layoutPreviewFile.size,
+          kind: item.layoutPreviewFile.kind,
+          dataUrl: item.layoutPreviewFile.dataUrl,
+          url: item.layoutPreviewFile.url,
+          blobId: item.layoutPreviewFile.blobId,
         }
       : null,
     exportedAt: new Date().toISOString(),
@@ -129,6 +142,14 @@ export function buildCasePackageFiles(item: PortalContentItem): Record<string, s
               mimeType: item.previewFile.mimeType,
               size: item.previewFile.size,
               kind: item.previewFile.kind,
+              layoutPreviewFile: item.layoutPreviewFile
+                ? {
+                    name: item.layoutPreviewFile.name,
+                    mimeType: item.layoutPreviewFile.mimeType,
+                    size: item.layoutPreviewFile.size,
+                    kind: item.layoutPreviewFile.kind,
+                  }
+                : null,
             },
             null,
             2,
@@ -484,28 +505,37 @@ export function parseCaseImport(raw: unknown): PortalContentItem | null {
         ? (o.visibility as PortalContentItem['visibility'])
         : 'public',
     published: o.published !== false,
-    previewFile:
-      o.previewFile && typeof o.previewFile === 'object'
-        ? (() => {
-            const f = o.previewFile as Record<string, unknown>;
-            if (typeof f.dataUrl !== 'string' || typeof f.name !== 'string') return undefined;
-            return {
-              name: f.name,
-              mimeType: typeof f.mimeType === 'string' ? f.mimeType : 'application/octet-stream',
-              size: typeof f.size === 'number' ? f.size : 0,
-              dataUrl: f.dataUrl,
-              kind:
-                f.kind === 'pdf' ||
-                f.kind === 'pptx' ||
-                f.kind === 'docx' ||
-                f.kind === 'xlsx' ||
-                f.kind === 'image' ||
-                f.kind === 'video'
-                  ? f.kind
-                  : 'other',
-            };
-          })()
-        : undefined,
+    previewFile: parsePreviewFileField(o.previewFile),
+    layoutPreviewFile: parsePreviewFileField(o.layoutPreviewFile),
+  };
+}
+
+function parsePreviewFileField(
+  raw: unknown,
+): PortalContentItem['previewFile'] | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const f = raw as Record<string, unknown>;
+  if (typeof f.name !== 'string') return undefined;
+  const dataUrl = typeof f.dataUrl === 'string' ? f.dataUrl : undefined;
+  const url = typeof f.url === 'string' ? f.url : undefined;
+  const blobId = typeof f.blobId === 'string' ? f.blobId : undefined;
+  if (!dataUrl && !url) return undefined;
+  return {
+    name: f.name,
+    mimeType: typeof f.mimeType === 'string' ? f.mimeType : 'application/octet-stream',
+    size: typeof f.size === 'number' ? f.size : 0,
+    dataUrl,
+    url,
+    blobId,
+    kind:
+      f.kind === 'pdf' ||
+      f.kind === 'pptx' ||
+      f.kind === 'docx' ||
+      f.kind === 'xlsx' ||
+      f.kind === 'image' ||
+      f.kind === 'video'
+        ? f.kind
+        : 'other',
   };
 }
 

@@ -7,6 +7,7 @@ import type {
 } from '@/domain/prototype/types';
 import { canViewAsset } from '@/domain/assetVisibility';
 import { canExecuteChat } from '@/domain/permissions';
+import { allowsTaskExecutionSurfaces } from '@/domain/marketRunCapability';
 import type { BusinessScenarioId } from '@/domain/businessScenarios';
 import { BusinessScenarioFilterBar } from '@/components/home/BusinessScenarioFilterBar';
 import {
@@ -111,6 +112,8 @@ export function HomePage({
   const bumpToolInvokes = useMarketplaceStore((s) => s.bumpToolInvokes);
   const user = useSessionStore((s) => s.user);
   const executeAllowed = canExecuteChat(user?.platformRole);
+  const navPreset = useNavPresentationStore((s) => s.preset);
+  const showRecentTasks = executeAllowed && allowsTaskExecutionSurfaces(navPreset);
   const roleEnabled = useNavPresentationStore((s) => s.roleEnabled);
   const engagementOf = useContentEngagementStore((s) => s.get);
   const engagementById = useContentEngagementStore((s) => s.byId);
@@ -675,7 +678,7 @@ export function HomePage({
               </section>
             ) : null}
 
-            {executeAllowed && recentTasks.length > 0 ? (
+            {showRecentTasks && recentTasks.length > 0 ? (
               <section className="border-t border-zinc-100 pt-4">
                 <div className="mb-2.5 flex items-center justify-between">
                   <h2 className="text-[13px] font-semibold text-zinc-800">最近任务</h2>

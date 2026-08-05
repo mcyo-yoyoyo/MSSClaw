@@ -29,6 +29,7 @@ export interface CaseOutcomeCard {
   publisher?: string;
   publishedAt?: string;
   previewFile?: PortalCasePreviewFile | null;
+  layoutPreviewFile?: PortalCasePreviewFile | null;
 }
 
 export function resolveInvokeIds(item: PortalContentItem): {
@@ -78,6 +79,7 @@ export function toCaseOutcomeCard(
     publisher: item.publisher,
     publishedAt: item.publishedAt,
     previewFile: item.previewFile ?? null,
+    layoutPreviewFile: item.layoutPreviewFile ?? null,
   };
 }
 

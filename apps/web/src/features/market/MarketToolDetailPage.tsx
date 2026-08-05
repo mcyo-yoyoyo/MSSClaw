@@ -89,7 +89,7 @@ export function MarketToolDetailPage() {
 
   const openUrl = () => {
     if (!tool?.homepageUrl || tool.homepageUrl === '#') {
-      showToast('暂无可用链接，请查看 How to');
+      showToast('暂无可用链接，请查看快速上手');
       setTab('howto');
       return;
     }
@@ -191,7 +191,7 @@ export function MarketToolDetailPage() {
                       onClick={openUrl}
                       className="rounded-xl bg-zinc-900 px-4 py-2.5 text-[12px] font-semibold text-white shadow-sm transition hover:bg-zinc-800"
                     >
-                      立即使用
+                      去使用
                     </button>
                     <button
                       type="button"
@@ -201,7 +201,7 @@ export function MarketToolDetailPage() {
                       }}
                       className="rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-[12px] font-medium text-zinc-700 transition hover:bg-zinc-50"
                     >
-                      查看 How to
+                      快速上手
                     </button>
                   </div>
                 </div>
@@ -212,7 +212,7 @@ export function MarketToolDetailPage() {
               {(
                 [
                   ['overview', '概览'],
-                  ['howto', 'How to'],
+                  ['howto', '快速上手'],
                   ['resources', '相关资源'],
                 ] as const
               ).map(([id, label]) => (
@@ -268,7 +268,7 @@ export function MarketToolDetailPage() {
                     </span>
                     <p className="text-[13px] font-medium text-zinc-500">预览图 / 演示视频建设中</p>
                     <p className="mt-1 max-w-sm text-[12px] leading-relaxed text-zinc-400">
-                      可先查看 How to 上手材料，或直接立即使用打开工具。
+                      可先查看快速上手材料，或直接去使用打开工具。
                     </p>
                   </div>
                 </div>
@@ -338,7 +338,7 @@ export function MarketToolDetailPage() {
                   </div>
                 ) : (
                   <p className="py-8 text-center text-[12px] text-zinc-400">
-                    暂无 How to，可在门户运营维护
+                    暂无快速上手材料，可在门户运营维护
                   </p>
                 )
               ) : null}

@@ -1,11 +1,15 @@
 import type { AssetVisibility, DeptId, PortalAssetType, RegionId } from '@/domain/orgTaxonomy';
 
-/** 案例在线预览附件（演示态以 dataUrl 持久化，建议 ≤3MB） */
+/** 案例在线预览附件（演示态可 dataUrl；API 在线时优先落盘 blob 用 url） */
 export interface PortalCasePreviewFile {
   name: string;
   mimeType: string;
   size: number;
-  dataUrl: string;
+  /** 内联字节（离线 / 未外提时） */
+  dataUrl?: string;
+  /** 共享 API 或外链地址（相对路径如 /api/v1/workspaces/.../blobs/...） */
+  url?: string;
+  blobId?: string;
   kind: 'pdf' | 'pptx' | 'docx' | 'xlsx' | 'image' | 'video' | 'other';
 }
 
@@ -45,8 +49,13 @@ export interface PortalContentItem {
   isGold?: boolean;
   /** 包版本（导出/再导入） */
   packageVersion?: string;
-  /** 在线预览附件（PPT / PDF / Office） */
+  /** 在线预览附件（PPT / PDF / Office）；无版式预览时直接用于展示 */
   previewFile?: PortalCasePreviewFile | null;
+  /**
+   * 视觉预览件（PDF / 图片）：有则业务侧在线预览优先用此文件，
+   * previewFile 仍作原件下载（典型：PPT 原件 + PDF 版式预览）。
+   */
+  layoutPreviewFile?: PortalCasePreviewFile | null;
 }
 
 export const PORTAL_CONTENT_TYPE_LABELS: Record<PortalContentItem['type'], string> = {

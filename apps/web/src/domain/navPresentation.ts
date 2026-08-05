@@ -56,7 +56,7 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   {
     id: 'home',
     label: '首页',
-    subtitle: '入口总览 · 最近任务',
+    subtitle: '入口总览 · 最近使用（最近任务见标准/完整）',
     icon: 'fa-house',
     section: 'workspace',
   },
@@ -92,7 +92,7 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
     section: 'workspace',
     hiddenFromSidebar: true,
   },
-  { id: 'task', label: '任务记录', subtitle: '进度 · 结果 · 历史会话', icon: 'fa-list-check', section: 'workspace' },
+  { id: 'task', label: '任务记录', subtitle: '进度 · 结果 · 历史会话（标准/完整）', icon: 'fa-list-check', section: 'workspace' },
   {
     id: 'warroom',
     label: '协作空间',
@@ -192,12 +192,12 @@ export const NAV_PRESET_LABELS: Record<NavPresetId, { title: string; description
   customer: {
     title: 'MVP演示',
     description:
-      '业务=三货架/任务记录；能力开发能力配置仅「配置技能」；超管=+专家/工具/组织/展示/租户/门户',
+      '业务=三货架（无任务记录/最近任务）；能力开发仅「配置技能」；超管=+专家/工具/组织/展示/门户',
   },
   standard: {
     title: '标准能力',
     description:
-      '能力开发能力配置仍仅「配置技能」（无专家/工具/知识/协作空间）；超管另开知识·自动化等',
+      '业务加回任务记录与货架打样执行；能力开发仍仅「配置技能」；超管另开知识·自动化等',
   },
   full: {
     title: '完整产品',
@@ -228,7 +228,7 @@ function withAdminLocks(base: Record<NavSlotId, boolean>, role: PlatformRole): R
 
 /**
  * MVP 菜单矩阵（三方案递增；超管 ≠ 直接完整版）：
- * - 业务用户：工作平台 = 首页 · 三货架 · 任务记录（协作空间关）
+ * - 业务用户：工作平台 = 首页 · 三货架（任务记录仅标准/完整）
  * - 只读访客：工作平台 = 首页 · 三货架
  * - 能力开发：工作平台 + 仅「配置技能」（无专家/工具/知识/协作空间；完整产品再开）
  * - 平台运营：专家/技能/工具 + 系统治理项（展示/租户/组织/门户）
@@ -250,7 +250,7 @@ function mvpForRole(role: PlatformRole): Record<NavSlotId, boolean> {
       marketSlotsOn({
         ...off,
         home: true,
-        task: true,
+        task: false,
         warroom: false,
         messages: true,
         'ai-map': true,
@@ -267,7 +267,7 @@ function mvpForRole(role: PlatformRole): Record<NavSlotId, boolean> {
       marketSlotsOn({
         ...off,
         home: true,
-        task: true,
+        task: false,
         warroom: true,
         messages: true,
         'ai-map': true,
@@ -293,12 +293,12 @@ function mvpForRole(role: PlatformRole): Record<NavSlotId, boolean> {
       role,
     );
   }
-  // 业务用户：首页 · 三货架 · 任务记录；无协作空间
+  // 业务用户：首页 · 三货架；MVP 无任务记录（标准/完整再开）
   return withAdminLocks(
     marketSlotsOn({
       ...off,
       home: true,
-      task: true,
+      task: false,
       warroom: false,
       messages: true,
       'ai-map': true,
@@ -340,9 +340,13 @@ function standardForRole(role: PlatformRole): Record<NavSlotId, boolean> {
   // 标准能力：仅超管加开知识/自动化/租户配置；能力开发仍维持「仅配置技能」
   if (role === 'super_admin') {
     return withAdminLocks(
-      { ...base, tools: true, kb: true, automation: true, 'workspace-config': true },
+      { ...base, tools: true, kb: true, automation: true, 'workspace-config': true, task: true },
       role,
     );
+  }
+  // 业务 / 能力开发：相对 MVP 加回任务记录
+  if (role === 'business_user' || role === 'capability_ops') {
+    return withAdminLocks({ ...base, task: true }, role);
   }
   return base;
 }

@@ -17,12 +17,17 @@ import {
 import type { AssetVisibility, DeptId, RegionId } from '@/domain/orgTaxonomy';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
 import {
+  CASE_LAYOUT_PREVIEW_ACCEPT,
   CASE_PREVIEW_ACCEPT,
+  CASE_PREVIEW_BLOB_MAX_MB,
   CASE_PREVIEW_MAX_MB,
   formatFileSize,
+  needsLayoutPreviewCompanion,
   previewKindIcon,
   previewKindLabel,
+  readCaseLayoutPreviewFile,
   readCasePreviewFile,
+  resolveOnlinePreviewFile,
 } from '@/domain/casePreview';
 import {
   inferBusinessScenarioFromTags,
@@ -30,8 +35,10 @@ import {
   scenarioTagsForBusiness,
   type BusinessScenarioId,
 } from '@/domain/businessScenarios';
+import { featuredScenarioMountHint } from '@/domain/scenarioPackOps';
 import { usePortalContentStore } from '@/stores/portalContentStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { cn } from '@/lib/utils';
 
 type EditorTarget = string | 'new' | null;
@@ -59,6 +66,7 @@ function emptyItem(): PortalContentItem {
     isGold: false,
     packageVersion: '1.0.0',
     previewFile: null,
+    layoutPreviewFile: null,
     homepageUrl: '',
   };
 }
@@ -74,6 +82,7 @@ function normalizeForm(item: PortalContentItem): PortalContentItem {
     scenarioTags: Array.isArray(item.scenarioTags) ? item.scenarioTags : [],
     steps: Array.isArray(item.steps) ? item.steps : [],
     previewFile: item.previewFile ?? null,
+    layoutPreviewFile: item.layoutPreviewFile ?? null,
     homepageUrl: item.homepageUrl ?? '',
   };
 }
@@ -180,16 +189,40 @@ export function CaseEditorModal({
     if (!file) return;
     setUploading(true);
     try {
-      const previewFile = await readCasePreviewFile(file);
+      const allowBlobQuota = useWorkspaceStore.getState().apiConnected;
+      const previewFile = await readCasePreviewFile(file, { allowBlobQuota });
       setForm((prev) => ({
         ...prev,
         previewFile,
+        // 主附件换成原生视觉格式时，清空多余视觉预览件
+        layoutPreviewFile: needsLayoutPreviewCompanion(previewFile.kind)
+          ? prev.layoutPreviewFile
+          : null,
         icon:
           prev.icon === 'fa-lightbulb' || !prev.icon
             ? previewKindIcon(previewFile.kind)
             : prev.icon,
       }));
-      showToast(`已上传预览文件：${previewFile.name}`);
+      showToast(
+        needsLayoutPreviewCompanion(previewFile.kind)
+          ? `已上传原件：${previewFile.name}（建议另传 PDF/图片作视觉预览）`
+          : `已上传预览文件：${previewFile.name}`,
+      );
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '上传失败');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleLayoutUpload = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const allowBlobQuota = useWorkspaceStore.getState().apiConnected;
+      const layoutPreviewFile = await readCaseLayoutPreviewFile(file, { allowBlobQuota });
+      setForm((prev) => ({ ...prev, layoutPreviewFile }));
+      showToast(`已上传视觉预览：${layoutPreviewFile.name}`);
     } catch (err) {
       showToast(err instanceof Error ? err.message : '上传失败');
     } finally {
@@ -204,7 +237,9 @@ export function CaseEditorModal({
       return;
     }
     const link = (form.homepageUrl ?? '').trim();
-    const hasMaterial = Boolean(form.previewFile?.dataUrl) || Boolean(link && link !== '#');
+    const hasMaterial =
+      Boolean(form.previewFile?.dataUrl || form.previewFile?.url) ||
+      Boolean(link && link !== '#');
     if (!hasMaterial) {
       showToast('请上传预览附件，或填写文档/演示链接（画廊需要材料才能展示）');
       return;
@@ -215,6 +250,11 @@ export function CaseEditorModal({
         : scenarioTagsForBusiness(businessId);
     if (!tags.length) {
       showToast('请选择业务场景');
+      return;
+    }
+    const mount = featuredScenarioMountHint(tags);
+    if (!mount.ok) {
+      showToast(mount.hint);
       return;
     }
 
@@ -244,6 +284,9 @@ export function CaseEditorModal({
       skillId: form.skillId || form.primarySkillId,
       primarySkillId: form.primarySkillId || form.skillId,
       previewFile: form.previewFile ?? null,
+      layoutPreviewFile: needsLayoutPreviewCompanion(form.previewFile?.kind)
+        ? form.layoutPreviewFile ?? null
+        : null,
     };
     upsertItem(saved, isNew);
     onSaved?.(saved);
@@ -310,7 +353,13 @@ export function CaseEditorModal({
           </FormField>
           <FormField
             label="业务场景"
-            hint="写入对应场景 matchTags，材料才会出现在该场景的案例画廊。"
+            hint={
+              featuredScenarioMountHint(
+                form.scenarioTags?.length
+                  ? form.scenarioTags
+                  : scenarioTagsForBusiness(businessId),
+              ).hint
+            }
           >
             <FormSelect
               value={businessId}
@@ -327,6 +376,9 @@ export function CaseEditorModal({
           <h5 className="pt-1 text-[10px] font-semibold tracking-wide text-zinc-400">
             预览附件（PDF / PPT / Word / Excel / 图片 / 视频）
           </h5>
+          <p className="text-[10px] leading-snug text-zinc-500">
+            PPT/Word 作原件时可另传 PDF 或图片作为视觉预览；业务侧将优先展示视觉预览件。
+          </p>
           {form.previewFile ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2.5">
@@ -344,20 +396,93 @@ export function CaseEditorModal({
                       {form.previewFile.name}
                     </p>
                     <p className="text-[10px] text-zinc-400">
-                      {previewKindLabel(form.previewFile.kind)} ·{' '}
+                      原件 · {previewKindLabel(form.previewFile.kind)} ·{' '}
                       {formatFileSize(form.previewFile.size)}
                     </p>
                   </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setForm({ ...form, previewFile: null })}
+                  onClick={() =>
+                    setForm({ ...form, previewFile: null, layoutPreviewFile: null })
+                  }
                   className="shrink-0 rounded-lg border border-red-200 px-2.5 py-1 text-[10px] font-medium text-red-600 hover:bg-red-50"
                 >
                   移除
                 </button>
               </div>
-              <CaseDocumentPreview file={form.previewFile} />
+
+              {needsLayoutPreviewCompanion(form.previewFile.kind) ? (
+                <div className="space-y-2 rounded-xl border border-dashed border-zinc-300 bg-white px-3 py-3">
+                  <p className="text-[11px] font-semibold text-zinc-800">
+                    视觉预览件（推荐）
+                  </p>
+                  <p className="text-[10px] leading-snug text-zinc-500">
+                    上传 PDF 或图片后，业务用户将看到版式预览；未上传则仅显示文本大纲。
+                  </p>
+                  {form.layoutPreviewFile ? (
+                    <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 bg-zinc-50/80 px-2.5 py-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-[12px] font-medium text-zinc-800">
+                          {form.layoutPreviewFile.name}
+                        </p>
+                        <p className="text-[10px] text-zinc-400">
+                          {previewKindLabel(form.layoutPreviewFile.kind)} ·{' '}
+                          {formatFileSize(form.layoutPreviewFile.size)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setForm({ ...form, layoutPreviewFile: null })}
+                        className="shrink-0 rounded-lg border border-red-200 px-2 py-1 text-[10px] font-medium text-red-600 hover:bg-red-50"
+                      >
+                        移除
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-zinc-50/50 px-3 py-4 text-center transition hover:border-zinc-400">
+                      <span className="text-[12px] font-medium text-zinc-700">
+                        {uploading ? '上传中…' : '上传 PDF / 图片作视觉预览'}
+                      </span>
+                      <input
+                        type="file"
+                        accept={CASE_LAYOUT_PREVIEW_ACCEPT}
+                        className="hidden"
+                        disabled={uploading}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          e.target.value = '';
+                          void handleLayoutUpload(f);
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+              ) : null}
+
+              {(() => {
+                const online = resolveOnlinePreviewFile(form);
+                if (!online) return null;
+                const hasLayout =
+                  Boolean(
+                    form.layoutPreviewFile?.dataUrl || form.layoutPreviewFile?.url,
+                  ) && needsLayoutPreviewCompanion(form.previewFile?.kind);
+                return (
+                  <>
+                    <p className="text-[10px] leading-snug text-zinc-500">
+                      {hasLayout
+                        ? '以下为业务用户所见：视觉预览（PDF/图片）；下载仍指向原件。'
+                        : needsLayoutPreviewCompanion(form.previewFile.kind)
+                          ? '以下预览与业务用户前端一致（文本大纲，非幻灯片效果）。建议上传视觉预览件。'
+                          : '以下预览与业务用户前端一致。'}
+                    </p>
+                    <CaseDocumentPreview
+                      file={online}
+                      downloadFile={form.previewFile}
+                    />
+                  </>
+                );
+              })()}
             </div>
           ) : (
             <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50/50 px-4 py-6 text-center transition hover:border-zinc-400 hover:bg-zinc-50">
@@ -365,9 +490,10 @@ export function CaseEditorModal({
               <span className="text-[12px] font-medium text-zinc-700">
                 {uploading ? '上传中…' : '点击上传预览文件'}
               </span>
-              <span className="mt-1 text-[10px] text-zinc-400">
-                支持 PDF / PPT / Word / Excel / 图片 / 视频，单文件 ≤{' '}
-                {CASE_PREVIEW_MAX_MB}MB
+              <span className="mt-1 max-w-sm text-[10px] leading-snug text-zinc-400">
+                支持 PDF / PPT / Word / Excel / 图片 / 视频。离线缓存 ≤{' '}
+                {CASE_PREVIEW_MAX_MB}MB；连接共享 API 后可至 {CASE_PREVIEW_BLOB_MAX_MB}
+                MB（自动外提）。PPT/Word 上传后可再挂 PDF/图片作视觉预览。
               </span>
               <input
                 type="file"

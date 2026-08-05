@@ -13,6 +13,7 @@ interface PortalContentState {
   toast: string | null;
   bootstrap: (workspaceId: string) => Promise<void>;
   persist: () => void;
+  applyAuthoritativeItems: (items: PortalContentItem[], meta?: { conflict?: boolean }) => void;
   upsertItem: (item: PortalContentItem, isNew?: boolean) => void;
   deleteItem: (id: string) => void;
   togglePublished: (id: string) => void;
@@ -20,6 +21,16 @@ interface PortalContentState {
   resetToSeeds: () => void;
   showToast: (msg: string) => void;
   dismissToast: () => void;
+}
+
+function schedulePersist(get: () => PortalContentState) {
+  const { items } = get();
+  const workspaceId = useWorkspaceStore.getState().workspaceId;
+  scheduleSavePortalContent(workspaceId, { items }, 600, {
+    onApplied: (next, meta) => {
+      get().applyAuthoritativeItems(next, meta);
+    },
+  });
 }
 
 export const usePortalContentStore = create<PortalContentState>((set, get) => ({
@@ -33,9 +44,15 @@ export const usePortalContentStore = create<PortalContentState>((set, get) => ({
   },
 
   persist: () => {
-    const { items } = get();
-    const workspaceId = useWorkspaceStore.getState().workspaceId;
-    scheduleSavePortalContent(workspaceId, { items });
+    schedulePersist(get);
+  },
+
+  /** 外提成功或冲突重载后，用权威快照替换内存（去掉 dataUrl） */
+  applyAuthoritativeItems: (items, meta) => {
+    set({ items });
+    if (meta?.conflict) {
+      get().showToast('检测到他人已更新门户内容，已加载最新版本，请重新编辑后再保存');
+    }
   },
 
   upsertItem: (item, isNew = false) => {
@@ -53,7 +70,6 @@ export const usePortalContentStore = create<PortalContentState>((set, get) => ({
   deleteItem: (id) => {
     const seedIds = new Set(demoDefaults(PROTOTYPE_PORTAL_CONTENT).map((p) => p.id));
     if (seedIds.has(id)) {
-      // ?????????????????
       set((s) => ({
         items: s.items.map((row) => (row.id === id ? { ...row, published: false } : row)),
       }));

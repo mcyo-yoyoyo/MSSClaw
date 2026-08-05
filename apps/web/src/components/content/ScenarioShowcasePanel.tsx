@@ -10,6 +10,10 @@ import {
   type ShowcaseTabId,
 } from '@/domain/scenarioShowcase';
 import { CaseDocumentPreview } from '@/components/content/CaseDocumentPreview';
+import {
+  resolveDownloadOriginalFile,
+  resolveOnlinePreviewFile,
+} from '@/domain/casePreview';
 
 interface ScenarioShowcasePanelProps {
   scenarioLabel: string;
@@ -78,6 +82,8 @@ export function ScenarioShowcasePanel({
 
   const current = list[index] ?? null;
   const card = current ? itemToShowcaseCard(current) : null;
+  const onlineFile = card ? resolveOnlinePreviewFile(card) : null;
+  const downloadFile = card ? resolveDownloadOriginalFile(card) : null;
 
   const journey = useMemo(
     () =>
@@ -176,8 +182,8 @@ export function ScenarioShowcasePanel({
             </div>
           ) : null}
 
-          {card.previewFile ? (
-            <CaseDocumentPreview file={card.previewFile} />
+          {onlineFile ? (
+            <CaseDocumentPreview file={onlineFile} downloadFile={downloadFile} />
           ) : (
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50/80 px-4 py-10 text-center">
               <i className="fa-solid fa-book-open mb-2 text-lg text-zinc-300" />

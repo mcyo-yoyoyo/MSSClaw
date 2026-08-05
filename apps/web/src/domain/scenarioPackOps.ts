@@ -114,6 +114,47 @@ export function listOrphanPortalItems(items: PortalContentItem[]): PortalContent
   );
 }
 
+/** 标签是否命中任一演示场景包（业务前端可见的前提） */
+export function tagsHitFeaturedScenario(tags: string[] | undefined | null): boolean {
+  if (!tags?.length) return false;
+  return FEATURED_SCENARIOS.some((def) =>
+    tags.some((t) => def.matchTags.includes(t)),
+  );
+}
+
+/** 返回命中的场景标签说明；未命中时给出可选 matchTags 提示 */
+export function featuredScenarioMountHint(tags: string[] | undefined | null): {
+  ok: boolean;
+  matchedLabels: string[];
+  hint: string;
+} {
+  if (!tags?.length) {
+    return {
+      ok: false,
+      matchedLabels: [],
+      hint: '请选择业务场景，使材料出现在对应场景案例画廊。',
+    };
+  }
+  const matched = FEATURED_SCENARIOS.filter((def) =>
+    tags.some((t) => def.matchTags.includes(t)),
+  );
+  if (matched.length) {
+    return {
+      ok: true,
+      matchedLabels: matched.map((m) => m.label),
+      hint: `将出现在：${matched.map((m) => m.label).join('、')}`,
+    };
+  }
+  const samples = FEATURED_SCENARIOS.slice(0, 3)
+    .map((s) => `${s.label}（${s.matchTags.slice(0, 2).join('/')}）`)
+    .join('；');
+  return {
+    ok: false,
+    matchedLabels: [],
+    hint: `当前标签未挂到任何场景包，业务前端将看不到。请用业务场景下拉，或使用如：${samples}`,
+  };
+}
+
 export function packCompletenessLabel(pack: ScenarioContentPack): string {
   return `${pack.filledSlots}/${SCENARIO_PACK_SLOTS.length} 槽`;
 }

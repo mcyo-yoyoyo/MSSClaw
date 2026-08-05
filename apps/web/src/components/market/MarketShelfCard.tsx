@@ -11,7 +11,7 @@ export function MarketShelfCard({
   onPrimary,
   onHowTo,
   primaryLabel: primaryLabelOverride,
-  howToLabel = 'How to',
+  howToLabel = '快速上手',
 }: {
   card: MarketShelfCardModel;
   variant?: 'grid' | 'featured';
@@ -26,10 +26,10 @@ export function MarketShelfCard({
   const primaryLabel =
     primaryLabelOverride ??
     (card.kind === 'projects'
-      ? '下载使用'
+      ? '下载'
       : card.primaryAction === 'howto'
-        ? '查看 How to'
-        : '立即使用');
+        ? '快速上手'
+        : '去使用');
 
   return (
     <article
@@ -99,7 +99,7 @@ export function MarketShelfCard({
             </p>
             {featured && card.hasHowto ? (
               <p className="mt-2 text-[11px] leading-snug text-zinc-400">
-                How to · 含快速上手材料，可先预览再使用
+                快速上手 · 含上手材料，可先预览再使用
               </p>
             ) : null}
             {card.kind === 'projects' && card.updatedAt ? (

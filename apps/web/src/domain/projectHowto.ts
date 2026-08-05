@@ -19,13 +19,18 @@ function previewKindToGuideType(
 
 function itemToGuide(item: PortalContentItem): PlazaToolGuide {
   const typeLabel = PORTAL_CONTENT_TYPE_LABELS[item.type] ?? item.type;
-  if (item.previewFile?.dataUrl) {
+  const online = item.layoutPreviewFile?.dataUrl || item.layoutPreviewFile?.url
+    ? item.layoutPreviewFile
+    : item.previewFile?.dataUrl || item.previewFile?.url
+      ? item.previewFile
+      : null;
+  if (online) {
     return {
       id: `howto-item-${item.id}`,
       title: item.title,
-      type: previewKindToGuideType(item.previewFile.kind),
-      url: item.previewFile.dataUrl,
-      fileName: item.previewFile.name,
+      type: previewKindToGuideType(online.kind),
+      url: online.dataUrl || online.url || '#',
+      fileName: online.name,
       blurb: `${typeLabel} · ${item.desc}`,
       body: item.steps?.length
         ? item.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')

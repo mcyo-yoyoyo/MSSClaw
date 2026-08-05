@@ -1,12 +1,51 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CenterModal } from '@/components/center/CenterShell';
+import { CaseDocumentPreview } from '@/components/content/CaseDocumentPreview';
 import {
   PLAZA_GUIDE_TYPE_LABEL,
   type PlazaToolGuide,
 } from '@/domain/plazaToolGuides';
 import { isHowtoDataUrl, openHowtoResource } from '@/domain/howtoUpload';
 import { groupGuidesIntoSteps } from '@/domain/howtoSteps';
+import type { PortalCasePreviewFile } from '@/domain/prototype/portalContent';
 import { cn } from '@/lib/utils';
+
+function guideToPreviewFile(guide: PlazaToolGuide): PortalCasePreviewFile | null {
+  const url = guide.url;
+  if (!url || url === '#') return null;
+  if (guide.type === 'pdf') {
+    return {
+      name: guide.fileName || `${guide.title || 'document'}.pdf`,
+      mimeType: 'application/pdf',
+      size: 0,
+      dataUrl: url.startsWith('data:') ? url : undefined,
+      url: url.startsWith('data:') ? undefined : url,
+      kind: 'pdf',
+    };
+  }
+  if (guide.type === 'ppt') {
+    return {
+      name: guide.fileName || `${guide.title || 'deck'}.pptx`,
+      mimeType:
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      size: 0,
+      dataUrl: url.startsWith('data:') ? url : undefined,
+      url: url.startsWith('data:') ? undefined : url,
+      kind: 'pptx',
+    };
+  }
+  if (guide.type === 'image') {
+    return {
+      name: guide.fileName || `${guide.title || 'image'}.png`,
+      mimeType: 'image/png',
+      size: 0,
+      dataUrl: url.startsWith('data:') ? url : undefined,
+      url: url.startsWith('data:') ? undefined : url,
+      kind: 'image',
+    };
+  }
+  return null;
+}
 
 function GuideList({
   guides,
@@ -144,7 +183,7 @@ export function HowToDrawer({
   );
 }
 
-/** 单条指引预览（文字 / 图片 / 视频） */
+/** 单条指引预览（文字 / 图片 / 视频 / PDF / PPT） */
 export function HowToGuidePreviewModal({
   guide,
   onClose,
@@ -153,6 +192,7 @@ export function HowToGuidePreviewModal({
   onClose: () => void;
 }) {
   if (!guide) return null;
+  const docFile = guideToPreviewFile(guide);
   return (
     <CenterModal
       open={!!guide}
@@ -170,8 +210,8 @@ export function HowToGuidePreviewModal({
             >
               {isHowtoDataUrl(guide.url)
                 ? guide.fileName
-                  ? `打开 ${guide.fileName}`
-                  : '打开文件'
+                  ? `下载 ${guide.fileName}`
+                  : '下载文件'
                 : '打开链接'}
             </button>
           ) : null}
@@ -185,12 +225,8 @@ export function HowToGuidePreviewModal({
         </>
       }
     >
-      {guide.type === 'image' && guide.url && guide.url !== '#' ? (
-        <img
-          src={guide.url}
-          alt={guide.title}
-          className="mx-auto max-h-[70vh] w-auto max-w-full rounded-xl object-contain"
-        />
+      {docFile && (guide.type === 'pdf' || guide.type === 'ppt' || guide.type === 'image') ? (
+        <CaseDocumentPreview file={docFile} />
       ) : null}
       {guide.type === 'video' && guide.url && guide.url !== '#' ? (
         <video
@@ -230,6 +266,14 @@ export function openGuideEntry(
     return;
   }
   if (g.type === 'image' && g.url && g.url !== '#') {
+    opts.onPreview(g);
+    return;
+  }
+  if (g.type === 'pdf' && g.url && g.url !== '#') {
+    opts.onPreview(g);
+    return;
+  }
+  if (g.type === 'ppt' && g.url && g.url !== '#') {
     opts.onPreview(g);
     return;
   }

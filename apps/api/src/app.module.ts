@@ -14,11 +14,11 @@ import { OptionalApiKeyGuard } from './common/optional-api-key.guard';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    // 默认：每 IP 每分钟 120 次；可用 THROTTLE_TTL_MS / THROTTLE_LIMIT 覆盖
+    // 默认：每 IP 每分钟 6000 次（内网 NAT 友好）；可用 THROTTLE_* 覆盖
     ThrottlerModule.forRoot([
       {
         ttl: Number(process.env.THROTTLE_TTL_MS ?? 60_000),
-        limit: Number(process.env.THROTTLE_LIMIT ?? 120),
+        limit: Number(process.env.THROTTLE_LIMIT ?? 6000),
       },
     ]),
     PrismaModule,

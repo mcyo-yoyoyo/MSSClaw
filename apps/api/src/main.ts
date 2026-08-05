@@ -14,7 +14,7 @@ async function bootstrap() {
   });
 
   // 大 JSON（会话 / Marketplace）默认 Express 100kb 会静默失败
-  const bodyLimit = process.env.JSON_BODY_LIMIT ?? '8mb';
+  const bodyLimit = process.env.JSON_BODY_LIMIT ?? '20mb';
   app.use(json({ limit: bodyLimit }));
   app.use(urlencoded({ extended: true, limit: bodyLimit }));
   app.use(compression());
@@ -39,7 +39,7 @@ async function bootstrap() {
   await app.listen(port);
   logger.log(`MSS Claw API listening on http://localhost:${port}/api/v1`);
   logger.log(
-    `JSON body limit=${bodyLimit}; API_KEY=${process.env.API_KEY ? 'on' : 'off'}; MAX_CONCURRENT_SSE=${process.env.MAX_CONCURRENT_SSE ?? 80}`,
+    `JSON body limit=${bodyLimit}; API_KEY=${process.env.API_KEY ? 'on' : 'off'}; MAX_CONCURRENT_SSE=${process.env.MAX_CONCURRENT_SSE ?? 200}`,
   );
 }
 

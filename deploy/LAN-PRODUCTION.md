@@ -49,6 +49,12 @@ VITE_INCLUDE_DEMO_CONTENT=false npm ci
 VITE_INCLUDE_DEMO_CONTENT=false npm run build --workspace @mss-claw/web
 ```
 
+若后端开启了 `API_KEY`，构建时一并写入（或事后在偏好设置里填）：
+
+```bash
+VITE_API_KEY=与后端API_KEY相同的值 VITE_INCLUDE_DEMO_CONTENT=false npm run build --workspace @mss-claw/web
+```
+
 **禁止**设置：`VITE_API_BASE_URL=http://localhost:3000`  
 （会导致每台电脑去连自己本机，数据无法互通。）
 
@@ -57,11 +63,16 @@ VITE_INCLUDE_DEMO_CONTENT=false npm run build --workspace @mss-claw/web
 ```bash
 cd apps/api
 cp ../../deploy/api.env.example .env
-# 编辑 .env：
+# 编辑 .env（参考下列推荐值）
 #   PORT=3000
-#   CORS_ORIGIN=https://你们的访问地址   （与浏览器地址一致）
-#   JSON_BODY_LIMIT=8mb
-#   DATABASE_URL="file:./prod.db"       （小团队 SQLite 即可）
+#   CORS_ORIGIN=https://你们的访问地址   （与浏览器地址一致，可逗号分隔多源）
+#   JSON_BODY_LIMIT=20mb
+#   THROTTLE_LIMIT=6000                 （内网 NAT 共享出口 IP，勿用过小默认）
+#   MAX_CONCURRENT_SSE=200
+#   BLOB_ROOT=/var/lib/mssclaw/blobs    （建议放到大磁盘）
+#   DATABASE_URL="file:./prod.db"       （试点 / 小团队可用 SQLite）
+#   # 百人以上共享写：换 Postgres，例如
+#   # DATABASE_URL="postgresql://mssclaw:密码@127.0.0.1:5432/mssclaw"
 
 npm run build
 npm run start:prod
@@ -74,6 +85,7 @@ npm run start:prod
 
 - `server_name`、证书、`root` 指到 `apps/web/dist`
 - **必须**有 `location /api/` 反代到 `127.0.0.1:3000`（不要让 SPA 的 `try_files` 吃掉 `/api`）
+- 上传相关建议：`client_max_body_size 25m;`
 
 ### 4. 健康检查（必须过）
 
@@ -97,12 +109,21 @@ npm run start:prod
 2. 普通同事**看不到**、也**不用填** API 地址。  
 3. 管理员若曾在旧版手填过地址：偏好 →「数据同步」→「恢复自动连接」。  
 4. 开发者工具 Network：`/api/v1/health` = 200 JSON。  
-5. 电脑 A 上传案例附件并保存 → 电脑 B 刷新后能打开同一附件。
+5. 电脑 A 上传案例附件（PPT 建议另传 PDF 视觉预览）并保存 → 电脑 B **刷新**后能打开同一附件。  
+6. （可选）两人几乎同时改同一门户条目：后保存方应提示冲突并加载最新版，避免静默互覆盖。
 
 ---
 
-## 五、已知边界（下一阶段再升级）
+## 五、容量与已知边界
 
-- 附件暂存在共享库的 JSON（单文件约 ≤3MB）；量大再上对象存储。  
-- 小团队 SQLite 够用；写并发高再换 Postgres（改 `DATABASE_URL`）。  
-- How to 等少数配置可能仍偏本机；核心案例 / 货架 / 会话走共享 API。
+| 场景 | 建议 |
+|------|------|
+| 试点 / 部门内少人编辑 | SQLite + 本机 `BLOB_ROOT` 可先上 |
+| 百人以上、多人同时改门户/货架 | **换 Postgres**；SQLite 单写者会锁等待 |
+| 附件 | API 在线时落盘 blob（默认 ≤12MB），JSON 只存 `url`/`blobId`；离线仍 ≤3MB dataUrl |
+| 限流 | 默认 6000/IP/分钟（应对公司 NAT）；过严会出现集体 429 |
+| How to | 部分仍偏本机 localStorage；核心案例 / 货架走共享 API |
+| 会话 | 当前仍为工作区级 chats 快照；大规模多用户请勿依赖其作为每人私有聊天真相源 |
+| 实时 | 门户无推送，他人改完需刷新；下一阶段可加轮询 |
+
+硬件（如 64G+2T）通常够用；瓶颈在同步模型与数据库选型，不在内存本身。

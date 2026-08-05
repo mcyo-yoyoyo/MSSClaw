@@ -70,7 +70,7 @@ http {
     # 健康检查须返回 JSON：GET /api/v1/health → {"status":"ok","service":"mss-claw-api",...}
     location /api/ {
       limit_req zone=mss_api burst=40 nodelay;
-      client_max_body_size 12m; # 案例附件 dataUrl
+      client_max_body_size 25m; # 门户 blob base64 + JSON
       proxy_http_version 1.1;
       proxy_set_header Host $host;
       proxy_set_header X-Real-IP $remote_addr;

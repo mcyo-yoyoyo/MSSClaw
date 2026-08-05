@@ -13,7 +13,7 @@ export class HealthController {
       version: '0.1.1',
       timestamp: new Date().toISOString(),
       sseActive: SseConcurrencyGuard.activeCount,
-      sseLimit: Number(process.env.MAX_CONCURRENT_SSE ?? 80),
+      sseLimit: Number(process.env.MAX_CONCURRENT_SSE ?? 200),
       apiKeyRequired: Boolean(process.env.API_KEY?.trim()),
       persistenceNote:
         'SQLite is a demo stub; prefer static frontend or Postgres for multi-user shared writes',

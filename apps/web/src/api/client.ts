@@ -1,5 +1,7 @@
 /** localStorage key for runtime API override (Settings → Runtime) */
 export const LS_API_KEY = 'mssclaw_api';
+/** 与 Nest API_KEY 对应的客户端密钥（可选） */
+export const LS_API_AUTH_KEY = 'mssclaw_api_auth';
 
 /** 强制纯浏览器模式（不做 API 探活） */
 export function isForceLocalDemo(): boolean {
@@ -74,6 +76,30 @@ export function setApiBaseOverride(value: string): void {
     return;
   }
   localStorage.setItem(LS_API_KEY, trimmed);
+}
+
+/** Nest OptionalApiKeyGuard：有密钥时注入 X-API-Key */
+export function getApiAuthKey(): string {
+  if (typeof localStorage !== 'undefined') {
+    const stored = localStorage.getItem(LS_API_AUTH_KEY)?.trim();
+    if (stored) return stored;
+  }
+  return (import.meta.env.VITE_API_KEY as string | undefined)?.trim() ?? '';
+}
+
+export function setApiAuthKey(value: string): void {
+  if (typeof localStorage === 'undefined') return;
+  const trimmed = value.trim();
+  if (!trimmed) {
+    localStorage.removeItem(LS_API_AUTH_KEY);
+    return;
+  }
+  localStorage.setItem(LS_API_AUTH_KEY, trimmed);
+}
+
+export function apiAuthHeaders(): Record<string, string> {
+  const key = getApiAuthKey();
+  return key ? { 'X-API-Key': key } : {};
 }
 
 export function apiUrl(path: string) {
