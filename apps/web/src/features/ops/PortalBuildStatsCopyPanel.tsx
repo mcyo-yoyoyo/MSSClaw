@@ -24,7 +24,7 @@ export function PortalBuildStatsCopyPanel() {
     <div className="space-y-4">
       <div className="rounded-2xl border border-zinc-200/90 bg-white p-4">
         <p className="text-[12px] leading-relaxed text-zinc-500">
-          配置 MSS工具集市「建设概况」统计条的标题与口径说明。项目数 / 可执行 / 场景覆盖仍由当前筛选下的真实列表推导，此处只解释含义与建设目标，避免业务用户误解统计口径。
+          配置 MSS工具集市「建设概况」统计条的标题与口径说明。案例数 / 场景覆盖仍由当前筛选下的真实列表推导，此处只解释含义与建设目标，避免业务用户误解统计口径。
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
@@ -72,7 +72,7 @@ export function PortalBuildStatsCopyPanel() {
             onChange={(e) => update({ goalBlurb: e.target.value })}
             rows={2}
             className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-[13px] leading-relaxed text-zinc-900"
-            placeholder="例如：各业务场景均有场景案例与可执行场景技能"
+            placeholder="例如：各业务场景均有可复用的场景案例与场景技能"
           />
         </label>
       </div>

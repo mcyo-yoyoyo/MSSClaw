@@ -11,7 +11,6 @@ import { OwnershipFormFields } from '@/components/center/OrgAssetFilters';
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import type { AssetSourceType, AssetVisibility, DeptId, RegionId } from '@/domain/orgTaxonomy';
 import {
-  FIND_CASES_FEATURED_HINT,
   MARKET_SHELF_SLOT_HINT,
 } from '@/domain/capabilityShelf';
 import {
@@ -25,6 +24,12 @@ import {
   type BusinessScenarioId,
 } from '@/domain/businessScenarios';
 import { resolveToolBusinessScenarios } from '@/domain/toolBusinessScenarios';
+import {
+  type ExternalToolTypeId,
+  type ToolRegion,
+} from '@/domain/externalToolTaxonomy';
+import { listVisibleExternalToolTypes } from '@/domain/externalTaxonomyCatalog';
+import { useExternalTaxonomyCatalogStore } from '@/stores/externalTaxonomyCatalogStore';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
 import { resolveToolLogoUrl } from '@/domain/toolLogo';
 import { ToolLogo } from '@/components/brand/ToolLogo';
@@ -76,6 +81,14 @@ function emptyTool(asExternal: boolean): PrototypeToolSeed {
     marketTitle: '',
     businessScenarioIds: [],
     featuredInFindCases: false,
+    region: asExternal ? ('overseas' as ToolRegion) : undefined,
+    toolTypeId: asExternal ? ('general' as ExternalToolTypeId) : undefined,
+    cardSummary: '',
+    company: '',
+    productIntro: '',
+    bestFor: '',
+    mediaUrl: '',
+    screenshotUrl: '',
   };
 }
 
@@ -87,6 +100,9 @@ interface ToolEditorModalProps {
 export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
   const { tools, upsertTool, showToast } = useMarketplaceStore();
   const [form, setForm] = useState<PrototypeToolSeed>(emptyTool(false));
+  const externalTypeOptions = listVisibleExternalToolTypes(
+    useExternalTaxonomyCatalogStore((s) => s.catalog),
+  );
 
   useEffect(() => {
     if (!target) return;
@@ -143,9 +159,6 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
       showToast('外部工具请填写访问链接');
       return;
     }
-    if (marketShelf !== 'none' && form.featuredInFindCases && !(form.businessScenarioIds?.length)) {
-      // 精选不强制场景，但建议有场景；不阻塞保存
-    }
     const prev = !isNew ? tools.find((t) => t.id === target) : null;
     const userName = getCurrentUserName() || 'Mcyo';
     const userId = getCurrentUserId();
@@ -185,6 +198,18 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
         marketTitle: marketShelf === 'external' ? marketTitle : undefined,
         businessScenarioIds: businessScenarioIds.length ? businessScenarioIds : undefined,
         featuredInFindCases: marketShelf === 'none' ? false : Boolean(form.featuredInFindCases),
+        ...(sourceType === 'external' || marketShelf === 'external'
+          ? {
+              region: (form.region ?? 'overseas') as ToolRegion,
+              toolTypeId: (form.toolTypeId ?? 'general') as ExternalToolTypeId,
+              cardSummary: form.cardSummary?.trim() || undefined,
+              company: form.company?.trim() || undefined,
+              productIntro: form.productIntro?.trim() || undefined,
+              bestFor: form.bestFor?.trim() || undefined,
+              mediaUrl: form.mediaUrl?.trim() || undefined,
+              screenshotUrl: form.screenshotUrl?.trim() || undefined,
+            }
+          : {}),
       },
       isNew,
     );
@@ -226,6 +251,86 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
             onChange={(e) => setForm({ ...form, desc: e.target.value })}
           />
         </FormField>
+        {(form.sourceType === 'external' || shelf === 'external') && (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="目录区域（海外 / 国内）" hint="决定外精选双栏与筛选统计">
+                <FormSelect
+                  value={form.region ?? 'overseas'}
+                  onChange={(e) =>
+                    setForm({ ...form, region: e.target.value as ToolRegion })
+                  }
+                >
+                  <option value="overseas">海外</option>
+                  <option value="domestic">国内</option>
+                </FormSelect>
+              </FormField>
+              <FormField label="工具类型" hint="对应「按工具类型」筛选芯片">
+                <FormSelect
+                  value={(form.toolTypeId as string) || 'general'}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      toolTypeId: e.target.value as ExternalToolTypeId,
+                    })
+                  }
+                >
+                  {externalTypeOptions.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
+                </FormSelect>
+              </FormField>
+            </div>
+            <FormField label="卡片摘要" hint="货架卡优先展示；可短于完整描述">
+              <FormTextarea
+                rows={2}
+                value={form.cardSummary ?? ''}
+                onChange={(e) => setForm({ ...form, cardSummary: e.target.value })}
+                placeholder="一句话说明核心作用"
+              />
+            </FormField>
+            <FormField label="厂商 / 公司">
+              <FormInput
+                value={form.company ?? ''}
+                onChange={(e) => setForm({ ...form, company: e.target.value })}
+                placeholder="例：OpenAI"
+              />
+            </FormField>
+            <FormField label="产品介绍">
+              <FormTextarea
+                rows={3}
+                value={form.productIntro ?? ''}
+                onChange={(e) => setForm({ ...form, productIntro: e.target.value })}
+                placeholder="详情页概览展示"
+              />
+            </FormField>
+            <FormField label="最适合">
+              <FormInput
+                value={form.bestFor ?? ''}
+                onChange={(e) => setForm({ ...form, bestFor: e.target.value })}
+                placeholder="例：需要可追溯来源的研究问答"
+              />
+            </FormField>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="截图 URL">
+                <FormInput
+                  value={form.screenshotUrl ?? ''}
+                  onChange={(e) => setForm({ ...form, screenshotUrl: e.target.value })}
+                  placeholder="https://… 图片地址"
+                />
+              </FormField>
+              <FormField label="演示 / 介绍媒体 URL">
+                <FormInput
+                  value={form.mediaUrl ?? ''}
+                  onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })}
+                  placeholder="https://… 视频或介绍页"
+                />
+              </FormField>
+            </div>
+          </>
+        )}
         {(shelf === 'external' ||
           shelf === 'internal' ||
           form.sourceType === 'external' ||
@@ -340,19 +445,18 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
         <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-3 py-2.5 space-y-2">
           <p className="text-[11px] font-semibold text-zinc-700">货架陈列</p>
           <p className="text-[11px] leading-relaxed text-zinc-500">
-            上架到「外部工具精选 / 公司工具推荐」、场景标题、精选角标与置顶，请在{' '}
+            外部工具的上架与精选置顶请在{' '}
             <strong className="font-semibold text-zinc-700">门户运营 · 货架运营</strong>{' '}
-            配置。本页只维护工具主数据（名称、链接、归属、发布）。
+            配置。公司推荐前台为办公场景网格，请在本页维护场景工具的链接 / Logo。本页只维护工具主数据。
           </p>
           {shelf !== 'none' ? (
             <p className="rounded-lg border border-emerald-100 bg-emerald-50/70 px-2.5 py-1.5 text-[11px] text-emerald-800">
               当前货架：
-              {shelf === 'external' ? '外部工具精选' : '公司工具推荐'}
+              {shelf === 'external' ? '外部工具精选' : '公司工具推荐（场景引用）'}
               {form.marketTitle?.trim() ? ` · ${form.marketTitle.trim()}` : ''}
-              {form.featuredInFindCases ? ' · 精选角标开' : ''}
             </p>
           ) : (
-            <p className="text-[11px] text-zinc-400">当前未上架到业务货架（可在门户运营上架）。</p>
+            <p className="text-[11px] text-zinc-400">当前未上架到业务货架（可在门户运营上架外部工具）。</p>
           )}
           <details className="rounded-lg border border-zinc-200 bg-white px-2.5 py-2">
             <summary className="cursor-pointer text-[11px] font-medium text-zinc-600">
@@ -394,7 +498,14 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
                 </FormField>
               ) : null}
               {shelf !== 'none' ? (
-                <FormField label="业务场景">
+                <FormField
+                  label="业务场景（组织轴）"
+                  hint={
+                    shelf === 'external'
+                      ? '仅用于左侧领域/区域相关组织筛选；外精选「按工具类型 / 工作场景」请用上方目录区域与工具类型字段。'
+                      : '用于组织轴场景筛选与 MSS 关联；公司推荐主界面由办公场景字典驱动，不由此勾选决定。'
+                  }
+                >
                   <div className="flex flex-wrap gap-1.5">
                     {scenarioCats.map((c) => {
                       const on = (form.businessScenarioIds ?? []).includes(c.id);
@@ -415,26 +526,6 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
                     })}
                   </div>
                 </FormField>
-              ) : null}
-              {shelf !== 'none' ? (
-                <label className="flex cursor-pointer items-start gap-2">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 accent-claw-600"
-                    checked={Boolean(form.featuredInFindCases)}
-                    onChange={(e) =>
-                      setForm({ ...form, featuredInFindCases: e.target.checked })
-                    }
-                  />
-                  <span>
-                    <span className="block text-[13px] font-medium text-zinc-800">
-                      精选露出到货架「精选推荐」
-                    </span>
-                    <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500">
-                      {FIND_CASES_FEATURED_HINT}
-                    </span>
-                  </span>
-                </label>
               ) : null}
             </div>
           </details>

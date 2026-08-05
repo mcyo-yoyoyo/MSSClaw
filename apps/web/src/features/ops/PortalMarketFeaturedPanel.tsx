@@ -11,10 +11,6 @@ import {
   type MarketShelfSlot,
 } from '@/domain/aiToolCategories';
 import { emptyOrgPerspectiveSelection } from '@/domain/orgAxisTags';
-import {
-  listVisibleBusinessScenarioCategories,
-  type BusinessScenarioId,
-} from '@/domain/businessScenarios';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import {
   MARKET_FEATURED_MAX,
@@ -26,6 +22,7 @@ import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { resolveToolLogoUrl } from '@/domain/toolLogo';
 import { AssetAccentMark } from '@/components/brand/AssetAccentMark';
+import { PortalInternalOfficeScenePanel } from '@/features/ops/PortalInternalOfficeScenePanel';
 
 type PinCandidate = {
   id: string;
@@ -36,17 +33,14 @@ type PinCandidate = {
   icon?: string;
 };
 
-const TOOL_KINDS: Array<Extract<MarketShelfKind, 'external' | 'internal'>> = [
-  'external',
-  'internal',
-];
 const KINDS: MarketShelfKind[] = ['external', 'internal', 'projects'];
 
 type ShelfMode = 'assign' | 'pins';
 
 /**
  * 门户运营 · 货架运营
- * - 外精选 / 公司推荐：上架选品（marketShelf / 标题 / 场景 / 精选角标）+ 精选置顶
+ * - 外精选：上架选品（marketShelf / 标题）+ 精选置顶（pins）
+ * - 公司推荐：前台为办公场景网格，本页仅说明场景工具与配置工具维护口径
  * - MSS 集市：仅场景卡置顶（案例材料在「场景内容」）
  */
 export function PortalMarketFeaturedPanel() {
@@ -66,11 +60,9 @@ export function PortalMarketFeaturedPanel() {
 
   useEffect(() => {
     if (kind === 'projects') setMode('pins');
-    else setMode('assign');
+    else if (kind === 'external') setMode('assign');
     setQ('');
   }, [kind]);
-
-  const scenarioCats = listVisibleBusinessScenarioCategories();
 
   const projectCandidates = useMemo((): PinCandidate[] => {
     return listMarketProjectCards(emptyOrgPerspectiveSelection(), 'all').map((c) => ({
@@ -147,7 +139,7 @@ export function PortalMarketFeaturedPanel() {
     patch: Partial<
       Pick<
         PrototypeToolSeed,
-        'marketShelf' | 'marketTitle' | 'featuredInFindCases' | 'businessScenarioIds' | 'tags' | 'sourceType'
+        'marketShelf' | 'marketTitle' | 'tags' | 'sourceType'
       >
     >,
   ) => {
@@ -165,8 +157,6 @@ export function PortalMarketFeaturedPanel() {
           : marketShelf === 'internal'
             ? 'internal'
             : tool.sourceType),
-      featuredInFindCases:
-        marketShelf === 'none' ? false : (patch.featuredInFindCases ?? tool.featuredInFindCases),
     };
     upsertTool(next, false);
   };
@@ -174,8 +164,13 @@ export function PortalMarketFeaturedPanel() {
   return (
     <div className="space-y-4">
       <p className="text-[12px] leading-relaxed text-zinc-500">
-        货架陈列在此配置：选择已发布工具上架到「外精选 / 公司推荐」、填写场景标题、勾选精选角标，并设置精选条置顶（每货架最多{' '}
-        {MARKET_FEATURED_MAX} 个）。工具主数据（链接、ACL、连接器）仍在「配置工具」。
+        <strong className="font-semibold text-zinc-700">外部工具精选</strong>
+        ：上架选品、场景标题与精选置顶（每货架最多 {MARKET_FEATURED_MAX}{' '}
+        个）。分类芯片请到「外精选分类」维护。
+        <strong className="ml-1 font-semibold text-zinc-700">公司工具推荐</strong>
+        ：下方可配办公场景字典；链接/Logo 在「配置工具」，How to 在「工具 How to」。
+        <strong className="ml-1 font-semibold text-zinc-700">MSS 集市</strong>
+        ：仅场景卡置顶。
       </p>
 
       <div className="flex flex-wrap gap-1.5">
@@ -208,7 +203,9 @@ export function PortalMarketFeaturedPanel() {
         ))}
       </div>
 
-      {kind !== 'projects' ? (
+      {kind === 'internal' ? <PortalInternalOfficeScenePanel /> : null}
+
+      {kind === 'external' ? (
         <div className="inline-flex rounded-xl border border-zinc-200 bg-zinc-50 p-0.5">
           {(
             [
@@ -231,12 +228,15 @@ export function PortalMarketFeaturedPanel() {
             </button>
           ))}
         </div>
-      ) : (
+      ) : null}
+
+      {kind === 'projects' ? (
         <p className="text-[11px] text-zinc-500">
           MSS 集市场景卡置顶（共 {projectCount} 个场景）。案例材料请到「场景内容」维护。
         </p>
-      )}
+      ) : null}
 
+      {kind !== 'internal' ? (
       <div className="flex flex-wrap items-center gap-2">
         <input
           value={q}
@@ -251,8 +251,9 @@ export function PortalMarketFeaturedPanel() {
           className="min-w-[220px] flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-zinc-400"
         />
       </div>
+      ) : null}
 
-      {mode === 'assign' && kind !== 'projects' ? (
+      {kind === 'external' && mode === 'assign' ? (
         <ul className="divide-y divide-zinc-100 rounded-2xl border border-zinc-200 bg-white">
           {assignList.map((t) => {
             const shelf = resolveToolMarketShelf(t);
@@ -295,16 +296,13 @@ export function PortalMarketFeaturedPanel() {
                     type="button"
                     onClick={() => {
                       if (onShelf) {
-                        patchToolShelf(t, {
-                          marketShelf: 'none',
-                          featuredInFindCases: false,
-                        });
+                        patchToolShelf(t, { marketShelf: 'none' });
                         if (pinnedSet.has(t.id)) togglePin(kind, t.id);
                         showToast(`已从「${MARKET_SHELF_META[kind].label}」下架`);
                       } else {
                         patchToolShelf(t, {
-                          marketShelf: kind as MarketShelfSlot,
-                          sourceType: kind === 'external' ? 'external' : 'internal',
+                          marketShelf: 'external',
+                          sourceType: 'external',
                         });
                         showToast(`已上架到「${MARKET_SHELF_META[kind].label}」`);
                       }
@@ -322,59 +320,16 @@ export function PortalMarketFeaturedPanel() {
 
                 {onShelf ? (
                   <div className="ml-4 space-y-2 rounded-xl border border-zinc-100 bg-zinc-50/80 p-2.5">
-                    {kind === 'external' ? (
-                      <label className="block text-[11px] text-zinc-600">
-                        应用场景标题（外精选卡主标题）
-                        <input
-                          value={t.marketTitle ?? ''}
-                          placeholder="例：竞品舆情监控 · 市场洞察"
-                          onChange={(e) =>
-                            patchToolShelf(t, { marketTitle: e.target.value })
-                          }
-                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[12px] outline-none focus:border-zinc-400"
-                        />
-                      </label>
-                    ) : null}
-                    <div>
-                      <p className="mb-1 text-[11px] text-zinc-600">业务场景（货架筛选）</p>
-                      <div className="flex flex-wrap gap-1">
-                        {scenarioCats.map((c) => {
-                          const on = (t.businessScenarioIds ?? []).includes(c.id);
-                          return (
-                            <button
-                              key={c.id}
-                              type="button"
-                              onClick={() => {
-                                const cur = new Set(t.businessScenarioIds ?? []);
-                                if (on) cur.delete(c.id);
-                                else cur.add(c.id);
-                                patchToolShelf(t, {
-                                  businessScenarioIds: [...cur] as BusinessScenarioId[],
-                                });
-                              }}
-                              className={cn(
-                                'rounded-lg border px-2 py-0.5 text-[10px] font-medium',
-                                on
-                                  ? 'border-claw-500/40 bg-claw-50 text-claw-800'
-                                  : 'border-zinc-200 bg-white text-zinc-600',
-                              )}
-                            >
-                              {c.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <label className="flex cursor-pointer items-center gap-2 text-[11px] text-zinc-700">
+                    <label className="block text-[11px] text-zinc-600">
+                      应用场景标题（外精选卡主标题）
                       <input
-                        type="checkbox"
-                        className="accent-claw-600"
-                        checked={Boolean(t.featuredInFindCases)}
+                        value={t.marketTitle ?? ''}
+                        placeholder="例：竞品舆情监控 · 市场洞察"
                         onChange={(e) =>
-                          patchToolShelf(t, { featuredInFindCases: e.target.checked })
+                          patchToolShelf(t, { marketTitle: e.target.value })
                         }
+                        className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[12px] outline-none focus:border-zinc-400"
                       />
-                      精选角标（货架「精选推荐」默认露出）
                     </label>
                   </div>
                 ) : null}
@@ -387,7 +342,9 @@ export function PortalMarketFeaturedPanel() {
             </li>
           ) : null}
         </ul>
-      ) : (
+      ) : null}
+
+      {(kind === 'external' && mode === 'pins') || kind === 'projects' ? (
         <>
           {pinnedIds.length > 0 ? (
             <div className="rounded-xl border border-amber-100 bg-amber-50/50 px-3 py-2">
@@ -474,11 +431,11 @@ export function PortalMarketFeaturedPanel() {
             ) : null}
           </ul>
         </>
-      )}
+      ) : null}
 
-      {TOOL_KINDS.includes(kind as 'external' | 'internal') && mode === 'pins' ? (
+      {kind === 'external' && mode === 'pins' ? (
         <p className="text-[10px] text-zinc-400">
-          置顶仅作用于已上架本货架的工具；未配置置顶时仍按热度 / 精选角标规则露出。
+          置顶决定外精选双栏露出顺序；未配置置顶时按点击热度排序。精选不再使用「精选角标」字段。
         </p>
       ) : null}
     </div>

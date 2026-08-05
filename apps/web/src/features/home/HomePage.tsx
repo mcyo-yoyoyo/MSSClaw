@@ -52,6 +52,7 @@ import { isNewSkill } from '@/domain/contentBadges';
 import { downloadSkillFile } from '@/domain/skillExport';
 import {
   applyMarketFeaturedPins,
+  listInternalOfficeMarketCards,
   listMarketProjectCards,
   listMarketToolCards,
   type MarketShelfCard as MarketShelfCardModel,
@@ -72,6 +73,7 @@ import { useAppViewStore } from '@/stores/appViewStore';
 import { useMarketFilterStore } from '@/stores/marketFilterStore';
 import { useRecentMarketStore } from '@/stores/recentMarketStore';
 import { useMarketFeaturedStore } from '@/stores/marketFeaturedStore';
+import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
 import { AssetAccentMark } from '@/components/brand/AssetAccentMark';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { greetingForNow } from '@/domain/timeGreeting';
@@ -117,6 +119,7 @@ export function HomePage({
   const roleEnabled = useNavPresentationStore((s) => s.roleEnabled);
   const engagementOf = useContentEngagementStore((s) => s.get);
   const engagementById = useContentEngagementStore((s) => s.byId);
+  const bumpUse = useContentEngagementStore((s) => s.bumpUse);
   const chats = useConversationStore((s) => s.chats);
   const currentChatId = useConversationStore((s) => s.currentChatId);
   const switchChat = useConversationStore((s) => s.switchChat);
@@ -131,6 +134,7 @@ export function HomePage({
   const pushRecent = useRecentMarketStore((s) => s.push);
   const featuredPins = useMarketFeaturedStore((s) => s.pins);
   const hydrateFeaturedPins = useMarketFeaturedStore((s) => s.hydrate);
+  const officeSceneEntries = useInternalOfficeSceneCatalogStore((s) => s.entries);
   const guideRecords = usePlazaToolGuideStore((s) => s.records);
   const [rankByKind, setRankByKind] =
     useState<Record<MarketShelfKind, RankMode>>(DEFAULT_RANK_BY_KIND);
@@ -274,7 +278,18 @@ export function HomePage({
       c.description.toLowerCase().includes(q) ||
       c.badges.some((b) => b.label.toLowerCase().includes(q));
 
-    const external = sortByRankMode(
+    const byPinsThenClicks = (list: MarketShelfCardModel[]) =>
+      [...list].sort((a, b) => {
+        if (Number(b.featured) !== Number(a.featured)) {
+          return Number(b.featured) - Number(a.featured);
+        }
+        const au = eng(a.id).uses;
+        const bu = eng(b.id).uses;
+        if (bu !== au) return bu - au;
+        return b.heat - a.heat;
+      });
+
+    const external = byPinsThenClicks(
       applyMarketFeaturedPins(
         listMarketToolCards(
           tools,
@@ -287,27 +302,13 @@ export function HomePage({
         ),
         featuredPins.external,
       ).filter(matchSearch),
-      rankByKind.external,
-      eng,
     );
-    const internal = sortByRankMode(
-      applyMarketFeaturedPins(
-        listMarketToolCards(
-          tools,
-          'internal',
-          viewer,
-          org,
-          'all',
-          eng,
-          howtoToolIds,
-        ),
-        featuredPins.internal,
-      )
-        .map((c) => ({ ...c, featured: false }))
-        .filter(matchSearch),
-      rankByKind.internal,
+    const internal = listInternalOfficeMarketCards(
+      tools,
       eng,
-    );
+      howtoToolIds,
+      officeSceneEntries,
+    ).filter(matchSearch);
     const projects = sortByRankMode(
       applyMarketFeaturedPins(
         listMarketProjectCards(org, 'all', eng, portalByScenario),
@@ -331,6 +332,7 @@ export function HomePage({
     portalByScenario,
     featuredPins,
     rankByKind,
+    officeSceneEntries,
   ]);
 
   useEffect(() => {
@@ -356,6 +358,7 @@ export function HomePage({
     if (card.homepageUrl && card.homepageUrl !== '#') {
       const win = window.open(card.homepageUrl, '_blank', 'noopener,noreferrer');
       bumpToolInvokes(card.id);
+      if (card.kind !== 'projects') bumpUse(card.id);
       rememberCard(card);
       if (!win) showToast('浏览器拦截了弹窗，请允许后重试，或先查看 How to');
       else showToast(`已打开：${card.title}`);
@@ -370,6 +373,7 @@ export function HomePage({
       openMarketShelf('projects');
       return;
     }
+    bumpUse(card.id);
     openMarketToolDetail(card.id, card.kind);
   };
 
@@ -390,8 +394,10 @@ export function HomePage({
   const openPortalHowTo = (card: MarketShelfCardModel) => {
     if (card.hasHowto) {
       showToast(`「${card.title}」How to 材料可在详情页查看`);
-      if (card.kind !== 'projects') openMarketToolDetail(card.id, card.kind);
-      else openMarketShelf('projects');
+      if (card.kind !== 'projects') {
+        bumpUse(card.id);
+        openMarketToolDetail(card.id, card.kind);
+      } else openMarketShelf('projects');
       return;
     }
     showToast(`「${card.title}」暂无 How to，可在门户运营维护`);

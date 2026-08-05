@@ -3,15 +3,16 @@ import { cn } from '@/lib/utils';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { resolveToolLogoUrl } from '@/domain/toolLogo';
 import {
-  HowToDrawer,
   HowToGuidePreviewModal,
   openGuideEntry,
 } from '@/components/market/HowToPanel';
 import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
 import { resolveToolBusinessScenarios } from '@/domain/toolBusinessScenarios';
 import { getBusinessScenarioMeta } from '@/domain/businessScenarios';
+import { resolveExternalToolTypeMeta } from '@/domain/externalTaxonomyCatalog';
 import { openMarketShelf } from '@/domain/openHomeJourney';
 import type { MarketShelfKind } from '@/domain/marketShelf';
+import { useExternalTaxonomyCatalogStore } from '@/stores/externalTaxonomyCatalogStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
@@ -20,6 +21,7 @@ import {
   usePlazaToolGuideStore,
 } from '@/stores/plazaToolGuideStore';
 import { useRecentMarketStore } from '@/stores/recentMarketStore';
+import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { parseAppRoute } from '@/domain/appRoute';
 import type { PlazaToolGuide } from '@/domain/plazaToolGuides';
 import { groupGuidesIntoSteps } from '@/domain/howtoSteps';
@@ -30,15 +32,17 @@ export function MarketToolDetailPage() {
   const tools = useMarketplaceStore((s) => s.tools);
   const showToast = useMarketplaceStore((s) => s.showToast);
   const bumpToolInvokes = useMarketplaceStore((s) => s.bumpToolInvokes);
+  const bumpUse = useContentEngagementStore((s) => s.bumpUse);
   const setAppView = useAppViewStore((s) => s.setAppView);
   const peekToolId = useNavigationIntentStore((s) => s.peekToolId);
   const consumeReturnTarget = useNavigationIntentStore((s) => s.consumeReturnTarget);
+  const consumeToolDetailTab = useNavigationIntentStore((s) => s.consumeToolDetailTab);
   const focusTool = useNavigationIntentStore((s) => s.focusTool);
   const guideRecords = usePlazaToolGuideStore((s) => s.records);
   const pushRecent = useRecentMarketStore((s) => s.push);
+  const externalTaxonomy = useExternalTaxonomyCatalogStore((s) => s.catalog);
 
   const [tab, setTab] = useState<DetailTab>('overview');
-  const [howToOpen, setHowToOpen] = useState(false);
   const [guidePreview, setGuidePreview] = useState<PlazaToolGuide | null>(null);
   const [activeStep, setActiveStep] = useState(0);
 
@@ -67,7 +71,9 @@ export function MarketToolDetailPage() {
 
   useEffect(() => {
     setActiveStep(0);
-  }, [toolId]);
+    const nextTab = consumeToolDetailTab();
+    setTab(nextTab ?? 'overview');
+  }, [toolId, consumeToolDetailTab]);
 
   const kind: MarketShelfKind =
     tool?.sourceType === 'internal' || tool?.tags?.includes('hw-internal')
@@ -88,13 +94,16 @@ export function MarketToolDetailPage() {
   };
 
   const openUrl = () => {
-    if (!tool?.homepageUrl || tool.homepageUrl === '#') {
+    if (!tool) return;
+    if (!tool.homepageUrl || tool.homepageUrl === '#') {
       showToast('暂无可用链接，请查看快速上手');
       setTab('howto');
+      bumpUse(tool.id);
       return;
     }
     const win = window.open(tool.homepageUrl, '_blank', 'noopener,noreferrer');
     bumpToolInvokes(tool.id);
+    bumpUse(tool.id);
     pushRecent({
       id: tool.id,
       kind,
@@ -121,17 +130,43 @@ export function MarketToolDetailPage() {
     );
   }
 
+  const typeMeta = resolveExternalToolTypeMeta(tool.toolTypeId, externalTaxonomy);
+  const heroBlurb = tool.cardSummary?.trim() || tool.desc;
+  const introText = tool.productIntro?.trim() || tool.desc?.trim() || '';
+  const hasScreenshot = Boolean(tool.screenshotUrl?.trim());
+  const hasMedia = Boolean(tool.mediaUrl?.trim());
+
   const metaRows: { label: string; value: string }[] = [
     {
       label: '类型',
       value: kind === 'internal' ? '内部工具' : '外部工具',
     },
+    ...(kind === 'external'
+      ? [
+          {
+            label: '目录区域',
+            value:
+              tool.region === 'domestic'
+                ? '国内'
+                : tool.region === 'overseas'
+                  ? '海外'
+                  : '未标注',
+          },
+          {
+            label: '工具类型',
+            value: typeMeta?.label ?? '未标注',
+          },
+        ]
+      : []),
+    ...(tool.company
+      ? [{ label: '厂商', value: tool.company }]
+      : []),
     {
       label: '领域',
       value: (tool.ownerDeptIds ?? []).map(getDeptLabel).filter(Boolean).join('、') || '未标注',
     },
     {
-      label: '区域',
+      label: '组织区域',
       value: tool.ownerRegionId ? getRegionLabel(tool.ownerRegionId) : '不限',
     },
     {
@@ -184,20 +219,20 @@ export function MarketToolDetailPage() {
                       {kind === 'internal' ? '内部工具' : '外部工具'}
                     </span>
                   </div>
-                  <p className="mt-1.5 text-[13px] leading-relaxed text-zinc-500">{tool.desc}</p>
+                  <p className="mt-1.5 text-[13px] leading-relaxed text-zinc-500">{heroBlurb}</p>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={openUrl}
                       className="rounded-xl bg-zinc-900 px-4 py-2.5 text-[12px] font-semibold text-white shadow-sm transition hover:bg-zinc-800"
                     >
-                      去使用
+                      立即体验
                     </button>
                     <button
                       type="button"
                       onClick={() => {
+                        bumpUse(tool.id);
                         setTab('howto');
-                        setHowToOpen(true);
                       }}
                       className="rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-[12px] font-medium text-zinc-700 transition hover:bg-zinc-50"
                     >
@@ -235,6 +270,24 @@ export function MarketToolDetailPage() {
             <div className="mt-5">
               {tab === 'overview' ? (
                 <div className="space-y-4 text-[13px] leading-relaxed text-zinc-600">
+                  {introText ? (
+                    <div>
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
+                        产品介绍
+                      </p>
+                      <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-zinc-600">
+                        {introText}
+                      </p>
+                    </div>
+                  ) : null}
+                  {tool.bestFor?.trim() ? (
+                    <div>
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
+                        最适合
+                      </p>
+                      <p className="text-[13px] text-zinc-600">{tool.bestFor.trim()}</p>
+                    </div>
+                  ) : null}
                   <div>
                     <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
                       应用场景
@@ -262,15 +315,48 @@ export function MarketToolDetailPage() {
                         .join(' · ') || '—'}
                     </p>
                   ) : null}
-                  <div className="flex min-h-[200px] flex-col items-center justify-center rounded-3xl border border-dashed border-zinc-200 bg-gradient-to-b from-zinc-50/80 to-white px-4 py-12 text-center">
-                    <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-zinc-300 ring-1 ring-zinc-100">
-                      <i className="fa-regular fa-image text-[18px]" />
-                    </span>
-                    <p className="text-[13px] font-medium text-zinc-500">预览图 / 演示视频建设中</p>
-                    <p className="mt-1 max-w-sm text-[12px] leading-relaxed text-zinc-400">
-                      可先查看快速上手材料，或直接去使用打开工具。
-                    </p>
-                  </div>
+                  {hasScreenshot || hasMedia ? (
+                    <div className="space-y-3">
+                      {hasScreenshot ? (
+                        <a
+                          href={tool.screenshotUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50"
+                        >
+                          <img
+                            src={tool.screenshotUrl}
+                            alt={`${tool.name} 预览`}
+                            className="max-h-[360px] w-full object-contain object-center"
+                          />
+                        </a>
+                      ) : null}
+                      {hasMedia ? (
+                        <a
+                          href={tool.mediaUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-[12px] font-medium text-zinc-700 transition hover:bg-zinc-50"
+                        >
+                          <i className="fa-solid fa-play text-[11px] text-zinc-400" />
+                          打开演示 / 介绍媒体
+                          <span className="min-w-0 truncate text-[11px] font-normal text-zinc-400">
+                            {tool.mediaUrl}
+                          </span>
+                        </a>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="flex min-h-[160px] flex-col items-center justify-center rounded-3xl border border-dashed border-zinc-200 bg-gradient-to-b from-zinc-50/80 to-white px-4 py-10 text-center">
+                      <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-zinc-300 ring-1 ring-zinc-100">
+                        <i className="fa-regular fa-image text-[18px]" />
+                      </span>
+                      <p className="text-[13px] font-medium text-zinc-500">预览图 / 演示视频建设中</p>
+                      <p className="mt-1 max-w-sm text-[12px] leading-relaxed text-zinc-400">
+                        可先查看快速上手材料，或直接去使用打开工具。
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : null}
 
@@ -357,15 +443,38 @@ export function MarketToolDetailPage() {
                         {tool.homepageUrl}
                       </span>
                     </a>
-                  ) : (
+                  ) : null}
+                  {tool.docsUrl?.trim() ? (
+                    <a
+                      href={tool.docsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block rounded-xl border border-zinc-200 px-3 py-2.5 hover:bg-zinc-50"
+                    >
+                      帮助文档
+                      <span className="mt-0.5 block truncate text-[11px] text-zinc-400">
+                        {tool.docsUrl}
+                      </span>
+                    </a>
+                  ) : null}
+                  {tool.mediaUrl?.trim() ? (
+                    <a
+                      href={tool.mediaUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block rounded-xl border border-zinc-200 px-3 py-2.5 hover:bg-zinc-50"
+                    >
+                      演示 / 介绍媒体
+                      <span className="mt-0.5 block truncate text-[11px] text-zinc-400">
+                        {tool.mediaUrl}
+                      </span>
+                    </a>
+                  ) : null}
+                  {!(tool.homepageUrl && tool.homepageUrl !== '#') &&
+                  !tool.docsUrl?.trim() &&
+                  !tool.mediaUrl?.trim() ? (
                     <p className="text-[12px] text-zinc-400">暂无外链资源</p>
-                  )}
-                  <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70 px-3 py-3">
-                    <p className="text-[12px] font-semibold text-zinc-700">评论与评分</p>
-                    <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
-                      暂未开放。当前不做假评论或评分涨跌；反馈可走提报 / 门户运营渠道。
-                    </p>
-                  </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -387,17 +496,6 @@ export function MarketToolDetailPage() {
         </div>
       </div>
 
-      {howToOpen ? (
-        <HowToDrawer
-          title={tool.name}
-          guides={guides}
-          stepped
-          onClose={() => setHowToOpen(false)}
-          onOpenGuide={(g) =>
-            openGuideEntry(g, { onPreview: setGuidePreview, onToast: showToast })
-          }
-        />
-      ) : null}
       <HowToGuidePreviewModal guide={guidePreview} onClose={() => setGuidePreview(null)} />
     </div>
   );

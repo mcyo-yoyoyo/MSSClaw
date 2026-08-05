@@ -1,8 +1,11 @@
 import { create } from 'zustand';
+import {
+  DEFAULT_EXTERNAL_FEATURED_PINS,
+} from '@/domain/externalToolTaxonomy';
 import type { MarketShelfKind } from '@/domain/marketShelf';
 
 const LS_KEY = 'mssclaw_market_featured_pins_v1';
-const MAX_PER_KIND = 8;
+const MAX_PER_KIND = 12;
 
 export type MarketFeaturedPins = Record<MarketShelfKind, string[]>;
 
@@ -15,15 +18,29 @@ const EMPTY: MarketFeaturedPins = {
 function readLocal(): MarketFeaturedPins {
   try {
     const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return { ...EMPTY, external: [], internal: [], projects: [] };
+    if (!raw) {
+      return {
+        ...EMPTY,
+        external: [...DEFAULT_EXTERNAL_FEATURED_PINS],
+        internal: [],
+        projects: [],
+      };
+    }
     const parsed = JSON.parse(raw) as Partial<MarketFeaturedPins>;
+    const external = Array.isArray(parsed.external)
+      ? parsed.external.slice(0, MAX_PER_KIND)
+      : [];
     return {
-      external: Array.isArray(parsed.external) ? parsed.external.slice(0, MAX_PER_KIND) : [],
+      external: external.length ? external : [...DEFAULT_EXTERNAL_FEATURED_PINS],
       internal: Array.isArray(parsed.internal) ? parsed.internal.slice(0, MAX_PER_KIND) : [],
       projects: Array.isArray(parsed.projects) ? parsed.projects.slice(0, MAX_PER_KIND) : [],
     };
   } catch {
-    return { external: [], internal: [], projects: [] };
+    return {
+      external: [...DEFAULT_EXTERNAL_FEATURED_PINS],
+      internal: [],
+      projects: [],
+    };
   }
 }
 

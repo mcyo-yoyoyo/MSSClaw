@@ -30,12 +30,19 @@ import { canViewAsset } from '@/domain/assetVisibility';
 import { downloadSkillFile } from '@/domain/skillExport';
 import { useMssBuildStatsCopyStore } from '@/stores/mssBuildStatsCopyStore';
 import {
-  AI_TOOL_NAV_CATEGORIES,
-  toolBelongsToNavCategory,
-  type AiToolNavCategoryId,
-} from '@/domain/aiToolCategories';
+  type ExternalFilterMode,
+  type ExternalToolTypeId,
+  type ExternalWorkSceneId,
+} from '@/domain/externalToolTaxonomy';
+import {
+  toolMatchesExternalSceneCatalog,
+  toolMatchesExternalTypeCatalog,
+} from '@/domain/externalTaxonomyCatalog';
+import { useExternalTaxonomyCatalogStore } from '@/stores/externalTaxonomyCatalogStore';
 import { openMarketToolDetail } from '@/domain/openHomeJourney';
 import { MarketShelfCard } from '@/components/market/MarketShelfCard';
+import { ExternalMarketFilters } from '@/components/market/ExternalMarketFilters';
+import { InternalOfficeSceneGrid } from '@/components/market/InternalOfficeSceneGrid';
 import { buildProjectHowtoGuides } from '@/domain/projectHowto';
 import { downloadScenarioUnifiedPack } from '@/domain/caseExport';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
@@ -105,16 +112,20 @@ export function MarketShelfPage({
   const pushRecent = useRecentMarketStore((s) => s.push);
   const getEngagement = useContentEngagementStore((s) => s.get);
   const bumpDownload = useContentEngagementStore((s) => s.bumpDownload);
+  const bumpUse = useContentEngagementStore((s) => s.bumpUse);
   const guideRecords = usePlazaToolGuideStore((s) => s.records);
   const featuredPins = useMarketFeaturedStore((s) => s.pins);
+  const externalTaxonomy = useExternalTaxonomyCatalogStore((s) => s.catalog);
   const hydrateFeaturedPins = useMarketFeaturedStore((s) => s.hydrate);
 
   const [showcaseId, setShowcaseId] = useState<string | null>(null);
   const [howTo, setHowTo] = useState<{ title: string; guides: PlazaToolGuide[] } | null>(null);
   const [guidePreview, setGuidePreview] = useState<PlazaToolGuide | null>(null);
   const [submitOpen, setSubmitOpen] = useState(false);
-  const [aiCategory, setAiCategory] = useState<AiToolNavCategoryId | 'all'>('all');
-  /** MSS 集市二级面：场景案例 | 场景技能 */
+  const [externalFilterMode, setExternalFilterMode] = useState<ExternalFilterMode>('scene');
+  const [externalScene, setExternalScene] = useState<ExternalWorkSceneId | 'all'>('all');
+  const [externalType, setExternalType] = useState<ExternalToolTypeId | 'all'>('all');
+  /** MSS 集市二级面：学场景案例 | 用场景技能 */
   const [mssSurface, setMssSurface] = useState<'projects' | 'skills'>('projects');
   const [skillDetail, setSkillDetail] = useState<PrototypeSkillSeed | null>(null);
 
@@ -142,7 +153,9 @@ export function MarketShelfPage({
   }, [hydrateFeaturedPins, hydrateBuildStatsCopy]);
 
   useEffect(() => {
-    setAiCategory('all');
+    setExternalFilterMode('scene');
+    setExternalScene('all');
+    setExternalType('all');
     setMssSurface('projects');
   }, [kind]);
 
@@ -231,11 +244,20 @@ export function MarketShelfPage({
         : listMarketToolCards(tools, kind, viewer, listOrg, listBusiness, eng, howtoToolIds);
 
     let working = raw;
-    if (kind === 'external' && aiCategory !== 'all') {
-      working = working.filter((c) => {
-        const tool = tools.find((x) => x.id === c.id);
-        return tool ? toolBelongsToNavCategory(tool, aiCategory) : false;
-      });
+    if (kind === 'external') {
+      if (externalFilterMode === 'scene') {
+        working = working.filter((c) =>
+          toolMatchesExternalSceneCatalog(
+            { id: c.id, toolTypeId: c.toolTypeId },
+            externalScene === 'all' ? 'all' : externalScene,
+            externalTaxonomy,
+          ),
+        );
+      } else {
+        working = working.filter((c) =>
+          toolMatchesExternalTypeCatalog(c.toolTypeId, externalType),
+        );
+      }
     }
 
     const pinned =
@@ -249,6 +271,7 @@ export function MarketShelfPage({
       (c) =>
         c.title.toLowerCase().includes(q) ||
         c.description.toLowerCase().includes(q) ||
+        (c.productName?.toLowerCase().includes(q) ?? false) ||
         c.badges.some((b) => b.label.toLowerCase().includes(q)),
     );
   }, [
@@ -259,7 +282,10 @@ export function MarketShelfPage({
     listOrg,
     listBusiness,
     search,
-    aiCategory,
+    externalFilterMode,
+    externalScene,
+    externalType,
+    externalTaxonomy,
     getEngagement,
     howtoToolIds,
     portalByScenario,
@@ -280,17 +306,13 @@ export function MarketShelfPage({
         cat.id,
         eng,
         portalByScenario,
-      ).map((c) => ({
-        ...c,
-        runnable: Boolean(c.scenarioId && runnableByScenario.get(c.scenarioId)),
-      }));
+      );
       return {
         ...cat,
         count: projects.length,
-        runnableCount: projects.filter((p) => p.runnable).length,
       };
     });
-  }, [kind, orgSelection, getEngagement, portalByScenario, runnableByScenario, sceneCatalog]);
+  }, [kind, orgSelection, getEngagement, portalByScenario, sceneCatalog]);
 
   const hubStats = useMemo(() => {
     if (kind !== 'projects') return null;
@@ -300,10 +322,7 @@ export function MarketShelfPage({
       businessFilter === 'all' ? 'all' : businessFilter,
       eng,
       portalByScenario,
-    ).map((c) => ({
-      ...c,
-      runnable: Boolean(c.scenarioId && runnableByScenario.get(c.scenarioId)),
-    }));
+    );
     const sceneCovered =
       businessFilter === 'all'
         ? sceneCategories.filter((s) => s.count > 0).length
@@ -312,7 +331,6 @@ export function MarketShelfPage({
           : 0;
     return {
       projectCount: all.length,
-      runnableCount: all.filter((p) => p.runnable).length,
       sceneCovered,
       sceneTotal: listVisibleBusinessScenarioCategories().length,
     };
@@ -322,7 +340,6 @@ export function MarketShelfPage({
     businessFilter,
     getEngagement,
     portalByScenario,
-    runnableByScenario,
     sceneCategories,
     sceneCatalog,
   ]);
@@ -382,7 +399,7 @@ export function MarketShelfPage({
       if (s.ownerRegionId) {
         badges.push({ label: getRegionLabel(s.ownerRegionId), tone: 'region' });
       }
-      badges.push({ label: '场景技能', tone: 'type' });
+      badges.push({ label: '用场景技能', tone: 'type' });
       return {
         id: s.id,
         kind: 'internal',
@@ -407,7 +424,7 @@ export function MarketShelfPage({
     return parts.join(' \u00b7 ') || '\u5168\u90e8';
   }, [orgSelection]);
 
-  const featuredLimit = kind === 'external' ? 4 : 8;
+  const featuredLimit = kind === 'external' ? 12 : 8;
   const { featured, rest } = splitFeaturedAndRest(cards, featuredLimit);
   const { featured: skillFeatured, rest: skillRest } = splitFeaturedAndRest(skillCards, 4);
   const showFeaturedStrip =
@@ -417,6 +434,30 @@ export function MarketShelfPage({
       : featured.length > 0);
   const activeFeatured =
     kind === 'projects' && mssSurface === 'skills' ? skillFeatured : featured;
+
+  const externalFeaturedOverseas = useMemo(
+    () =>
+      kind === 'external'
+        ? activeFeatured.filter((c) => c.region === 'overseas').slice(0, 6)
+        : [],
+    [kind, activeFeatured],
+  );
+  const externalFeaturedDomestic = useMemo(
+    () =>
+      kind === 'external'
+        ? activeFeatured.filter((c) => c.region === 'domestic').slice(0, 6)
+        : [],
+    [kind, activeFeatured],
+  );
+
+  const externalFilterStats = useMemo(() => {
+    if (kind !== 'external') return { total: 0, overseas: 0, domestic: 0 };
+    return {
+      total: cards.length,
+      overseas: cards.filter((c) => c.region === 'overseas').length,
+      domestic: cards.filter((c) => c.region === 'domestic').length,
+    };
+  }, [kind, cards]);
 
   const showcaseBundle = useMemo(() => {
     if (!showcaseId) return null;
@@ -430,9 +471,6 @@ export function MarketShelfPage({
 
   const showcaseItems = showcaseId ? resolveCaseItemsForScenarioId(showcaseId) : [];
 
-  const guidesForTool = (toolId: string): PlazaToolGuide[] =>
-    guideRecords.filter((r) => r.toolId === toolId).map(({ toolId: _t, ...g }) => g);
-
   const rememberCard = (card: MarketShelfCardModel) => {
     pushRecent({
       id: card.id,
@@ -443,10 +481,15 @@ export function MarketShelfPage({
     });
   };
 
+  const trackToolClick = (id: string) => {
+    bumpUse(id);
+  };
+
   const openToolUrl = (card: MarketShelfCardModel) => {
     if (!card.homepageUrl || card.homepageUrl === '#') return false;
     const win = window.open(card.homepageUrl, '_blank', 'noopener,noreferrer');
     bumpToolInvokes(card.id);
+    trackToolClick(card.id);
     rememberCard(card);
     if (!win) {
       showToast(
@@ -506,13 +549,9 @@ export function MarketShelfPage({
   };
 
   const openToolHowTo = (card: MarketShelfCardModel) => {
-    const guides = guidesForTool(card.id);
-    setHowTo({ title: card.title, guides });
-    if (!guides.length) {
-      showToast(
-        `\u300c${card.title}\u300d\u6682\u65e0\u5feb\u901f\u4e0a\u624b\u6750\u6599\uff0c\u53ef\u5728\u95e8\u6237\u8fd0\u8425\u7ef4\u62a4`,
-      );
-    }
+    trackToolClick(card.id);
+    rememberCard(card);
+    openMarketToolDetail(card.id, kind === 'projects' ? 'external' : kind, { tab: 'howto' });
   };
 
   const openHowTo = (card: MarketShelfCardModel) => {
@@ -526,8 +565,24 @@ export function MarketShelfPage({
       setShowcaseId(card.scenarioId);
       return;
     }
+    trackToolClick(card.id);
     rememberCard(card);
     openMarketToolDetail(card.id, kind === 'projects' ? 'external' : kind);
+  };
+
+  const openInternalToolDetail = (
+    tool: { id: string; name: string; logoUrl?: string },
+    tab?: 'overview' | 'howto',
+  ) => {
+    trackToolClick(tool.id);
+    pushRecent({
+      id: tool.id,
+      kind: 'internal',
+      title: tool.name,
+      icon: 'fa-cube',
+      logoUrl: tool.logoUrl,
+    });
+    openMarketToolDetail(tool.id, 'internal', tab ? { tab } : undefined);
   };
 
   const downloadUseProject = (card: MarketShelfCardModel) => {
@@ -649,14 +704,29 @@ export function MarketShelfPage({
         ? rest
         : cards;
 
+  const restOverseas =
+    kind === 'external' ? gridCards.filter((c) => c.region === 'overseas') : [];
+  const restDomestic =
+    kind === 'external' ? gridCards.filter((c) => c.region === 'domestic') : [];
+
   const buildStatsTooltip = [buildStatsCopy.coverageBlurb, buildStatsCopy.goalBlurb]
     .filter(Boolean)
     .join(' ');
 
   return (
-    <div className="center-surface flex min-h-0 flex-1 flex-col overflow-y-auto scroll-hidden">
-      <div className="mx-auto w-full max-w-7xl px-5 py-6 md:px-7">
-        <header className="mb-5 rounded-2xl border border-zinc-200/80 bg-gradient-to-b from-zinc-50 to-white px-4 py-4 md:px-5">
+    <div
+      className={cn(
+        'center-surface flex min-h-0 flex-1 flex-col',
+        kind === 'internal' ? 'overflow-hidden' : 'overflow-y-auto scroll-hidden',
+      )}
+    >
+      <div
+        className={cn(
+          'mx-auto flex w-full max-w-7xl flex-col px-5 py-6 md:px-7',
+          kind === 'internal' && 'min-h-0 flex-1',
+        )}
+      >
+        <header className="mb-5 shrink-0 rounded-2xl border border-zinc-200/80 bg-gradient-to-b from-zinc-50 to-white px-4 py-4 md:px-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
             <div className="min-w-0 flex-1">
               <h1 className="text-[20px] font-semibold tracking-tight text-zinc-900 md:text-[22px]">
@@ -666,124 +736,34 @@ export function MarketShelfPage({
                 {kind === 'projects'
                   ? mssSurface === 'skills'
                     ? allowScenarioRun
-                      ? '场景技能 · 快速上手 / 去执行 · 亦可下载技能包'
-                      : '场景技能 · 快速上手 / 下载技能包（MVP 不提供一键执行）'
+                      ? '用场景技能 · 快速上手 / 去执行 · 亦可下载技能包'
+                      : '用场景技能 · 快速上手 / 下载技能包'
                     : allowScenarioRun
-                      ? '场景案例 · 快速上手 / 可执行则去打样 · 否则下载学习包'
-                      : '场景案例 · 快速上手 / 下载学习包（MVP 不提供一键执行）'
+                      ? '学场景案例 · 快速上手 / 可执行则去打样 · 否则下载学习包'
+                      : '学场景案例 · 快速上手 / 下载学习包'
                   : kind === 'external'
-                    ? '按 AI 能力浏览精选外链工具 · 快速上手'
-                    : '公司办公工具 · 权限范围可见 · 快速上手'}
+                    ? '从工作场景出发，浏览全球领先 AI · 海外 / 国内对照 · 快速上手'
+                    : '不用先学会复杂工具，从「记、读、写、问」等日常动作开始'}
               </p>
               {kind === 'external' ? (
-                <p className="mt-1.5 max-w-2xl text-[11px] leading-relaxed text-amber-800/80">
+                <p className="mt-1.5 min-h-[17px] max-w-2xl text-[11px] leading-relaxed text-amber-800/80">
                   <i className="fa-solid fa-shield-halved mr-1 text-[10px]" />
-                  使用外部工具时请遵守公司信息安全规范，勿上传敏感或未授权数据。
+                  使用前请遵循组织的数据、账号与采购规范。
                 </p>
               ) : null}
               {kind === 'projects' ? (
-                <div className="mt-3 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-                  <div className="inline-flex h-9 w-fit items-center rounded-xl border border-zinc-200 bg-zinc-50/80 p-1">
-                    {(
-                      [
-                        { id: 'projects' as const, label: '场景案例' },
-                        { id: 'skills' as const, label: '场景技能' },
-                      ] as const
-                    ).map((tab) => (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => setMssSurface(tab.id)}
-                        className={cn(
-                          'inline-flex h-full items-center rounded-lg px-3.5 text-[12px] font-semibold transition',
-                          mssSurface === tab.id
-                            ? 'bg-white text-zinc-900 shadow-sm'
-                            : 'text-zinc-500 hover:text-zinc-800',
-                        )}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
-                  {(mssSurface === 'skills' ? skillHubStats : hubStats) ? (
-                    <div className="inline-flex h-9 max-w-full flex-wrap items-center gap-x-2.5 gap-y-0 rounded-xl border border-zinc-200/90 bg-white px-3 text-[12px] text-zinc-600">
-                      <span className="inline-flex items-center gap-1 font-semibold tracking-tight text-zinc-800">
-                        {buildStatsCopy.title}
-                        {buildStatsTooltip ? (
-                          <span className="group relative inline-flex">
-                            <button
-                              type="button"
-                              aria-label="建设概况口径说明"
-                              className="inline-flex h-4 w-4 items-center justify-center rounded-full text-zinc-400 transition hover:text-zinc-700"
-                            >
-                              <i className="fa-solid fa-circle-info text-[11px]" />
-                            </button>
-                            <span
-                              role="tooltip"
-                              className="pointer-events-none absolute left-0 top-full z-20 mt-2 w-64 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-left text-[11px] font-normal leading-relaxed text-zinc-600 opacity-0 shadow-lg transition group-hover:opacity-100 group-focus-within:opacity-100 sm:left-1/2 sm:-translate-x-1/2 md:w-72"
-                            >
-                              {buildStatsTooltip}
-                            </span>
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="text-zinc-300">·</span>
-                      <span className="text-zinc-400">{orgScopeLabel}</span>
-                      {mssSurface === 'skills' && skillHubStats ? (
-                        <>
-                          <span className="text-zinc-300">·</span>
-                          <span>
-                            <span className="font-semibold tabular-nums text-zinc-900">
-                              {skillHubStats.skillCount}
-                            </span>{' '}
-                            技能
-                          </span>
-                          {showSceneHub ? (
-                            <>
-                              <span className="text-zinc-300">·</span>
-                              <span>
-                                <span className="font-semibold tabular-nums text-zinc-900">
-                                  {skillHubStats.sceneCovered}
-                                </span>
-                                <span className="text-zinc-400">/{skillHubStats.sceneTotal}</span>{' '}
-                                场景
-                              </span>
-                            </>
-                          ) : null}
-                        </>
-                      ) : hubStats ? (
-                        <>
-                          <span className="text-zinc-300">·</span>
-                          <span>
-                            <span className="font-semibold tabular-nums text-zinc-900">
-                              {hubStats.projectCount}
-                            </span>{' '}
-                            案例
-                          </span>
-                          <span className="text-zinc-300">·</span>
-                          <span>
-                            <span className="font-semibold tabular-nums text-zinc-900">
-                              {hubStats.runnableCount}
-                            </span>{' '}
-                            可执行
-                          </span>
-                          {showSceneHub ? (
-                            <>
-                              <span className="text-zinc-300">·</span>
-                              <span>
-                                <span className="font-semibold tabular-nums text-zinc-900">
-                                  {hubStats.sceneCovered}
-                                </span>
-                                <span className="text-zinc-400">/{hubStats.sceneTotal}</span>{' '}
-                                场景
-                              </span>
-                            </>
-                          ) : null}
-                        </>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
+                <p className="mt-1.5 min-h-[17px] max-w-2xl text-[11px] leading-relaxed text-amber-800/80">
+                  <i className="fa-solid fa-circle-info mr-1 text-[10px]" />
+                  {allowScenarioRun
+                    ? '当前方案支持一键打样与对话执行，亦可下载学习包自学。'
+                    : 'MVP 版本场景案例、专家技能仅提供下载学习；长期规划平台可一键打样与对话执行。'}
+                </p>
+              ) : null}
+              {kind === 'internal' ? (
+                <p className="mt-1.5 min-h-[17px] max-w-2xl text-[11px] leading-relaxed text-amber-800/80">
+                  <i className="fa-solid fa-building-lock mr-1 text-[10px]" />
+                  公司内部工具需经组织统一入口访问；请在授权范围内使用，勿将敏感业务数据外传。
+                </p>
               ) : null}
             </div>
             <div className="flex w-full shrink-0 flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
@@ -794,11 +774,11 @@ export function MarketShelfPage({
                   onClick={() => setSubmitOpen(true)}
                   className="shrink-0 rounded-xl bg-zinc-900 px-4 py-2.5 text-[12px] font-semibold text-white shadow-sm transition hover:bg-zinc-800"
                 >
-                  {kind === 'projects'
-                    ? mssSurface === 'skills'
+                  {kind === 'external' || kind === 'internal'
+                    ? '提报工具'
+                    : kind === 'projects' && mssSurface === 'skills'
                       ? '提报技能'
-                      : '提报案例'
-                    : '提报工具'}
+                      : '提报案例'}
                 </button>
               ) : null}
             </div>
@@ -806,49 +786,121 @@ export function MarketShelfPage({
         </header>
 
         {kind === 'external' ? (
-          <div className="mb-6 flex justify-center px-1">
-            <div className="inline-flex min-h-[64px] max-w-full flex-wrap items-center justify-center gap-2.5 rounded-2xl border border-zinc-200/80 bg-white px-5 py-3.5 shadow-[0_8px_24px_-20px_rgba(24,24,27,0.35)] md:min-h-[72px] md:gap-3 md:px-8 md:py-4">
-              <button
-                type="button"
-                onClick={() => setAiCategory('all')}
-                className={cn(
-                  'rounded-xl px-4 py-2.5 text-[14px] font-semibold transition md:text-[15px]',
-                  aiCategory === 'all'
-                    ? 'bg-zinc-900 text-white shadow-sm'
-                    : 'bg-zinc-50 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900',
-                )}
-              >
-                全部
-              </button>
-              {AI_TOOL_NAV_CATEGORIES.map((c) => (
+          <ExternalMarketFilters
+            mode={externalFilterMode}
+            scene={externalScene}
+            type={externalType}
+            stats={externalFilterStats}
+            onModeChange={setExternalFilterMode}
+            onSceneChange={setExternalScene}
+            onTypeChange={setExternalType}
+          />
+        ) : null}
+
+        {kind === 'projects' ? (
+          <div className="mb-2.5 flex flex-wrap items-center justify-center gap-3 px-1">
+            <div className="inline-flex h-11 items-center rounded-xl border border-zinc-200 bg-zinc-50/80 p-1">
+              {(
+                [
+                  { id: 'projects' as const, label: '学场景案例' },
+                  { id: 'skills' as const, label: '用场景技能' },
+                ] as const
+              ).map((tab) => (
                 <button
-                  key={c.id}
+                  key={tab.id}
                   type="button"
-                  title={c.blurb}
-                  onClick={() => setAiCategory(c.id)}
+                  onClick={() => setMssSurface(tab.id)}
                   className={cn(
-                    'inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[14px] font-semibold transition md:text-[15px]',
-                    aiCategory === c.id
-                      ? 'bg-zinc-900 text-white shadow-sm'
-                      : 'bg-zinc-50 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900',
+                    'inline-flex h-full items-center rounded-lg px-5 text-[14px] font-semibold transition md:text-[15px]',
+                    mssSurface === tab.id
+                      ? 'bg-white text-zinc-900 shadow-sm'
+                      : 'text-zinc-500 hover:text-zinc-800',
                   )}
                 >
-                  <i className={cn('fa-solid text-[13px]', c.icon)} />
-                  {c.label}
+                  {tab.label}
                 </button>
               ))}
             </div>
+            {(mssSurface === 'skills' ? skillHubStats : hubStats) ? (
+              <div className="inline-flex h-11 max-w-full flex-wrap items-center gap-x-2.5 gap-y-0 rounded-xl border border-zinc-200/90 bg-white px-3.5 text-[12px] text-zinc-600 md:text-[13px]">
+                <span className="inline-flex items-center gap-1 font-semibold tracking-tight text-zinc-800">
+                  {buildStatsCopy.title}
+                  {buildStatsTooltip ? (
+                    <span className="group relative inline-flex">
+                      <button
+                        type="button"
+                        aria-label="建设概况口径说明"
+                        className="inline-flex h-4 w-4 items-center justify-center rounded-full text-zinc-400 transition hover:text-zinc-700"
+                      >
+                        <i className="fa-solid fa-circle-info text-[11px]" />
+                      </button>
+                      <span
+                        role="tooltip"
+                        className="pointer-events-none absolute left-0 top-full z-20 mt-2 w-64 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-left text-[11px] font-normal leading-relaxed text-zinc-600 opacity-0 shadow-lg transition group-hover:opacity-100 group-focus-within:opacity-100 sm:left-1/2 sm:-translate-x-1/2 md:w-72"
+                      >
+                        {buildStatsTooltip}
+                      </span>
+                    </span>
+                  ) : null}
+                </span>
+                <span className="text-zinc-300">·</span>
+                <span className="text-zinc-400">{orgScopeLabel}</span>
+                {mssSurface === 'skills' && skillHubStats ? (
+                  <>
+                    <span className="text-zinc-300">·</span>
+                    <span>
+                      <span className="text-[15px] font-semibold tabular-nums leading-none text-zinc-900 md:text-[16px]">
+                        {skillHubStats.skillCount}
+                      </span>{' '}
+                      技能
+                    </span>
+                    {showSceneHub ? (
+                      <>
+                        <span className="text-zinc-300">·</span>
+                        <span>
+                          <span className="text-[15px] font-semibold tabular-nums leading-none text-zinc-900 md:text-[16px]">
+                            {skillHubStats.sceneCovered}
+                          </span>
+                          <span className="text-zinc-400">/{skillHubStats.sceneTotal}</span> 场景
+                        </span>
+                      </>
+                    ) : null}
+                  </>
+                ) : hubStats ? (
+                  <>
+                    <span className="text-zinc-300">·</span>
+                    <span>
+                      <span className="text-[15px] font-semibold tabular-nums leading-none text-zinc-900 md:text-[16px]">
+                        {hubStats.projectCount}
+                      </span>{' '}
+                      案例
+                    </span>
+                    {showSceneHub ? (
+                      <>
+                        <span className="text-zinc-300">·</span>
+                        <span>
+                          <span className="text-[15px] font-semibold tabular-nums leading-none text-zinc-900 md:text-[16px]">
+                            {hubStats.sceneCovered}
+                          </span>
+                          <span className="text-zinc-400">/{hubStats.sceneTotal}</span> 场景
+                        </span>
+                      </>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
         {showMssSceneChips ? (
-          <div className="mb-6 flex justify-center px-1">
-            <div className="inline-flex min-h-[64px] max-w-full flex-wrap items-center justify-center gap-2.5 rounded-2xl border border-zinc-200/80 bg-white px-5 py-3.5 shadow-[0_8px_24px_-20px_rgba(24,24,27,0.35)] md:min-h-[72px] md:gap-3 md:px-8 md:py-4">
+          <div className="mb-5 w-full px-1">
+            <div className="flex w-full items-stretch gap-1 rounded-2xl border border-zinc-200/80 bg-white px-2 py-2 shadow-[0_8px_24px_-20px_rgba(24,24,27,0.35)] sm:gap-1.5 sm:px-2.5">
               <button
                 type="button"
                 onClick={() => setBusinessFilter('all')}
                 className={cn(
-                  'rounded-xl px-4 py-2.5 text-[14px] font-semibold transition md:text-[15px]',
+                  'flex min-w-0 flex-1 items-center justify-center rounded-lg px-1.5 py-1.5 text-center text-[11px] font-semibold transition md:px-2 md:text-[12px]',
                   businessFilter === 'all'
                     ? 'bg-zinc-900 text-white shadow-sm'
                     : 'bg-zinc-50 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900',
@@ -863,57 +915,135 @@ export function MarketShelfPage({
                   title={c.blurb}
                   onClick={() => setBusinessFilter(c.id)}
                   className={cn(
-                    'inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[14px] font-semibold transition md:text-[15px]',
+                    'flex min-w-0 flex-1 items-center justify-center gap-1 rounded-lg px-1.5 py-1.5 text-center text-[11px] font-semibold transition md:px-2 md:text-[12px]',
                     businessFilter === c.id
                       ? 'bg-zinc-900 text-white shadow-sm'
                       : 'bg-zinc-50 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900',
                   )}
                 >
-                  {c.icon ? <i className={cn('fa-solid text-[13px]', c.icon)} /> : null}
-                  {c.label}
+                  {c.icon ? <i className={cn('fa-solid hidden text-[10px] sm:inline', c.icon)} /> : null}
+                  <span className="truncate">{c.label}</span>
                 </button>
               ))}
             </div>
           </div>
         ) : null}
 
-        {showFeaturedStrip ? (
+        {kind === 'internal' ? (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <InternalOfficeSceneGrid
+              search={search}
+              catalogTools={tools}
+              onOpenDetail={(tool) => openInternalToolDetail(tool)}
+              onHowTo={(tool) => openInternalToolDetail(tool, 'howto')}
+              onExperience={(tool) => {
+                trackToolClick(tool.id);
+                pushRecent({
+                  id: tool.id,
+                  kind: 'internal',
+                  title: tool.name,
+                  icon: 'fa-cube',
+                  logoUrl: tool.logoUrl,
+                });
+                const win = window.open(tool.homepageUrl, '_blank', 'noopener,noreferrer');
+                bumpToolInvokes(tool.id);
+                if (!win) showToast('浏览器拦截了弹窗，请允许后重试');
+                else showToast(`已打开：${tool.name}`);
+              }}
+            />
+          </div>
+        ) : null}
+
+        {kind !== 'internal' && showFeaturedStrip ? (
           <section className="mb-7">
-            <div className="mb-3 flex items-baseline justify-between gap-2">
-              <h2 className="text-[13px] font-semibold text-zinc-800">精选推荐</h2>
-              <span className="text-[11px] text-zinc-400">{activeFeatured.length} 项</span>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {activeFeatured.map((c) => {
-                if (kind === 'projects' && mssSurface === 'skills') {
-                  const skill = skills.find((s) => s.id === c.id);
-                  return (
-                    <MarketShelfCard
-                      key={`hot-${c.id}`}
-                      card={c}
-                      primaryLabel={skillPrimaryLabel}
-                      howToLabel="快速上手"
-                      onOpen={() => skill && setSkillDetail(skill)}
-                      onPrimary={() => openPrimary(c)}
-                      onHowTo={skill ? () => setSkillDetail(skill) : undefined}
-                    />
-                  );
-                }
-                return (
-                  <MarketShelfCard
-                    key={`hot-${c.id}`}
-                    card={c}
-                    primaryLabel={casePrimaryLabel}
-                    onOpen={() => openCard(c)}
-                    onPrimary={() => openPrimary(c)}
-                    onHowTo={() => openHowTo(c)}
-                  />
-                );
-              })}
-            </div>
+            {kind === 'external' ? (
+              <>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {(
+                    [
+                      {
+                        key: 'overseas',
+                        title: '海外工具',
+                        sub: 'GLOBAL TOP 6',
+                        items: externalFeaturedOverseas,
+                      },
+                      {
+                        key: 'domestic',
+                        title: '国内工具',
+                        sub: 'CHINA TOP 6',
+                        items: externalFeaturedDomestic,
+                      },
+                    ] as const
+                  ).map((col) => (
+                    <div key={col.key} className="min-w-0">
+                      <div className="mb-2.5 flex items-baseline gap-2">
+                        <h3 className="text-[12px] font-semibold text-zinc-800">{col.title}</h3>
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
+                          {col.sub}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {col.items.map((c) => (
+                          <MarketShelfCard
+                            key={`hot-${c.id}`}
+                            card={c}
+                            variant="compact"
+                            howToLabel="快速上手"
+                            onOpen={() => openCard(c)}
+                            onPrimary={() => openPrimary(c)}
+                            onHowTo={() => openHowTo(c)}
+                          />
+                        ))}
+                      </div>
+                      {!col.items.length ? (
+                        <div className="rounded-xl border border-dashed border-zinc-200 px-3 py-8 text-center text-[12px] text-zinc-400">
+                          当前筛选下暂无
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mb-3 flex items-baseline justify-between gap-2">
+                  <h2 className="text-[13px] font-semibold text-zinc-800">精选推荐</h2>
+                  <span className="text-[11px] text-zinc-400">{activeFeatured.length} 项</span>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {activeFeatured.map((c) => {
+                    if (kind === 'projects' && mssSurface === 'skills') {
+                      const skill = skills.find((s) => s.id === c.id);
+                      return (
+                        <MarketShelfCard
+                          key={`hot-${c.id}`}
+                          card={c}
+                          primaryLabel={skillPrimaryLabel}
+                          howToLabel="快速上手"
+                          onOpen={() => skill && setSkillDetail(skill)}
+                          onPrimary={() => openPrimary(c)}
+                          onHowTo={skill ? () => setSkillDetail(skill) : undefined}
+                        />
+                      );
+                    }
+                    return (
+                      <MarketShelfCard
+                        key={`hot-${c.id}`}
+                        card={c}
+                        primaryLabel={kind === 'projects' ? casePrimaryLabel : undefined}
+                        onOpen={() => openCard(c)}
+                        onPrimary={() => openPrimary(c)}
+                        onHowTo={() => openHowTo(c)}
+                      />
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </section>
         ) : null}
 
+        {kind !== 'internal' ? (
         <section>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-[13px] font-semibold text-zinc-800">
@@ -921,7 +1051,61 @@ export function MarketShelfPage({
               <span className="ml-1.5 font-normal text-zinc-400">{gridCards.length}</span>
             </h2>
           </div>
-          {gridCards.length ? (
+          {kind === 'external' ? (
+            gridCards.length ? (
+              <div className="grid gap-4 lg:grid-cols-2">
+                {(
+                  [
+                    {
+                      key: 'overseas',
+                      title: '海外工具',
+                      sub: 'MORE',
+                      items: restOverseas,
+                    },
+                    {
+                      key: 'domestic',
+                      title: '国内工具',
+                      sub: 'MORE',
+                      items: restDomestic,
+                    },
+                  ] as const
+                ).map((col) => (
+                  <div key={col.key} className="min-w-0">
+                    <div className="mb-2.5 flex items-baseline gap-2">
+                      <h3 className="text-[12px] font-semibold text-zinc-800">{col.title}</h3>
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
+                        {col.sub}
+                      </span>
+                      <span className="text-[11px] text-zinc-400">{col.items.length}</span>
+                    </div>
+                    {col.items.length ? (
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {col.items.map((c) => (
+                          <MarketShelfCard
+                            key={c.id}
+                            card={c}
+                            variant="compact"
+                            howToLabel="快速上手"
+                            onOpen={() => openCard(c)}
+                            onPrimary={() => openPrimary(c)}
+                            onHowTo={() => openHowTo(c)}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-zinc-200 px-3 py-8 text-center text-[12px] text-zinc-400">
+                        当前筛选下暂无
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-4 py-14 text-center text-[13px] text-zinc-400">
+                {emptyHint}
+              </div>
+            )
+          ) : gridCards.length ? (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {gridCards.map((c) => {
                 if (kind === 'projects' && mssSurface === 'skills') {
@@ -942,7 +1126,7 @@ export function MarketShelfPage({
                   <MarketShelfCard
                     key={c.id}
                     card={c}
-                    primaryLabel={casePrimaryLabel}
+                    primaryLabel={kind === 'projects' ? casePrimaryLabel : undefined}
                     onOpen={() => openCard(c)}
                     onPrimary={() => openPrimary(c)}
                     onHowTo={() => openHowTo(c)}
@@ -956,14 +1140,12 @@ export function MarketShelfPage({
             </div>
           )}
         </section>
+        ) : null}
       </div>
 
       <MarketSubmitModal
         kind={kind}
-        open={
-          submitOpen &&
-          kind !== 'projects'
-        }
+        open={submitOpen && (kind === 'external' || kind === 'internal')}
         onClose={() => setSubmitOpen(false)}
       />
       <CaseEditorModal
@@ -976,7 +1158,8 @@ export function MarketShelfPage({
         defaultType="case"
         defaultBusinessId={caseSubmitDefaultBusinessId}
         onClose={() => setSubmitOpen(false)}
-      />      <MarketSkillSubmitModal
+      />
+      <MarketSkillSubmitModal
         open={submitOpen && kind === 'projects' && mssSurface === 'skills'}
         onClose={() => setSubmitOpen(false)}
       />

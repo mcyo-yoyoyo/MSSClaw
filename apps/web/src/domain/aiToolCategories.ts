@@ -172,9 +172,10 @@ export function ensureMarketShelfTags(
   return next;
 }
 
-/** 调用量展示：210000 → 21万（数据层保留，发现页外链区不用于排行） */
+/** 调用量 / 热度展示：一律取整，不出现小数点 */
 export function formatToolInvokes(n: number): string {
-  if (n >= 10000) return `${Math.round(n / 10000)}万`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return String(n);
+  const v = Math.max(0, Math.round(Number.isFinite(n) ? n : 0));
+  if (v >= 10000) return `${Math.round(v / 10000)}万`;
+  if (v >= 1000) return `${Math.max(1, Math.round(v / 1000))}k`;
+  return String(v);
 }

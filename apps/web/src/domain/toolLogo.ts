@@ -1,8 +1,14 @@
-/** 公司工具推荐统一华为 Logo（取自华为官网 favicon-logo.svg，适配 GitHub Pages base） */
+/** 公司工具推荐默认华为 Logo（取自华为官网 favicon-logo.svg，适配 GitHub Pages base） */
 export function companyToolLogoUrl(): string {
   const base = String(import.meta.env.BASE_URL || '/');
   const normalized = base.endsWith('/') ? base : `${base}/`;
   return `${normalized}brand/huawei-logo.svg`;
+}
+
+export function internalToolAssetUrl(filename: string): string {
+  const base = String(import.meta.env.BASE_URL || '/');
+  const normalized = base.endsWith('/') ? base : `${base}/`;
+  return `${normalized}brand/internal-tools/${filename}`;
 }
 
 /** 从官网 URL 推导 favicon（外精选初始化用） */
@@ -27,14 +33,14 @@ function isCompanyShelfTool(tool: LogoToolInput): boolean {
   return tool.sourceType === 'internal' && tags.includes('hw-internal');
 }
 
-/** 公司推荐 → 统一华为 Logo；外精选 → 上传优先，否则官网 favicon */
+/** 公司推荐：自定义 Logo 优先，否则统一华为 Logo；外精选 → 上传优先，否则官网 favicon */
 export function resolveToolLogoUrl(tool: LogoToolInput): string | undefined {
+  const custom = tool.logoUrl?.trim();
+  if (custom) return custom;
+
   if (isCompanyShelfTool(tool)) {
     return companyToolLogoUrl();
   }
-
-  const custom = tool.logoUrl?.trim();
-  if (custom) return custom;
 
   const home = tool.homepageUrl?.trim();
   if (!home || home === '#') return undefined;

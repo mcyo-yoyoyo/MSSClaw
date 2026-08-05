@@ -10,19 +10,6 @@ import type { PrototypeToolSeed } from '@/domain/prototype/types';
 
 /** 显式 toolId → 主业务场景（可多选） */
 export const TOOL_TO_BUSINESS_SCENARIOS: Record<string, BusinessScenarioId[]> = {
-  // 内部连接器（若上架到货架）
-  'tool-market-intel': ['S1'],
-  'tool-isrp': ['S8'],
-  'tool-doc-ai': ['S4', 'S2'],
-  'tool-hr-hub': ['S7'],
-  'tool-wecom-api': ['S5'],
-
-  // 区域自建外部
-  'tool-ext-latam-price': ['S1'],
-  'tool-ext-eu-compliance': ['S4'],
-  'tool-ext-apac-review': ['S1'],
-  'tool-ext-latam-private-playbook': ['S1'],
-
   // 内部 AI
   'tool-hw-assistant': ['S7', 'S6'],
   'tool-hw-xiaowei': ['S7'],

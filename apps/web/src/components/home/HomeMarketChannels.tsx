@@ -10,8 +10,8 @@ import { openMarketShelf } from '@/domain/openHomeJourney';
 
 const CHANNEL_ORDER: MarketShelfKind[] = ['external', 'internal', 'projects'];
 const CHANNEL_BLURB: Record<MarketShelfKind, string> = {
-  external: '外链 / SaaS 精选，即开即用',
-  internal: '公司办公工具，权限范围可见',
+  external: '海外 / 国内对照 · 场景与类型筛选',
+  internal: '从记读写问等场景进入公司工具',
   projects: 'MSS 建设成果，按场景深潜',
 };
 
@@ -75,23 +75,31 @@ export function HomeMarketChannels({
                   进入 <i className="fa-solid fa-arrow-right text-[9px]" />
                 </button>
               </div>
-              <div className="mt-2 flex flex-wrap gap-1">
-                {HOME_RANK_TABS.map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => onRankChange(kind, tab.id)}
-                    className={cn(
-                      'rounded-md px-2 py-0.5 text-[10px] font-medium transition',
-                      rank === tab.id
-                        ? 'bg-zinc-900 text-white'
-                        : 'bg-zinc-50 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800',
-                    )}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
+              {kind === 'projects' ? (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {HOME_RANK_TABS.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => onRankChange(kind, tab.id)}
+                      className={cn(
+                        'rounded-md px-2 py-0.5 text-[10px] font-medium transition',
+                        rank === tab.id
+                          ? 'bg-zinc-900 text-white'
+                          : 'bg-zinc-50 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800',
+                      )}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-[10px] text-zinc-400">
+                  {kind === 'external'
+                    ? '精选由运营置顶 · 列表按点击量排序'
+                    : '与货架办公场景同源 · 点击进入工具详情'}
+                </p>
+              )}
             </header>
 
             <div className="flex flex-1 flex-col gap-2 p-2.5">

@@ -43,11 +43,21 @@ import { PortalMarketFeaturedPanel } from '@/features/ops/PortalMarketFeaturedPa
 import { PortalStationAnnouncePanel } from '@/features/ops/PortalStationAnnouncePanel';
 import { PortalSceneCategoryPanel } from '@/features/ops/PortalSceneCategoryPanel';
 import { PortalBuildStatsCopyPanel } from '@/features/ops/PortalBuildStatsCopyPanel';
+import { PortalExternalTaxonomyPanel } from '@/features/ops/PortalExternalTaxonomyPanel';
 import { useBusinessScenarioCatalogStore } from '@/stores/businessScenarioCatalogStore';
+import { useExternalTaxonomyCatalogStore } from '@/stores/externalTaxonomyCatalogStore';
+import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
 import { useStationAnnouncementStore } from '@/stores/stationAnnouncementStore';
 
 type EditorTarget = string | 'new' | null;
-type OpsSurface = 'packs' | 'howto' | 'featured' | 'announce' | 'scenes' | 'buildstats';
+type OpsSurface =
+  | 'packs'
+  | 'howto'
+  | 'featured'
+  | 'extaxonomy'
+  | 'announce'
+  | 'scenes'
+  | 'buildstats';
 
 /** 运营视角：全部 / 只展开某负责人槽位 */
 type SlotFocus = 'all' | ScenarioPackSlotId;
@@ -97,6 +107,8 @@ export function PortalContentOpsPage() {
   useEffect(() => {
     bootstrapHowto();
     useBusinessScenarioCatalogStore.getState().hydrate();
+    useExternalTaxonomyCatalogStore.getState().hydrate();
+    useInternalOfficeSceneCatalogStore.getState().hydrate();
     useStationAnnouncementStore.getState().hydrate();
   }, [bootstrapHowto]);
 
@@ -241,14 +253,16 @@ export function PortalContentOpsPage() {
             opsSurface === 'packs'
               ? '场景内容 · 方案包三槽分责维护'
               : opsSurface === 'featured'
-                ? '货架运营 · 上架选品 / 场景标题 / 精选置顶'
-                : opsSurface === 'announce'
-                  ? '站点触达 · 首页站内公告跑马灯'
-                  : opsSurface === 'scenes'
-                    ? '场景分类字典 · 文案 / 图标 / 顺序'
-                    : opsSurface === 'buildstats'
-                      ? '站点触达 · MSS 建设概况口径'
-                      : '货架运营 · 外部 / 公司工具 How to'
+                ? '货架运营 · 外精选上架置顶 / 公司办公场景字典'
+                : opsSurface === 'extaxonomy'
+                  ? '货架运营 · 外精选工具类型与工作场景字典'
+                  : opsSurface === 'announce'
+                    ? '站点触达 · 首页站内公告跑马灯'
+                    : opsSurface === 'scenes'
+                      ? '场景分类字典 · 文案 / 图标 / 顺序'
+                      : opsSurface === 'buildstats'
+                        ? '站点触达 · MSS 建设概况口径'
+                        : '货架运营 · 外部 / 公司工具 How to'
           }
           tip={
             opsSurface === 'packs' ? (
@@ -259,7 +273,12 @@ export function PortalContentOpsPage() {
               </>
             ) : opsSurface === 'featured' ? (
               <>
-                在此完成货架陈列：将已发布工具上架到外精选/公司推荐、填写场景标题与精选角标，并配置精选条置顶。工具主数据请在「配置工具」维护。
+                外部工具：上架选品、场景标题与精选置顶。公司推荐：在此配置办公场景文案与工具绑定；链接/Logo
+                请到「配置工具」，分类芯片请到「外精选分类」。
+              </>
+            ) : opsSurface === 'extaxonomy' ? (
+              <>
+                调整外精选筛选条上的工具类型与工作场景名称、可见性、顺序及场景关联类型。编码保持稳定以兼容工具主数据。
               </>
             ) : opsSurface === 'announce' ? (
               <>
@@ -272,12 +291,12 @@ export function PortalContentOpsPage() {
               </>
             ) : opsSurface === 'buildstats' ? (
               <>
-                解释建设概况数字含义与建设目标文案；项目数 / 可执行 / 场景覆盖仍由真实列表推导。
+                解释建设概况数字含义与建设目标文案；案例数 / 场景覆盖仍由真实列表推导。
               </>
             ) : (
               <>
                 维护外部工具精选 / 公司工具推荐的 How to：可上传文件或填链接（图片 / PDF / PPT /
-                短视频 / 文字），「链接」类型仅填 URL；保存后货架卡「How to」立即生效。
+                短视频 / 文字），「链接」类型仅填 URL；保存后详情页「快速上手」与货架 How to 立即生效。
               </>
             )
           }
@@ -423,6 +442,7 @@ export function PortalContentOpsPage() {
               { id: 'packs' as const, label: '场景内容', group: '场景' },
               { id: 'scenes' as const, label: '场景分类', group: '场景' },
               { id: 'featured' as const, label: '货架运营', group: '货架' },
+              { id: 'extaxonomy' as const, label: '外精选分类', group: '货架' },
               { id: 'howto' as const, label: '工具 How to', group: '货架' },
               { id: 'announce' as const, label: '站内公告', group: '站点' },
               { id: 'buildstats' as const, label: '建设概况口径', group: '站点' },
@@ -445,7 +465,7 @@ export function PortalContentOpsPage() {
           ))}
         </div>
         <p className="mb-4 text-[10px] leading-relaxed text-zinc-400">
-          分组：场景（内容/分类）→ 货架（上架选品·置顶 / How to）→ 站点（公告/建设口径）。工具主数据仍在「配置工具」；货架陈列以「货架运营」为准。
+          分组：场景（内容/分类）→ 货架（外精选上架·置顶 / 公司办公场景 / 外精选分类 / How to）→ 站点（公告/建设口径）。工具主数据仍在「配置工具」。
         </p>
 
         {howtoToast ? (
@@ -456,6 +476,7 @@ export function PortalContentOpsPage() {
 
         {opsSurface === 'howto' ? <PortalHowToOpsPanel /> : null}
         {opsSurface === 'featured' ? <PortalMarketFeaturedPanel /> : null}
+        {opsSurface === 'extaxonomy' ? <PortalExternalTaxonomyPanel /> : null}
         {opsSurface === 'announce' ? <PortalStationAnnouncePanel /> : null}
         {opsSurface === 'scenes' ? <PortalSceneCategoryPanel /> : null}
         {opsSurface === 'buildstats' ? <PortalBuildStatsCopyPanel /> : null}

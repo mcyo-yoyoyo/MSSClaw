@@ -12,12 +12,11 @@ export const RANK_MODE_OPTIONS: { id: RankMode; label: string }[] = [
   { id: 'most_used', label: '最多使用' },
 ];
 
-/** 首页排行 Tab（不含「最多使用」以免与热门过于重叠） */
+/** 首页 MSS 工具集市排行 Tab（去掉最高评分；不含「最多使用」以免与热门重叠） */
 export const HOME_RANK_TABS: { id: RankMode; label: string }[] = [
   { id: 'trending', label: '热门推荐' },
   { id: 'newest', label: '最新上线' },
   { id: 'most_downloaded', label: '最多下载' },
-  { id: 'top_rated', label: '最高评分' },
 ];
 
 export interface ContentEngagement {

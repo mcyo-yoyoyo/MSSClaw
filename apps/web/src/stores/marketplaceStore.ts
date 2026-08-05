@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { PROTOTYPE_AGENTS } from '@/domain/prototype/agents';
 import { PROTOTYPE_SKILLS } from '@/domain/prototype/skills';
-import { PROTOTYPE_TOOLS } from '@/domain/prototype/tools';
+import { PROTOTYPE_TOOLS, pruneRetiredDemoTools } from '@/domain/prototype/tools';
 import { PROTOTYPE_AUTOMATIONS } from '@/domain/prototype/automations';
 import { PROTOTYPE_KB_DOCS } from '@/domain/prototype/kb';
 import type {
@@ -110,7 +110,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   ready: false,
   agents: structuredClone(demoDefaults(PROTOTYPE_AGENTS)),
   skills: structuredClone(demoDefaults(PROTOTYPE_SKILLS)),
-  tools: structuredClone(demoDefaults(PROTOTYPE_TOOLS)),
+  tools: pruneRetiredDemoTools(structuredClone(demoDefaults(PROTOTYPE_TOOLS))),
   automations: structuredClone(demoDefaults(PROTOTYPE_AUTOMATIONS)),
   kbDocs: structuredClone(demoDefaults(PROTOTYPE_KB_DOCS)),
   agentFilter: 'all',

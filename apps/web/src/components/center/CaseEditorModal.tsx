@@ -698,7 +698,7 @@ export function CaseEditorModal({
                       onChange={(e) =>
                         setForm({ ...form, toolId: e.target.value || undefined })
                       }
-                      placeholder="tool-ext-latam-price"
+                      placeholder="tool-hw-assistant"
                     />
                   </FormField>
                   <FormField label="知识库文档 ID">

@@ -85,9 +85,13 @@ export function openCaseMap() {
 }
 
 /** 打开货架工具详情（深链 #/market-tool?id=） */
-export function openMarketToolDetail(toolId: string, returnShelf?: MarketShelfKind) {
+export function openMarketToolDetail(
+  toolId: string,
+  returnShelf?: MarketShelfKind,
+  opts?: { tab?: 'overview' | 'howto' | 'resources' },
+) {
   const intent = useNavigationIntentStore.getState();
-  intent.focusTool(toolId);
+  intent.focusTool(toolId, opts?.tab ? { tab: opts.tab } : undefined);
   if (returnShelf) {
     intent.setReturnTarget({ view: MARKET_SHELF_META[returnShelf].view });
   }

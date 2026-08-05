@@ -2,6 +2,10 @@
 
 import type { BusinessScenarioId } from '@/domain/businessScenarios';
 import type {
+  ExternalToolTypeId,
+  ToolRegion,
+} from '@/domain/externalToolTaxonomy';
+import type {
   AssetSourceType,
   AssetVisibility,
   DeptId,
@@ -156,6 +160,26 @@ export interface PrototypeToolSeed extends AssetOwnershipFields {
   tags: string[];
   /** 内部连接器类型提示 */
   connectorType?: string;
+  /** 外部目录：海外 / 国内 */
+  region?: ToolRegion;
+  /** 外部目录：工具类型（Demo 对齐） */
+  toolTypeId?: ExternalToolTypeId | string;
+  /** 卡片核心作用（优先于 desc 展示） */
+  cardSummary?: string;
+  /** 厂商 / 公司 */
+  company?: string;
+  /** 帮助文档 */
+  docsUrl?: string;
+  /** 官方介绍或演示 */
+  mediaUrl?: string;
+  /** 官方截图 */
+  screenshotUrl?: string;
+  /** 公开版本文案 */
+  versionLabel?: string;
+  /** 最适合场景 */
+  bestFor?: string;
+  /** 产品详细介绍 */
+  productIntro?: string;
 }
 
 export interface PrototypeKbCollection {

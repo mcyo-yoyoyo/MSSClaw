@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
-import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import {
   ASSET_VISIBILITY_LABELS,
   getDeptLabel,
   getRegionLabel,
 } from '@/domain/orgTaxonomy';
 import {
-  CenterModal,
   CenterPageHeader,
   CenterSearchInput,
   StatCardGrid,
@@ -21,14 +19,6 @@ import { resolveToolMarketShelf } from '@/domain/aiToolCategories';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { isAiSaasTool } from '@/domain/portalNavigation';
-
-function openTool(tool: PrototypeToolSeed) {
-  if (tool.sourceType === 'external' && tool.homepageUrl) {
-    window.open(tool.homepageUrl, '_blank', 'noopener,noreferrer');
-    return true;
-  }
-  return false;
-}
 
 export function ToolCenterPage() {
   const {
@@ -44,13 +34,11 @@ export function ToolCenterPage() {
     setToolScopeFilter,
     setToolEfficiencyFilter,
     filteredTools,
-    bumpToolInvokes,
     showToast,
   } = useMarketplaceStore();
 
   const consumeToolId = useNavigationIntentStore((s) => s.consumeToolId);
   const pendingToolId = useNavigationIntentStore((s) => s.pendingToolId);
-  const [detail, setDetail] = useState<PrototypeToolSeed | null>(null);
   const [editorTarget, setEditorTarget] = useState<ToolEditorTarget>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const list = filteredTools();
@@ -60,7 +48,7 @@ export function ToolCenterPage() {
     const id = consumeToolId();
     if (!id) return;
     const found = tools.find((t) => t.id === id);
-    if (found) setDetail(found);
+    if (found) setEditorTarget(found.id);
     else showToast(`未找到工具：${id}`);
   }, [pendingToolId, tools, consumeToolId, showToast]);
 
@@ -76,15 +64,6 @@ export function ToolCenterPage() {
     ] as [string, string | number][];
   }, [tools]);
 
-  const handleOpen = (tool: PrototypeToolSeed) => {
-    if (openTool(tool)) {
-      bumpToolInvokes(tool.id);
-      showToast(`已打开外部工具：${tool.name}`);
-      return;
-    }
-    setDetail(tool);
-  };
-
   return (
     <div className="center-surface center-page scroll-hidden flex-1 overflow-y-auto">
       <div className="mx-auto max-w-6xl">
@@ -93,7 +72,7 @@ export function ToolCenterPage() {
           subtitle="登记主数据与上架；外精选 / 公司推荐的陈列与 How to 在「门户运营」维护"
           tip={
             <>
-              各 NP 与区域可将内外部工具登记上架。可见性：全员 / 本组织（有区域则同区域）/ 仅发布方。欧洲账号默认看不到拉美「本组织」工具，但可看到全员公开工具。
+              各 NP 与区域可将内外部工具登记上架。可见性：全员 / 本组织（有区域则同区域）/ 仅发布方。外精选工具与 CSV 目录、公司内部工具与办公场景字典联动。
             </>
           }
           actions={
@@ -223,25 +202,11 @@ export function ToolCenterPage() {
                       ) : null}
                     </div>
                   </div>
-                  <div className="mt-2 flex gap-1.5 border-t border-black/[0.04] pt-2">
-                    <button
-                      type="button"
-                      onClick={() => handleOpen(t)}
-                      className="apple-btn-primary flex-1 rounded-md py-1 text-[11px] font-semibold text-white transition"
-                    >
-                      {t.sourceType === 'external' ? '打开' : '查看说明'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDetail(t)}
-                      className="rounded-md border border-black/8 px-2.5 py-1 text-[11px] font-medium transition hover:bg-black/[0.03]"
-                    >
-                      详情
-                    </button>
+                  <div className="mt-2 flex border-t border-black/[0.04] pt-2">
                     <button
                       type="button"
                       onClick={() => setEditorTarget(t.id)}
-                      className="rounded-md border border-black/8 px-2.5 py-1 text-[11px] font-medium transition hover:bg-black/[0.03]"
+                      className="apple-btn-primary w-full rounded-md py-1 text-[11px] font-semibold text-white transition"
                     >
                       编辑
                     </button>
@@ -256,46 +221,6 @@ export function ToolCenterPage() {
           )}
         </div>
       </div>
-
-      <CenterModal
-        open={!!detail}
-        title={detail?.name ?? ''}
-        onClose={() => setDetail(null)}
-        actions={
-          detail && (
-            <>
-              {detail.sourceType === 'external' ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleOpen(detail);
-                    setDetail(null);
-                  }}
-                  className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white"
-                >
-                  打开链接
-                </button>
-              ) : null}
-              <button type="button" onClick={() => setDetail(null)} className="rounded-xl border border-black/8 px-4 py-2 text-[12px]">
-                关闭
-              </button>
-            </>
-          )
-        }
-      >
-        {detail && (
-          <div className="space-y-2 text-[13px]">
-            <p className="text-[#86868b]">{detail.desc}</p>
-            <p className="text-[11px] text-[#86868b]">
-              发布方：{detail.publisher || detail.author}
-              {detail.ownerRegionId ? ` · ${getRegionLabel(detail.ownerRegionId)}` : ''}
-            </p>
-            {detail.homepageUrl && (
-              <p className="break-all text-[11px] text-claw-600">{detail.homepageUrl}</p>
-            )}
-          </div>
-        )}
-      </CenterModal>
 
       <ToolEditorModal target={editorTarget} onClose={() => setEditorTarget(null)} />
     </div>

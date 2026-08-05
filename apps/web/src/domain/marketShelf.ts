@@ -4,17 +4,16 @@
  */
 
 import {
-  getNavCategoryMeta,
-  resolveAiToolNavCategories,
   resolveToolMarketShelf,
 } from '@/domain/aiToolCategories';
-import { companyToolLogoUrl, resolveToolLogoUrl } from '@/domain/toolLogo';
+import { resolveToolLogoUrl } from '@/domain/toolLogo';
 import { canViewAsset, type AssetViewerContext } from '@/domain/assetVisibility';
 import {
   DISCOVER_TO_BUSINESS_SCENARIO,
   getBusinessScenarioMeta,
   type BusinessScenarioId,
 } from '@/domain/businessScenarios';
+import type { ToolRegion } from '@/domain/externalToolTaxonomy';
 import {
   anyItemMatchesOrgPerspective,
   emptyOrgPerspectiveSelection,
@@ -24,7 +23,12 @@ import {
 import { FEATURED_SCENARIOS, type ScenarioDef } from '@/domain/portalMap';
 import type { PortalContentItem } from '@/domain/prototype/portalContent';
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
-import { resolveToolFeaturedInFindCases } from '@/domain/plazaToolPicks';
+import {
+  getInternalOfficeSceneCatalog,
+  listInternalOfficeCatalogTools,
+  resolveOfficeToolWithCatalog,
+  type InternalOfficeSceneCatalogEntry,
+} from '@/domain/internalOfficeScenes';
 import {
   DISCOVER_SCENARIO_IDS,
   type DiscoverScenarioId,
@@ -38,7 +42,6 @@ import {
 } from '@/domain/orgTaxonomy';
 import { heatScore, type ContentEngagement } from '@/domain/contentEngagement';
 import {
-  resolveToolBusinessScenarios,
   toolMatchesBusinessScenario,
 } from '@/domain/toolBusinessScenarios';
 
@@ -73,7 +76,7 @@ export type MarketShelfCard = {
   kind: MarketShelfKind;
   title: string;
   description: string;
-  /** 外部工具：真实产品名（弱化展示在场景标题下） */
+  /** 外部工具：厂商名（弱化展示在产品名下） */
   productName?: string;
   icon: string;
   /** 外精选 / 公司推荐：品牌 Logo（可上传或由官网初始化） */
@@ -92,48 +95,38 @@ export type MarketShelfCard = {
   /** 展示用更新时间（YYYY-MM-DD） */
   updatedAt?: string;
   primaryAction: MarketPrimaryAction;
+  /** 外部目录：海外 / 国内 */
+  region?: ToolRegion;
+  /** 外部目录：工具类型 id */
+  toolTypeId?: string;
 };
 
-/** 外部工具卡：场景/能力作主标题，产品名弱化；运营可配 marketTitle */
+/** 外部工具卡：产品名为标题，卡片核心作用为描述（对齐 Demo） */
 function externalToolPresentation(tool: PrototypeToolSeed): {
   title: string;
-  productName: string;
+  productName?: string;
   description: string;
 } {
   const configured = tool.marketTitle?.trim();
-  if (configured) {
-    const oneLine = (tool.desc || '')
+  const summary =
+    tool.cardSummary?.trim() ||
+    (tool.desc || '')
       .replace(/\s+/g, ' ')
       .split(/[。！？.!?\n]/)[0]
-      .trim();
+      .trim() ||
+    tool.desc ||
+    '';
+  if (configured) {
     return {
       title: configured,
-      productName: tool.name,
-      description: oneLine || tool.desc || '',
+      productName: tool.company || tool.name,
+      description: summary,
     };
   }
-  const caps = resolveAiToolNavCategories(tool);
-  const capLabel = caps
-    .map((id) => getNavCategoryMeta(id)?.label)
-    .filter(Boolean)
-    .slice(0, 2)
-    .join(' · ');
-  const biz = resolveToolBusinessScenarios(tool)[0];
-  const bizLabel = biz ? getBusinessScenarioMeta(biz).label : '';
-  // 主标题优先 AI 应用能力；辅以业务场景，避免大量卡片同名「日常办公」
-  const title = capLabel
-    ? bizLabel && bizLabel !== '日常办公'
-      ? `${capLabel} · ${bizLabel}`
-      : capLabel
-    : bizLabel || tool.name;
-  const oneLine = (tool.desc || '')
-    .replace(/\s+/g, ' ')
-    .split(/[。！？.!?\n]/)[0]
-    .trim();
   return {
-    title,
-    productName: tool.name,
-    description: oneLine || tool.desc || '',
+    title: tool.name,
+    productName: tool.company || undefined,
+    description: summary,
   };
 }
 
@@ -148,7 +141,9 @@ function toolBadges(tool: PrototypeToolSeed): MarketShelfCard['badges'] {
   const badges: MarketShelfCard['badges'] = [];
   const dept = tool.ownerDeptIds?.[0];
   if (dept) badges.push({ label: getDeptLabel(dept), tone: 'dept' });
-  if (tool.ownerRegionId) {
+  if (tool.region === 'overseas') badges.push({ label: '海外', tone: 'region' });
+  else if (tool.region === 'domestic') badges.push({ label: '国内', tone: 'region' });
+  else if (tool.ownerRegionId) {
     badges.push({ label: getRegionLabel(tool.ownerRegionId), tone: 'region' });
   }
   const src =
@@ -229,20 +224,68 @@ export function listMarketToolCards(
         description: presentation.description,
         productName: presentation.productName,
         icon: t.icon || 'fa-plug',
-        logoUrl: kind === 'internal' ? companyToolLogoUrl() : resolveToolLogoUrl(t),
+        logoUrl: resolveToolLogoUrl(t),
         badges: toolBadges(t),
-        featured: resolveToolFeaturedInFindCases(t),
-        heat: eng
-          ? heatScore({ ...eng, uses: eng.uses + (t.invokes ?? 0) })
-          : t.invokes ?? 0,
+        featured: false,
+        heat: Math.round(
+          eng
+            ? heatScore({ ...eng, uses: eng.uses + (t.invokes ?? 0) })
+            : t.invokes ?? 0,
+        ),
         homepageUrl: t.homepageUrl,
         ownerDeptIds: t.ownerDeptIds,
         ownerRegionId: t.ownerRegionId ?? null,
         hasHowto,
         primaryAction: (canOpen ? 'open' : 'howto') as MarketPrimaryAction,
+        region: t.region,
+        toolTypeId: t.toolTypeId,
       };
     })
     .sort((a, b) => Number(b.featured) - Number(a.featured) || b.heat - a.heat);
+}
+
+/** 首页 / 对齐公司货架：办公场景引用的工具卡（链接优先配置工具主数据） */
+export function listInternalOfficeMarketCards(
+  catalogTools: PrototypeToolSeed[],
+  engagementOf?: (id: string) => ContentEngagement,
+  howtoToolIds?: Set<string>,
+  sceneEntries: InternalOfficeSceneCatalogEntry[] = getInternalOfficeSceneCatalog(),
+): MarketShelfCard[] {
+  const byId = new Map(catalogTools.map((t) => [t.id, t]));
+  return listInternalOfficeCatalogTools(sceneEntries).map((st) => {
+    const t = byId.get(st.id);
+    const resolved = resolveOfficeToolWithCatalog(st, t);
+    const eng = engagementOf?.(st.id);
+    const canOpen = Boolean(resolved.homepageUrl && resolved.homepageUrl !== '#');
+    const hasHowto = howtoToolIds?.has(st.id) ?? false;
+    return {
+      id: st.id,
+      kind: 'internal' as const,
+      title: resolved.name,
+      description: (t?.desc || st.blurb).trim(),
+      icon: t?.icon || 'fa-cube',
+      logoUrl: resolveToolLogoUrl(
+        t ?? {
+          logoUrl: resolved.logoUrl,
+          homepageUrl: resolved.homepageUrl,
+          sourceType: 'internal',
+          tags: ['hw-internal'],
+        },
+      ),
+      badges: [] as MarketShelfCard['badges'],
+      featured: false,
+      heat: Math.round(
+        eng
+          ? heatScore({ ...eng, uses: eng.uses + (t?.invokes ?? 0) })
+          : t?.invokes ?? 0,
+      ),
+      homepageUrl: resolved.homepageUrl,
+      ownerDeptIds: t?.ownerDeptIds,
+      ownerRegionId: t?.ownerRegionId ?? null,
+      hasHowto,
+      primaryAction: (canOpen ? 'open' : 'howto') as MarketPrimaryAction,
+    };
+  });
 }
 
 export function listMarketProjectCards(

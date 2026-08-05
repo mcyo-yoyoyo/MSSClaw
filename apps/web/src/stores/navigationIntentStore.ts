@@ -9,8 +9,12 @@ export interface NavReturnTarget {
   chatId?: string;
 }
 
+export type MarketToolDetailTab = 'overview' | 'howto' | 'resources';
+
 interface NavigationIntentState {
   pendingToolId: string | null;
+  /** 打开工具详情时默认落在哪个 Tab */
+  pendingToolDetailTab: MarketToolDetailTab | null;
   pendingKbDocId: string | null;
   pendingCaseId: string | null;
   /** 门户运营：打开后直达编辑某条内容 */
@@ -21,7 +25,7 @@ interface NavigationIntentState {
   /** 用 · 做任务 / 学 · 找案例：预选业务场景筛选 */
   pendingBusinessScenario: BusinessScenarioId | 'all' | null;
   returnTarget: NavReturnTarget | null;
-  focusTool: (id: string) => void;
+  focusTool: (id: string, opts?: { tab?: MarketToolDetailTab }) => void;
   focusKbDoc: (id: string) => void;
   focusCase: (id: string) => void;
   focusPortalEdit: (id: string) => void;
@@ -31,6 +35,7 @@ interface NavigationIntentState {
   focusBusinessScenario: (id: BusinessScenarioId | 'all') => void;
   setReturnTarget: (target: NavReturnTarget | null) => void;
   peekToolId: () => string | null;
+  peekToolDetailTab: () => MarketToolDetailTab | null;
   peekKbDocId: () => string | null;
   peekCaseId: () => string | null;
   peekPortalEditId: () => string | null;
@@ -40,6 +45,7 @@ interface NavigationIntentState {
   peekBusinessScenario: () => BusinessScenarioId | 'all' | null;
   peekReturnTarget: () => NavReturnTarget | null;
   consumeToolId: () => string | null;
+  consumeToolDetailTab: () => MarketToolDetailTab | null;
   consumeKbDocId: () => string | null;
   consumeCaseId: () => string | null;
   consumePortalEditId: () => string | null;
@@ -61,6 +67,7 @@ interface NavigationIntentState {
 
 export const useNavigationIntentStore = create<NavigationIntentState>((set, get) => ({
   pendingToolId: null,
+  pendingToolDetailTab: null,
   pendingKbDocId: null,
   pendingCaseId: null,
   pendingPortalEditId: null,
@@ -70,7 +77,11 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
   pendingBusinessScenario: null,
   returnTarget: null,
 
-  focusTool: (id) => set({ pendingToolId: id }),
+  focusTool: (id, opts) =>
+    set({
+      pendingToolId: id,
+      pendingToolDetailTab: opts?.tab ?? null,
+    }),
   focusKbDoc: (id) => set({ pendingKbDocId: id }),
   focusCase: (id) => set({ pendingCaseId: id }),
   focusPortalEdit: (id) => set({ pendingPortalEditId: id }),
@@ -81,6 +92,7 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
   setReturnTarget: (target) => set({ returnTarget: target }),
 
   peekToolId: () => get().pendingToolId,
+  peekToolDetailTab: () => get().pendingToolDetailTab,
   peekKbDocId: () => get().pendingKbDocId,
   peekCaseId: () => get().pendingCaseId,
   peekPortalEditId: () => get().pendingPortalEditId,
@@ -94,6 +106,11 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
     const id = get().pendingToolId;
     if (id) set({ pendingToolId: null });
     return id;
+  },
+  consumeToolDetailTab: () => {
+    const tab = get().pendingToolDetailTab;
+    if (tab) set({ pendingToolDetailTab: null });
+    return tab;
   },
   consumeKbDocId: () => {
     const id = get().pendingKbDocId;
@@ -139,6 +156,7 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
   clearAll: () =>
     set({
       pendingToolId: null,
+      pendingToolDetailTab: null,
       pendingKbDocId: null,
       pendingCaseId: null,
       pendingPortalEditId: null,
@@ -148,7 +166,7 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
       pendingBusinessScenario: null,
       returnTarget: null,
     }),
-  clearTool: () => set({ pendingToolId: null }),
+  clearTool: () => set({ pendingToolId: null, pendingToolDetailTab: null }),
   clearKb: () => set({ pendingKbDocId: null }),
   clearCase: () => set({ pendingCaseId: null }),
   clearPortalEdit: () => set({ pendingPortalEditId: null }),

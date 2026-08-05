@@ -34,20 +34,35 @@ function migrateFromV1(workspaceId: string): PlazaToolGuideRecord[] | null {
 
 function readLocal(workspaceId: string): PlazaToolGuideRecord[] {
   try {
+    const seeds = howtoSeeds();
     const raw = localStorage.getItem(storageKey(workspaceId));
     if (!raw) {
       const legacy = migrateFromV1(workspaceId);
-      return legacy?.length ? legacy : howtoSeeds();
+      if (!legacy?.length) return seeds;
+      return mergeGuideCatalog(seeds, legacy);
     }
     const parsed = JSON.parse(raw) as unknown[];
-    if (!Array.isArray(parsed)) return howtoSeeds();
+    if (!Array.isArray(parsed)) return seeds;
     const normalized = parsed
       .map((row) => normalizePlazaToolGuideRecord(row as PlazaToolGuideRecord))
       .filter((r): r is PlazaToolGuideRecord => Boolean(r));
-    return normalized.length ? normalized : howtoSeeds();
+    return mergeGuideCatalog(seeds, normalized);
   } catch {
     return howtoSeeds();
   }
+}
+
+/** 种子优先补齐新 catalog 指导；同 id 以本地运营修改为准 */
+function mergeGuideCatalog(
+  seeds: PlazaToolGuideRecord[],
+  saved: PlazaToolGuideRecord[],
+): PlazaToolGuideRecord[] {
+  const map = new Map(seeds.map((s) => [s.id, s]));
+  for (const row of saved) {
+    if (!row?.id) continue;
+    map.set(row.id, row);
+  }
+  return [...map.values()];
 }
 
 function writeLocal(workspaceId: string, records: PlazaToolGuideRecord[]) {

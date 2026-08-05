@@ -6,7 +6,7 @@ import {
 } from '@/domain/prototype/constants';
 import { PROTOTYPE_AGENTS } from '@/domain/prototype/agents';
 import { PROTOTYPE_SKILLS } from '@/domain/prototype/skills';
-import { PROTOTYPE_TOOLS } from '@/domain/prototype/tools';
+import { PROTOTYPE_TOOLS, pruneRetiredDemoTools } from '@/domain/prototype/tools';
 import { PROTOTYPE_AUTOMATIONS } from '@/domain/prototype/automations';
 import { PROTOTYPE_KB_DOCS } from '@/domain/prototype/kb';
 import { applyCanonicalSkillOwnershipList } from '@/domain/prototype/skillOwnership';
@@ -47,6 +47,20 @@ export interface MarketplaceSnapshot {
   kbDocs: PrototypeKbDocument[];
 }
 
+/** 公司内部工具：种子里的真实跳转链接 / Logo 优先于本地缓存旧值 */
+function refreshHwInternalToolMeta(tools: PrototypeToolSeed[]): PrototypeToolSeed[] {
+  const seedById = new Map(demoDefaults(PROTOTYPE_TOOLS).map((t) => [t.id, t]));
+  return tools.map((t) => {
+    const seed = seedById.get(t.id);
+    if (!seed?.tags?.includes('hw-internal')) return t;
+    return {
+      ...t,
+      homepageUrl: seed.homepageUrl || t.homepageUrl,
+      logoUrl: seed.logoUrl || t.logoUrl,
+    };
+  });
+}
+
 function readLocalMarketplace(): MarketplaceSnapshot {
   if (localStorage.getItem(LS_MARKET_VERSION) !== MARKET_VERSION) {
     localStorage.removeItem(LS_AGENTS);
@@ -74,7 +88,9 @@ function readLocalMarketplace(): MarketplaceSnapshot {
     return {
       agents: mergeCatalog(agents0, savedA),
       skills: applyCanonicalSkillOwnershipList(mergeCatalog(skills0, savedS)),
-      tools: mergeCatalog(tools0, savedT),
+      tools: pruneRetiredDemoTools(
+        refreshHwInternalToolMeta(mergeCatalog(tools0, savedT)),
+      ),
       automations:
         Array.isArray(savedAuto) && savedAuto.length
           ? savedAuto
@@ -87,7 +103,7 @@ function readLocalMarketplace(): MarketplaceSnapshot {
       skills: applyCanonicalSkillOwnershipList(
         structuredClone(demoDefaults(PROTOTYPE_SKILLS)),
       ),
-      tools: structuredClone(demoDefaults(PROTOTYPE_TOOLS)),
+      tools: pruneRetiredDemoTools(structuredClone(demoDefaults(PROTOTYPE_TOOLS))),
       automations: structuredClone(demoDefaults(PROTOTYPE_AUTOMATIONS)),
       kbDocs: structuredClone(demoDefaults(PROTOTYPE_KB_DOCS)),
     };
@@ -119,9 +135,13 @@ export async function loadMarketplace(workspaceId: string): Promise<MarketplaceS
               remote.skills as PrototypeSkillSeed[],
             ),
           ),
-          tools: mergeCatalog(
-            demoDefaults(PROTOTYPE_TOOLS),
-            (remote as { tools?: PrototypeToolSeed[] }).tools,
+          tools: pruneRetiredDemoTools(
+            refreshHwInternalToolMeta(
+              mergeCatalog(
+                demoDefaults(PROTOTYPE_TOOLS),
+                (remote as { tools?: PrototypeToolSeed[] }).tools,
+              ),
+            ),
           ),
           automations:
             Array.isArray(remote.automations) && remote.automations.length
