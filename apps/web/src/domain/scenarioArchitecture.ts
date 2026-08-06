@@ -273,7 +273,6 @@ export const SCENARIO_ARCHITECTURE_BY_ID: Record<
         '| Agent | `agent-data-analysis` | 数据分析专家 |',
         '| Skill | `skill-so-report` `/so报表` | 排名、环比、IoT 剔除 |',
         '| Skill | `skill-data-analysis` `/数据分析` | 多源归因 |',
-        '| Tool | `tool-isrp` | ISRP 数据连接器 |',
         '',
         '## 思想层',
         '- 金牌：`portal-case-so-mea-gold`',
@@ -289,7 +288,7 @@ export const SCENARIO_ARCHITECTURE_BY_ID: Record<
       [
         '# 经营分析 · AI 执行方案',
         '',
-        '1. 确认 ISRP 账号与代表处权限',
+        '1. 确认经营取数账号与代表处权限',
         '2. 打开金牌案例 → `/so报表`',
         '3. 勾选 IoT 剔除规则，生成周清清单',
         '4. 需要归因时追加 `/数据分析`',

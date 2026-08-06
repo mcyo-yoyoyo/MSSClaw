@@ -420,7 +420,7 @@ export function MarketShelfPage({
       badges.push({ label: '用场景技能', tone: 'type' });
       return {
         id: s.id,
-        kind: 'internal',
+        kind: 'projects',
         title: s.name,
         description: s.desc,
         icon: s.icon || 'fa-cube',
@@ -668,7 +668,7 @@ export function MarketShelfPage({
     onInvokeSkill(skill);
     rememberCard({
       id: skill.id,
-      kind: 'internal',
+      kind: 'projects',
       title: skill.name,
       description: skill.desc,
       icon: skill.icon || 'fa-cube',
