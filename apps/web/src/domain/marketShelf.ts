@@ -85,6 +85,10 @@ export type MarketShelfCard = {
   badges: { label: string; tone?: 'dept' | 'region' | 'type' }[];
   featured: boolean;
   heat: number;
+  /** 点赞数（MSS Skill/Agent 展示） */
+  likes?: number;
+  /** 下载量（MSS Skill/Agent 展示） */
+  downloads?: number;
   homepageUrl?: string;
   scenarioId?: string;
   ownerDeptIds?: DeptId[];
@@ -152,11 +156,22 @@ function toolBadges(tool: PrototypeToolSeed): MarketShelfCard['badges'] {
   return badges;
 }
 
-function scenarioBadges(def: ScenarioDef): MarketShelfCard['badges'] {
-  const badges: MarketShelfCard['badges'] = [{ label: 'AI 项目', tone: 'type' }];
+function scenarioBadges(
+  def: ScenarioDef,
+  portalItems: PortalContentItem[] = [],
+): MarketShelfCard['badges'] {
+  const badges: MarketShelfCard['badges'] = [];
   const biz = DISCOVER_TO_BUSINESS_SCENARIO[def.id as DiscoverScenarioId];
   if (biz) {
-    badges.unshift({ label: getBusinessScenarioMeta(biz).label, tone: 'dept' });
+    badges.push({ label: getBusinessScenarioMeta(biz).label, tone: 'dept' });
+  }
+  const dept = portalItems.find((i) => i.ownerDeptIds?.[0])?.ownerDeptIds?.[0];
+  if (dept) {
+    badges.push({ label: getDeptLabel(dept), tone: 'dept' });
+  }
+  const regionId = portalItems.find((i) => i.ownerRegionId)?.ownerRegionId;
+  if (regionId) {
+    badges.push({ label: getRegionLabel(regionId), tone: 'region' });
   }
   return badges;
 }
@@ -304,23 +319,19 @@ export function listMarketProjectCards(
     .map((d) => {
       const eng = engagementOf?.(d.id);
       const items = portalByScenario?.(d.id) ?? [];
-      const latest = items
-        .map((i) => i.publishedAt)
-        .filter(Boolean)
-        .sort()
-        .at(-1);
       return {
         id: d.id,
         kind: 'projects' as const,
         title: d.label,
         description: d.desc || d.label,
         icon: d.icon || 'fa-map',
-        badges: scenarioBadges(d),
+        badges: scenarioBadges(d, items),
         featured: false,
         heat: eng ? heatScore(eng) : 0,
+        likes: eng?.likes ?? 0,
+        downloads: eng?.downloads ?? 0,
         scenarioId: d.id,
         hasHowto: items.length > 0,
-        updatedAt: latest ? latest.slice(0, 10) : undefined,
         primaryAction: 'detail' as const,
       };
     })

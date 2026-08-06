@@ -25,9 +25,11 @@ import {
   listFeaturedDoTaskSkillIds,
   resolveSkillBusinessScenario,
 } from '@/domain/skillBusinessScenarios';
+import { skillDisplayName, skillTechnicalName } from '@/domain/skillDisplay';
 import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
 import { canViewAsset } from '@/domain/assetVisibility';
 import { downloadSkillFile } from '@/domain/skillExport';
+import { MarketSkillDetailModal } from '@/features/market/MarketSkillDetailModal';
 import { useMssBuildStatsCopyStore } from '@/stores/mssBuildStatsCopyStore';
 import {
   type ExternalFilterMode,
@@ -54,6 +56,10 @@ import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { ProjectDocsGallery } from '@/components/content/ProjectDocsGallery';
 import { CenterModal } from '@/components/center/CenterShell';
 import { resolveCaseItemsForScenarioId } from '@/domain/portalCase';
+import {
+  preferAgentHubFeaturedOrder,
+  withAgentHubCasePreview,
+} from '@/domain/agentHubCasePresets';
 import {
   buildScenarioBundles,
   FEATURED_SCENARIOS,
@@ -113,6 +119,7 @@ export function MarketShelfPage({
   const search = useMarketFilterStore((s) => s.search);
   const pushRecent = useRecentMarketStore((s) => s.push);
   const getEngagement = useContentEngagementStore((s) => s.get);
+  const engagementById = useContentEngagementStore((s) => s.byId);
   const bumpDownload = useContentEngagementStore((s) => s.bumpDownload);
   const bumpUse = useContentEngagementStore((s) => s.bumpUse);
   const guideRecords = usePlazaToolGuideStore((s) => s.records);
@@ -127,8 +134,8 @@ export function MarketShelfPage({
   const [externalFilterMode, setExternalFilterMode] = useState<ExternalFilterMode>('scene');
   const [externalScene, setExternalScene] = useState<ExternalWorkSceneId | 'all'>('all');
   const [externalType, setExternalType] = useState<ExternalToolTypeId | 'all'>('all');
-  /** MSS 集市二级面：学场景案例 | 用场景技能 */
-  const [mssSurface, setMssSurface] = useState<'projects' | 'skills'>('projects');
+  /** MSS 集市二级面：Skill Hub | Agent Hub（默认 Skill Hub） */
+  const [mssSurface, setMssSurface] = useState<'projects' | 'skills'>('skills');
   const [skillDetail, setSkillDetail] = useState<PrototypeSkillSeed | null>(null);
 
   const caseSubmitDefaultBusinessId =
@@ -283,9 +290,14 @@ export function MarketShelfPage({
         ? working.map((c) => ({ ...c, featured: false }))
         : applyMarketFeaturedPins(working, featuredPins[kind] ?? []);
 
+    const ordered =
+      kind === 'projects' && !(featuredPins.projects?.length)
+        ? preferAgentHubFeaturedOrder(pinned)
+        : pinned;
+
     const q = search.trim().toLowerCase();
-    if (!q) return pinned;
-    return pinned.filter(
+    if (!q) return ordered;
+    return ordered.filter(
       (c) =>
         c.title.toLowerCase().includes(q) ||
         c.description.toLowerCase().includes(q) ||
@@ -305,6 +317,7 @@ export function MarketShelfPage({
     externalType,
     externalTaxonomy,
     getEngagement,
+    engagementById,
     howtoToolIds,
     portalByScenario,
     runnableByScenario,
@@ -409,6 +422,7 @@ export function MarketShelfPage({
     return mssSkills.map((s) => {
       const biz = resolveSkillBusinessScenario(s);
       const bizLabel = getSkillBusinessLabel(s);
+      const eng = getEngagement(s.id);
       const badges: MarketShelfCardModel['badges'] = [];
       if (bizLabel) badges.push({ label: bizLabel, tone: 'dept' });
       if (s.ownerDeptIds?.[0]) {
@@ -417,23 +431,26 @@ export function MarketShelfPage({
       if (s.ownerRegionId) {
         badges.push({ label: getRegionLabel(s.ownerRegionId), tone: 'region' });
       }
-      badges.push({ label: '用场景技能', tone: 'type' });
+      badges.push({ label: 'Skill', tone: 'type' });
       return {
         id: s.id,
         kind: 'projects',
-        title: s.name,
-        description: s.desc,
+        title: skillDisplayName(s),
+        description: (s.desc || '').replace(/^【[^】]+】/, '').trim(),
+        productName: skillTechnicalName(s),
         icon: s.icon || 'fa-cube',
         badges,
         featured: true,
         heat: s.invokes ?? 0,
+        likes: eng.likes,
+        downloads: eng.downloads,
         hasHowto: Boolean(s.instructions || s.command),
         runnable: canRunSkills && Boolean(s.published && (s.instructions || s.command)),
         primaryAction: 'detail',
         scenarioId: biz ?? undefined,
       };
     });
-  }, [mssSkills, canRunSkills]);
+  }, [mssSkills, canRunSkills, getEngagement, engagementById]);
 
   const orgScopeLabel = useMemo(() => {
     const parts: string[] = [];
@@ -487,7 +504,10 @@ export function MarketShelfPage({
     [showcaseBundle],
   );
 
-  const showcaseItems = showcaseId ? resolveCaseItemsForScenarioId(showcaseId) : [];
+  const showcaseItems = useMemo(() => {
+    if (!showcaseId) return [];
+    return withAgentHubCasePreview(showcaseId, resolveCaseItemsForScenarioId(showcaseId));
+  }, [showcaseId]);
 
   const rememberCard = (card: MarketShelfCardModel) => {
     pushRecent({
@@ -759,13 +779,13 @@ export function MarketShelfPage({
                 {kind === 'projects'
                   ? mssSurface === 'skills'
                     ? allowScenarioRun
-                      ? '用场景技能 · 快速上手 / 去执行 · 亦可下载技能包'
-                      : '用场景技能 · 快速上手 / 下载技能包'
+                      ? 'Skill Hub · 快速上手 / 去执行 · 亦可下载技能包'
+                      : 'Skill Hub · 快速上手 / 下载技能包'
                     : allowScenarioRun
-                      ? '学场景案例 · 快速上手 / 可执行则去打样 · 否则下载学习包'
-                      : '学场景案例 · 快速上手 / 下载学习包'
+                      ? 'Agent Hub · 快速上手 / 可执行则去打样 · 否则下载学习包'
+                      : 'Agent Hub · 快速上手 / 下载学习包'
                   : kind === 'external'
-                    ? '从工作场景出发，浏览全球领先 AI · 海外 / 国内对照 · 快速上手'
+                    ? '从工作场景出发，浏览全球领先 AI · 海外 / 国内精选对照 · 快速上手'
                     : '不用先学会复杂工具，从「记、读、写、问」等日常动作开始'}
               </p>
               {kind === 'external' ? (
@@ -779,7 +799,7 @@ export function MarketShelfPage({
                   <i className="fa-solid fa-circle-info mr-1 text-[10px]" />
                   {allowScenarioRun
                     ? '当前方案支持一键打样与对话执行，亦可下载学习包自学。'
-                    : 'MVP 版本场景案例、专家技能仅提供下载学习；长期规划平台可一键打样与对话执行。'}
+                    : 'MVP 版本 Skill Hub、Agent Hub 仅提供下载学习；长期规划平台可一键打样与对话执行。'}
                 </p>
               ) : null}
               {kind === 'internal' ? (
@@ -791,17 +811,13 @@ export function MarketShelfPage({
             </div>
             <div className="flex w-full shrink-0 flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
               <MarketShelfFilterBar className="min-w-0 flex-1 sm:min-w-[240px] lg:w-[280px] lg:flex-none" />
-              {canSubmit ? (
+              {canSubmit && (kind === 'external' || kind === 'internal') ? (
                 <button
                   type="button"
                   onClick={() => setSubmitOpen(true)}
                   className="shrink-0 rounded-xl bg-zinc-900 px-4 py-2.5 text-[12px] font-semibold text-white shadow-sm transition hover:bg-zinc-800"
                 >
-                  {kind === 'external' || kind === 'internal'
-                    ? '提报工具'
-                    : kind === 'projects' && mssSurface === 'skills'
-                      ? '提报技能'
-                      : '提报案例'}
+                  提报工具
                 </button>
               ) : null}
             </div>
@@ -825,8 +841,8 @@ export function MarketShelfPage({
             <div className="inline-flex h-11 items-center rounded-xl border border-zinc-200 bg-zinc-50/80 p-1">
               {(
                 [
-                  { id: 'projects' as const, label: '学场景案例' },
-                  { id: 'skills' as const, label: '用场景技能' },
+                  { id: 'skills' as const, label: 'Skill Hub' },
+                  { id: 'projects' as const, label: 'Agent Hub' },
                 ] as const
               ).map((tab) => (
                 <button
@@ -994,13 +1010,13 @@ export function MarketShelfPage({
                     [
                       {
                         key: 'overseas',
-                        title: '海外工具',
+                        title: '海外精选',
                         sub: 'GLOBAL TOP 6',
                         items: externalFeaturedOverseas,
                       },
                       {
                         key: 'domestic',
-                        title: '国内工具',
+                        title: '国内精选',
                         sub: 'CHINA TOP 6',
                         items: externalFeaturedDomestic,
                       },
@@ -1019,6 +1035,7 @@ export function MarketShelfPage({
                             key={`hot-${c.id}`}
                             card={c}
                             variant="compact"
+                            showHot
                             howToLabel="快速上手"
                             onOpen={() => openCard(c)}
                             onPrimary={() => openPrimary(c)}
@@ -1049,6 +1066,7 @@ export function MarketShelfPage({
                         <MarketShelfCard
                           key={`hot-${c.id}`}
                           card={c}
+                          showHot
                           primaryLabel={skillPrimaryLabel}
                           howToLabel="快速上手"
                           onOpen={() => skill && setSkillDetail(skill)}
@@ -1061,6 +1079,7 @@ export function MarketShelfPage({
                       <MarketShelfCard
                         key={`hot-${c.id}`}
                         card={c}
+                        showHot
                         primaryLabel={kind === 'projects' ? casePrimaryLabel : undefined}
                         onOpen={() => openCard(c)}
                         onPrimary={() => openPrimary(c)}
@@ -1196,64 +1215,16 @@ export function MarketShelfPage({
       />
 
       {skillDetail ? (
-        <CenterModal
-          open
-          title={skillDetail.name}
+        <MarketSkillDetailModal
+          skill={skillDetail}
+          canRun={canRunSkills}
           onClose={() => setSkillDetail(null)}
-          size="md"
-          actions={
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  downloadSkillFile(skillDetail);
-                  showToast(`已下载技能包：${skillDetail.name}`);
-                }}
-                className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium"
-              >
-                下载技能包
-              </button>
-              {canRunSkills ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const s = skillDetail;
-                    setSkillDetail(null);
-                    runSkill(s);
-                  }}
-                  className="rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white"
-                >
-                  去执行
-                </button>
-              ) : null}
-            </>
-          }
-        >
-          <div className="space-y-3 text-left">
-            <p className="text-[13px] leading-relaxed text-zinc-600">{skillDetail.desc}</p>
-            {skillDetail.instructions ? (
-              <div className="rounded-xl border border-zinc-100 bg-zinc-50/80 px-3 py-2.5">
-                <p className="mb-1 text-[11px] font-semibold text-zinc-500">快速上手</p>
-                <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-zinc-700">
-                  {skillDetail.instructions.slice(0, 800)}
-                  {skillDetail.instructions.length > 800 ? '…' : ''}
-                </p>
-              </div>
-            ) : null}
-            <div className="flex flex-wrap gap-1.5">
-              {getSkillBusinessLabel(skillDetail) ? (
-                <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600">
-                  {getSkillBusinessLabel(skillDetail)}
-                </span>
-              ) : null}
-              {skillDetail.command ? (
-                <span className="rounded-md bg-zinc-100 px-2 py-0.5 font-mono text-[11px] text-zinc-500">
-                  {skillDetail.command}
-                </span>
-              ) : null}
-            </div>
-          </div>
-        </CenterModal>
+          onRun={(s) => {
+            setSkillDetail(null);
+            runSkill(s);
+          }}
+          onToast={showToast}
+        />
       ) : null}
 
       {howTo ? (

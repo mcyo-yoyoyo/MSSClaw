@@ -3,6 +3,7 @@ export const APP_VIEWS = [
   'market-external',
   'market-internal',
   'market-projects',
+  'ai-brief',
   'market-tool',
   'ai-map',
   'task',

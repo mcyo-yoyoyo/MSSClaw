@@ -25,6 +25,7 @@ import {
   LazyMyMessagesPage,
   LazyToolCenterPage,
   LazyWorkflowStudioPage,
+  LazyAiBriefPage,
 } from '@/features/lazyPages';
 
 export interface AppViewRouterHandlers {
@@ -48,6 +49,7 @@ const VIEW_LABELS: Partial<Record<AppView, string>> = {
   'market-external': '外部工具精选',
   'market-internal': '公司工具推荐',
   'market-projects': 'MSS工具集市',
+  'ai-brief': 'AI快讯',
   task: '任务记录',
   messages: '我的消息',
   'ai-map': '场景案例',
@@ -111,6 +113,12 @@ export function AppViewRouter({ appView, handlers }: AppViewRouterProps) {
             onInvokeSkill={handlers.onInvokeSkill}
             onStartExpertTeam={handlers.onStartExpertTeam}
           />
+        </LazyView>
+      );
+    case 'ai-brief':
+      return (
+        <LazyView label={label}>
+          <LazyAiBriefPage />
         </LazyView>
       );
     case 'market-tool':

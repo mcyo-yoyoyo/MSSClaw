@@ -12,7 +12,7 @@ const CHANNEL_ORDER: MarketShelfKind[] = ['external', 'internal', 'projects'];
 const CHANNEL_BLURB: Record<MarketShelfKind, string> = {
   external: '海外 / 国内对照 · 场景与类型筛选',
   internal: '从记读写问等场景进入公司工具',
-  projects: 'MSS 建设成果，按场景深潜',
+  projects: 'Skill Hub · Agent Hub 分列统计',
 };
 
 const TOP_N = 4;
@@ -25,6 +25,7 @@ export function HomeMarketChannels({
   onPrimary,
   onHowTo,
   searchActive,
+  projectsBreakdown,
 }: {
   cardsByKind: Record<MarketShelfKind, MarketShelfCardModel[]>;
   rankByKind: Record<MarketShelfKind, RankMode>;
@@ -33,6 +34,8 @@ export function HomeMarketChannels({
   onPrimary: (card: MarketShelfCardModel) => void;
   onHowTo: (card: MarketShelfCardModel) => void;
   searchActive?: boolean;
+  /** MSS工具集市：Skill / Agent 分列数量 */
+  projectsBreakdown?: { skill: number; agent: number };
 }) {
   return (
     <section className="grid gap-3 lg:grid-cols-3">
@@ -49,19 +52,42 @@ export function HomeMarketChannels({
             <header className="border-b border-zinc-100 px-3 py-2.5">
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="flex min-w-0 items-baseline gap-2">
+                  <div className="flex min-w-0 flex-wrap items-baseline gap-2">
                     <h2 className="truncate text-[18px] font-semibold tracking-tight text-zinc-900 md:text-[20px]">
                       {meta.label}
                     </h2>
-                    <span
-                      className="inline-flex shrink-0 items-baseline gap-0.5 rounded-full bg-zinc-900/[0.06] px-2 py-0.5 ring-1 ring-inset ring-zinc-900/[0.06]"
-                      title={`共 ${total} 项`}
-                    >
-                      <span className="text-[15px] font-semibold tabular-nums tracking-tight text-zinc-800 md:text-[16px]">
-                        {total}
+                    {kind === 'projects' && projectsBreakdown ? (
+                      <div className="inline-flex shrink-0 items-center gap-1">
+                        <span
+                          className="inline-flex items-baseline gap-0.5 rounded-full bg-sky-50 px-2 py-0.5 ring-1 ring-inset ring-sky-100"
+                          title={`Skill Hub ${projectsBreakdown.skill} 项`}
+                        >
+                          <span className="text-[10px] font-semibold text-sky-700">Skill</span>
+                          <span className="text-[14px] font-semibold tabular-nums tracking-tight text-sky-900 md:text-[15px]">
+                            {projectsBreakdown.skill}
+                          </span>
+                        </span>
+                        <span
+                          className="inline-flex items-baseline gap-0.5 rounded-full bg-zinc-100 px-2 py-0.5 ring-1 ring-inset ring-zinc-200/80"
+                          title={`Agent Hub ${projectsBreakdown.agent} 项`}
+                        >
+                          <span className="text-[10px] font-semibold text-zinc-600">Agent</span>
+                          <span className="text-[14px] font-semibold tabular-nums tracking-tight text-zinc-900 md:text-[15px]">
+                            {projectsBreakdown.agent}
+                          </span>
+                        </span>
+                      </div>
+                    ) : (
+                      <span
+                        className="inline-flex shrink-0 items-baseline gap-0.5 rounded-full bg-zinc-900/[0.06] px-2 py-0.5 ring-1 ring-inset ring-zinc-900/[0.06]"
+                        title={`共 ${total} 项`}
+                      >
+                        <span className="text-[15px] font-semibold tabular-nums tracking-tight text-zinc-800 md:text-[16px]">
+                          {total}
+                        </span>
+                        <span className="text-[10px] font-medium text-zinc-400">项</span>
                       </span>
-                      <span className="text-[10px] font-medium text-zinc-400">项</span>
-                    </span>
+                    )}
                   </div>
                   <p className="mt-1 truncate text-[12px] leading-snug text-zinc-400">
                     {CHANNEL_BLURB[kind]}

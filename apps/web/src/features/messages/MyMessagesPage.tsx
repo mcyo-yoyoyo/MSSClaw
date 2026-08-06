@@ -3,16 +3,14 @@ import { cn } from '@/lib/utils';
 import {
   CenterPageHeader,
   CenterSearchInput,
-  StatCardGrid,
 } from '@/components/center/CenterShell';
 import { inboxKindLabel } from '@/domain/inbox';
 import { getCurrentUserId } from '@/domain/currentUser';
+import { ensureAiNewsOverviewInbox } from '@/domain/aiNews';
 import { ensureStationAnnouncementInbox } from '@/domain/stationAnnouncements';
 import { useInboxStore } from '@/stores/inboxStore';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
-
-type Filter = 'all' | 'unread' | 'deliverable' | 'system' | 'user';
 
 export function MyMessagesPage() {
   const userId = getCurrentUserId();
@@ -22,60 +20,63 @@ export function MyMessagesPage() {
   const remove = useInboxStore((s) => s.remove);
   const setAppView = useAppViewStore((s) => s.setAppView);
   const consumeMessageId = useNavigationIntentStore((s) => s.consumeMessageId);
+  const consumeAiNewsOverview = useNavigationIntentStore((s) => s.consumeAiNewsOverview);
 
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<Filter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     ensureStationAnnouncementInbox();
+    ensureAiNewsOverviewInbox();
   }, []);
 
   useEffect(() => {
+    // 旧入口：AI 新闻总览意图改走顶栏 AI快讯
+    const overview = consumeAiNewsOverview();
+    if (overview.open) {
+      setAppView('ai-brief');
+      return;
+    }
     const id = consumeMessageId();
     if (!id) return;
+    if (id === 'ainews-overview' || id.startsWith('ainews-')) {
+      setAppView('ai-brief');
+      return;
+    }
     setSelectedId(id);
-    setFilter('all');
     markRead(id);
-  }, [consumeMessageId, markRead, messages.length]);
+  }, [consumeAiNewsOverview, consumeMessageId, markRead, messages.length, setAppView]);
 
-  const mine = useMemo(() => {
+  const platformMessages = useMemo(() => {
     void messages;
-    return useInboxStore.getState().forUser(userId);
-  }, [messages, userId]);
-
-  const list = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return mine.filter((m) => {
-      if (filter === 'unread' && m.read) return false;
-      if (filter === 'deliverable' && m.kind !== 'deliverable') return false;
-      if (filter === 'system' && m.kind !== 'system') return false;
-      if (filter === 'user' && m.kind !== 'user') return false;
-      if (!q) return true;
-      return `${m.title} ${m.body} ${m.fromName}`.toLowerCase().includes(q);
-    });
-  }, [mine, search, filter]);
+    return useInboxStore
+      .getState()
+      .forUser(userId)
+      .filter((m) => m.kind !== 'ai_news')
+      .filter((m) => {
+        if (!q) return true;
+        return `${m.title} ${m.body} ${m.fromName}`.toLowerCase().includes(q);
+      });
+  }, [messages, userId, search]);
 
-  const selected = list.find((m) => m.id === selectedId) ?? list[0] ?? null;
-
-  const unread = mine.filter((m) => !m.read).length;
-  const stats = [
-    ['全部', mine.length],
-    ['未读', unread],
-    ['交付推送', mine.filter((m) => m.kind === 'deliverable').length],
-    ['系统通知', mine.filter((m) => m.kind === 'system').length],
-  ] as [string, string | number][];
+  const selected =
+    platformMessages.find((m) => m.id === selectedId) ?? platformMessages[0] ?? null;
 
   return (
     <div className="center-surface center-page scroll-hidden flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-4 py-4 md:px-6">
         <CenterPageHeader
           title="我的消息"
-          subtitle="MSS AI提效作战平台 · 交付推送、作战室通知与系统提醒"
-          tip={<>任务预览中「推送」可选作战室或成员；对方在此查收并可回到任务中心继续跟进。</>}
+          subtitle="AI 平台系统与协作通知"
+          tip={<>平台系统消息与协作通知。每日 AI 产业动态请看顶栏「AI快讯」。</>}
           actions={
             <>
-              <CenterSearchInput value={search} onChange={setSearch} placeholder="搜索消息…" />
+              <CenterSearchInput
+                value={search}
+                onChange={setSearch}
+                placeholder="搜索平台消息…"
+              />
               <button
                 type="button"
                 onClick={() => markAllRead(userId)}
@@ -83,50 +84,17 @@ export function MyMessagesPage() {
               >
                 全部已读
               </button>
-              <button
-                type="button"
-                onClick={() => setAppView('task')}
-                className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03]"
-              >
-                去任务中心
-              </button>
             </>
           }
         />
 
-        <StatCardGrid items={stats} />
-
-        <div className="mb-3 flex flex-wrap gap-1.5">
-          {(
-            [
-              ['all', '全部'],
-              ['unread', '未读'],
-              ['deliverable', '交付推送'],
-              ['system', '系统'],
-              ['user', '成员'],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setFilter(id)}
-              className={cn(
-                'filter-chip px-2.5 py-1 text-[11px] font-medium',
-                filter === id && 'active',
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
         <div className="flex min-h-0 flex-1 flex-col gap-3 md:flex-row">
           <aside className="flex w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white md:w-[300px]">
             <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
-              {list.length === 0 ? (
-                <p className="px-2 py-10 text-center text-[11px] text-zinc-400">暂无消息</p>
+              {platformMessages.length === 0 ? (
+                <p className="px-2 py-10 text-center text-[11px] text-zinc-400">暂无平台消息</p>
               ) : (
-                list.map((m) => (
+                platformMessages.map((m) => (
                   <button
                     key={m.id}
                     type="button"

@@ -25,6 +25,7 @@ const TOP_SHELF_NAV: { view: AppView; label: string }[] = [
   { view: MARKET_SHELF_META.external.view, label: MARKET_SHELF_META.external.label },
   { view: MARKET_SHELF_META.internal.view, label: MARKET_SHELF_META.internal.label },
   { view: MARKET_SHELF_META.projects.view, label: MARKET_SHELF_META.projects.label },
+  { view: 'ai-brief', label: 'AI快讯' },
 ];
 
 const ADMIN_MENU_ITEMS: { view: AppView; label: string }[] = ADMIN_MENU_VIEWS.map((view) => ({

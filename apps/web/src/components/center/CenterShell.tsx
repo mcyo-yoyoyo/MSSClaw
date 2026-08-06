@@ -7,10 +7,12 @@ interface CenterModalProps {
   onClose: () => void;
   children: ReactNode;
   actions?: ReactNode;
-  /** 弹层宽度：fullscreen 近全屏遮罩，适合文档预览 */
-  size?: 'md' | 'lg' | 'fullscreen';
+  /** 弹层宽度：fullscreen 近全屏遮罩，适合文档预览；xl 适合 Skill Hub 详情 */
+  size?: 'md' | 'lg' | 'xl' | 'fullscreen';
   /** 叠在其它弹层之上（如详情→编辑） */
   elevate?: boolean;
+  /** 覆盖默认标题区（如自定义 Hero） */
+  header?: ReactNode;
 }
 
 export function CenterModal({
@@ -21,10 +23,18 @@ export function CenterModal({
   actions,
   size = 'md',
   elevate = false,
+  header,
 }: CenterModalProps) {
   if (!open) return null;
 
   const fullscreen = size === 'fullscreen';
+  const widthClass = fullscreen
+    ? 'h-[min(96vh,calc(100%-1rem))] max-h-none max-w-none'
+    : size === 'xl'
+      ? 'h-[min(92vh,880px)] max-w-5xl'
+      : size === 'lg'
+        ? 'max-h-[85vh] max-w-2xl'
+        : 'max-h-[85vh] max-w-lg';
 
   return (
     <div
@@ -38,28 +48,29 @@ export function CenterModal({
       <div
         className={cn(
           'flex w-full flex-col overflow-hidden rounded-2xl border border-black/5 bg-white shadow-apple-lg',
-          fullscreen
-            ? 'h-[min(96vh,calc(100%-1rem))] max-h-none max-w-none'
-            : 'max-h-[85vh]',
-          !fullscreen && (size === 'lg' ? 'max-w-2xl' : 'max-w-lg'),
+          widthClass,
         )}
       >
-        <div
-          className={cn(
-            'flex shrink-0 items-center justify-between border-b border-black/[0.06]',
-            fullscreen ? 'px-5 py-3' : 'px-5 py-4',
-          )}
-        >
-          <h3 className="truncate text-[15px] font-semibold text-[#1d1d1f]">{title}</h3>
-          <button type="button" onClick={onClose} className="text-[#86868b] transition hover:text-[#1d1d1f]">
-            <i className="fa-solid fa-xmark" />
-          </button>
-        </div>
+        {header ?? (
+          <div
+            className={cn(
+              'flex shrink-0 items-center justify-between border-b border-black/[0.06]',
+              fullscreen || size === 'xl' ? 'px-5 py-3' : 'px-5 py-4',
+            )}
+          >
+            <h3 className="truncate text-[15px] font-semibold text-[#1d1d1f]">{title}</h3>
+            <button type="button" onClick={onClose} className="text-[#86868b] transition hover:text-[#1d1d1f]">
+              <i className="fa-solid fa-xmark" />
+            </button>
+          </div>
+        )}
         <div
           className={cn(
             fullscreen
               ? 'min-h-0 flex-1 overflow-hidden p-3 md:p-4'
-              : 'max-h-[60vh] overflow-y-auto p-5',
+              : size === 'xl'
+                ? 'min-h-0 flex-1 overflow-y-auto p-0'
+                : 'max-h-[60vh] overflow-y-auto p-5',
           )}
         >
           {children}
@@ -68,7 +79,7 @@ export function CenterModal({
           <div
             className={cn(
               'flex shrink-0 justify-end gap-2 border-t border-black/[0.06] bg-[#fafafa]/50',
-              fullscreen ? 'px-5 py-3' : 'px-5 py-4',
+              fullscreen || size === 'xl' ? 'px-5 py-3' : 'px-5 py-4',
             )}
           >
             {actions}

@@ -24,6 +24,7 @@ const VIEW_RBAC: Partial<Record<AppView, { module: ResourceModule; min: Permissi
   'market-external': { module: 'chat', min: 'read' },
   'market-internal': { module: 'chat', min: 'read' },
   'market-projects': { module: 'chat', min: 'read' },
+  'ai-brief': { module: 'chat', min: 'read' },
   'market-tool': { module: 'chat', min: 'read' },
   task: { module: 'chat', min: 'read' },
   messages: { module: 'chat', min: 'read' },

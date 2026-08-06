@@ -55,9 +55,17 @@ const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
     id: 'goto-market-projects',
     label: 'MSS工具集市',
     icon: 'fa-layer-group',
-    keywords: 'MSS工具集市 AI项目 项目中心 样板 场景 找案例',
+    keywords: 'MSS工具集市 AI项目 项目中心 样板 场景 找案例 Skill Agent',
     view: 'market-projects',
     run: () => openMarketShelf('projects'),
+  },
+  {
+    id: 'goto-ai-brief',
+    label: 'AI快讯',
+    icon: 'fa-newspaper',
+    keywords: 'AI快讯 AI新闻 日报 产业动态 aibot',
+    view: 'ai-brief',
+    run: () => h.goto('ai-brief'),
   },
   {
     id: 'goto-find-cases',

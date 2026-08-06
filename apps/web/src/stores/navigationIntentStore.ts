@@ -11,6 +11,15 @@ export interface NavReturnTarget {
 
 export type MarketToolDetailTab = 'overview' | 'howto' | 'resources';
 
+/** 我的消息筛选意图（与页面 Filter 对齐） */
+export type MessageFilterIntent =
+  | 'all'
+  | 'unread'
+  | 'deliverable'
+  | 'system'
+  | 'user'
+  | 'ai_news';
+
 interface NavigationIntentState {
   pendingToolId: string | null;
   /** 打开工具详情时默认落在哪个 Tab */
@@ -22,6 +31,11 @@ interface NavigationIntentState {
   pendingPortalType: PortalOpsType | null;
   pendingScenarioId: string | null;
   pendingMessageId: string | null;
+  /** 打开「我的消息」时默认筛选 Tab */
+  pendingMessageFilter: MessageFilterIntent | null;
+  /** 打开「我的消息」并进入 AI 新闻累计总览 */
+  pendingAiNewsOverview: boolean;
+  pendingAiNewsFocusId: string | null;
   /** 用 · 做任务 / 学 · 找案例：预选业务场景筛选 */
   pendingBusinessScenario: BusinessScenarioId | 'all' | null;
   returnTarget: NavReturnTarget | null;
@@ -32,6 +46,8 @@ interface NavigationIntentState {
   focusPortalType: (type: PortalOpsType) => void;
   focusScenario: (id: string) => void;
   focusMessage: (id: string) => void;
+  focusMessageFilter: (filter: MessageFilterIntent) => void;
+  focusAiNewsOverview: (focusId?: string) => void;
   focusBusinessScenario: (id: BusinessScenarioId | 'all') => void;
   setReturnTarget: (target: NavReturnTarget | null) => void;
   peekToolId: () => string | null;
@@ -42,6 +58,9 @@ interface NavigationIntentState {
   peekPortalType: () => PortalOpsType | null;
   peekScenarioId: () => string | null;
   peekMessageId: () => string | null;
+  peekMessageFilter: () => MessageFilterIntent | null;
+  peekAiNewsOverview: () => boolean;
+  peekAiNewsFocusId: () => string | null;
   peekBusinessScenario: () => BusinessScenarioId | 'all' | null;
   peekReturnTarget: () => NavReturnTarget | null;
   consumeToolId: () => string | null;
@@ -52,6 +71,8 @@ interface NavigationIntentState {
   consumePortalType: () => PortalOpsType | null;
   consumeScenarioId: () => string | null;
   consumeMessageId: () => string | null;
+  consumeMessageFilter: () => MessageFilterIntent | null;
+  consumeAiNewsOverview: () => { open: boolean; focusId: string | null };
   consumeBusinessScenario: () => BusinessScenarioId | 'all' | null;
   consumeReturnTarget: () => NavReturnTarget | null;
   clearAll: () => void;
@@ -74,6 +95,9 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
   pendingPortalType: null,
   pendingScenarioId: null,
   pendingMessageId: null,
+  pendingMessageFilter: null,
+  pendingAiNewsOverview: false,
+  pendingAiNewsFocusId: null,
   pendingBusinessScenario: null,
   returnTarget: null,
 
@@ -88,6 +112,12 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
   focusPortalType: (type) => set({ pendingPortalType: type }),
   focusScenario: (id) => set({ pendingScenarioId: id }),
   focusMessage: (id) => set({ pendingMessageId: id }),
+  focusMessageFilter: (filter) => set({ pendingMessageFilter: filter }),
+  focusAiNewsOverview: (focusId) =>
+    set({
+      pendingAiNewsOverview: true,
+      pendingAiNewsFocusId: focusId ?? null,
+    }),
   focusBusinessScenario: (id) => set({ pendingBusinessScenario: id }),
   setReturnTarget: (target) => set({ returnTarget: target }),
 
@@ -99,6 +129,9 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
   peekPortalType: () => get().pendingPortalType,
   peekScenarioId: () => get().pendingScenarioId,
   peekMessageId: () => get().pendingMessageId,
+  peekMessageFilter: () => get().pendingMessageFilter,
+  peekAiNewsOverview: () => get().pendingAiNewsOverview,
+  peekAiNewsFocusId: () => get().pendingAiNewsFocusId,
   peekBusinessScenario: () => get().pendingBusinessScenario,
   peekReturnTarget: () => get().returnTarget,
 
@@ -142,6 +175,19 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
     if (id) set({ pendingMessageId: null });
     return id;
   },
+  consumeMessageFilter: () => {
+    const f = get().pendingMessageFilter;
+    if (f) set({ pendingMessageFilter: null });
+    return f;
+  },
+  consumeAiNewsOverview: () => {
+    const open = get().pendingAiNewsOverview;
+    const focusId = get().pendingAiNewsFocusId;
+    if (open || focusId) {
+      set({ pendingAiNewsOverview: false, pendingAiNewsFocusId: null });
+    }
+    return { open, focusId };
+  },
   consumeBusinessScenario: () => {
     const id = get().pendingBusinessScenario;
     if (id) set({ pendingBusinessScenario: null });
@@ -163,6 +209,9 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
       pendingPortalType: null,
       pendingScenarioId: null,
       pendingMessageId: null,
+      pendingMessageFilter: null,
+      pendingAiNewsOverview: false,
+      pendingAiNewsFocusId: null,
       pendingBusinessScenario: null,
       returnTarget: null,
     }),
@@ -171,7 +220,13 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
   clearCase: () => set({ pendingCaseId: null }),
   clearPortalEdit: () => set({ pendingPortalEditId: null }),
   clearScenario: () => set({ pendingScenarioId: null }),
-  clearMessage: () => set({ pendingMessageId: null }),
+  clearMessage: () =>
+    set({
+      pendingMessageId: null,
+      pendingMessageFilter: null,
+      pendingAiNewsOverview: false,
+      pendingAiNewsFocusId: null,
+    }),
   clearBusinessScenario: () => set({ pendingBusinessScenario: null }),
   clearReturnTarget: () => set({ returnTarget: null }),
 }));

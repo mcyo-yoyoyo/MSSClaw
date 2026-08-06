@@ -3,5 +3,8 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build --workspace @mss-claw/web",
   "outputDirectory": "apps/web/dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/api/ai-daily-news", "destination": "/api/ai-daily-news" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }

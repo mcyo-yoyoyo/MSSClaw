@@ -1,5 +1,6 @@
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
 import { withSkillOwnership } from '@/domain/prototype/skillOwnership';
+import { withSkillDisplayNames } from '@/domain/skillDisplay';
 import { getSkillPack } from '@/domain/skills/catalog';
 
 /** 来源：index.html DEFAULT_SKILLS（Phase1 打样 23 Skill）· 正文/计划由 skill pack 注入 */
@@ -84,5 +85,5 @@ function withRunnablePack(skill: PrototypeSkillSeed): PrototypeSkillSeed {
 }
 
 export const PROTOTYPE_SKILLS: PrototypeSkillSeed[] = withSkillOwnership(
-  PROTOTYPE_SKILLS_RAW.map(withRunnablePack),
+  PROTOTYPE_SKILLS_RAW.map(withRunnablePack).map(withSkillDisplayNames),
 );

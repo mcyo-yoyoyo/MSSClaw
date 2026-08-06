@@ -48,6 +48,8 @@ const CLEAR_KEY_EXACT = [
   'mssclaw_audit_log_v1',
   'mssclaw_audit_log_v2',
   'mssclaw_task_sessions',
+  'mssclaw_station_announce_v1',
+  'mssclaw_ai_news_v1',
 ];
 
 const CLEAR_KEY_PREFIXES = [
@@ -55,6 +57,7 @@ const CLEAR_KEY_PREFIXES = [
   'mssclaw_plaza_howto_',
   'mssclaw_inbox_',
   'mssclaw_sessions_',
+  'mssclaw_ai_news_pref_',
 ];
 
 /**

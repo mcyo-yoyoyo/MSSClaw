@@ -6,6 +6,7 @@ import type { MarketShelfCard as MarketShelfCardModel } from '@/domain/marketShe
 export function MarketShelfCard({
   card,
   variant = 'grid',
+  showHot = false,
   onOpen,
   onPrimary,
   onHowTo,
@@ -14,6 +15,8 @@ export function MarketShelfCard({
 }: {
   card: MarketShelfCardModel;
   variant?: 'grid' | 'featured' | 'compact';
+  /** 精选区右上角 HOT 角标 */
+  showHot?: boolean;
   onOpen: () => void;
   onPrimary?: () => void;
   onHowTo?: () => void;
@@ -33,11 +36,19 @@ export function MarketShelfCard({
   return (
     <article
       className={cn(
-        'group flex h-full flex-col rounded-2xl border border-zinc-200/90 bg-white transition duration-200',
+        'group relative flex h-full flex-col rounded-2xl border border-zinc-200/90 bg-white transition duration-200',
         'hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-[0_10px_28px_-16px_rgba(24,24,27,0.35)]',
         featured ? 'p-5' : compact ? 'p-3' : 'p-4',
       )}
     >
+      {showHot ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -right-1 -top-1 z-10 inline-flex items-center gap-0.5 rounded-md bg-gradient-to-br from-[#E11D48] via-[#F43F5E] to-[#FB923C] px-1.5 py-[3px] text-[9px] font-extrabold tracking-[0.08em] text-white shadow-[0_4px_10px_-3px_rgba(225,29,72,0.55)] ring-1 ring-white/70"
+        >
+          HOT
+        </span>
+      ) : null}
       <button type="button" onClick={onOpen} className="flex min-h-0 flex-1 flex-col text-left">
         <div className="flex items-start gap-3">
           <div
@@ -64,7 +75,7 @@ export function MarketShelfCard({
               >
                 {card.title}
               </h3>
-              {!compact && card.featured ? (
+              {!compact && card.featured && card.kind !== 'projects' ? (
                 <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold text-amber-800">
                   精选
                 </span>
@@ -98,9 +109,6 @@ export function MarketShelfCard({
                 快速上手 · 含上手材料，可先预览再使用
               </p>
             ) : null}
-            {card.kind === 'projects' && card.updatedAt ? (
-              <p className="mt-1.5 text-[10px] text-zinc-400">更新 {card.updatedAt}</p>
-            ) : null}
           </div>
         </div>
         {!compact ? (
@@ -113,7 +121,18 @@ export function MarketShelfCard({
                 {b.label}
               </span>
             ))}
-            {card.heat > 0 ? (
+            {card.kind === 'projects' ? (
+              <span className="ml-auto inline-flex items-center gap-2.5 text-[10px] tabular-nums text-zinc-400">
+                <span className="inline-flex items-center gap-1" title="下载量">
+                  <i className="fa-solid fa-download text-[9px] text-zinc-400" />
+                  {formatToolInvokes(card.downloads ?? 0)}
+                </span>
+                <span className="inline-flex items-center gap-1" title="点赞">
+                  <i className="fa-solid fa-thumbs-up text-[9px] text-sky-500/80" />
+                  {formatToolInvokes(card.likes ?? 0)}
+                </span>
+              </span>
+            ) : card.heat > 0 ? (
               <span className="ml-auto inline-flex items-center gap-1 text-[10px] tabular-nums text-zinc-400">
                 <i className="fa-solid fa-fire text-[9px] text-amber-500/80" />
                 {formatToolInvokes(card.heat)}

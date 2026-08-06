@@ -1,4 +1,4 @@
-export type InboxMessageKind = 'system' | 'user' | 'deliverable';
+export type InboxMessageKind = 'system' | 'user' | 'deliverable' | 'ai_news';
 
 export interface InboxMessage {
   id: string;
@@ -17,6 +17,9 @@ export interface InboxMessage {
     warroomTitle?: string;
     artifactType?: string;
     query?: string;
+    /** AI 新闻发布日 YYYY-MM-DD */
+    newsDate?: string;
+    cadence?: 'daily' | 'weekly';
   };
 }
 
@@ -26,6 +29,8 @@ export function inboxKindLabel(kind: InboxMessageKind): string {
       return '交付推送';
     case 'user':
       return '成员消息';
+    case 'ai_news':
+      return 'AI新闻';
     default:
       return '系统通知';
   }

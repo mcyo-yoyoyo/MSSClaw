@@ -335,6 +335,25 @@ export function HomePage({
     officeSceneEntries,
   ]);
 
+  const projectsBreakdown = useMemo(() => {
+    const q = marketSearch.trim().toLowerCase();
+    const skillIds = listFeaturedDoTaskSkillIds(skills, 'all', 256);
+    const skill = skillIds
+      .map((id) => skills.find((s) => s.id === id))
+      .filter((s): s is PrototypeSkillSeed => Boolean(s))
+      .filter((s) => canViewAsset(s, viewer))
+      .filter((s) => {
+        if (!q) return true;
+        return `${s.name} ${s.nameZh ?? ''} ${s.desc} ${s.command ?? ''}`
+          .toLowerCase()
+          .includes(q);
+      }).length;
+    return {
+      skill,
+      agent: channelCards.projects.length,
+    };
+  }, [skills, viewer, marketSearch, channelCards.projects]);
+
   useEffect(() => {
     const ids = [
       ...channelCards.external,
@@ -640,6 +659,7 @@ export function HomePage({
 
             <HomeMarketChannels
               cardsByKind={channelCards}
+              projectsBreakdown={projectsBreakdown}
               rankByKind={rankByKind}
               onRankChange={(kind, mode) =>
                 setRankByKind((prev) => ({ ...prev, [kind]: mode }))
