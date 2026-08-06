@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { CenterModal } from '@/components/center/CenterShell';
 import { CaseDocumentPreview } from '@/components/content/CaseDocumentPreview';
 import {
@@ -6,9 +6,7 @@ import {
   type PlazaToolGuide,
 } from '@/domain/plazaToolGuides';
 import { isHowtoDataUrl, openHowtoResource } from '@/domain/howtoUpload';
-import { groupGuidesIntoSteps } from '@/domain/howtoSteps';
 import type { PortalCasePreviewFile } from '@/domain/prototype/portalContent';
-import { cn } from '@/lib/utils';
 
 function guideToPreviewFile(guide: PlazaToolGuide): PortalCasePreviewFile | null {
   const url = guide.url;
@@ -80,58 +78,54 @@ function GuideList({
       ))}
       {!guides.length ? (
         <p className="py-8 text-center text-[11px] text-zinc-400">
-          暂无 How to，运营可在门户运营维护上手材料
+          暂无快速上手材料，可在门户运营维护
         </p>
       ) : null}
     </div>
   );
 }
 
-/** 货架 / 找案例共用 · How to 侧栏（可选分步轨） */
+/** 快速上手材料列表（不分章） */
+export function HowtoGuideList({
+  guides,
+  onOpenGuide,
+}: {
+  guides: PlazaToolGuide[];
+  onOpenGuide: (g: PlazaToolGuide) => void;
+}) {
+  return <GuideList guides={guides} onOpenGuide={onOpenGuide} />;
+}
+
+/** 货架 / 找案例共用 · How to 侧栏（材料列表，不分章） */
 export function HowToDrawer({
   title,
   subtitle,
   guides,
-  stepped = false,
   onClose,
   onOpenGuide,
 }: {
   title: string;
   subtitle?: string;
   guides: PlazaToolGuide[];
-  /** 左侧步骤轨 · 准备/连接/上手 */
+  /** @deprecated 已取消分章，保留参数以免旧调用报错 */
   stepped?: boolean;
   onClose: () => void;
   onOpenGuide: (g: PlazaToolGuide) => void;
 }) {
-  const steps = useMemo(() => groupGuidesIntoSteps(guides), [guides]);
-  const [activeStep, setActiveStep] = useState(0);
-
-  useEffect(() => {
-    setActiveStep(0);
-  }, [title, guides.length]);
-
-  const showSteps = stepped && steps.length > 1;
-  const visibleGuides = showSteps ? steps[activeStep]?.guides ?? [] : guides;
-
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/20" onClick={onClose}>
       <aside
-        className={cn(
-          'flex h-full w-full flex-col border-l border-zinc-200 bg-white shadow-xl',
-          showSteps ? 'max-w-[420px]' : 'max-w-[320px]',
-        )}
+        className="flex h-full w-full max-w-[320px] flex-col border-l border-zinc-200 bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3 border-b border-zinc-100 px-4 py-3.5">
           <div className="min-w-0">
-            <p className="font-serif text-[12px] italic text-zinc-400">How to</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-zinc-400">
+              快速上手
+            </p>
             <h3 className="mt-0.5 truncate text-[14px] font-semibold text-zinc-900">{title}</h3>
             <p className="mt-0.5 text-[10px] text-zinc-400">
-              {subtitle ??
-                (showSteps
-                  ? '快速上手 · 准备 / 连接 / 上手'
-                  : '快速上手 · 图片 · PDF · PPT · 视频 · 链接 · 文字')}
+              {subtitle ?? '图片 · PDF · PPT · 视频 · 链接 · 文字'}
             </p>
           </div>
           <button
@@ -142,41 +136,8 @@ export function HowToDrawer({
             关闭
           </button>
         </div>
-        <div
-          className={cn(
-            'flex min-h-0 flex-1',
-            showSteps ? 'flex-row' : 'flex-col overflow-y-auto px-4 py-3',
-          )}
-        >
-          {showSteps ? (
-            <>
-              <ol className="w-[120px] shrink-0 space-y-1 overflow-y-auto border-r border-zinc-100 px-2 py-3">
-                {steps.map((s, i) => (
-                  <li key={s.id}>
-                    <button
-                      type="button"
-                      onClick={() => setActiveStep(i)}
-                      className={cn(
-                        'flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-[11px] font-semibold transition',
-                        i === activeStep
-                          ? 'bg-zinc-900 text-white'
-                          : 'text-zinc-600 hover:bg-zinc-100',
-                      )}
-                    >
-                      <span className="opacity-70">{i + 1}</span>
-                      {s.label}
-                    </button>
-                  </li>
-                ))}
-              </ol>
-              <div className="min-w-0 flex-1 overflow-y-auto px-3 py-3">
-                <p className="mb-2 text-[10px] text-zinc-400">{steps[activeStep]?.hint}</p>
-                <GuideList guides={visibleGuides} onOpenGuide={onOpenGuide} />
-              </div>
-            </>
-          ) : (
-            <GuideList guides={visibleGuides} onOpenGuide={onOpenGuide} />
-          )}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+          <GuideList guides={guides} onOpenGuide={onOpenGuide} />
         </div>
       </aside>
     </div>

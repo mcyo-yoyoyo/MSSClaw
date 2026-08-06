@@ -13,7 +13,7 @@ function previewKindToGuideType(
   if (kind === 'pdf') return 'pdf';
   if (kind === 'pptx') return 'ppt';
   if (kind === 'image') return 'image';
-  if (kind === 'video') return 'link';
+  if (kind === 'video') return 'video';
   return 'link';
 }
 

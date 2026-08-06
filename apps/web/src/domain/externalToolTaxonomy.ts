@@ -145,6 +145,7 @@ export function toolMatchesExternalScene(
 ): boolean {
   if (scene === 'all') return true;
   const meta = getExternalWorkSceneMeta(scene);
-  if (!meta?.typeIds?.length) return true;
+  // 与 toolMatchesExternalSceneCatalog 一致：空 typeIds 不匹配任何工具
+  if (!meta?.typeIds?.length) return false;
   return Boolean(tool.toolTypeId && meta.typeIds.includes(tool.toolTypeId as ExternalToolTypeId));
 }

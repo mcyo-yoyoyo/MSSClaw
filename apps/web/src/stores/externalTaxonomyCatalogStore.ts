@@ -70,10 +70,10 @@ function mergeCatalog(
       id,
       label: o?.label?.trim() || base.label,
       visible: o?.visible ?? base.visible,
-      typeIds:
-        o?.typeIds?.length && Array.isArray(o.typeIds)
-          ? (o.typeIds.filter((tid) => TYPE_IDS.has(tid)) as ExternalToolTypeId[])
-          : [...base.typeIds],
+      // 区分「未配置」与「显式空数组」：空数组表示运营清空关联
+      typeIds: Array.isArray(o?.typeIds)
+        ? (o.typeIds.filter((tid) => TYPE_IDS.has(tid)) as ExternalToolTypeId[])
+        : [...base.typeIds],
     });
   }
 

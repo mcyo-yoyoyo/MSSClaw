@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CenterModal } from '@/components/center/CenterShell';
 import {
   FormField,
@@ -100,9 +100,17 @@ interface ToolEditorModalProps {
 export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
   const { tools, upsertTool, showToast } = useMarketplaceStore();
   const [form, setForm] = useState<PrototypeToolSeed>(emptyTool(false));
-  const externalTypeOptions = listVisibleExternalToolTypes(
-    useExternalTaxonomyCatalogStore((s) => s.catalog),
-  );
+  const externalTaxonomy = useExternalTaxonomyCatalogStore((s) => s.catalog);
+  const externalTypeOptions = useMemo(() => {
+    const visible = listVisibleExternalToolTypes(externalTaxonomy);
+    const current = form.toolTypeId
+      ? externalTaxonomy.types.find((t) => t.id === form.toolTypeId)
+      : undefined;
+    if (current && !visible.some((t) => t.id === current.id)) {
+      return [...visible, current];
+    }
+    return visible;
+  }, [externalTaxonomy, form.toolTypeId]);
 
   useEffect(() => {
     if (!target) return;
@@ -209,7 +217,12 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
               mediaUrl: form.mediaUrl?.trim() || undefined,
               screenshotUrl: form.screenshotUrl?.trim() || undefined,
             }
-          : {}),
+          : {
+              region: undefined,
+              toolTypeId: undefined,
+              cardSummary: undefined,
+              company: undefined,
+            }),
       },
       isNew,
     );

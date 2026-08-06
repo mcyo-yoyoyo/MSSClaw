@@ -1,5 +1,6 @@
 /**
- * How to 分步呈现：将材料列表归为准备 / 连接 / 上手三章
+ * How to 分步归类（历史能力；业务 UI 已改为不分章材料列表）。
+ * 保留供运营分析 / 未来可选分段，前台详情与抽屉不再调用。
  */
 
 import type { PlazaToolGuide } from '@/domain/plazaToolGuides';

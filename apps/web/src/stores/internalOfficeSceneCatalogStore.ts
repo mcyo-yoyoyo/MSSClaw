@@ -39,10 +39,10 @@ function mergeWithDefaults(
       description: override?.description?.trim() || base.description,
       icon: override?.icon?.trim() || base.icon,
       visible: override?.visible ?? base.visible,
-      toolIds:
-        override?.toolIds?.length && Array.isArray(override.toolIds)
-          ? [...new Set(override.toolIds.filter(Boolean))]
-          : [...base.toolIds],
+      // 区分「未配置」与「显式空数组」：空数组表示运营清空绑定
+      toolIds: Array.isArray(override?.toolIds)
+        ? [...new Set(override.toolIds.filter(Boolean))]
+        : [...base.toolIds],
       toolBlurbs: {
         ...base.toolBlurbs,
         ...(override?.toolBlurbs ?? {}),

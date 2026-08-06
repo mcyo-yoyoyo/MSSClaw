@@ -230,17 +230,28 @@ function seedToolOrFallback(
   return resolveOfficeToolWithCatalog(base, catalog);
 }
 
-/** 场景引用的去重工具（稳定顺序；含运营绑定） */
+/** 配置工具主数据是否可用于前台办公场景（已发布且存在） */
+export function isOfficeCatalogToolEligible(
+  catalog?: PrototypeToolSeed | null,
+): boolean {
+  return Boolean(catalog && catalog.published !== false);
+}
+
+/** 场景引用的去重工具（稳定顺序；含运营绑定；仅已发布主数据） */
 export function listInternalOfficeCatalogTools(
   entries: InternalOfficeSceneCatalogEntry[] = getInternalOfficeSceneCatalog(),
+  catalogTools: PrototypeToolSeed[] = [],
 ): InternalOfficeSceneTool[] {
+  const byId = new Map(catalogTools.map((t) => [t.id, t]));
   const map = new Map<string, InternalOfficeSceneTool>();
   for (const entry of entries.filter((e) => e.visible !== false)) {
     for (const toolId of entry.toolIds) {
       if (map.has(toolId)) continue;
+      const catalog = byId.get(toolId);
+      if (!isOfficeCatalogToolEligible(catalog)) continue;
       map.set(
         toolId,
-        seedToolOrFallback(toolId, entry.toolBlurbs?.[toolId], null),
+        seedToolOrFallback(toolId, entry.toolBlurbs?.[toolId], catalog),
       );
     }
   }
@@ -277,9 +288,13 @@ export function materializeOfficeScenes(
       english: entry.english,
       description: entry.description,
       icon: entry.icon,
-      tools: entry.toolIds.map((toolId) =>
-        seedToolOrFallback(toolId, entry.toolBlurbs?.[toolId], byId.get(toolId)),
-      ),
+      tools: entry.toolIds.flatMap((toolId) => {
+        const catalog = byId.get(toolId);
+        if (!isOfficeCatalogToolEligible(catalog)) return [];
+        return [
+          seedToolOrFallback(toolId, entry.toolBlurbs?.[toolId], catalog),
+        ];
+      }),
     }));
 }
 

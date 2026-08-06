@@ -4,6 +4,7 @@ import { ToolLogo } from '@/components/brand/ToolLogo';
 import { resolveToolLogoUrl } from '@/domain/toolLogo';
 import {
   HowToGuidePreviewModal,
+  HowtoGuideList,
   openGuideEntry,
 } from '@/components/market/HowToPanel';
 import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
@@ -24,7 +25,6 @@ import { useRecentMarketStore } from '@/stores/recentMarketStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { parseAppRoute } from '@/domain/appRoute';
 import type { PlazaToolGuide } from '@/domain/plazaToolGuides';
-import { groupGuidesIntoSteps } from '@/domain/howtoSteps';
 
 type DetailTab = 'overview' | 'howto' | 'resources';
 
@@ -36,6 +36,7 @@ export function MarketToolDetailPage() {
   const setAppView = useAppViewStore((s) => s.setAppView);
   const peekToolId = useNavigationIntentStore((s) => s.peekToolId);
   const consumeReturnTarget = useNavigationIntentStore((s) => s.consumeReturnTarget);
+  const peekReturnTarget = useNavigationIntentStore((s) => s.peekReturnTarget);
   const consumeToolDetailTab = useNavigationIntentStore((s) => s.consumeToolDetailTab);
   const focusTool = useNavigationIntentStore((s) => s.focusTool);
   const guideRecords = usePlazaToolGuideStore((s) => s.records);
@@ -44,7 +45,6 @@ export function MarketToolDetailPage() {
 
   const [tab, setTab] = useState<DetailTab>('overview');
   const [guidePreview, setGuidePreview] = useState<PlazaToolGuide | null>(null);
-  const [activeStep, setActiveStep] = useState(0);
 
   useEffect(() => {
     ensurePlazaToolGuidesBootstrapped();
@@ -67,18 +67,22 @@ export function MarketToolDetailPage() {
         .map(({ toolId: _t, ...g }) => g),
     [guideRecords, toolId],
   );
-  const steps = useMemo(() => groupGuidesIntoSteps(guides), [guides]);
 
   useEffect(() => {
-    setActiveStep(0);
     const nextTab = consumeToolDetailTab();
     setTab(nextTab ?? 'overview');
   }, [toolId, consumeToolDetailTab]);
 
-  const kind: MarketShelfKind =
-    tool?.sourceType === 'internal' || tool?.tags?.includes('hw-internal')
-      ? 'internal'
-      : 'external';
+  const kind: MarketShelfKind = (() => {
+    if (tool?.sourceType === 'internal' || tool?.tags?.includes('hw-internal')) {
+      return 'internal';
+    }
+    if (tool) return 'external';
+    const ret = peekReturnTarget();
+    if (ret?.view === 'market-internal') return 'internal';
+    if (ret?.view === 'market-projects') return 'projects';
+    return 'external';
+  })();
 
   const bizLabels = tool
     ? resolveToolBusinessScenarios(tool).map((id) => getBusinessScenarioMeta(id).label)
@@ -182,8 +186,6 @@ export function MarketToolDetailPage() {
       value: String(tool.invokes ?? 0),
     },
   ];
-
-  const stepGuides = steps[activeStep]?.guides ?? [];
 
   return (
     <div className="center-surface flex min-h-0 flex-1 flex-col overflow-y-auto scroll-hidden">
@@ -361,72 +363,20 @@ export function MarketToolDetailPage() {
               ) : null}
 
               {tab === 'howto' ? (
-                guides.length ? (
-                  <div className="grid gap-4 sm:grid-cols-[160px_1fr]">
-                    <ol className="space-y-1">
-                      {steps.map((s, i) => (
-                        <li key={s.id}>
-                          <button
-                            type="button"
-                            onClick={() => setActiveStep(i)}
-                            className={cn(
-                              'flex w-full items-start gap-2 rounded-xl px-2.5 py-2 text-left transition',
-                              i === activeStep
-                                ? 'bg-zinc-900 text-white'
-                                : 'hover:bg-zinc-100',
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
-                                i === activeStep
-                                  ? 'bg-white/20 text-white'
-                                  : 'bg-zinc-200 text-zinc-600',
-                              )}
-                            >
-                              {i + 1}
-                            </span>
-                            <span className="min-w-0">
-                              <span className="block text-[12px] font-semibold">{s.label}</span>
-                              <span
-                                className={cn(
-                                  'mt-0.5 block text-[10px]',
-                                  i === activeStep ? 'text-white/70' : 'text-zinc-400',
-                                )}
-                              >
-                                {s.hint}
-                              </span>
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                    </ol>
-                    <div className="space-y-2">
-                      {stepGuides.map((g) => (
-                        <button
-                          key={g.id}
-                          type="button"
-                          onClick={() =>
-                            openGuideEntry(g, {
-                              onPreview: setGuidePreview,
-                              onToast: showToast,
-                            })
-                          }
-                          className="flex w-full flex-col rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-left hover:border-zinc-300"
-                        >
-                          <span className="text-[12px] font-semibold text-zinc-800">{g.title}</span>
-                          {g.blurb ? (
-                            <span className="mt-0.5 text-[11px] text-zinc-400">{g.blurb}</span>
-                          ) : null}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="py-8 text-center text-[12px] text-zinc-400">
-                    暂无快速上手材料，可在门户运营维护
+                <div className="space-y-3">
+                  <p className="text-[12px] text-zinc-400">
+                    按运营配置顺序查看材料，点击即可预览或打开。
                   </p>
-                )
+                  <HowtoGuideList
+                    guides={guides}
+                    onOpenGuide={(g) =>
+                      openGuideEntry(g, {
+                        onPreview: setGuidePreview,
+                        onToast: showToast,
+                      })
+                    }
+                  />
+                </div>
               ) : null}
 
               {tab === 'resources' ? (

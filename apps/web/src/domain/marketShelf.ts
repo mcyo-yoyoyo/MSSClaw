@@ -252,7 +252,7 @@ export function listInternalOfficeMarketCards(
   sceneEntries: InternalOfficeSceneCatalogEntry[] = getInternalOfficeSceneCatalog(),
 ): MarketShelfCard[] {
   const byId = new Map(catalogTools.map((t) => [t.id, t]));
-  return listInternalOfficeCatalogTools(sceneEntries).map((st) => {
+  return listInternalOfficeCatalogTools(sceneEntries, catalogTools).map((st) => {
     const t = byId.get(st.id);
     const resolved = resolveOfficeToolWithCatalog(st, t);
     const eng = engagementOf?.(st.id);

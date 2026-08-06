@@ -91,7 +91,8 @@ export function toolMatchesExternalSceneCatalog(
 ): boolean {
   if (scene === 'all') return true;
   const meta = catalog.scenes.find((s) => s.id === scene);
-  if (!meta?.typeIds?.length) return true;
+  // 未配置或显式清空关联类型 → 无工具命中（避免「空关联 = 全部」）
+  if (!meta?.typeIds?.length) return false;
   return Boolean(
     tool.toolTypeId && meta.typeIds.includes(tool.toolTypeId as ExternalToolTypeId),
   );

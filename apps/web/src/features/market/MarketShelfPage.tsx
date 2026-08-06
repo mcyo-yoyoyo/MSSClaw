@@ -35,6 +35,8 @@ import {
   type ExternalWorkSceneId,
 } from '@/domain/externalToolTaxonomy';
 import {
+  listVisibleExternalToolTypes,
+  listVisibleExternalWorkScenes,
   toolMatchesExternalSceneCatalog,
   toolMatchesExternalTypeCatalog,
 } from '@/domain/externalTaxonomyCatalog';
@@ -158,6 +160,22 @@ export function MarketShelfPage({
     setExternalType('all');
     setMssSurface('projects');
   }, [kind]);
+
+  /** 运营隐藏类型/场景后，清除已失效的筛选态 */
+  useEffect(() => {
+    if (kind !== 'external') return;
+    const scenes = listVisibleExternalWorkScenes(externalTaxonomy);
+    if (
+      externalScene !== 'all' &&
+      !scenes.some((s) => s.id === externalScene)
+    ) {
+      setExternalScene('all');
+    }
+    const types = listVisibleExternalToolTypes(externalTaxonomy);
+    if (externalType !== 'all' && !types.some((t) => t.id === externalType)) {
+      setExternalType('all');
+    }
+  }, [kind, externalTaxonomy, externalScene, externalType]);
 
   const sceneCatalog = useBusinessScenarioCatalogStore((s) => s.categories);
 
@@ -574,6 +592,11 @@ export function MarketShelfPage({
     tool: { id: string; name: string; logoUrl?: string },
     tab?: 'overview' | 'howto',
   ) => {
+    const catalog = tools.find((t) => t.id === tool.id);
+    if (!catalog || catalog.published === false) {
+      showToast('该工具主数据不存在或已下架');
+      return;
+    }
     trackToolClick(tool.id);
     pushRecent({
       id: tool.id,
@@ -936,7 +959,15 @@ export function MarketShelfPage({
               catalogTools={tools}
               onOpenDetail={(tool) => openInternalToolDetail(tool)}
               onHowTo={(tool) => openInternalToolDetail(tool, 'howto')}
+              onEmptyAction={(scene) =>
+                showToast(`「${scene.label}」暂无已发布工具，请运营完成绑定`)
+              }
               onExperience={(tool) => {
+                if (!tool.homepageUrl || tool.homepageUrl === '#') {
+                  showToast('暂无可用链接，请查看快速上手');
+                  openInternalToolDetail(tool, 'howto');
+                  return;
+                }
                 trackToolClick(tool.id);
                 pushRecent({
                   id: tool.id,
@@ -1234,7 +1265,6 @@ export function MarketShelfPage({
               : undefined
           }
           guides={howTo.guides}
-          stepped
           onClose={() => setHowTo(null)}
           onOpenGuide={(g) =>
             openGuideEntry(g, { onPreview: setGuidePreview, onToast: showToast })

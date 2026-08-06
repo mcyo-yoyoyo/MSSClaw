@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import type { MarketShelfKind } from '@/domain/marketShelf';
+import { RETIRED_DEMO_TOOL_IDS } from '@/domain/prototype/tools';
 
 const LS_KEY = 'mssclaw_recent_market_v1';
 const MAX = 12;
+const RETIRED = new Set<string>(RETIRED_DEMO_TOOL_IDS);
 
 export type RecentMarketItem = {
   id: string;
@@ -13,12 +15,16 @@ export type RecentMarketItem = {
   at: number;
 };
 
+function pruneItems(items: RecentMarketItem[]): RecentMarketItem[] {
+  return items.filter((x) => !RETIRED.has(x.id)).slice(0, MAX);
+}
+
 function readLocal(): RecentMarketItem[] {
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as RecentMarketItem[];
-    return Array.isArray(parsed) ? parsed.slice(0, MAX) : [];
+    return Array.isArray(parsed) ? pruneItems(parsed) : [];
   } catch {
     return [];
   }
@@ -26,7 +32,7 @@ function readLocal(): RecentMarketItem[] {
 
 function writeLocal(items: RecentMarketItem[]) {
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify(items.slice(0, MAX)));
+    localStorage.setItem(LS_KEY, JSON.stringify(pruneItems(items)));
   } catch {
     /* ignore quota */
   }
@@ -41,13 +47,18 @@ interface RecentMarketState {
 export const useRecentMarketStore = create<RecentMarketState>((set, get) => ({
   items: [],
 
-  hydrate: () => set({ items: readLocal() }),
+  hydrate: () => {
+    const items = readLocal();
+    writeLocal(items);
+    set({ items });
+  },
 
   push: (item) => {
-    const next: RecentMarketItem[] = [
+    if (RETIRED.has(item.id)) return;
+    const next: RecentMarketItem[] = pruneItems([
       { ...item, at: Date.now() },
       ...get().items.filter((x) => !(x.id === item.id && x.kind === item.kind)),
-    ].slice(0, MAX);
+    ]);
     writeLocal(next);
     set({ items: next });
   },
