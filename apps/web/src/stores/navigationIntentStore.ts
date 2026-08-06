@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 import type { AppView } from '@/domain/appView';
 import type { BusinessScenarioId } from '@/domain/businessScenarios';
 

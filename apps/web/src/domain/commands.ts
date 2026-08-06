@@ -1,4 +1,4 @@
-﻿import type { AppView } from '@/domain/appView';
+import type { AppView } from '@/domain/appView';
 import { openFindCases, openMarketShelf, openUseSkills } from '@/domain/openHomeJourney';
 
 export interface AppCommand {
