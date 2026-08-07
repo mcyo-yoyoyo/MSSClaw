@@ -9,9 +9,8 @@
 | 渠道 | 地址 |
 |------|------|
 | GitHub Pages | https://mcyo-yoyoyo.github.io/MSSClaw/ |
-| Vercel | https://mssclaw.vercel.app/ |
 
-- 演示账号：`mcyo@company.com`（平台运营）；默认仍可用演示密码 `mssclaw`（未单独设密时）
+- 演示账号：`mcyo@company.com`（平台运营）；
 - **生产前**：在「系统设置 · 组织权限」关闭演示密码，并用「账号密码」批量配置各账号密码
 - 与本地 `npm run dev` 为同一套 React 应用（静态托管 `apps/web` 构建产物）
 
