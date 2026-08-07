@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   resolveOfficeScenesWithCatalog,
+  resolveOfficeToolWithCatalog,
   type InternalOfficeScene,
   type InternalOfficeSceneTool,
 } from '@/domain/internalOfficeScenes';
@@ -9,6 +10,8 @@ import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
 
 type PickerMode = 'detail' | 'howto' | 'experience';
+
+const ASSISTANT_TOOL_ID = 'tool-hw-assistant';
 
 export function InternalOfficeSceneGrid({
   search,
@@ -37,6 +40,24 @@ export function InternalOfficeSceneGrid({
     () => resolveOfficeScenesWithCatalog(catalogTools, sceneEntries),
     [catalogTools, sceneEntries],
   );
+
+  const assistantTool = useMemo(() => {
+    const fromScene = allScenes
+      .flatMap((s) => s.tools)
+      .find((t) => t.id === ASSISTANT_TOOL_ID);
+    if (fromScene) return fromScene;
+    const seed = catalogTools.find((t) => t.id === ASSISTANT_TOOL_ID) ?? null;
+    return resolveOfficeToolWithCatalog(
+      {
+        id: ASSISTANT_TOOL_ID,
+        name: '员工助手',
+        blurb: '综合知识问答',
+        homepageUrl: '#',
+        logoUrl: '',
+      },
+      seed,
+    );
+  }, [allScenes, catalogTools]);
 
   const scenes = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -84,19 +105,41 @@ export function InternalOfficeSceneGrid({
   return (
     <>
       <section className="flex min-h-0 flex-1 flex-col">
-        <div className="mb-3 flex shrink-0 items-end justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
-              Start with your task
-            </p>
-            <h2 className="mt-0.5 text-[16px] font-semibold tracking-tight text-zinc-900 md:text-[17px]">
-              今天，你想让 AI 帮你做什么？
-            </h2>
+        <button
+          type="button"
+          className="internal-assistant-chat shrink-0"
+          onClick={() => onExperience(assistantTool)}
+          aria-label="员工助手待上线，点击前往员工助手下载页"
+          title="点击前往员工助手下载页"
+        >
+          <div className="internal-assistant-chat__head">
+            {assistantTool.logoUrl ? (
+              <img
+                src={assistantTool.logoUrl}
+                alt=""
+                className="internal-assistant-chat__logo"
+                loading="lazy"
+              />
+            ) : (
+              <span className="internal-assistant-chat__logo inline-flex items-center justify-center">
+                <i className="fa-solid fa-robot text-[14px] text-[#a1a1aa]" />
+              </span>
+            )}
+            <div className="internal-assistant-chat__copy">
+              <p className="internal-assistant-chat__name">{assistantTool.name || '员工助手'}</p>
+              <p className="internal-assistant-chat__headline">今天，你想让 AI 帮你做什么？</p>
+            </div>
+            <span className="internal-assistant-chat__badge">待上线</span>
           </div>
-          <p className="hidden shrink-0 text-[12px] text-zinc-400 sm:block">
-            选择一个工作动作，查看核心能力与推荐工具
-          </p>
-        </div>
+          <div className="internal-assistant-chat__composer" aria-hidden>
+            <span className="min-w-0 flex-1 truncate">给员工助手发送消息…</span>
+            <span className="internal-assistant-chat__send">
+              <i className="fa-solid fa-arrow-up text-[11px]" />
+            </span>
+          </div>
+          <p className="internal-assistant-chat__hint">点击前往员工助手下载页</p>
+        </button>
+
         {scenes.length ? (
           <div className="grid min-h-0 flex-1 grid-cols-2 content-stretch gap-3 auto-rows-fr sm:grid-cols-3 lg:grid-cols-4 lg:gap-3.5">
             {scenes.map((scene) => {

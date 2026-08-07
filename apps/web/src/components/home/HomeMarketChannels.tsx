@@ -15,6 +15,12 @@ const CHANNEL_BLURB: Record<MarketShelfKind, string> = {
   projects: 'Skill Hub · Agent Hub 分列统计',
 };
 
+const TITLE_COLOR: Record<MarketShelfKind, string> = {
+  external: '#2563eb',
+  internal: '#0d9488',
+  projects: '#c45b5f',
+};
+
 const TOP_N = 4;
 
 export function HomeMarketChannels({
@@ -38,7 +44,7 @@ export function HomeMarketChannels({
   projectsBreakdown?: { skill: number; agent: number };
 }) {
   return (
-    <section className="grid gap-3 lg:grid-cols-3">
+    <section className="grid gap-3 lg:grid-cols-3 lg:gap-3.5">
       {CHANNEL_ORDER.map((kind) => {
         const meta = MARKET_SHELF_META[kind];
         const total = cardsByKind[kind].length;
@@ -47,62 +53,54 @@ export function HomeMarketChannels({
         return (
           <article
             key={kind}
-            className="flex min-h-0 flex-col rounded-2xl border border-zinc-200/90 bg-white/90 shadow-[0_8px_22px_-20px_rgba(24,24,27,0.35)]"
+            className={cn(
+              'market-channel-panel flex min-h-0 flex-col rounded-[20px]',
+              `market-channel-panel--${kind}`,
+            )}
           >
-            <header className="border-b border-zinc-100 px-3 py-2.5">
-              <div className="flex items-center justify-between gap-2">
+            <header className="market-channel-head border-b border-black/[0.04] px-3.5 py-3.5">
+              <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex min-w-0 flex-wrap items-baseline gap-2">
-                    <h2 className="truncate text-[18px] font-semibold tracking-tight text-zinc-900 md:text-[20px]">
+                    <h2
+                      className="market-channel-title truncate"
+                      style={{ color: TITLE_COLOR[kind] }}
+                    >
                       {meta.label}
                     </h2>
                     {kind === 'projects' && projectsBreakdown ? (
-                      <div className="inline-flex shrink-0 items-center gap-1">
-                        <span
-                          className="inline-flex items-baseline gap-0.5 rounded-full bg-sky-50 px-2 py-0.5 ring-1 ring-inset ring-sky-100"
-                          title={`Skill Hub ${projectsBreakdown.skill} 项`}
-                        >
-                          <span className="text-[10px] font-semibold text-sky-700">Skill</span>
-                          <span className="text-[14px] font-semibold tabular-nums tracking-tight text-sky-900 md:text-[15px]">
-                            {projectsBreakdown.skill}
-                          </span>
+                      <div className="home-channel-stats" aria-label="Skill 与 Agent 数量">
+                        <span className="home-channel-stats__item" title={`Skill Hub ${projectsBreakdown.skill} 项`}>
+                          <span className="home-channel-stats__label">Skill</span>
+                          <span className="home-channel-stats__value">{projectsBreakdown.skill}</span>
                         </span>
-                        <span
-                          className="inline-flex items-baseline gap-0.5 rounded-full bg-zinc-100 px-2 py-0.5 ring-1 ring-inset ring-zinc-200/80"
-                          title={`Agent Hub ${projectsBreakdown.agent} 项`}
-                        >
-                          <span className="text-[10px] font-semibold text-zinc-600">Agent</span>
-                          <span className="text-[14px] font-semibold tabular-nums tracking-tight text-zinc-900 md:text-[15px]">
-                            {projectsBreakdown.agent}
-                          </span>
+                        <span className="home-channel-stats__divider" aria-hidden />
+                        <span className="home-channel-stats__item" title={`Agent Hub ${projectsBreakdown.agent} 项`}>
+                          <span className="home-channel-stats__label">Agent</span>
+                          <span className="home-channel-stats__value">{projectsBreakdown.agent}</span>
                         </span>
                       </div>
                     ) : (
-                      <span
-                        className="inline-flex shrink-0 items-baseline gap-0.5 rounded-full bg-zinc-900/[0.06] px-2 py-0.5 ring-1 ring-inset ring-zinc-900/[0.06]"
-                        title={`共 ${total} 项`}
-                      >
-                        <span className="text-[15px] font-semibold tabular-nums tracking-tight text-zinc-800 md:text-[16px]">
-                          {total}
-                        </span>
-                        <span className="text-[10px] font-medium text-zinc-400">项</span>
+                      <span className="home-channel-stats__solo" title={`共 ${total} 项`}>
+                        <span className="home-channel-stats__value">{total}</span>
+                        <span className="home-channel-stats__unit">项</span>
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 truncate text-[12px] leading-snug text-zinc-400">
+                  <p className="mt-1.5 truncate text-[12px] leading-snug text-[#6e6e73]">
                     {CHANNEL_BLURB[kind]}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => openMarketShelf(kind)}
-                  className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold text-zinc-500 transition hover:bg-zinc-50 hover:text-zinc-800"
+                  className="mt-0.5 shrink-0 rounded-lg px-2 py-1 text-[12px] font-semibold text-[#0071e3] transition hover:bg-[#0071e3] hover:text-white"
                 >
                   进入 <i className="fa-solid fa-arrow-right text-[9px]" />
                 </button>
               </div>
               {kind === 'projects' ? (
-                <div className="mt-2 flex flex-wrap gap-1">
+                <div className="mt-2.5 flex flex-wrap gap-1">
                   {HOME_RANK_TABS.map((tab) => (
                     <button
                       key={tab.id}
@@ -111,8 +109,8 @@ export function HomeMarketChannels({
                       className={cn(
                         'rounded-md px-2 py-0.5 text-[10px] font-medium transition',
                         rank === tab.id
-                          ? 'bg-zinc-900 text-white'
-                          : 'bg-zinc-50 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800',
+                          ? 'bg-[#1d1d1f] text-white'
+                          : 'bg-black/[0.04] text-[#6e6e73] hover:bg-black/[0.07] hover:text-[#1d1d1f]',
                       )}
                     >
                       {tab.label}
@@ -120,7 +118,7 @@ export function HomeMarketChannels({
                   ))}
                 </div>
               ) : (
-                <p className="mt-2 text-[10px] text-zinc-400">
+                <p className="mt-2 text-[10px] text-[#86868b]">
                   {kind === 'external'
                     ? '精选由运营置顶 · 列表按点击量排序'
                     : '与货架办公场景同源 · 点击进入工具详情'}
@@ -134,13 +132,14 @@ export function HomeMarketChannels({
                   <MarketShelfCard
                     key={`${c.kind}-${c.id}`}
                     card={c}
+                    className="home-channel-card"
                     onOpen={() => onOpen(c)}
                     onPrimary={() => onPrimary(c)}
                     onHowTo={() => onHowTo(c)}
                   />
                 ))
               ) : (
-                <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-zinc-200 px-3 py-8 text-center text-[12px] text-zinc-400">
+                <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-zinc-200 px-3 py-8 text-center text-[12px] text-[#86868b]">
                   {searchActive ? '当前搜索下暂无内容' : '暂无上架内容'}
                 </div>
               )}

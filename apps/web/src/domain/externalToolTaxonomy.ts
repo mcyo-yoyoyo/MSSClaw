@@ -57,19 +57,20 @@ export const EXTERNAL_TOOL_TYPES: {
 export const EXTERNAL_WORK_SCENES: {
   id: ExternalWorkSceneId;
   label: string;
+  icon: string;
   /** 关联工具类型 */
   typeIds?: ExternalToolTypeId[];
 }[] = [
-  { id: 'office', label: '日常办公', typeIds: ['general', 'ppt', 'meeting', 'writing'] },
-  { id: 'search', label: '搜索研究', typeIds: ['search'] },
-  { id: 'knowledge', label: '知识学习', typeIds: ['knowledge'] },
-  { id: 'writing', label: '写作翻译', typeIds: ['writing'] },
-  { id: 'ppt', label: 'PPT制作', typeIds: ['ppt'] },
-  { id: 'media', label: '图片·视频·音频', typeIds: ['image', 'video', 'audio'] },
-  { id: 'meeting', label: '会议协作', typeIds: ['meeting'] },
-  { id: 'data', label: '数据分析', typeIds: ['data'] },
-  { id: 'code', label: '编程开发', typeIds: ['code'] },
-  { id: 'agent', label: 'Agent 执行', typeIds: ['agent'] },
+  { id: 'office', label: '日常办公', icon: 'fa-briefcase', typeIds: ['general', 'ppt', 'meeting', 'writing'] },
+  { id: 'search', label: '搜索研究', icon: 'fa-magnifying-glass', typeIds: ['search'] },
+  { id: 'knowledge', label: '知识学习', icon: 'fa-book', typeIds: ['knowledge'] },
+  { id: 'writing', label: '写作翻译', icon: 'fa-pen', typeIds: ['writing'] },
+  { id: 'ppt', label: 'PPT制作', icon: 'fa-file-powerpoint', typeIds: ['ppt'] },
+  { id: 'media', label: '图片·视频·音频', icon: 'fa-photo-film', typeIds: ['image', 'video', 'audio'] },
+  { id: 'meeting', label: '会议协作', icon: 'fa-users', typeIds: ['meeting'] },
+  { id: 'data', label: '数据分析', icon: 'fa-chart-line', typeIds: ['data'] },
+  { id: 'code', label: '编程开发', icon: 'fa-code', typeIds: ['code'] },
+  { id: 'agent', label: 'Agent 执行', icon: 'fa-robot', typeIds: ['agent'] },
 ];
 
 export const EXTERNAL_FILTER_MODES: { id: ExternalFilterMode; label: string }[] = [

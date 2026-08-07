@@ -10,9 +10,8 @@ import { useAiBotDailyNewsStore } from '@/stores/aiBotDailyNewsStore';
 import { useStationAnnouncementStore } from '@/stores/stationAnnouncementStore';
 
 const BADGE_CLASS: Record<string, string> = {
-  上线: 'text-[#C8102E]',
-  培训: 'text-[#E85D04]',
-  通知: 'text-zinc-500',
+  AI上线: 'text-[#C8102E]',
+  AI培训: 'text-[#E85D04]',
   AI快讯: 'text-sky-700',
 };
 
@@ -23,7 +22,7 @@ type MarqueeItem = {
   kind: 'announce' | 'ai_brief';
 };
 
-/** 首页广播条：最新 AI快讯 + 站内公告 */
+/** 首页广播条：仅 AI快讯 / AI培训 / AI上线 */
 export function StationAnnounceBanner({ className }: { className?: string }) {
   const [paused, setPaused] = useState(false);
   const announceRaw = useStationAnnouncementStore((s) => s.items);
@@ -43,7 +42,7 @@ export function StationAnnounceBanner({ className }: { className?: string }) {
         ]
       : [];
     const announces: MarqueeItem[] = announceRaw
-      .filter((a) => a.published)
+      .filter((a) => a.published && (a.badge === 'AI上线' || a.badge === 'AI培训'))
       .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
       .map((a) => ({
         id: a.id,

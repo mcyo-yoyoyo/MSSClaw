@@ -12,6 +12,8 @@ export type InternalOfficeSceneId =
   | 'read'
   | 'write'
   | 'ask'
+  | 'search'
+  | 'specialist'
   | 'intel'
   | 'knowledge'
   | 'agent';
@@ -21,6 +23,8 @@ export const INTERNAL_OFFICE_SCENE_IDS: InternalOfficeSceneId[] = [
   'read',
   'write',
   'ask',
+  'search',
+  'specialist',
   'intel',
   'knowledge',
   'agent',
@@ -126,9 +130,25 @@ export const INTERNAL_OFFICE_SCENES: InternalOfficeScene[] = [
     id: 'ask',
     label: '问一下',
     english: 'ASK',
-    description: '在组织知识、业务资料与搜索结果中提问，并继续追问来源',
-    tools: [EMPLOYEE_ASSISTANT, W3_SEARCH, XIAOLUBAN],
+    description: '面向组织知识与业务资料提问，快速获得可追溯的回答',
+    tools: [EMPLOYEE_ASSISTANT],
     icon: 'fa-comments',
+  },
+  {
+    id: 'search',
+    label: '搜一下',
+    english: 'SEARCH',
+    description: '在内部信息与知识网络中检索，定位制度、资料与关键入口',
+    tools: [W3_SEARCH],
+    icon: 'fa-magnifying-glass',
+  },
+  {
+    id: 'specialist',
+    label: '达一下',
+    english: 'SPECIALIST',
+    description: '面向专项业务知识答疑，适合深入某一领域的连续追问',
+    tools: [XIAOLUBAN],
+    icon: 'fa-screwdriver-wrench',
   },
   {
     id: 'intel',
@@ -173,7 +193,8 @@ export function defaultInternalOfficeSceneCatalog(): InternalOfficeSceneCatalogE
     english: s.english,
     description: s.description,
     icon: s.icon,
-    visible: true,
+    /** Agent 入口改为页顶员工助手对话框预告，默认不展示场景卡 */
+    visible: s.id !== 'agent',
     toolIds: s.tools.map((t) => t.id),
     toolBlurbs: Object.fromEntries(s.tools.map((t) => [t.id, t.blurb])),
   }));
@@ -310,6 +331,8 @@ export const INTERNAL_OFFICE_SCENE_ICON_PRESETS = [
   'fa-book-open',
   'fa-file-lines',
   'fa-comments',
+  'fa-magnifying-glass',
+  'fa-screwdriver-wrench',
   'fa-binoculars',
   'fa-database',
   'fa-robot',

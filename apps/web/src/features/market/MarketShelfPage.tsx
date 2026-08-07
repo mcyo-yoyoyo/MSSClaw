@@ -45,6 +45,8 @@ import {
 import { useExternalTaxonomyCatalogStore } from '@/stores/externalTaxonomyCatalogStore';
 import { openMarketToolDetail } from '@/domain/openHomeJourney';
 import { MarketShelfCard } from '@/components/market/MarketShelfCard';
+import { PageCanvas } from '@/components/layout/PageCanvas';
+import { PageStageHero } from '@/components/layout/PageStageHero';
 import { ExternalMarketFilters } from '@/components/market/ExternalMarketFilters';
 import { InternalOfficeSceneGrid } from '@/components/market/InternalOfficeSceneGrid';
 import { buildProjectHowtoGuides } from '@/domain/projectHowto';
@@ -165,7 +167,7 @@ export function MarketShelfPage({
     setExternalFilterMode('scene');
     setExternalScene('all');
     setExternalType('all');
-    setMssSurface('projects');
+    setMssSurface('skills');
   }, [kind]);
 
   /** 运营隐藏类型/场景后，清除已失效的筛选态 */
@@ -613,7 +615,9 @@ export function MarketShelfPage({
     tab?: 'overview' | 'howto',
   ) => {
     const catalog = tools.find((t) => t.id === tool.id);
-    if (!catalog || catalog.published === false) {
+    // 员工助手下载页允许在主数据暂缺时仍按 id 打开（场景预留入口）
+    const allowAssistantFallback = tool.id === 'tool-hw-assistant';
+    if ((!catalog || catalog.published === false) && !allowAssistantFallback) {
       showToast('该工具主数据不存在或已下架');
       return;
     }
@@ -621,9 +625,9 @@ export function MarketShelfPage({
     pushRecent({
       id: tool.id,
       kind: 'internal',
-      title: tool.name,
+      title: catalog?.name?.trim() || tool.name,
       icon: 'fa-cube',
-      logoUrl: tool.logoUrl,
+      logoUrl: tool.logoUrl || catalog?.logoUrl,
     });
     openMarketToolDetail(tool.id, 'internal', tab ? { tab } : undefined);
   };
@@ -763,66 +767,81 @@ export function MarketShelfPage({
         kind === 'internal' ? 'overflow-hidden' : 'overflow-y-auto scroll-hidden',
       )}
     >
-      <div
+      <PageCanvas
         className={cn(
-          'mx-auto flex w-full max-w-7xl flex-col px-5 py-6 md:px-7',
+          'flex flex-col py-6',
           kind === 'internal' && 'min-h-0 flex-1',
         )}
       >
-        <header className="mb-5 shrink-0 rounded-2xl border border-zinc-200/80 bg-gradient-to-b from-zinc-50 to-white px-4 py-4 md:px-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
-            <div className="min-w-0 flex-1">
-              <h1 className="text-[20px] font-semibold tracking-tight text-zinc-900 md:text-[22px]">
-                {meta.label}
-              </h1>
-              <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-zinc-500 md:text-[13px]">
-                {kind === 'projects'
-                  ? mssSurface === 'skills'
-                    ? allowScenarioRun
-                      ? 'Skill Hub · 快速上手 / 去执行 · 亦可下载技能包'
-                      : 'Skill Hub · 快速上手 / 下载技能包'
-                    : allowScenarioRun
-                      ? 'Agent Hub · 快速上手 / 可执行则去打样 · 否则下载学习包'
-                      : 'Agent Hub · 快速上手 / 下载学习包'
-                  : kind === 'external'
-                    ? '从工作场景出发，浏览全球领先 AI · 海外 / 国内精选对照 · 快速上手'
-                    : '不用先学会复杂工具，从「记、读、写、问」等日常动作开始'}
-              </p>
-              {kind === 'external' ? (
-                <p className="mt-1.5 min-h-[17px] max-w-2xl text-[11px] leading-relaxed text-amber-800/80">
-                  <i className="fa-solid fa-shield-halved mr-1 text-[10px]" />
-                  使用前请遵循组织的数据、账号与采购规范。
-                </p>
-              ) : null}
-              {kind === 'projects' ? (
-                <p className="mt-1.5 min-h-[17px] max-w-2xl text-[11px] leading-relaxed text-amber-800/80">
-                  <i className="fa-solid fa-circle-info mr-1 text-[10px]" />
-                  {allowScenarioRun
-                    ? '当前方案支持一键打样与对话执行，亦可下载学习包自学。'
-                    : 'MVP 版本 Skill Hub、Agent Hub 仅提供下载学习；长期规划平台可一键打样与对话执行。'}
-                </p>
-              ) : null}
-              {kind === 'internal' ? (
-                <p className="mt-1.5 min-h-[17px] max-w-2xl text-[11px] leading-relaxed text-amber-800/80">
-                  <i className="fa-solid fa-building-lock mr-1 text-[10px]" />
-                  公司内部工具需经组织统一入口访问；请在授权范围内使用，勿将敏感业务数据外传。
-                </p>
-              ) : null}
-            </div>
-            <div className="flex w-full shrink-0 flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
-              <MarketShelfFilterBar className="min-w-0 flex-1 sm:min-w-[240px] lg:w-[280px] lg:flex-none" />
-              {canSubmit && (kind === 'external' || kind === 'internal') ? (
-                <button
-                  type="button"
-                  onClick={() => setSubmitOpen(true)}
-                  className="shrink-0 rounded-xl bg-zinc-900 px-4 py-2.5 text-[12px] font-semibold text-white shadow-sm transition hover:bg-zinc-800"
-                >
-                  提报工具
-                </button>
-              ) : null}
-            </div>
+        <PageStageHero
+          className="mb-5 shrink-0"
+          tone={kind === 'projects' ? 'projects' : kind}
+          title={meta.label}
+          subtitle={
+            kind === 'projects'
+              ? mssSurface === 'skills'
+                ? allowScenarioRun
+                  ? 'Skill Hub · 快速上手 / 去执行 · 亦可下载技能包'
+                  : 'Skill Hub · 快速上手 / 下载技能包'
+                : allowScenarioRun
+                  ? 'Agent Hub · 快速上手 / 可执行则去打样 · 否则下载学习包'
+                  : 'Agent Hub · 快速上手 / 下载学习包'
+              : kind === 'external'
+                ? '从工作场景出发，浏览全球领先 AI · 海外 / 国内精选对照 · 快速上手'
+                : '不用先学会复杂工具，从「记、读、写、问」等日常动作开始'
+          }
+          tip={
+            kind === 'external' ? (
+              <>
+                <i className="fa-solid fa-shield-halved mr-1 text-[10px]" />
+                外部工具为第三方服务，内网请勿输入涉密或未授权数据，请遵从公司规定使用。
+              </>
+            ) : kind === 'projects' ? (
+              <>
+                <i className="fa-solid fa-circle-info mr-1 text-[10px]" />
+                {allowScenarioRun
+                  ? '当前方案支持一键打样与对话执行，亦可下载学习包自学。'
+                  : 'MVP 版本 Skill Hub、Agent Hub 仅提供下载学习；长期规划平台可一键打样与对话执行。'}
+              </>
+            ) : (
+              <>
+                <i className="fa-solid fa-building-lock mr-1 text-[10px]" />
+                公司内部工具需经组织统一入口访问；请在授权范围内使用，勿将敏感业务数据外传。
+              </>
+            )
+          }
+        >
+          <div className="flex h-full w-full flex-col justify-center gap-2 sm:flex-row sm:items-center">
+            <MarketShelfFilterBar className="min-w-0 flex-1 sm:min-w-[220px]" />
+            {canSubmit && (kind === 'external' || kind === 'internal') ? (
+              <button
+                type="button"
+                onClick={() => setSubmitOpen(true)}
+                className="shrink-0 rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-[12px] font-semibold text-white transition hover:bg-[#2c2c2e]"
+              >
+                提报工具
+              </button>
+            ) : null}
+            {canSubmit && kind === 'projects' && mssSurface === 'skills' ? (
+              <button
+                type="button"
+                onClick={() => setSubmitOpen(true)}
+                className="shrink-0 rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-[12px] font-semibold text-white transition hover:bg-[#2c2c2e]"
+              >
+                提报 Skill
+              </button>
+            ) : null}
+            {canSubmit && kind === 'projects' && mssSurface === 'projects' ? (
+              <button
+                type="button"
+                onClick={() => setSubmitOpen(true)}
+                className="shrink-0 rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-[12px] font-semibold text-white transition hover:bg-[#2c2c2e]"
+              >
+                提报案例
+              </button>
+            ) : null}
           </div>
-        </header>
+        </PageStageHero>
 
         {kind === 'external' ? (
           <ExternalMarketFilters
@@ -837,8 +856,8 @@ export function MarketShelfPage({
         ) : null}
 
         {kind === 'projects' ? (
-          <div className="mb-2.5 flex flex-wrap items-center justify-center gap-3 px-1">
-            <div className="inline-flex h-11 items-center rounded-xl border border-zinc-200 bg-zinc-50/80 p-1">
+          <div className="mb-2.5 flex flex-wrap items-center justify-center gap-2.5 px-1">
+            <div className="market-mode-switch market-mode-switch--mss" role="tablist" aria-label="MSS 集市面">
               {(
                 [
                   { id: 'skills' as const, label: 'Skill Hub' },
@@ -848,12 +867,12 @@ export function MarketShelfPage({
                 <button
                   key={tab.id}
                   type="button"
+                  role="tab"
+                  aria-selected={mssSurface === tab.id}
                   onClick={() => setMssSurface(tab.id)}
                   className={cn(
-                    'inline-flex h-full items-center rounded-lg px-5 text-[14px] font-semibold transition md:text-[15px]',
-                    mssSurface === tab.id
-                      ? 'bg-white text-zinc-900 shadow-sm'
-                      : 'text-zinc-500 hover:text-zinc-800',
+                    'market-mode-switch__btn md:text-[15px]',
+                    mssSurface === tab.id && 'is-active',
                   )}
                 >
                   {tab.label}
@@ -861,15 +880,15 @@ export function MarketShelfPage({
               ))}
             </div>
             {(mssSurface === 'skills' ? skillHubStats : hubStats) ? (
-              <div className="inline-flex h-11 max-w-full flex-wrap items-center gap-x-2.5 gap-y-0 rounded-xl border border-zinc-200/90 bg-white px-3.5 text-[12px] text-zinc-600 md:text-[13px]">
-                <span className="inline-flex items-center gap-1 font-semibold tracking-tight text-zinc-800">
+              <div className="market-stats-pill md:text-[13px]">
+                <span className="inline-flex items-center gap-1 font-semibold tracking-tight text-[#1d1d1f]">
                   {buildStatsCopy.title}
                   {buildStatsTooltip ? (
                     <span className="group relative inline-flex">
                       <button
                         type="button"
                         aria-label="建设概况口径说明"
-                        className="inline-flex h-4 w-4 items-center justify-center rounded-full text-zinc-400 transition hover:text-zinc-700"
+                        className="inline-flex h-4 w-4 items-center justify-center rounded-full text-[#86868b] transition hover:text-[#1d1d1f]"
                       >
                         <i className="fa-solid fa-circle-info text-[11px]" />
                       </button>
@@ -882,8 +901,8 @@ export function MarketShelfPage({
                     </span>
                   ) : null}
                 </span>
-                <span className="text-zinc-300">·</span>
-                <span className="text-zinc-400">{orgScopeLabel}</span>
+                <span className="text-[#d4d4d8]">·</span>
+                <span className="text-[#86868b]">{orgScopeLabel}</span>
                 {mssSurface === 'skills' && skillHubStats ? (
                   <>
                     <span className="text-zinc-300">·</span>
@@ -934,15 +953,13 @@ export function MarketShelfPage({
 
         {showMssSceneChips ? (
           <div className="mb-5 w-full px-1">
-            <div className="flex w-full items-stretch gap-1 rounded-2xl border border-zinc-200/80 bg-white px-2 py-2 shadow-[0_8px_24px_-20px_rgba(24,24,27,0.35)] sm:gap-1.5 sm:px-2.5">
+            <div className="market-chip-rail" role="tablist" aria-label="业务场景">
               <button
                 type="button"
                 onClick={() => setBusinessFilter('all')}
                 className={cn(
-                  'flex min-w-0 flex-1 items-center justify-center rounded-lg px-1.5 py-1.5 text-center text-[11px] font-semibold transition md:px-2 md:text-[12px]',
-                  businessFilter === 'all'
-                    ? 'bg-zinc-900 text-white shadow-sm'
-                    : 'bg-zinc-50 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900',
+                  'market-chip-rail__btn',
+                  businessFilter === 'all' && 'is-active',
                 )}
               >
                 全部
@@ -954,10 +971,8 @@ export function MarketShelfPage({
                   title={c.blurb}
                   onClick={() => setBusinessFilter(c.id)}
                   className={cn(
-                    'flex min-w-0 flex-1 items-center justify-center gap-1 rounded-lg px-1.5 py-1.5 text-center text-[11px] font-semibold transition md:px-2 md:text-[12px]',
-                    businessFilter === c.id
-                      ? 'bg-zinc-900 text-white shadow-sm'
-                      : 'bg-zinc-50 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900',
+                    'market-chip-rail__btn',
+                    businessFilter === c.id && 'is-active',
                   )}
                 >
                   {c.icon ? <i className={cn('fa-solid hidden text-[10px] sm:inline', c.icon)} /> : null}
@@ -1022,12 +1037,22 @@ export function MarketShelfPage({
                       },
                     ] as const
                   ).map((col) => (
-                    <div key={col.key} className="min-w-0">
-                      <div className="mb-2.5 flex items-baseline gap-2">
-                        <h3 className="text-[12px] font-semibold text-zinc-800">{col.title}</h3>
-                        <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
-                          {col.sub}
-                        </span>
+                    <div
+                      key={col.key}
+                      className={cn(
+                        'min-w-0',
+                        col.key === 'overseas' ? 'market-rail-stage--overseas' : 'market-rail-stage--domestic',
+                      )}
+                    >
+                      <div className="mb-3 flex items-baseline justify-between gap-2 px-0.5">
+                        <div className="flex items-baseline gap-2">
+                          <h3 className="text-[18px] font-semibold tracking-tight text-[#1d1d1f]">
+                            {col.title}
+                          </h3>
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#86868b]">
+                            {col.sub}
+                          </span>
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                         {col.items.map((c) => (
@@ -1044,7 +1069,7 @@ export function MarketShelfPage({
                         ))}
                       </div>
                       {!col.items.length ? (
-                        <div className="rounded-xl border border-dashed border-zinc-200 px-3 py-8 text-center text-[12px] text-zinc-400">
+                        <div className="rounded-xl border border-dashed border-black/10 bg-white/50 px-3 py-8 text-center text-[12px] text-[#86868b]">
                           当前筛选下暂无
                         </div>
                       ) : null}
@@ -1055,8 +1080,8 @@ export function MarketShelfPage({
             ) : (
               <>
                 <div className="mb-3 flex items-baseline justify-between gap-2">
-                  <h2 className="text-[13px] font-semibold text-zinc-800">精选推荐</h2>
-                  <span className="text-[11px] text-zinc-400">{activeFeatured.length} 项</span>
+                  <h2 className="text-[15px] font-semibold tracking-tight text-[#1d1d1f]">精选推荐</h2>
+                  <span className="text-[12px] text-[#86868b]">{activeFeatured.length} 项</span>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   {activeFeatured.map((c) => {
@@ -1096,9 +1121,9 @@ export function MarketShelfPage({
         {kind !== 'internal' ? (
         <section>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-[13px] font-semibold text-zinc-800">
+            <h2 className="text-[15px] font-semibold tracking-tight text-[#1d1d1f]">
               {showFeaturedStrip ? '更多' : '全部'}
-              <span className="ml-1.5 font-normal text-zinc-400">{gridCards.length}</span>
+              <span className="ml-1.5 font-normal text-[#86868b]">{gridCards.length}</span>
             </h2>
           </div>
           {kind === 'external' ? (
@@ -1120,13 +1145,21 @@ export function MarketShelfPage({
                     },
                   ] as const
                 ).map((col) => (
-                  <div key={col.key} className="min-w-0">
-                    <div className="mb-2.5 flex items-baseline gap-2">
-                      <h3 className="text-[12px] font-semibold text-zinc-800">{col.title}</h3>
-                      <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
+                  <div
+                    key={col.key}
+                    className={cn(
+                      'min-w-0',
+                      col.key === 'overseas' ? 'market-rail-stage--overseas' : 'market-rail-stage--domestic',
+                    )}
+                  >
+                    <div className="mb-3 flex items-baseline gap-2 px-0.5">
+                      <h3 className="text-[18px] font-semibold tracking-tight text-[#1d1d1f]">
+                        {col.title}
+                      </h3>
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#86868b]">
                         {col.sub}
                       </span>
-                      <span className="text-[11px] text-zinc-400">{col.items.length}</span>
+                      <span className="text-[12px] text-[#86868b]">{col.items.length}</span>
                     </div>
                     {col.items.length ? (
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -1143,7 +1176,7 @@ export function MarketShelfPage({
                         ))}
                       </div>
                     ) : (
-                      <div className="rounded-xl border border-dashed border-zinc-200 px-3 py-8 text-center text-[12px] text-zinc-400">
+                      <div className="rounded-xl border border-dashed border-black/10 bg-white/50 px-3 py-8 text-center text-[12px] text-[#86868b]">
                         当前筛选下暂无
                       </div>
                     )}
@@ -1151,7 +1184,7 @@ export function MarketShelfPage({
                 ))}
               </div>
             ) : (
-              <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-4 py-14 text-center text-[13px] text-zinc-400">
+              <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-4 py-14 text-center text-[13px] text-[#86868b]">
                 {emptyHint}
               </div>
             )
@@ -1191,7 +1224,7 @@ export function MarketShelfPage({
           )}
         </section>
         ) : null}
-      </div>
+      </PageCanvas>
 
       <MarketSubmitModal
         kind={kind}

@@ -37,7 +37,7 @@ export function MarketToolDetailPage() {
   const peekToolId = useNavigationIntentStore((s) => s.peekToolId);
   const consumeReturnTarget = useNavigationIntentStore((s) => s.consumeReturnTarget);
   const peekReturnTarget = useNavigationIntentStore((s) => s.peekReturnTarget);
-  const consumeToolDetailTab = useNavigationIntentStore((s) => s.consumeToolDetailTab);
+  const pendingToolDetailTab = useNavigationIntentStore((s) => s.pendingToolDetailTab);
   const focusTool = useNavigationIntentStore((s) => s.focusTool);
   const guideRecords = usePlazaToolGuideStore((s) => s.records);
   const pushRecent = useRecentMarketStore((s) => s.push);
@@ -68,10 +68,10 @@ export function MarketToolDetailPage() {
     [guideRecords, toolId],
   );
 
+  // 读 pending tab，不在此 consume，避免 Strict Mode 二次挂载把 howto 冲成 overview
   useEffect(() => {
-    const nextTab = consumeToolDetailTab();
-    setTab(nextTab ?? 'overview');
-  }, [toolId, consumeToolDetailTab]);
+    setTab(pendingToolDetailTab ?? 'overview');
+  }, [toolId, pendingToolDetailTab]);
 
   const kind: MarketShelfKind = (() => {
     if (tool?.sourceType === 'internal' || tool?.tags?.includes('hw-internal')) {

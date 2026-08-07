@@ -20,6 +20,7 @@ export interface ExternalToolTypeCatalogEntry {
 export interface ExternalWorkSceneCatalogEntry {
   id: ExternalWorkSceneId;
   label: string;
+  icon: string;
   visible: boolean;
   typeIds: ExternalToolTypeId[];
 }
@@ -41,6 +42,7 @@ export function defaultExternalTaxonomyCatalog(): ExternalTaxonomyCatalog {
     scenes: EXTERNAL_WORK_SCENES.map((s) => ({
       id: s.id,
       label: s.label,
+      icon: s.icon,
       visible: true,
       typeIds: [...(s.typeIds ?? [])],
     })),

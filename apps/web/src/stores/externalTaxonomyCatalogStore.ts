@@ -69,6 +69,7 @@ function mergeCatalog(
     scenes.push({
       id,
       label: o?.label?.trim() || base.label,
+      icon: o?.icon?.trim() || base.icon,
       visible: o?.visible ?? base.visible,
       // 区分「未配置」与「显式空数组」：空数组表示运营清空关联
       typeIds: Array.isArray(o?.typeIds)

@@ -7,6 +7,7 @@ export function MarketShelfCard({
   card,
   variant = 'grid',
   showHot = false,
+  className,
   onOpen,
   onPrimary,
   onHowTo,
@@ -17,6 +18,7 @@ export function MarketShelfCard({
   variant?: 'grid' | 'featured' | 'compact';
   /** 精选区右上角 HOT 角标 */
   showHot?: boolean;
+  className?: string;
   onOpen: () => void;
   onPrimary?: () => void;
   onHowTo?: () => void;
@@ -25,6 +27,7 @@ export function MarketShelfCard({
 }) {
   const featured = variant === 'featured';
   const compact = variant === 'compact';
+  const homeDense = Boolean(className?.includes('home-channel-card'));
   const primaryLabel =
     primaryLabelOverride ??
     (card.kind === 'projects'
@@ -33,12 +36,23 @@ export function MarketShelfCard({
         ? '快速上手'
         : '立即体验');
 
+  const regionTone =
+    card.kind === 'external' && card.region === 'overseas'
+      ? 'overseas'
+      : card.kind === 'external' && card.region === 'domestic'
+        ? 'domestic'
+        : null;
+
   return (
     <article
       className={cn(
         'group relative flex h-full flex-col rounded-2xl border border-zinc-200/90 bg-white transition duration-200',
         'hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-[0_10px_28px_-16px_rgba(24,24,27,0.35)]',
-        featured ? 'p-5' : compact ? 'p-3' : 'p-4',
+        featured ? 'p-5' : compact ? 'p-3' : homeDense ? 'p-3.5' : 'p-4',
+        regionTone === 'overseas' && 'market-card-region-overseas hover:border-transparent',
+        regionTone === 'domestic' && 'market-card-region-domestic hover:border-transparent',
+        card.kind === 'projects' && 'market-card-mss hover:border-transparent',
+        className,
       )}
     >
       {showHot ? (
@@ -53,15 +67,15 @@ export function MarketShelfCard({
         <div className="flex items-start gap-3">
           <div
             className={cn(
-              'flex shrink-0 items-center justify-center rounded-2xl bg-zinc-50 ring-1 ring-zinc-100',
-              featured ? 'h-14 w-14' : compact ? 'h-9 w-9' : 'h-11 w-11',
+              'flex shrink-0 items-center justify-center rounded-2xl bg-white/80 ring-1 ring-black/[0.04]',
+              featured ? 'h-14 w-14' : compact || homeDense ? 'h-10 w-10' : 'h-11 w-11',
             )}
           >
             <ToolLogo
               name={card.productName || card.title}
               logoUrl={card.logoUrl}
               icon={card.icon}
-              size={featured ? 40 : compact ? 26 : 32}
+              size={featured ? 40 : compact || homeDense ? 28 : 32}
               className="rounded-xl"
             />
           </div>
@@ -69,8 +83,8 @@ export function MarketShelfCard({
             <div className="flex flex-wrap items-center gap-1.5">
               <h3
                 className={cn(
-                  'truncate font-semibold tracking-tight text-zinc-900',
-                  featured ? 'text-[16px]' : compact ? 'text-[13px]' : 'text-[14px]',
+                  'truncate font-semibold tracking-tight text-[#1d1d1f]',
+                  featured ? 'text-[17px]' : compact ? 'text-[13px]' : homeDense ? 'text-[14px]' : 'text-[15px]',
                 )}
               >
                 {card.title}
@@ -87,44 +101,53 @@ export function MarketShelfCard({
               ) : null}
             </div>
             {card.productName ? (
-              <p className="mt-0.5 truncate text-[11px] text-zinc-400">{card.productName}</p>
+              <p className="mt-0.5 truncate text-[11px] text-[#86868b]">{card.productName}</p>
             ) : null}
             <p
               className={cn(
-                'leading-relaxed text-zinc-500',
+                'leading-relaxed text-[#6e6e73]',
                 card.productName ? 'mt-1' : 'mt-1.5',
                 compact
                   ? 'line-clamp-2 text-[11px]'
                   : card.kind === 'external' || card.productName
                     ? 'line-clamp-1 text-[12px]'
                     : featured
-                      ? 'line-clamp-3 text-[12px]'
+                      ? 'line-clamp-3 text-[13px]'
                       : 'line-clamp-2 text-[12px]',
               )}
             >
               {card.description}
             </p>
             {!compact && featured && card.hasHowto ? (
-              <p className="mt-2 text-[11px] leading-snug text-zinc-400">
+              <p className="mt-2 text-[11px] leading-snug text-[#86868b]">
                 快速上手 · 含上手材料，可先预览再使用
               </p>
             ) : null}
           </div>
         </div>
         {!compact ? (
-          <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
+          <div
+            className={cn(
+              'flex flex-wrap items-center gap-1.5',
+              homeDense ? 'mt-2.5' : 'mt-3.5',
+            )}
+          >
             {card.badges.slice(0, featured ? 4 : 3).map((b) => (
               <span
                 key={`${b.tone}-${b.label}`}
-                className="rounded-md bg-zinc-100/90 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600"
+                className={cn(
+                  'rounded-md bg-zinc-100/90 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600',
+                  b.label === '海外' && 'market-badge-overseas',
+                  b.label === '国内' && 'market-badge-domestic',
+                )}
               >
                 {b.label}
               </span>
             ))}
             {card.kind === 'projects' ? (
-              <span className="ml-auto inline-flex items-center gap-2.5 text-[10px] tabular-nums text-zinc-400">
+              <span className="ml-auto inline-flex items-center gap-2.5 text-[10px] tabular-nums text-[#86868b]">
                 <span className="inline-flex items-center gap-1" title="下载量">
-                  <i className="fa-solid fa-download text-[9px] text-zinc-400" />
+                  <i className="fa-solid fa-download text-[9px] text-[#86868b]" />
                   {formatToolInvokes(card.downloads ?? 0)}
                 </span>
                 <span className="inline-flex items-center gap-1" title="点赞">
@@ -133,7 +156,7 @@ export function MarketShelfCard({
                 </span>
               </span>
             ) : card.heat > 0 ? (
-              <span className="ml-auto inline-flex items-center gap-1 text-[10px] tabular-nums text-zinc-400">
+              <span className="ml-auto inline-flex items-center gap-1 text-[10px] tabular-nums text-[#86868b]">
                 <i className="fa-solid fa-fire text-[9px] text-amber-500/80" />
                 {formatToolInvokes(card.heat)}
               </span>
@@ -143,15 +166,15 @@ export function MarketShelfCard({
       </button>
       <div
         className={cn(
-          'flex flex-wrap items-center gap-2 border-t border-zinc-100',
-          compact ? 'mt-2.5 pt-2.5' : 'mt-3.5 pt-3',
+          'flex flex-wrap items-center justify-start gap-2 border-t border-black/[0.04]',
+          compact ? 'mt-2.5 pt-2.5' : homeDense ? 'mt-2.5 pt-2.5' : 'mt-3.5 pt-3',
         )}
       >
         {onHowTo ? (
           <button
             type="button"
             onClick={onHowTo}
-            className="rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 transition hover:bg-zinc-50"
+            className="shrink-0 rounded-lg border-0 bg-black/[0.04] px-2.5 py-1.5 text-[11px] font-medium text-[#3f3f46] transition hover:bg-black/[0.07]"
           >
             {howToLabel}
           </button>
@@ -159,7 +182,7 @@ export function MarketShelfCard({
         <button
           type="button"
           onClick={onPrimary ?? onOpen}
-          className="ml-auto rounded-lg bg-zinc-900 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-zinc-800"
+          className="shrink-0 rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-[#2c2c2e]"
         >
           {primaryLabel}
         </button>

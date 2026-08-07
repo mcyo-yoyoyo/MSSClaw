@@ -9,14 +9,14 @@ import {
   type StationAnnouncementRecord,
 } from '@/stores/stationAnnouncementStore';
 
-const BADGES: StationAnnouncementBadge[] = ['上线', '培训', '通知'];
+const BADGES: StationAnnouncementBadge[] = ['AI上线', 'AI培训'];
 
 function newDraft(): StationAnnouncementRecord {
   return {
     id: `ann-${Date.now().toString(36)}`,
     title: '',
     body: '',
-    badge: '通知',
+    badge: 'AI上线',
     publishedAt: new Date().toISOString(),
     published: true,
   };
@@ -63,9 +63,11 @@ export function PortalStationAnnouncePanel() {
     <div className="space-y-4">
       <div className="rounded-2xl border border-zinc-200/90 bg-white p-4">
         <p className="text-[12px] leading-relaxed text-zinc-500">
-          配置首页横向「站内公告」跑马灯。关闭演示内容后仍可在此维护真实公告；仅
+          配置首页横向「站内动态」跑马灯。仅
+          <strong className="font-semibold text-zinc-700">AI上线 / AI培训</strong>
+          会与「AI快讯」一并露出；通知类内容不再进入首页滚动。仅
           <strong className="font-semibold text-zinc-700">已上架</strong>
-          项会对业务用户露出，并同步到「我的消息」。
+          项对业务用户可见，并同步到「我的消息」。
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <button
@@ -183,11 +185,9 @@ export function PortalStationAnnouncePanel() {
                   <span
                     className={cn(
                       'rounded-md px-1.5 py-0.5 text-[10px] font-semibold',
-                      a.badge === '上线'
+                      a.badge === 'AI上线'
                         ? 'bg-red-50 text-[#C8102E]'
-                        : a.badge === '培训'
-                          ? 'bg-orange-50 text-[#E85D04]'
-                          : 'bg-zinc-100 text-zinc-500',
+                        : 'bg-orange-50 text-[#E85D04]',
                     )}
                   >
                     {a.badge}

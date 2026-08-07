@@ -131,6 +131,13 @@ const LEGACY_PLAZA_TOOL_GUIDES: Record<string, PlazaToolGuide[]> = {
   ],
   'tool-hw-assistant': [
     {
+      id: 'g-hw-asst-download',
+      title: '员工助手客户端下载',
+      type: 'link',
+      url: 'https://his.huawei.com/csop/index.html#/ToolInfo?samType=his&toolId=1706591788617216002',
+      blurb: '官方 ToolInfo 下载与安装入口',
+    },
+    {
       id: 'g-hw-asst-1',
       title: '员工助手进厅与权限说明',
       type: 'pdf',

@@ -34,6 +34,8 @@ import {
 } from '@/components/home/CardPageCarousel';
 import { OrgPerspectiveFilter } from '@/components/home/OrgPerspectiveFilter';
 import { StationAnnounceBanner } from '@/components/home/StationAnnounceBanner';
+import { HomeAiBriefTeaser } from '@/components/home/HomeAiBriefTeaser';
+import { PageStageHero } from '@/components/layout/PageStageHero';
 import { useHomeStore } from '@/stores/homeStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
@@ -467,7 +469,7 @@ export function HomePage({
           'mx-auto flex w-full flex-1 flex-col overflow-x-visible py-3 md:py-4',
           showAssistant
             ? 'max-w-[960px] px-8 md:px-11'
-            : 'max-w-[1360px] px-5 md:px-7',
+            : 'page-canvas',
         )}
       >
         {showAssistant ? (
@@ -614,48 +616,61 @@ export function HomePage({
             ) : null}
           </div>
         ) : (
-          <div className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 pb-6 md:gap-5">
-            <StationAnnounceBanner className="rounded-xl border border-zinc-200/80 bg-white/90 px-3.5 py-1.5 shadow-[0_6px_18px_-16px_rgba(24,24,27,0.35)]" />
-
-            <section className="relative overflow-hidden rounded-2xl border border-zinc-200/80 bg-gradient-to-r from-white via-zinc-50/60 to-white px-4 py-4 shadow-[0_10px_28px_-24px_rgba(24,24,27,0.35)] md:px-5 md:py-4">
-              <div className="relative flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-5">
-                <div className="min-w-0 md:max-w-[52%]">
-                  <p className="text-[12px] font-medium text-zinc-500">
-                    {greetingForNow()}
-                    {user?.name ? `，${user.name}` : ''}
-                  </p>
-                  <h1 className="mt-0.5 text-[20px] font-semibold tracking-tight text-zinc-900 md:text-[22px]">
-                    探索 AI 的无限可能
-                  </h1>
-                  <p className="mt-1 text-[12px] leading-snug text-zinc-500">
-                    工具分三类：外部工具精选 · 公司工具推荐 · MSS工具集市
-                  </p>
-                </div>
+          <div className="flex w-full flex-col gap-4 pb-6 md:gap-5">
+            <PageStageHero
+              tone="home"
+              eyebrow={
+                <>
+                  {greetingForNow()}
+                  {user?.name ? `，${user.name}` : ''}
+                </>
+              }
+              title={
+                <span className="home-hero-pillars" aria-label="学工具 用工具 造工具">
+                  <span className="home-hero-pillars__item home-hero-pillars__item--learn">
+                    <i className="fa-solid fa-graduation-cap" aria-hidden />
+                    学工具
+                  </span>
+                  <span className="home-hero-pillars__item home-hero-pillars__item--use">
+                    <i className="fa-solid fa-hand-pointer" aria-hidden />
+                    用工具
+                  </span>
+                  <span className="home-hero-pillars__item home-hero-pillars__item--build">
+                    <i className="fa-solid fa-wand-magic-sparkles" aria-hidden />
+                    造工具
+                  </span>
+                </span>
+              }
+              actions={
                 <form
-                  className="flex w-full gap-2 md:max-w-md md:flex-1"
+                  className="flex w-full max-w-md gap-2"
                   onSubmit={(e) => {
                     e.preventDefault();
                     openMarketShelf('external');
                   }}
                 >
                   <label className="relative min-w-0 flex-1">
-                    <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[12px] text-zinc-400" />
+                    <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[12px] text-[#86868b]" />
                     <input
                       value={marketSearch}
                       onChange={(e) => setMarketSearch(e.target.value)}
                       placeholder="搜索工具或项目（权限范围内）…"
-                      className="w-full rounded-xl border border-zinc-200/90 bg-white py-2.5 pl-10 pr-3 text-[13px] text-zinc-800 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-300 focus:ring-2 focus:ring-zinc-100"
+                      className="w-full rounded-xl border-0 bg-white py-2.5 pl-10 pr-3 text-[14px] text-[#1d1d1f] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] outline-none transition placeholder:text-[#86868b] focus:shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12),0_0_0_3px_rgba(0,0,0,0.04)]"
                     />
                   </label>
                   <button
                     type="submit"
-                    className="shrink-0 rounded-xl bg-zinc-900 px-4 py-2.5 text-[12px] font-semibold text-white shadow-sm transition hover:bg-zinc-800"
+                    className="shrink-0 rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-[12px] font-semibold text-white transition hover:bg-[#2c2c2e]"
                   >
                     搜索
                   </button>
                 </form>
-              </div>
-            </section>
+              }
+            >
+              <HomeAiBriefTeaser />
+            </PageStageHero>
+
+            <StationAnnounceBanner className="rounded-xl border-0 bg-white/90 px-3.5 py-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_8px_24px_rgba(0,0,0,0.05)]" />
 
             <HomeMarketChannels
               cardsByKind={channelCards}

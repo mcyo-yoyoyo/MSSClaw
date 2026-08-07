@@ -6,26 +6,40 @@ import {
 } from '@/domain/stationAnnouncementSeeds';
 import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
 
-const LS_KEY = 'mssclaw_station_announce_v1';
+const LS_KEY = 'mssclaw_station_announce_v2';
 
 export type StationAnnouncementRecord = StationAnnouncement & {
   /** 是否在首页跑马灯露出 */
   published: boolean;
 };
 
+const VALID_BADGES: StationAnnouncementBadge[] = ['AI上线', 'AI培训'];
+
+function migrateBadge(raw: string | undefined): StationAnnouncementBadge | null {
+  if (!raw) return null;
+  if ((VALID_BADGES as string[]).includes(raw)) return raw as StationAnnouncementBadge;
+  if (raw === '上线') return 'AI上线';
+  if (raw === '培训') return 'AI培训';
+  // 通知及其他类型不再进入站内动态
+  return null;
+}
+
 function normalize(list: StationAnnouncementRecord[]): StationAnnouncementRecord[] {
   return [...list]
     .filter((a) => a?.id && a?.title?.trim())
-    .map((a) => ({
-      id: a.id,
-      title: a.title.trim(),
-      body: (a.body ?? '').trim(),
-      badge: (['上线', '培训', '通知'] as StationAnnouncementBadge[]).includes(a.badge)
-        ? a.badge
-        : '通知',
-      publishedAt: a.publishedAt || new Date().toISOString(),
-      published: a.published !== false,
-    }))
+    .map((a) => {
+      const badge = migrateBadge(a.badge as string);
+      if (!badge) return null;
+      return {
+        id: a.id,
+        title: a.title.trim(),
+        body: (a.body ?? '').trim(),
+        badge,
+        publishedAt: a.publishedAt || new Date().toISOString(),
+        published: a.published !== false,
+      };
+    })
+    .filter((a): a is StationAnnouncementRecord => Boolean(a))
     .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
 }
 
@@ -35,6 +49,16 @@ function load(): StationAnnouncementRecord[] {
     if (raw) {
       const parsed = JSON.parse(raw) as StationAnnouncementRecord[];
       if (Array.isArray(parsed)) return normalize(parsed);
+    }
+    // 从 v1 迁移：过滤通知，映射徽章
+    const legacy = localStorage.getItem('mssclaw_station_announce_v1');
+    if (legacy) {
+      const parsed = JSON.parse(legacy) as StationAnnouncementRecord[];
+      if (Array.isArray(parsed)) {
+        const next = normalize(parsed);
+        persist(next);
+        return next;
+      }
     }
   } catch {
     /* ignore */
@@ -81,7 +105,7 @@ export const useStationAnnouncementStore = create<StationAnnouncementState>((set
   upsert: (item, isNew = false) => {
     const nextItem = normalize([item])[0];
     if (!nextItem) {
-      set({ toast: '请填写公告标题' });
+      set({ toast: '请填写公告标题，且类型须为 AI上线 / AI培训' });
       return;
     }
     const items = get().items;

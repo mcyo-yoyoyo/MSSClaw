@@ -7,7 +7,7 @@ import {
   type InternalOfficeSceneId,
 } from '@/domain/internalOfficeScenes';
 
-const LS_KEY = 'mssclaw_internal_office_scenes_v1';
+const LS_KEY = 'mssclaw_internal_office_scenes_v3';
 
 function mergeWithDefaults(
   saved: InternalOfficeSceneCatalogEntry[] | null,
