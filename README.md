@@ -9,7 +9,7 @@
 | 渠道 | 地址 |
 |------|------|
 | GitHub Pages | https://mcyo-yoyoyo.github.io/MSSClaw/ |
-| Vercel | 推送 `main` 后由 Vercel 自动构建前端（见下方） |
+| Vercel | https://mssclaw.vercel.app |
 
 - 演示账号：`mcyo@huawei.com`（平台运营）；另有 `jacky` / `dickson` / `somebody` 与 `test1`–`test10@huawei.com`；
 - **生产前**：在「系统设置 · 组织权限」关闭演示密码，并用「账号密码」批量配置各账号密码
