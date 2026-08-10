@@ -5,8 +5,12 @@ import {
   type StationAnnouncementBadge,
 } from '@/domain/stationAnnouncementSeeds';
 import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
-
-const LS_KEY = 'mssclaw_station_announce_v2';
+import {
+  canUsePlatformDocsApi,
+  currentWorkspaceId,
+  fetchPlatformDoc,
+  scheduleSavePlatformDoc,
+} from '@/api/platformDocsApi';
 
 export type StationAnnouncementRecord = StationAnnouncement & {
   /** 是否在首页跑马灯露出 */
@@ -20,7 +24,6 @@ function migrateBadge(raw: string | undefined): StationAnnouncementBadge | null 
   if ((VALID_BADGES as string[]).includes(raw)) return raw as StationAnnouncementBadge;
   if (raw === '上线') return 'AI上线';
   if (raw === '培训') return 'AI培训';
-  // 通知及其他类型不再进入站内动态
   return null;
 }
 
@@ -43,36 +46,14 @@ function normalize(list: StationAnnouncementRecord[]): StationAnnouncementRecord
     .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
 }
 
-function load(): StationAnnouncementRecord[] {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as StationAnnouncementRecord[];
-      if (Array.isArray(parsed)) return normalize(parsed);
-    }
-    // 从 v1 迁移：过滤通知，映射徽章
-    const legacy = localStorage.getItem('mssclaw_station_announce_v1');
-    if (legacy) {
-      const parsed = JSON.parse(legacy) as StationAnnouncementRecord[];
-      if (Array.isArray(parsed)) {
-        const next = normalize(parsed);
-        persist(next);
-        return next;
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  if (isDemoContentEnabled()) {
-    return normalize(
-      STATION_ANNOUNCEMENT_SEEDS.map((a) => ({ ...a, published: true })),
-    );
-  }
-  return [];
+function seedItems(): StationAnnouncementRecord[] {
+  if (!isDemoContentEnabled()) return [];
+  return normalize(STATION_ANNOUNCEMENT_SEEDS.map((a) => ({ ...a, published: true })));
 }
 
 function persist(items: StationAnnouncementRecord[]) {
-  localStorage.setItem(LS_KEY, JSON.stringify(items));
+  if (!canUsePlatformDocsApi()) return;
+  void scheduleSavePlatformDoc(currentWorkspaceId(), 'station-announcements', { items });
 }
 
 interface StationAnnouncementState {
@@ -87,14 +68,27 @@ interface StationAnnouncementState {
   dismissToast: () => void;
 }
 
-const initial = load();
-
 export const useStationAnnouncementStore = create<StationAnnouncementState>((set, get) => ({
-  items: initial,
+  items: seedItems(),
   toast: null,
 
   hydrate: () => {
-    set({ items: load() });
+    void (async () => {
+      if (!canUsePlatformDocsApi()) {
+        set({ items: seedItems() });
+        return;
+      }
+      try {
+        const remote = await fetchPlatformDoc<{ items?: StationAnnouncementRecord[] }>(
+          currentWorkspaceId(),
+          'station-announcements',
+        );
+        const list = Array.isArray(remote?.items) ? remote.items : [];
+        set({ items: list.length ? normalize(list) : seedItems() });
+      } catch {
+        set({ items: seedItems() });
+      }
+    })();
   },
 
   listPublished: () =>
@@ -140,9 +134,7 @@ export const useStationAnnouncementStore = create<StationAnnouncementState>((set
   },
 
   resetToSeeds: () => {
-    const normalized = normalize(
-      STATION_ANNOUNCEMENT_SEEDS.map((a) => ({ ...a, published: true })),
-    );
+    const normalized = seedItems();
     persist(normalized);
     set({ items: normalized, toast: '已恢复默认公告示例' });
   },

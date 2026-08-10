@@ -44,7 +44,9 @@ import { useHomeStore } from '@/stores/homeStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { returnFromResource } from '@/domain/openResourceNav';
 import { canExecuteChat } from '@/domain/permissions';
+import { allowsTaskExecutionSurfaces } from '@/domain/marketRunCapability';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
+import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { ExpertTeamModal } from '@/components/content/ExpertTeamModal';
 import {
   countScenarioEnvSlots,
@@ -248,6 +250,9 @@ export function AiMapPage({
   const showToast = useMarketplaceStore((s) => s.showToast);
   const setAppView = useAppViewStore((s) => s.setAppView);
   const user = useSessionStore((s) => s.user);
+  const navPreset = useNavPresentationStore((s) => s.preset);
+  const canRunOnline =
+    canExecuteChat(user?.platformRole) && allowsTaskExecutionSurfaces(navPreset);
 
   const [listFilter, setListFilter] = useState<ScenarioListFilter>('related');
   const [search, setSearch] = useState('');
@@ -697,7 +702,11 @@ export function AiMapPage({
                       <span className="text-[11px] text-zinc-400">
                         齐套 {selected.completeness}/3
                         {selected.related ? ' · 与你相关' : ''}
-                        {selectedDemoPlan ? ' · 可一键打样' : ' · 暂不可打样'}
+                        {canRunOnline
+                          ? selectedDemoPlan
+                            ? ' · 可一键打样'
+                            : ' · 暂不可打样'
+                          : ' · MVP 请下载学习'}
                       </span>
                     </div>
                   </div>
@@ -716,7 +725,7 @@ export function AiMapPage({
                       <i className="fa-solid fa-download mr-1 text-[10px]" />
                       下载学习
                     </button>
-                    {canExecuteChat() ? (
+                    {canRunOnline ? (
                       <button
                         type="button"
                         onClick={() => startScenario(selected)}
@@ -1061,7 +1070,7 @@ export function AiMapPage({
                 下载学习
               </button>
             ) : null}
-            {selected && canExecuteChat() ? (
+            {selected && canRunOnline ? (
               <button
                 type="button"
                 onClick={() => {

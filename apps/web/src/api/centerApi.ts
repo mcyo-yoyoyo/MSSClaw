@@ -12,6 +12,13 @@ import { getWorkflowsByWorkspace, WorkflowSchema, type Workflow } from '@/domain
 import { apiUrl } from '@/api/client';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
+export class CenterApiError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CenterApiError';
+  }
+}
+
 async function fetchJson<T>(url: string, fallback: T): Promise<T> {
   if (!useWorkspaceStore.getState().apiConnected) return fallback;
 
@@ -24,144 +31,21 @@ async function fetchJson<T>(url: string, fallback: T): Promise<T> {
   }
 }
 
-async function mutateJson<T>(url: string, init: RequestInit, fallback: () => T | Promise<T>): Promise<T> {
-  if (!useWorkspaceStore.getState().apiConnected) return fallback();
+/** 写操作：API 未连接或失败时抛错，禁止静默改本地 */
+async function mutateJson<T>(url: string, init: RequestInit): Promise<T> {
+  if (!useWorkspaceStore.getState().apiConnected) {
+    throw new CenterApiError('共享服务未连接，变更未写入数据库');
+  }
 
   try {
     const response = await fetch(url, init);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) {
+      throw new CenterApiError(`保存失败（HTTP ${response.status}）`);
+    }
     return (await response.json()) as T;
-  } catch {
-    return fallback();
-  }
-}
-
-export async function fetchPrompts(workspaceId: string): Promise<Prompt[]> {
-  const fallback = getPromptsByWorkspace(workspaceId);
-  const payload = await fetchJson<{ prompts: unknown[] }>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/prompts`),
-    { prompts: fallback },
-  );
-  return payload.prompts
-    .map((item) => {
-      try {
-        return PromptSchema.parse(item);
-      } catch {
-        return null;
-      }
-    })
-    .filter((item): item is Prompt => item !== null);
-}
-
-export async function advancePromptLifecycle(workspaceId: string, promptId: string, local: Prompt[]): Promise<Prompt[]> {
-  const updated = await mutateJson<unknown>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/prompts/${promptId}/advance-lifecycle`),
-    { method: 'POST', headers: { 'Content-Type': 'application/json' } },
-    () => null,
-  );
-
-  if (!updated) return local;
-  try {
-    const prompt = PromptSchema.parse(updated);
-    return local.map((item) => (item.id === promptId ? prompt : item));
-  } catch {
-    return local;
-  }
-}
-
-export async function fetchAgents(workspaceId: string): Promise<Agent[]> {
-  const fallback = getAgentsByWorkspace(workspaceId);
-  const payload = await fetchJson<{ agents: unknown[] }>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/agents`),
-    { agents: fallback },
-  );
-  return payload.agents
-    .map((item) => {
-      try {
-        return AgentSchema.parse(item);
-      } catch {
-        return null;
-      }
-    })
-    .filter((item): item is Agent => item !== null);
-}
-
-export async function patchAgentPersona(
-  workspaceId: string,
-  agentId: string,
-  persona: string,
-  local: Agent[],
-): Promise<Agent[]> {
-  const updated = await mutateJson<unknown>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/agents/${agentId}`),
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ persona }),
-    },
-    () => null,
-  );
-
-  if (!updated) {
-    return local.map((item) =>
-      item.id === agentId ? { ...item, persona, updatedAt: new Date().toISOString().slice(0, 10) } : item,
-    );
-  }
-
-  try {
-    const agent = AgentSchema.parse(updated);
-    return local.map((item) => (item.id === agentId ? agent : item));
-  } catch {
-    return local;
-  }
-}
-
-export async function advanceAgentStatus(workspaceId: string, agentId: string, local: Agent[]): Promise<Agent[]> {
-  const updated = await mutateJson<unknown>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/agents/${agentId}/advance-status`),
-    { method: 'POST', headers: { 'Content-Type': 'application/json' } },
-    () => null,
-  );
-
-  if (!updated) return local;
-  try {
-    const agent = AgentSchema.parse(updated);
-    return local.map((item) => (item.id === agentId ? agent : item));
-  } catch {
-    return local;
-  }
-}
-
-export async function fetchSkills(workspaceId: string): Promise<Skill[]> {
-  const fallback = getSkillsByWorkspace(workspaceId);
-  const payload = await fetchJson<{ skills: unknown[] }>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/skills`),
-    { skills: fallback },
-  );
-  return payload.skills
-    .map((item) => {
-      try {
-        return SkillSchema.parse(item);
-      } catch {
-        return null;
-      }
-    })
-    .filter((item): item is Skill => item !== null);
-}
-
-export async function advanceSkillLifecycle(workspaceId: string, skillId: string, local: Skill[]): Promise<Skill[]> {
-  const updated = await mutateJson<unknown>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/skills/${skillId}/advance-lifecycle`),
-    { method: 'POST', headers: { 'Content-Type': 'application/json' } },
-    () => null,
-  );
-
-  if (!updated) return local;
-  try {
-    const skill = SkillSchema.parse(updated);
-    return local.map((item) => (item.id === skillId ? skill : item));
-  } catch {
-    return local;
+  } catch (err) {
+    if (err instanceof CenterApiError) throw err;
+    throw new CenterApiError(err instanceof Error ? err.message : '保存失败');
   }
 }
 
@@ -177,6 +61,73 @@ function parseList<T>(items: unknown[], schema: { parse: (v: unknown) => T }): T
     .filter((item): item is T => item !== null);
 }
 
+export async function fetchPrompts(workspaceId: string): Promise<Prompt[]> {
+  const fallback = getPromptsByWorkspace(workspaceId);
+  const payload = await fetchJson<{ prompts: unknown[] }>(
+    apiUrl(`/api/v1/workspaces/${workspaceId}/prompts`),
+    { prompts: fallback },
+  );
+  return parseList(payload.prompts, PromptSchema);
+}
+
+export async function advancePromptLifecycle(workspaceId: string, promptId: string): Promise<Prompt> {
+  const updated = await mutateJson<unknown>(
+    apiUrl(`/api/v1/workspaces/${workspaceId}/prompts/${promptId}/advance-lifecycle`),
+    { method: 'POST', headers: { 'Content-Type': 'application/json' } },
+  );
+  return PromptSchema.parse(updated);
+}
+
+export async function fetchAgents(workspaceId: string): Promise<Agent[]> {
+  const fallback = getAgentsByWorkspace(workspaceId);
+  const payload = await fetchJson<{ agents: unknown[] }>(
+    apiUrl(`/api/v1/workspaces/${workspaceId}/agents`),
+    { agents: fallback },
+  );
+  return parseList(payload.agents, AgentSchema);
+}
+
+export async function patchAgentPersona(
+  workspaceId: string,
+  agentId: string,
+  persona: string,
+): Promise<Agent> {
+  const updated = await mutateJson<unknown>(
+    apiUrl(`/api/v1/workspaces/${workspaceId}/agents/${agentId}`),
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ persona }),
+    },
+  );
+  return AgentSchema.parse(updated);
+}
+
+export async function advanceAgentStatus(workspaceId: string, agentId: string): Promise<Agent> {
+  const updated = await mutateJson<unknown>(
+    apiUrl(`/api/v1/workspaces/${workspaceId}/agents/${agentId}/advance-status`),
+    { method: 'POST', headers: { 'Content-Type': 'application/json' } },
+  );
+  return AgentSchema.parse(updated);
+}
+
+export async function fetchSkills(workspaceId: string): Promise<Skill[]> {
+  const fallback = getSkillsByWorkspace(workspaceId);
+  const payload = await fetchJson<{ skills: unknown[] }>(
+    apiUrl(`/api/v1/workspaces/${workspaceId}/skills`),
+    { skills: fallback },
+  );
+  return parseList(payload.skills, SkillSchema);
+}
+
+export async function advanceSkillLifecycle(workspaceId: string, skillId: string): Promise<Skill> {
+  const updated = await mutateJson<unknown>(
+    apiUrl(`/api/v1/workspaces/${workspaceId}/skills/${skillId}/advance-lifecycle`),
+    { method: 'POST', headers: { 'Content-Type': 'application/json' } },
+  );
+  return SkillSchema.parse(updated);
+}
+
 export async function fetchWorkflows(workspaceId: string): Promise<Workflow[]> {
   const fallback = getWorkflowsByWorkspace(workspaceId);
   const payload = await fetchJson<{ workflows: unknown[] }>(
@@ -189,20 +140,12 @@ export async function fetchWorkflows(workspaceId: string): Promise<Workflow[]> {
 export async function advanceWorkflowStatus(
   workspaceId: string,
   workflowId: string,
-  local: Workflow[],
-): Promise<Workflow[]> {
+): Promise<Workflow> {
   const updated = await mutateJson<unknown>(
     apiUrl(`/api/v1/workspaces/${workspaceId}/workflows/${workflowId}/advance-status`),
     { method: 'POST', headers: { 'Content-Type': 'application/json' } },
-    () => null,
   );
-  if (!updated) return local;
-  try {
-    const workflow = WorkflowSchema.parse(updated);
-    return local.map((item) => (item.id === workflowId ? workflow : item));
-  } catch {
-    return local;
-  }
+  return WorkflowSchema.parse(updated);
 }
 
 export async function fetchKnowledgeBases(workspaceId: string): Promise<KnowledgeBase[]> {
@@ -218,20 +161,12 @@ export async function runKnowledgePipelineApi(
   workspaceId: string,
   baseId: string,
   docId: string,
-  local: KnowledgeBase[],
-): Promise<KnowledgeBase[]> {
+): Promise<KnowledgeBase> {
   const updated = await mutateJson<unknown>(
     apiUrl(`/api/v1/workspaces/${workspaceId}/knowledge-bases/${baseId}/documents/${docId}/run-pipeline`),
     { method: 'POST', headers: { 'Content-Type': 'application/json' } },
-    () => null,
   );
-  if (!updated) return local;
-  try {
-    const base = KnowledgeBaseSchema.parse(updated);
-    return local.map((item) => (item.id === baseId ? base : item));
-  } catch {
-    return local;
-  }
+  return KnowledgeBaseSchema.parse(updated);
 }
 
 export async function fetchTools(workspaceId: string): Promise<PlatformTool[]> {
@@ -257,8 +192,7 @@ export async function patchMemoryLayerPolicyApi(
   storeId: string,
   layer: MemoryLayer,
   patch: Partial<{ retentionDays: number; maxTokens: number; reflectionEnabled: boolean; decayRate: number }>,
-  local: MemoryStore[],
-): Promise<MemoryStore[]> {
+): Promise<MemoryStore> {
   const updated = await mutateJson<unknown>(
     apiUrl(`/api/v1/workspaces/${workspaceId}/memory-stores/${storeId}/layers/${layer}/policy`),
     {
@@ -266,42 +200,54 @@ export async function patchMemoryLayerPolicyApi(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     },
-    () => null,
   );
-  if (!updated) {
-    return local.map((store) =>
-      store.id === storeId
-        ? {
-            ...store,
-            policies: store.policies.map((p) => (p.layer === layer ? { ...p, ...patch } : p)),
-            updatedAt: new Date().toISOString().slice(0, 10),
-          }
-        : store,
-    );
-  }
-  try {
-    const store = MemoryStoreSchema.parse(updated);
-    return local.map((item) => (item.id === storeId ? store : item));
-  } catch {
-    return local;
-  }
+  return MemoryStoreSchema.parse(updated);
 }
 
 export async function runMemoryReflectionApi(
   workspaceId: string,
   storeId: string,
-  local: MemoryStore[],
-): Promise<MemoryStore[]> {
+): Promise<MemoryStore> {
   const updated = await mutateJson<unknown>(
     apiUrl(`/api/v1/workspaces/${workspaceId}/memory-stores/${storeId}/run-reflection`),
     { method: 'POST', headers: { 'Content-Type': 'application/json' } },
-    () => null,
   );
-  if (!updated) return local;
+  return MemoryStoreSchema.parse(updated);
+}
+
+export async function fetchExecutionHistory(
+  workspaceId: string,
+  limit = 50,
+): Promise<
+  Array<{
+    id: string;
+    chatId: string;
+    message: string;
+    status: string;
+    startedAt: string;
+    finishedAt?: string;
+    agentName?: string;
+  }>
+> {
+  if (!useWorkspaceStore.getState().apiConnected) return [];
   try {
-    const store = MemoryStoreSchema.parse(updated);
-    return local.map((item) => (item.id === storeId ? store : item));
+    const res = await fetch(
+      apiUrl(`/api/v1/workspaces/${workspaceId}/executions?limit=${limit}`),
+    );
+    if (!res.ok) return [];
+    const body = (await res.json()) as { executions?: Array<Record<string, unknown>> };
+    return Array.isArray(body.executions)
+      ? body.executions.map((e) => ({
+          id: String(e.id ?? ''),
+          chatId: String(e.chatId ?? ''),
+          message: String(e.message ?? ''),
+          status: String(e.status ?? ''),
+          startedAt: String(e.startedAt ?? ''),
+          finishedAt: e.finishedAt ? String(e.finishedAt) : undefined,
+          agentName: e.agentName ? String(e.agentName) : undefined,
+        }))
+      : [];
   } catch {
-    return local;
+    return [];
   }
 }

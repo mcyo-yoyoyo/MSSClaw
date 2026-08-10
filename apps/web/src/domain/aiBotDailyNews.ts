@@ -95,56 +95,40 @@ export function flattenAiBotNews(payload: AiBotDailyNewsPayload): AiBotNewsItem[
 
 export function apiAiDailyNewsPath(): string {
   const base = import.meta.env.BASE_URL || '/';
+  return new URL('api/v1/ai-daily-news', base.endsWith('/') ? base : `${base}/`).pathname;
+}
+
+function legacyAiDailyNewsPath(): string {
+  const base = import.meta.env.BASE_URL || '/';
   return new URL('api/ai-daily-news', base.endsWith('/') ? base : `${base}/`).pathname;
 }
 
-const LS_CACHE_KEY = 'mssclaw_ai_bot_daily_news_cache_v1';
-
+/** @deprecated 保留导出以免旧引用报错；不再作为真相源 */
 export function readCachedAiBotDailyNews(): AiBotDailyNewsPayload | null {
-  try {
-    const raw = localStorage.getItem(LS_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as AiBotDailyNewsPayload;
-    if (!parsed?.groups?.length) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
-export function writeCachedAiBotDailyNews(payload: AiBotDailyNewsPayload): void {
-  try {
-    localStorage.setItem(
-      LS_CACHE_KEY,
-      JSON.stringify({
-        ...payload,
-        fromFallback: false,
-      }),
-    );
-  } catch {
-    /* quota / private mode */
-  }
+/** @deprecated */
+export function writeCachedAiBotDailyNews(_payload: AiBotDailyNewsPayload): void {
+  /* no-op：快讯不再写入浏览器缓存 */
 }
 
-/** 优先网络；失败则用运营同步缓存，再退回内置兜底 */
+/** 优先 Nest /api/v1；兼容 Vercel /api；失败回退内置兜底 */
 export async function fetchAiBotDailyNews(signal?: AbortSignal): Promise<AiBotDailyNewsPayload> {
-  try {
-    const res = await fetch(apiAiDailyNewsPath(), {
-      signal,
-      headers: { Accept: 'application/json' },
-      cache: 'no-store',
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = (await res.json()) as AiBotDailyNewsPayload;
-    if (!data?.groups?.length) throw new Error('empty feed');
-    const payload = { ...data, fromFallback: false };
-    writeCachedAiBotDailyNews(payload);
-    return payload;
-  } catch {
-    const cached = readCachedAiBotDailyNews();
-    if (cached?.groups?.length) {
-      return { ...cached, fromFallback: true };
+  for (const path of [apiAiDailyNewsPath(), legacyAiDailyNewsPath()]) {
+    try {
+      const res = await fetch(path, {
+        signal,
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+      });
+      if (!res.ok) continue;
+      const data = (await res.json()) as AiBotDailyNewsPayload;
+      if (!data?.groups?.length) continue;
+      return { ...data, fromFallback: false };
+    } catch {
+      /* try next */
     }
-    return { ...AI_BOT_DAILY_NEWS_FALLBACK, fetchedAt: new Date().toISOString(), fromFallback: true };
   }
+  return { ...AI_BOT_DAILY_NEWS_FALLBACK, fetchedAt: new Date().toISOString(), fromFallback: true };
 }

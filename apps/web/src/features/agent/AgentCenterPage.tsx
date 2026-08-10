@@ -95,8 +95,8 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
           subtitle="能力上架进目录；发布可选组织内 / 公开可见（默认公开）；勾选精选露出后出现在业务「做任务 · 场景专家」"
           tip={
             <>
-              「调用」将自动发送演示任务并挂载主 Skill；可下载/导入 .agent.zip（含 AGENT.md）。配置 LLM
-              后走真实模型执行，否则为演示 Mock。
+              「调用」将发送演示任务并进入执行面（需已开放任务记录）。请配置服务端 LLM_* 或「模型与
+              API」工作区密钥；未配置时执行会明确报错，不会静默假完成。可下载/导入 .agent.zip。
             </>
           }
           actions={

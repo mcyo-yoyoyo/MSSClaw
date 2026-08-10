@@ -3,8 +3,13 @@ import {
   DEFAULT_EXTERNAL_FEATURED_PINS,
 } from '@/domain/externalToolTaxonomy';
 import type { MarketShelfKind } from '@/domain/marketShelf';
+import {
+  canUsePlatformDocsApi,
+  currentWorkspaceId,
+  fetchPlatformDoc,
+  scheduleSavePlatformDoc,
+} from '@/api/platformDocsApi';
 
-const LS_KEY = 'mssclaw_market_featured_pins_v1';
 const MAX_PER_KIND = 12;
 
 export type MarketFeaturedPins = Record<MarketShelfKind, string[]>;
@@ -15,41 +20,30 @@ const EMPTY: MarketFeaturedPins = {
   projects: [],
 };
 
-function readLocal(): MarketFeaturedPins {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) {
-      return {
-        ...EMPTY,
-        external: [...DEFAULT_EXTERNAL_FEATURED_PINS],
-        internal: [],
-        projects: [],
-      };
-    }
-    const parsed = JSON.parse(raw) as Partial<MarketFeaturedPins>;
-    const external = Array.isArray(parsed.external)
-      ? parsed.external.slice(0, MAX_PER_KIND)
-      : [];
-    return {
-      external: external.length ? external : [...DEFAULT_EXTERNAL_FEATURED_PINS],
-      internal: Array.isArray(parsed.internal) ? parsed.internal.slice(0, MAX_PER_KIND) : [],
-      projects: Array.isArray(parsed.projects) ? parsed.projects.slice(0, MAX_PER_KIND) : [],
-    };
-  } catch {
-    return {
-      external: [...DEFAULT_EXTERNAL_FEATURED_PINS],
-      internal: [],
-      projects: [],
-    };
-  }
+function defaultPins(): MarketFeaturedPins {
+  return {
+    ...EMPTY,
+    external: [...DEFAULT_EXTERNAL_FEATURED_PINS],
+    internal: [],
+    projects: [],
+  };
 }
 
-function writeLocal(pins: MarketFeaturedPins) {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(pins));
-  } catch {
-    /* ignore */
-  }
+function normalizePins(parsed: Partial<MarketFeaturedPins> | null | undefined): MarketFeaturedPins {
+  if (!parsed) return defaultPins();
+  const external = Array.isArray(parsed.external)
+    ? parsed.external.slice(0, MAX_PER_KIND)
+    : [];
+  return {
+    external: external.length ? external : [...DEFAULT_EXTERNAL_FEATURED_PINS],
+    internal: Array.isArray(parsed.internal) ? parsed.internal.slice(0, MAX_PER_KIND) : [],
+    projects: Array.isArray(parsed.projects) ? parsed.projects.slice(0, MAX_PER_KIND) : [],
+  };
+}
+
+function persist(pins: MarketFeaturedPins) {
+  if (!canUsePlatformDocsApi()) return;
+  void scheduleSavePlatformDoc(currentWorkspaceId(), 'market-featured', { pins });
 }
 
 interface MarketFeaturedState {
@@ -62,9 +56,29 @@ interface MarketFeaturedState {
 }
 
 export const useMarketFeaturedStore = create<MarketFeaturedState>((set, get) => ({
-  pins: { external: [], internal: [], projects: [] },
+  pins: defaultPins(),
 
-  hydrate: () => set({ pins: readLocal() }),
+  hydrate: () => {
+    void (async () => {
+      if (!canUsePlatformDocsApi()) {
+        set({ pins: defaultPins() });
+        return;
+      }
+      try {
+        const remote = await fetchPlatformDoc<{ pins?: MarketFeaturedPins } | MarketFeaturedPins>(
+          currentWorkspaceId(),
+          'market-featured',
+        );
+        const pins =
+          remote && typeof remote === 'object' && 'pins' in remote && remote.pins
+            ? normalizePins(remote.pins)
+            : normalizePins(remote as Partial<MarketFeaturedPins> | null);
+        set({ pins });
+      } catch {
+        set({ pins: defaultPins() });
+      }
+    })();
+  },
 
   pinsFor: (kind) => get().pins[kind] ?? [],
 
@@ -73,7 +87,7 @@ export const useMarketFeaturedStore = create<MarketFeaturedState>((set, get) => 
       ...get().pins,
       [kind]: ids.slice(0, MAX_PER_KIND),
     };
-    writeLocal(pins);
+    persist(pins);
     set({ pins });
   },
 
@@ -83,7 +97,7 @@ export const useMarketFeaturedStore = create<MarketFeaturedState>((set, get) => 
       ? cur.filter((x) => x !== id)
       : [...cur, id].slice(0, MAX_PER_KIND);
     const pins = { ...get().pins, [kind]: next };
-    writeLocal(pins);
+    persist(pins);
     set({ pins });
   },
 

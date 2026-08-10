@@ -378,7 +378,7 @@ export function PortalContentOpsPage() {
                     onClick={() => {
                       if (
                         !window.confirm(
-                          '确定清空本机演示数据并关闭示例注入？\n\n将清除门户案例、Agent/Skill/工具示例、How to、站内消息等。\n不会清除登录、成员与密码。\n清空后页面将刷新。',
+                          '确定清空工作区演示数据并关闭示例注入？\n\n将清除门户案例、Agent/Skill/工具示例、How to、站内消息等（共享配置，同事也会受影响）。\n不会清除登录、成员与密码。\n清空后页面将刷新。',
                         )
                       ) {
                         return;
@@ -441,7 +441,7 @@ export function PortalContentOpsPage() {
               onClick={() => {
                 if (
                   !window.confirm(
-                    '确定清空本机演示数据并关闭示例注入？\n\n将清除门户案例、Agent/Skill/工具示例、How to、站内消息等。\n不会清除登录、成员与密码。\n清空后页面将刷新。',
+                    '确定清空工作区演示数据并关闭示例注入？\n\n将清除门户案例、Agent/Skill/工具示例、How to、站内消息等（共享配置，同事也会受影响）。\n不会清除登录、成员与密码。\n清空后页面将刷新。',
                   )
                 ) {
                   return;

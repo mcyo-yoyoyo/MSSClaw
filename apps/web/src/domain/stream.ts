@@ -2,7 +2,11 @@ import { z } from 'zod';
 import { ChatMessageSchema, ExecutionStepSchema } from '@/domain/chat';
 
 export const StreamEventSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('execution_start'), executionId: z.string() }),
+  z.object({
+    type: z.literal('execution_start'),
+    executionId: z.string(),
+    source: z.enum(['llm', 'scripted']).optional(),
+  }),
   z.object({
     type: z.literal('skill_start'),
     skill: z.string(),
@@ -23,6 +27,7 @@ export const StreamEventSchema = z.discriminatedUnion('type', [
     totalTime: z.string(),
     steps: z.array(ExecutionStepSchema),
     agentName: z.string(),
+    source: z.enum(['llm', 'scripted']).optional(),
     followUp: ChatMessageSchema.optional(),
   }),
   z.object({ type: z.literal('error'), message: z.string() }),

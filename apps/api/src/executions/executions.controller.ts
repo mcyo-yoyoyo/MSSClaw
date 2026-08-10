@@ -1,14 +1,23 @@
-import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ExecutionsService } from './executions.service';
 import type { StreamExecutionDto } from './dto/stream-execution.dto';
 import { SseConcurrencyGuard } from '../common/sse-concurrency.guard';
 
-@Controller('executions')
+@Controller()
 export class ExecutionsController {
   constructor(private readonly executionsService: ExecutionsService) {}
 
-  @Post('stream')
+  @Get('workspaces/:workspaceId/executions')
+  list(
+    @Param('workspaceId') workspaceId: string,
+    @Query('limit') limit?: string,
+  ) {
+    const n = limit ? Number(limit) : 50;
+    return this.executionsService.list(workspaceId, Number.isFinite(n) ? n : 50);
+  }
+
+  @Post('executions/stream')
   @UseGuards(SseConcurrencyGuard)
   async stream(@Body() body: StreamExecutionDto, @Req() req: Request, @Res() res: Response) {
     if (!body?.chatId || !body?.message) {

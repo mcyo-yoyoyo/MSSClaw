@@ -2,14 +2,15 @@ import { useEffect } from 'react';
 import type { AppView } from '@/domain/appView';
 import { isPlatformView } from '@/domain/appView';
 import { useWorkflowStore } from '@/stores/workflowStore';
-import { useToolStore } from '@/stores/toolStore';
 import { useMemoryStore } from '@/stores/memoryStore';
 import { usePromptStore } from '@/stores/promptStore';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { useAgentStore } from '@/stores/agentStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
-/** Lazy-load expert platform stores when entering iteration-9 views */
+/**
+ * Lazy-load expert platform stores when entering iteration-9 views.
+ * agents / skills / tools 已走 marketplaceStore，不再双载 legacy center stores。
+ */
 export function usePlatformStoreLoader(appView: AppView) {
   const workspaceId = useWorkspaceStore((s) => s.workspaceId);
 
@@ -17,14 +18,8 @@ export function usePlatformStoreLoader(appView: AppView) {
     if (!isPlatformView(appView)) return;
 
     switch (appView) {
-      case 'agent-studio':
-        useAgentStore.getState().loadWorkspace(workspaceId);
-        break;
       case 'workflow':
         useWorkflowStore.getState().loadWorkspace(workspaceId);
-        break;
-      case 'tools':
-        useToolStore.getState().loadWorkspace(workspaceId);
         break;
       case 'memory':
         useMemoryStore.getState().loadWorkspace(workspaceId);
@@ -34,6 +29,8 @@ export function usePlatformStoreLoader(appView: AppView) {
         break;
       case 'admin':
         useSettingsStore.getState().loadWorkspace(workspaceId);
+        break;
+      default:
         break;
     }
   }, [appView, workspaceId]);

@@ -11,8 +11,12 @@ import {
   type OrgUnit,
   type RegionId,
 } from '@/domain/orgTaxonomy';
-
-const LS_KEY = 'mssclaw_org_taxonomy_v1';
+import {
+  canUsePlatformDocsApi,
+  currentWorkspaceId,
+  fetchPlatformDoc,
+  scheduleSavePlatformDoc,
+} from '@/api/platformDocsApi';
 
 function slugFromLabel(label: string, prefix: 'd' | 'r'): string {
   const ascii = label
@@ -55,34 +59,37 @@ function migrateDepts(depts: OrgUnit[]): OrgUnit[] {
   return ordered.map((id) => byId.get(id)!);
 }
 
-function load(): { depts: OrgUnit[]; regions: OrgUnit[] } {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return { depts: [...DEFAULT_HQ_DEPTS], regions: [...DEFAULT_REGIONS] };
-    const parsed = JSON.parse(raw) as { depts?: OrgUnit[]; regions?: OrgUnit[] };
-    const depts =
-      Array.isArray(parsed.depts) && parsed.depts.length
-        ? migrateDepts(parsed.depts)
-        : [...DEFAULT_HQ_DEPTS];
-    const regions =
-      Array.isArray(parsed.regions) && parsed.regions.length
-        ? migrateRegions(parsed.regions)
-        : [...DEFAULT_REGIONS];
-    return { depts, regions };
-  } catch {
-    return { depts: [...DEFAULT_HQ_DEPTS], regions: [...DEFAULT_REGIONS] };
-  }
+function defaults(): { depts: OrgUnit[]; regions: OrgUnit[] } {
+  return { depts: [...DEFAULT_HQ_DEPTS], regions: [...DEFAULT_REGIONS] };
+}
+
+function normalizeRemote(remote: {
+  depts?: OrgUnit[];
+  regions?: OrgUnit[];
+} | null): { depts: OrgUnit[]; regions: OrgUnit[] } {
+  if (!remote) return defaults();
+  const depts =
+    Array.isArray(remote.depts) && remote.depts.length
+      ? migrateDepts(remote.depts)
+      : [...DEFAULT_HQ_DEPTS];
+  const regions =
+    Array.isArray(remote.regions) && remote.regions.length
+      ? migrateRegions(remote.regions)
+      : [...DEFAULT_REGIONS];
+  return { depts, regions };
 }
 
 function persist(depts: OrgUnit[], regions: OrgUnit[]) {
-  localStorage.setItem(LS_KEY, JSON.stringify({ depts, regions }));
   setOrgTaxonomy(depts, regions);
+  if (!canUsePlatformDocsApi()) return;
+  void scheduleSavePlatformDoc(currentWorkspaceId(), 'org-taxonomy', { depts, regions });
 }
 
 interface OrgTaxonomyState {
   depts: OrgUnit[];
   regions: OrgUnit[];
   toast: string | null;
+  hydrate: () => void;
   addDept: (label: string, id?: string) => boolean;
   updateDept: (id: DeptId, label: string) => boolean;
   removeDept: (id: DeptId, memberCount?: number) => boolean;
@@ -93,13 +100,37 @@ interface OrgTaxonomyState {
   dismissToast: () => void;
 }
 
-const initial = load();
+const initial = defaults();
 setOrgTaxonomy(initial.depts, initial.regions);
 
 export const useOrgTaxonomyStore = create<OrgTaxonomyState>((set, get) => ({
   depts: initial.depts,
   regions: initial.regions,
   toast: null,
+
+  hydrate: () => {
+    void (async () => {
+      if (!canUsePlatformDocsApi()) {
+        const next = defaults();
+        setOrgTaxonomy(next.depts, next.regions);
+        set(next);
+        return;
+      }
+      try {
+        const remote = await fetchPlatformDoc<{ depts?: OrgUnit[]; regions?: OrgUnit[] }>(
+          currentWorkspaceId(),
+          'org-taxonomy',
+        );
+        const next = normalizeRemote(remote);
+        setOrgTaxonomy(next.depts, next.regions);
+        set(next);
+      } catch {
+        const next = defaults();
+        setOrgTaxonomy(next.depts, next.regions);
+        set(next);
+      }
+    })();
+  },
 
   addDept: (label, id) => {
     const trimmed = label.trim();

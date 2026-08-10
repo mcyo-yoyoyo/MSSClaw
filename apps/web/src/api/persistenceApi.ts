@@ -21,8 +21,13 @@ function jsonHeaders(): HeadersInit {
 }
 
 /** 校验真实 Nest health JSON，避免 SPA fallback 把 HTML 200 当成已连接 */
-export async function fetchApiHealth(): Promise<boolean> {
-  if (!isApiEnabled()) return false;
+export type ApiHealthInfo = {
+  ok: boolean;
+  llmEnvConfigured: boolean;
+};
+
+export async function fetchApiHealthInfo(): Promise<ApiHealthInfo> {
+  if (!isApiEnabled()) return { ok: false, llmEnvConfigured: false };
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 3000);
@@ -31,14 +36,26 @@ export async function fetchApiHealth(): Promise<boolean> {
       headers: { Accept: 'application/json', ...apiAuthHeaders() },
     });
     clearTimeout(timer);
-    if (!res.ok) return false;
+    if (!res.ok) return { ok: false, llmEnvConfigured: false };
     const ct = res.headers.get('content-type') || '';
-    if (!ct.includes('application/json')) return false;
-    const body = (await res.json()) as { status?: string; service?: string };
-    return body?.status === 'ok' && body?.service === 'mss-claw-api';
+    if (!ct.includes('application/json')) return { ok: false, llmEnvConfigured: false };
+    const body = (await res.json()) as {
+      status?: string;
+      service?: string;
+      llmEnvConfigured?: boolean;
+    };
+    const ok = body?.status === 'ok' && body?.service === 'mss-claw-api';
+    return {
+      ok,
+      llmEnvConfigured: ok && Boolean(body.llmEnvConfigured),
+    };
   } catch {
-    return false;
+    return { ok: false, llmEnvConfigured: false };
   }
+}
+
+export async function fetchApiHealth(): Promise<boolean> {
+  return (await fetchApiHealthInfo()).ok;
 }
 
 export async function fetchSessionsApi(workspaceId: string): Promise<Record<string, ChatConfig> | null> {

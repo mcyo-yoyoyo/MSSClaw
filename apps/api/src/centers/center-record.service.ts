@@ -17,6 +17,8 @@ import {
   getNextWorkflowStatus,
   type CenterKind,
 } from './center-lifecycle';
+import { listMappedFromMarketplace } from '../persistence/marketplace-center-sync';
+import type { MarketplacePayload } from '../persistence/marketplace-center-sync';
 
 const LOCAL_CATALOGS: Record<CenterKind, Record<string, Record<string, unknown>[]>> = {
   prompt: PROMPT_CATALOG,
@@ -38,11 +40,47 @@ export class CenterRecordService {
       orderBy: { updatedAt: 'desc' },
     });
 
-    if (rows.length === 0) {
-      return LOCAL_CATALOGS[kind][workspaceId] ?? [];
+    const local = LOCAL_CATALOGS[kind][workspaceId] ?? [];
+    const byId = new Map<string, Record<string, unknown>>();
+    for (const item of local) {
+      byId.set(String(item.id), item);
+    }
+    for (const row of rows) {
+      const payload = row.payload as Record<string, unknown>;
+      const id = String(payload.id ?? row.id);
+      byId.set(id, payload);
     }
 
-    return rows.map((row: { payload: unknown }) => row.payload as Record<string, unknown>);
+    // Marketplace is canonical for agent/skill/tool — overlay mapped items
+    if (kind === 'agent' || kind === 'skill' || kind === 'tool') {
+      const marketRow = await this.prisma.centerRecord.findFirst({
+        where: { workspaceId, kind: 'marketplace' },
+      });
+      if (marketRow) {
+        const mapped = listMappedFromMarketplace(
+          kind,
+          marketRow.payload as MarketplacePayload,
+        );
+        for (const item of mapped) {
+          byId.set(String(item.id), item);
+        }
+      }
+    }
+
+    if (byId.size === 0) return local;
+
+    // Prefer local catalog order, then any DB/marketplace-only extras
+    const ordered: Record<string, unknown>[] = [];
+    const seen = new Set<string>();
+    for (const item of local) {
+      const id = String(item.id);
+      ordered.push(byId.get(id) ?? item);
+      seen.add(id);
+    }
+    for (const [id, payload] of byId) {
+      if (!seen.has(id)) ordered.push(payload);
+    }
+    return ordered;
   }
 
   async findOne(workspaceId: string, kind: CenterKind, id: string) {

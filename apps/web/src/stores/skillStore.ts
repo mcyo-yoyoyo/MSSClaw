@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import {
   advanceSkillLifecycle as advanceSkillLifecycleApi,
+  CenterApiError,
   fetchSkills,
 } from '@/api/centerApi';
 import {
   findSkillByName,
-  getNextSkillLifecycle,
   getSkillsByWorkspace,
   type Skill,
   type SkillLifecycle,
@@ -64,7 +64,9 @@ export const useSkillStore = create<SkillState>((set, get) => ({
   selectSkill: (id) => set({ selectedSkillId: id, liveTrace: [] }),
 
   selectSkillByName: (name) => {
-    const skill = findSkillByName(get().workspaceId, name) ?? get().skills.find((s) => s.name === name || s.displayName === name);
+    const skill =
+      findSkillByName(get().workspaceId, name) ??
+      get().skills.find((s) => s.name === name || s.displayName === name);
     if (skill) set({ selectedSkillId: skill.id, liveTrace: [] });
   },
 
@@ -75,21 +77,17 @@ export const useSkillStore = create<SkillState>((set, get) => ({
       const { skills, workspaceId } = get();
       const target = skills.find((s) => s.id === skillId);
       if (!target) return;
-
-      let nextSkills = await advanceSkillLifecycleApi(workspaceId, skillId, skills);
-      if (nextSkills === skills) {
-        const next = getNextSkillLifecycle(target.lifecycle);
-        if (!next) return;
-        nextSkills = skills.map((s) =>
-          s.id === skillId ? { ...s, lifecycle: next, updatedAt: new Date().toISOString().slice(0, 10) } : s,
-        );
+      try {
+        const updated = await advanceSkillLifecycleApi(workspaceId, skillId);
+        set({
+          skills: skills.map((s) => (s.id === skillId ? updated : s)),
+          toast: `「${target.displayName}」已推进到 ${updated.lifecycle}`,
+        });
+      } catch (err) {
+        set({
+          toast: err instanceof CenterApiError ? err.message : '生命周期推进失败',
+        });
       }
-
-      const updated = nextSkills.find((s) => s.id === skillId);
-      set({
-        skills: nextSkills,
-        toast: updated ? `�?{target.displayName}」已推进�?${updated.lifecycle}` : `�?{target.displayName}」已更新`,
-      });
     })();
   },
 
@@ -106,7 +104,7 @@ export const useSkillStore = create<SkillState>((set, get) => ({
 
     set({
       traceRunning: false,
-      toast: `�?{skill.displayName}」Trace 完成 · 总耗时 ~915ms`,
+      toast: `「${skill.displayName}」Trace 完成 · 总耗时 ~915ms（本地演示）`,
     });
   },
 
@@ -125,7 +123,11 @@ export const useSkillStore = create<SkillState>((set, get) => ({
   },
 }));
 
-export function resolveSkillIdFromResource(resourceId: string, resourceName?: string | null, workspaceId?: string) {
+export function resolveSkillIdFromResource(
+  resourceId: string,
+  resourceName?: string | null,
+  workspaceId?: string,
+) {
   if (resourceId.startsWith('skill-')) return resourceId;
   if (resourceName && workspaceId) return findSkillByName(workspaceId, resourceName)?.id ?? null;
   return null;

@@ -268,7 +268,7 @@ export function PortalHowToOpsPanel() {
                       <p className="truncate text-[12px] font-medium text-zinc-800">
                         {draft.fileName}
                       </p>
-                      <p className="text-[10px] text-zinc-400">已上传到本机演示存储</p>
+                      <p className="text-[10px] text-zinc-400">已上传到工作区共享存储（同事可见）</p>
                     </div>
                     <button
                       type="button"

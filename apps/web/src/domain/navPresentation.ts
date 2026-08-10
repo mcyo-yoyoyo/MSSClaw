@@ -166,6 +166,13 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
     adminOnly: true,
   },
   {
+    id: 'executions',
+    label: '执行历史',
+    subtitle: 'Agent/Skill 运行落库记录',
+    icon: 'fa-clock-rotate-left',
+    section: 'system',
+  },
+  {
     id: 'admin',
     label: '组织权限',
     subtitle: '成员 · 角色归属标签 · 部门字典（短期不做数据权限）',
@@ -201,7 +208,7 @@ export const NAV_PRESET_LABELS: Record<NavPresetId, { title: string; description
   customer: {
     title: 'MVP演示',
     description:
-      '业务=三货架（无任务记录/最近任务）；能力开发仅「配置技能」；超管=+专家/工具/组织/展示/门户',
+      '业务=三货架（无任务记录/最近任务）；能力开发=配置技能+轻量执行面；超管=+专家/工具/组织/展示/门户与执行',
   },
   standard: {
     title: '标准能力',
@@ -260,7 +267,8 @@ function mvpForRole(role: PlatformRole): Record<NavSlotId, boolean> {
       marketSlotsOn({
         ...off,
         home: true,
-        task: false,
+        // 运营需「调用」Skill 进入执行面；业务侧仍关任务记录
+        task: true,
         warroom: false,
         messages: true,
         'ai-map': true,
@@ -268,6 +276,7 @@ function mvpForRole(role: PlatformRole): Record<NavSlotId, boolean> {
         skills: true,
         tools: false,
         kb: false,
+        executions: true,
       }),
       role,
     );
@@ -277,13 +286,15 @@ function mvpForRole(role: PlatformRole): Record<NavSlotId, boolean> {
       marketSlotsOn({
         ...off,
         home: true,
-        task: false,
+        // 与 warroom / Agent·Skill「调用」对齐；业务用户仍无任务侧栏
+        task: true,
         warroom: true,
         messages: true,
         'ai-map': true,
         agents: true,
         skills: true,
         tools: true,
+        executions: true,
       }),
       role,
     );
@@ -513,6 +524,7 @@ export const NAV_FALLBACK_ORDER: AppView[] = [
   PRESENTATION_CONFIG_VIEW,
   WORKSPACE_CONFIG_VIEW,
   'portal-ops',
+  'executions',
 ];
 
 export function getNavMeta(slot: NavSlotId): NavPresentationMeta | undefined {

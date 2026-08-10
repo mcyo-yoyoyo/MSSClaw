@@ -71,7 +71,7 @@ export function LoginPage() {
               <span className="home-slogan-gradient">MSS AI提效作战平台</span>
             </h1>
             <p className="mt-3.5 max-w-[30rem] text-[13px] leading-6 text-zinc-600 md:text-[14px] md:leading-7">
-              前沿洞察开眼界，培训学院提能力，场景案例可复制；专家与技能一键打样，让个人行动沉淀组织能力，提效看得见、用得上！
+              前沿洞察开眼界，培训学院提能力，场景案例可复制；专家与技能可下载学习、按需落地，让个人行动沉淀组织能力，提效看得见、用得上！
             </p>
           </header>
 

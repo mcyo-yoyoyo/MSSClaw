@@ -7,52 +7,17 @@ import {
 } from '@/domain/plazaToolGuides';
 import { demoDefaults } from '@/domain/demoContentPolicy';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import {
+  canUsePlatformDocsApi,
+  fetchPlatformDoc,
+  scheduleSavePlatformDoc,
+} from '@/api/platformDocsApi';
 
 function howtoSeeds(): PlazaToolGuideRecord[] {
   return demoDefaults(flattenPlazaToolGuideSeeds());
 }
 
-const LS_PREFIX = 'mssclaw_plaza_howto_v2_';
-
-function storageKey(workspaceId: string) {
-  return `${LS_PREFIX}${workspaceId}`;
-}
-
-function migrateFromV1(workspaceId: string): PlazaToolGuideRecord[] | null {
-  try {
-    const raw = localStorage.getItem(`mssclaw_plaza_howto_v1_${workspaceId}`);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as unknown[];
-    if (!Array.isArray(parsed)) return null;
-    return parsed
-      .map((row) => normalizePlazaToolGuideRecord(row as PlazaToolGuideRecord))
-      .filter((r): r is PlazaToolGuideRecord => Boolean(r));
-  } catch {
-    return null;
-  }
-}
-
-function readLocal(workspaceId: string): PlazaToolGuideRecord[] {
-  try {
-    const seeds = howtoSeeds();
-    const raw = localStorage.getItem(storageKey(workspaceId));
-    if (!raw) {
-      const legacy = migrateFromV1(workspaceId);
-      if (!legacy?.length) return seeds;
-      return mergeGuideCatalog(seeds, legacy);
-    }
-    const parsed = JSON.parse(raw) as unknown[];
-    if (!Array.isArray(parsed)) return seeds;
-    const normalized = parsed
-      .map((row) => normalizePlazaToolGuideRecord(row as PlazaToolGuideRecord))
-      .filter((r): r is PlazaToolGuideRecord => Boolean(r));
-    return mergeGuideCatalog(seeds, normalized);
-  } catch {
-    return howtoSeeds();
-  }
-}
-
-/** 种子优先补齐新 catalog 指导；同 id 以本地运营修改为准 */
+/** 种子优先补齐新 catalog 指导；同 id 以运营修改为准 */
 function mergeGuideCatalog(
   seeds: PlazaToolGuideRecord[],
   saved: PlazaToolGuideRecord[],
@@ -65,8 +30,9 @@ function mergeGuideCatalog(
   return [...map.values()];
 }
 
-function writeLocal(workspaceId: string, records: PlazaToolGuideRecord[]) {
-  localStorage.setItem(storageKey(workspaceId), JSON.stringify(records));
+function persist(workspaceId: string, records: PlazaToolGuideRecord[]) {
+  if (!canUsePlatformDocsApi()) return;
+  void scheduleSavePlatformDoc(workspaceId, 'plaza-howto', { records });
 }
 
 interface PlazaToolGuideState {
@@ -74,6 +40,7 @@ interface PlazaToolGuideState {
   records: PlazaToolGuideRecord[];
   toast: string | null;
   bootstrap: (workspaceId?: string) => void;
+  hydrate: (workspaceId?: string) => void;
   persist: () => void;
   guidesFor: (toolId: string) => PlazaToolGuide[];
   upsert: (record: PlazaToolGuideRecord, isNew?: boolean) => void;
@@ -88,14 +55,41 @@ export const usePlazaToolGuideStore = create<PlazaToolGuideState>((set, get) => 
   records: howtoSeeds(),
   toast: null,
 
-  bootstrap: (workspaceId) => {
+  hydrate: (workspaceId) => {
     const ws = workspaceId || useWorkspaceStore.getState().workspaceId;
-    set({ records: readLocal(ws), ready: true });
+    void (async () => {
+      const seeds = howtoSeeds();
+      if (!canUsePlatformDocsApi()) {
+        set({ records: seeds, ready: true });
+        return;
+      }
+      try {
+        const remote = await fetchPlatformDoc<{ records?: PlazaToolGuideRecord[] }>(
+          ws,
+          'plaza-howto',
+        );
+        const saved = Array.isArray(remote?.records)
+          ? remote.records
+              .map((row) => normalizePlazaToolGuideRecord(row))
+              .filter((r): r is PlazaToolGuideRecord => Boolean(r))
+          : [];
+        set({
+          records: saved.length ? mergeGuideCatalog(seeds, saved) : seeds,
+          ready: true,
+        });
+      } catch {
+        set({ records: seeds, ready: true });
+      }
+    })();
+  },
+
+  bootstrap: (workspaceId) => {
+    get().hydrate(workspaceId);
   },
 
   persist: () => {
     const ws = useWorkspaceStore.getState().workspaceId;
-    writeLocal(ws, get().records);
+    persist(ws, get().records);
   },
 
   guidesFor: (toolId) =>

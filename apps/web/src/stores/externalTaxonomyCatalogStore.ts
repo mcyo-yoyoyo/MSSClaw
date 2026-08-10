@@ -12,8 +12,12 @@ import {
   type ExternalToolTypeCatalogEntry,
   type ExternalWorkSceneCatalogEntry,
 } from '@/domain/externalTaxonomyCatalog';
-
-const LS_KEY = 'mssclaw_external_taxonomy_v1';
+import {
+  canUsePlatformDocsApi,
+  currentWorkspaceId,
+  fetchPlatformDoc,
+  scheduleSavePlatformDoc,
+} from '@/api/platformDocsApi';
 
 const TYPE_IDS = new Set(EXTERNAL_TOOL_TYPES.map((t) => t.id));
 const SCENE_IDS = new Set(EXTERNAL_WORK_SCENES.map((s) => s.id));
@@ -81,22 +85,10 @@ function mergeCatalog(
   return { types, scenes };
 }
 
-function load(): ExternalTaxonomyCatalog {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<ExternalTaxonomyCatalog>;
-      return mergeCatalog(parsed);
-    }
-  } catch {
-    /* ignore */
-  }
-  return mergeCatalog(null);
-}
-
 function persist(catalog: ExternalTaxonomyCatalog) {
-  localStorage.setItem(LS_KEY, JSON.stringify(catalog));
   setExternalTaxonomyCatalog(catalog);
+  if (!canUsePlatformDocsApi()) return;
+  void scheduleSavePlatformDoc(currentWorkspaceId(), 'external-taxonomy', catalog);
 }
 
 interface ExternalTaxonomyCatalogState {
@@ -117,7 +109,7 @@ interface ExternalTaxonomyCatalogState {
   dismissToast: () => void;
 }
 
-const initial = load();
+const initial = mergeCatalog(null);
 setExternalTaxonomyCatalog(initial);
 
 export const useExternalTaxonomyCatalogStore = create<ExternalTaxonomyCatalogState>(
@@ -126,9 +118,27 @@ export const useExternalTaxonomyCatalogStore = create<ExternalTaxonomyCatalogSta
     toast: null,
 
     hydrate: () => {
-      const catalog = load();
-      setExternalTaxonomyCatalog(catalog);
-      set({ catalog });
+      void (async () => {
+        if (!canUsePlatformDocsApi()) {
+          const catalog = mergeCatalog(null);
+          setExternalTaxonomyCatalog(catalog);
+          set({ catalog });
+          return;
+        }
+        try {
+          const remote = await fetchPlatformDoc<Partial<ExternalTaxonomyCatalog>>(
+            currentWorkspaceId(),
+            'external-taxonomy',
+          );
+          const catalog = mergeCatalog(remote);
+          setExternalTaxonomyCatalog(catalog);
+          set({ catalog });
+        } catch {
+          const catalog = mergeCatalog(null);
+          setExternalTaxonomyCatalog(catalog);
+          set({ catalog });
+        }
+      })();
     },
 
     updateType: (id, patch) => {

@@ -16,8 +16,7 @@ function canSeeShareBanner(role: string | undefined): boolean {
 }
 
 /**
- * 平台运营 / 能力开发可见。
- * 普通业务用户不打扰；运维侧必须知道共享是否通。
+ * 平台运营 / 能力开发可见完整运维文案；业务用户可见简化「服务不可用」提示。
  */
 export function OfflineBanner({ onRetry }: OfflineBannerProps) {
   const apiConnected = useWorkspaceStore((s) => s.apiConnected);
@@ -26,7 +25,7 @@ export function OfflineBanner({ onRetry }: OfflineBannerProps) {
   const failStreak = useShareSyncStore((s) => s.failStreak);
   const lastSync = useShareSyncStore((s) => s.last);
   const role = useSessionStore((s) => s.user?.platformRole);
-  const canSee = canSeeShareBanner(role);
+  const isOps = canSeeShareBanner(role);
   const [online, setOnline] = useState(() =>
     typeof navigator !== 'undefined' ? navigator.onLine : true,
   );
@@ -57,11 +56,13 @@ export function OfflineBanner({ onRetry }: OfflineBannerProps) {
     }
   }, [apiConnected]);
 
-  if (!canSee) return null;
+  // 未登录不展示；业务用户仅提示网络/服务不可用，不同步失败细节
+  if (!role) return null;
 
   const offline = !online;
   const apiDown = online && !apiConnected && apiStatus === 'unreachable';
   const syncFail =
+    isOps &&
     online &&
     apiConnected &&
     failStreak >= 1 &&
@@ -73,10 +74,14 @@ export function OfflineBanner({ onRetry }: OfflineBannerProps) {
   if (!visible) return null;
 
   const message = offline
-    ? '网络已断开，部分功能将使用本地缓存'
+    ? isOps
+      ? '网络已断开，部分功能将使用本地缓存'
+      : '网络已断开，货架内容可能不是最新'
     : apiDown
-      ? '共享服务未连通：多用户数据与附件暂时无法互通。同事上传的 Skill/Agent/工具不会出现在此。请按内网部署说明检查 Nginx /api 与后台。'
-      : '最近一次写入共享服务失败：内容可能仅留在本机。请点「重试」或检查后台日志。';
+      ? isOps
+        ? '共享服务未连通：多用户数据与附件暂时无法互通。同事上传的 Skill/Agent/工具不会出现在此。请按内网部署说明检查 Nginx /api 与后台。'
+        : '共享服务暂不可用，货架与案例可能不是最新。请联系平台运营或稍后重试。'
+      : '最近一次写入共享服务失败：内容可能未同步到同事。请点「重试」或检查后台日志。';
 
   return (
     <div

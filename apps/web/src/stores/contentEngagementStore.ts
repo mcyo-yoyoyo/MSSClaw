@@ -8,42 +8,32 @@ import {
   type ContentEngagement,
 } from '@/domain/contentEngagement';
 import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
-
-const LS_KEY = 'mssclaw_content_engagement_v1';
-const LS_VOTE_KEY = 'mssclaw_content_user_votes_v1';
+import {
+  canUsePlatformDocsApi,
+  currentWorkspaceId,
+  fetchPlatformDoc,
+  scheduleSavePlatformDoc,
+} from '@/api/platformDocsApi';
 
 type UserVote = 'like' | 'dislike' | null;
 
-function loadMap(): Record<string, ContentEngagement> {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as Record<string, ContentEngagement>;
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function loadVotes(): Record<string, UserVote> {
-  try {
-    const raw = localStorage.getItem(LS_VOTE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as Record<string, UserVote>;
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-}
+type EngagementDoc = {
+  byId?: Record<string, ContentEngagement>;
+  userVotes?: Record<string, UserVote>;
+};
 
 function persist(map: Record<string, ContentEngagement>, votes: Record<string, UserVote>) {
-  localStorage.setItem(LS_KEY, JSON.stringify(map));
-  localStorage.setItem(LS_VOTE_KEY, JSON.stringify(votes));
+  if (!canUsePlatformDocsApi()) return;
+  void scheduleSavePlatformDoc(currentWorkspaceId(), 'content-engagement', {
+    byId: map,
+    userVotes: votes,
+  });
 }
 
 interface ContentEngagementState {
   byId: Record<string, ContentEngagement>;
   userVotes: Record<string, UserVote>;
+  hydrate: () => void;
   get: (id: string) => ContentEngagement;
   userVote: (id: string) => UserVote;
   bumpUse: (id: string) => void;
@@ -59,8 +49,32 @@ function ensure(map: Record<string, ContentEngagement>, id: string): ContentEnga
 }
 
 export const useContentEngagementStore = create<ContentEngagementState>((set, get) => ({
-  byId: loadMap(),
-  userVotes: loadVotes(),
+  byId: {},
+  userVotes: {},
+
+  hydrate: () => {
+    void (async () => {
+      if (!canUsePlatformDocsApi()) {
+        set({ byId: {}, userVotes: {} });
+        return;
+      }
+      try {
+        const remote = await fetchPlatformDoc<EngagementDoc>(
+          currentWorkspaceId(),
+          'content-engagement',
+        );
+        const byId =
+          remote?.byId && typeof remote.byId === 'object' ? remote.byId : {};
+        const userVotes =
+          remote?.userVotes && typeof remote.userVotes === 'object'
+            ? remote.userVotes
+            : {};
+        set({ byId, userVotes });
+      } catch {
+        set({ byId: {}, userVotes: {} });
+      }
+    })();
+  },
 
   get: (id) => resolveEngagement(id, get().byId),
 
@@ -135,7 +149,6 @@ export const useContentEngagementStore = create<ContentEngagementState>((set, ge
     const list = Object.values(byId).length
       ? Object.values(byId)
       : [];
-    // ???? id ???????????????????????
     return list.filter((e) => needsOptimization(e)).sort((a, b) => dislikeRatioDesc(b, a));
   },
 }));
@@ -146,7 +159,7 @@ function dislikeRatioDesc(a: ContentEngagement, b: ContentEngagement) {
   return ra - rb;
 }
 
-/** ????????id ?????????????? */
+/** ???? id ??????? */
 export function ensureEngagementSeeds(ids: string[]) {
   if (!isDemoContentEnabled()) return;
   const state = useContentEngagementStore.getState();
@@ -164,16 +177,13 @@ export function ensureEngagementSeeds(ids: string[]) {
   }
 }
 
-const DEMO_QUEUE_FLAG = 'mssclaw_engagement_demo_queue_v1';
+let demoQueueSeeded = false;
 
-/** ?????????????????????????*/
+/** ??????????????????? */
 export function forceQueueDemoSeeds(ids: string[]) {
   if (!isDemoContentEnabled()) return;
-  try {
-    if (localStorage.getItem(DEMO_QUEUE_FLAG)) return;
-  } catch {
-    /* ignore */
-  }
+  if (demoQueueSeeded) return;
+  demoQueueSeeded = true;
   const state = useContentEngagementStore.getState();
   const byId = { ...state.byId };
   ids.slice(0, 2).forEach((id, i) => {
@@ -189,9 +199,4 @@ export function forceQueueDemoSeeds(ids: string[]) {
   });
   useContentEngagementStore.setState({ byId });
   persist(byId, state.userVotes);
-  try {
-    localStorage.setItem(DEMO_QUEUE_FLAG, '1');
-  } catch {
-    /* ignore */
-  }
 }

@@ -16,7 +16,7 @@ import {
   fetchWorkspaceList,
   getLocalWorkspaceCatalogs,
 } from '@/api/workspaceApi';
-import { fetchApiHealth } from '@/api/persistenceApi';
+import { fetchApiHealthInfo } from '@/api/persistenceApi';
 import { isApiEnabled, isForceLocalDemo } from '@/api/client';
 
 interface WorkspaceState {
@@ -26,6 +26,8 @@ interface WorkspaceState {
   catalogReady: boolean;
   catalogLoading: boolean;
   apiConnected: boolean;
+  /** 共享 API 是否配置了部署级 LLM_*（工作区文档配置另计） */
+  nestLlmEnvConfigured: boolean;
   /** connected | unreachable | local-demo（强制本地） */
   apiStatus: 'unknown' | 'connected' | 'unreachable' | 'local-demo';
   expandedSections: Record<ExplorerSection, boolean>;
@@ -60,6 +62,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   catalogReady: false,
   catalogLoading: false,
   apiConnected: false,
+  nestLlmEnvConfigured: false,
   apiStatus: 'unknown',
   expandedSections: DEFAULT_EXPANDED,
   selectedResourceId: null,
@@ -78,6 +81,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         catalogReady: true,
         catalogLoading: false,
         apiConnected: false,
+        nestLlmEnvConfigured: false,
         apiStatus: status,
       });
     };
@@ -88,8 +92,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         return;
       }
 
-      const healthy = await fetchApiHealth();
-      if (!healthy) {
+      const health = await fetchApiHealthInfo();
+      if (!health.ok) {
         // 本机只开前端时：安静本地模式，不惊吓普通用户
         const loopback =
           typeof location !== 'undefined' &&
@@ -114,6 +118,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         catalogReady: true,
         catalogLoading: false,
         apiConnected: true,
+        nestLlmEnvConfigured: health.llmEnvConfigured,
         apiStatus: 'connected',
       });
     } catch {

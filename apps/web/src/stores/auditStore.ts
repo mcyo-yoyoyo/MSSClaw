@@ -9,8 +9,13 @@ import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
 import { SEED_MEMBERS, type PlatformRole } from '@/domain/rbac';
 import { useSessionStore } from '@/stores/sessionStore';
 import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
+import {
+  canUsePlatformDocsApi,
+  currentWorkspaceId,
+  fetchPlatformDoc,
+  scheduleSavePlatformDoc,
+} from '@/api/platformDocsApi';
 
-const LS_KEY = 'mssclaw_audit_log_v2';
 const MAX_LOGS = 400;
 
 function emptyOrSeedLogs(): AuditLogEntry[] {
@@ -45,44 +50,48 @@ export interface RecordAuditInput {
   regionId?: RegionId | null;
 }
 
-function loadLogs(): AuditLogEntry[] {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) {
-      // 兼容旧 key：有数据则迁移，否则用种子
-      const legacy = localStorage.getItem('mssclaw_audit_log_v1');
-      if (legacy) {
-        const parsed = (JSON.parse(legacy) as AuditLogEntry[]).map(enrichOrgFields);
-        if (Array.isArray(parsed) && parsed.length) {
-          localStorage.setItem(LS_KEY, JSON.stringify(parsed.slice(0, MAX_LOGS)));
-          return parsed;
-        }
-      }
-      return emptyOrSeedLogs();
-    }
-    const parsed = JSON.parse(raw) as AuditLogEntry[];
-    if (!Array.isArray(parsed) || !parsed.length) return emptyOrSeedLogs();
-    return parsed.map(enrichOrgFields);
-  } catch {
-    return emptyOrSeedLogs();
-  }
-}
-
 function persist(logs: AuditLogEntry[]) {
-  localStorage.setItem(LS_KEY, JSON.stringify(logs.slice(0, MAX_LOGS)));
+  if (!canUsePlatformDocsApi()) return;
+  void scheduleSavePlatformDoc(currentWorkspaceId(), 'audit-log', {
+    logs: logs.slice(0, MAX_LOGS),
+  });
 }
 
 interface AuditState {
   logs: AuditLogEntry[];
   filter: AuditCategory | 'all';
+  hydrate: () => void;
   setFilter: (filter: AuditCategory | 'all') => void;
   record: (input: RecordAuditInput) => void;
   clearLogs: () => void;
 }
 
 export const useAuditStore = create<AuditState>((set, get) => ({
-  logs: loadLogs(),
+  logs: emptyOrSeedLogs(),
   filter: 'all',
+
+  hydrate: () => {
+    void (async () => {
+      if (!canUsePlatformDocsApi()) {
+        set({ logs: emptyOrSeedLogs() });
+        return;
+      }
+      try {
+        const remote = await fetchPlatformDoc<{ logs?: AuditLogEntry[] }>(
+          currentWorkspaceId(),
+          'audit-log',
+        );
+        const list = Array.isArray(remote?.logs) ? remote.logs : [];
+        set({
+          logs: list.length
+            ? list.map(enrichOrgFields).slice(0, MAX_LOGS)
+            : emptyOrSeedLogs(),
+        });
+      } catch {
+        set({ logs: emptyOrSeedLogs() });
+      }
+    })();
+  },
 
   setFilter: (filter) => set({ filter }),
 

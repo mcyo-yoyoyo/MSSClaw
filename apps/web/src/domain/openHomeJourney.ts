@@ -3,6 +3,7 @@ import {
   MARKET_SHELF_META,
   type MarketShelfKind,
 } from '@/domain/marketShelf';
+import { isMvpCapabilityPreset } from '@/domain/marketRunCapability';
 import { emptyOrgPerspectiveSelection } from '@/domain/orgAxisTags';
 import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
 import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
@@ -12,6 +13,8 @@ import { useConversationStore } from '@/stores/conversationStore';
 import { useHomeStore } from '@/stores/homeStore';
 import { useMarketFilterStore } from '@/stores/marketFilterStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
+import { useNavPresentationStore } from '@/stores/navPresentationStore';
+import { useSessionStore } from '@/stores/sessionStore';
 import { useTaskStore } from '@/stores/taskStore';
 
 export type HomeJourneyOpts = {
@@ -59,7 +62,7 @@ export function openFindCases(opts?: HomeJourneyOpts) {
   openMarketShelf(opts?.shelf ?? 'external', opts);
 }
 
-/** 做任务 → Tab「用 · 做任务」场景技能页；只读用户回落找案例 */
+/** 做任务 → Tab「用 · 做任务」场景技能页；只读用户回落找案例；MVP 业务引导货架下载 */
 export function openUseSkills(opts?: HomeJourneyOpts) {
   if (opts?.businessId) {
     useNavigationIntentStore.getState().focusBusinessScenario(opts.businessId);
@@ -71,6 +74,21 @@ export function openUseSkills(opts?: HomeJourneyOpts) {
     );
     return;
   }
+
+  const preset = useNavPresentationStore.getState().preset;
+  const role = useSessionStore.getState().user?.platformRole;
+  if (
+    isMvpCapabilityPreset(preset) &&
+    (role === 'business_user' || role === 'viewer')
+  ) {
+    useConversationStore.setState({
+      pushToast:
+        'MVP 业务侧以货架下载学习为主；在线执行请使用标准/完整方案，或联系运营账号演示。',
+    });
+    openMarketShelf('projects', opts?.businessId ? { businessId: opts.businessId } : undefined);
+    return;
+  }
+
   useTaskStore.getState().closeCreateDialog();
   useHomeStore.getState().setHomeMode('assistant');
   if (opts?.focusComposer !== false) {

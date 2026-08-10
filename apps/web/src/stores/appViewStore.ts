@@ -9,23 +9,11 @@ import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useShellPerspectiveStore } from '@/stores/shellPerspectiveStore';
 
-const LS_SIDEBAR = 'mssclaw_sidebar_collapsed';
-const LS_NAV_SECTIONS = 'mssclaw_nav_sections_v4';
-
 function loadNavSections(): Record<NavSection, boolean> {
-  const defaults = Object.fromEntries(NAV_SECTIONS.map((s) => [s, s === 'system'])) as Record<
+  return Object.fromEntries(NAV_SECTIONS.map((s) => [s, s === 'system'])) as Record<
     NavSection,
     boolean
   >;
-  try {
-    const saved = JSON.parse(localStorage.getItem(LS_NAV_SECTIONS) || '{}');
-    NAV_SECTIONS.forEach((s) => {
-      if (typeof saved[s] === 'boolean') defaults[s] = saved[s];
-    });
-  } catch {
-    /* use defaults */
-  }
-  return defaults;
 }
 
 interface AppViewState {
@@ -47,7 +35,7 @@ interface AppViewState {
 export const useAppViewStore = create<AppViewState>((set, get) => ({
   appView: 'home',
   blockedOpsView: null,
-  sidebarCollapsed: localStorage.getItem(LS_SIDEBAR) === '1',
+  sidebarCollapsed: false,
   navSectionsCollapsed: loadNavSections(),
   settingsOpen: false,
 
@@ -100,27 +88,25 @@ export const useAppViewStore = create<AppViewState>((set, get) => ({
   clearBlockedOpsView: () => set({ blockedOpsView: null, appView: 'home' }),
 
   toggleSidebar: () => {
-    const next = !get().sidebarCollapsed;
-    localStorage.setItem(LS_SIDEBAR, next ? '1' : '0');
-    set({ sidebarCollapsed: next });
+    set({ sidebarCollapsed: !get().sidebarCollapsed });
   },
 
   toggleNavSection: (section) => {
-    const next = {
-      ...get().navSectionsCollapsed,
-      [section]: !get().navSectionsCollapsed[section],
-    };
-    localStorage.setItem(LS_NAV_SECTIONS, JSON.stringify(next));
-    set({ navSectionsCollapsed: next });
+    set({
+      navSectionsCollapsed: {
+        ...get().navSectionsCollapsed,
+        [section]: !get().navSectionsCollapsed[section],
+      },
+    });
   },
 
   setNavSectionCollapsed: (section, collapsed) => {
-    const next = {
-      ...get().navSectionsCollapsed,
-      [section]: collapsed,
-    };
-    localStorage.setItem(LS_NAV_SECTIONS, JSON.stringify(next));
-    set({ navSectionsCollapsed: next });
+    set({
+      navSectionsCollapsed: {
+        ...get().navSectionsCollapsed,
+        [section]: collapsed,
+      },
+    });
   },
 
   openSettings: () => set({ settingsOpen: true }),

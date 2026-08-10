@@ -1,8 +1,11 @@
 import { create } from 'zustand';
 import { getCurrentUserId } from '@/domain/currentUser';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
-
-const LS_PREFIX = 'mssclaw_ai_news_pref_v2_';
+import {
+  canUsePlatformDocsApi,
+  currentWorkspaceId,
+  fetchPlatformDoc,
+  scheduleSavePlatformDoc,
+} from '@/api/platformDocsApi';
 
 export type AiNewsPreference = {
   /**
@@ -19,13 +22,7 @@ export type AiNewsPreference = {
   updatedAt: string;
 };
 
-function storageKey(userId: string, workspaceId: string) {
-  return `${LS_PREFIX}${workspaceId}_${userId || 'anon'}`;
-}
-
-function legacyKey(userId: string, workspaceId: string) {
-  return `mssclaw_ai_news_pref_${workspaceId}_${userId || 'anon'}`;
-}
+type PrefsDoc = { byUser?: Record<string, AiNewsPreference> };
 
 function defaultPref(): AiNewsPreference {
   return {
@@ -37,27 +34,26 @@ function defaultPref(): AiNewsPreference {
   };
 }
 
-function readPref(userId: string, workspaceId: string): AiNewsPreference {
-  try {
-    const raw =
-      localStorage.getItem(storageKey(userId, workspaceId)) ||
-      localStorage.getItem(legacyKey(userId, workspaceId));
-    if (!raw) return defaultPref();
-    const parsed = JSON.parse(raw) as Partial<AiNewsPreference>;
-    return {
-      subscribed: Boolean(parsed.subscribed),
-      welinkPushEnabled: Boolean(parsed.welinkPushEnabled ?? parsed.subscribed),
-      emailSubscribed: Boolean(parsed.emailSubscribed),
-      email: typeof parsed.email === 'string' ? parsed.email.trim() : '',
-      updatedAt: parsed.updatedAt || new Date().toISOString(),
-    };
-  } catch {
-    return defaultPref();
-  }
+function normalizePref(parsed: Partial<AiNewsPreference> | null | undefined): AiNewsPreference {
+  if (!parsed) return defaultPref();
+  return {
+    subscribed: Boolean(parsed.subscribed),
+    welinkPushEnabled: Boolean(parsed.welinkPushEnabled ?? parsed.subscribed),
+    emailSubscribed: Boolean(parsed.emailSubscribed),
+    email: typeof parsed.email === 'string' ? parsed.email.trim() : '',
+    updatedAt: parsed.updatedAt || new Date().toISOString(),
+  };
 }
 
-function writePref(userId: string, workspaceId: string, pref: AiNewsPreference) {
-  localStorage.setItem(storageKey(userId, workspaceId), JSON.stringify(pref));
+/** 内存中的全量 byUser，hydrate 后用于写回 */
+let byUserCache: Record<string, AiNewsPreference> = {};
+
+function persistUser(userId: string, pref: AiNewsPreference) {
+  byUserCache = { ...byUserCache, [userId]: pref };
+  if (!canUsePlatformDocsApi()) return;
+  void scheduleSavePlatformDoc(currentWorkspaceId(), 'ai-news-prefs', {
+    byUser: byUserCache,
+  });
 }
 
 function isValidEmail(email: string): boolean {
@@ -76,21 +72,37 @@ export const useAiNewsPreferenceStore = create<AiNewsPreferenceState>((set, get)
   pref: defaultPref(),
 
   hydrate: () => {
-    const userId = getCurrentUserId() || 'anon';
-    const workspaceId = useWorkspaceStore.getState().workspaceId;
-    set({ pref: readPref(userId, workspaceId) });
+    void (async () => {
+      const userId = getCurrentUserId() || 'anon';
+      if (!canUsePlatformDocsApi()) {
+        byUserCache = {};
+        set({ pref: defaultPref() });
+        return;
+      }
+      try {
+        const remote = await fetchPlatformDoc<PrefsDoc>(
+          currentWorkspaceId(),
+          'ai-news-prefs',
+        );
+        byUserCache =
+          remote?.byUser && typeof remote.byUser === 'object' ? { ...remote.byUser } : {};
+        set({ pref: normalizePref(byUserCache[userId]) });
+      } catch {
+        byUserCache = {};
+        set({ pref: defaultPref() });
+      }
+    })();
   },
 
   setSubscribed: (subscribed) => {
     const userId = getCurrentUserId() || 'anon';
-    const workspaceId = useWorkspaceStore.getState().workspaceId;
     const next: AiNewsPreference = {
       ...get().pref,
       subscribed,
       welinkPushEnabled: subscribed,
       updatedAt: new Date().toISOString(),
     };
-    writePref(userId, workspaceId, next);
+    persistUser(userId, next);
     set({ pref: next });
   },
 
@@ -100,14 +112,13 @@ export const useAiNewsPreferenceStore = create<AiNewsPreferenceState>((set, get)
       return { ok: false, message: '请填写有效邮箱地址' };
     }
     const userId = getCurrentUserId() || 'anon';
-    const workspaceId = useWorkspaceStore.getState().workspaceId;
     const next: AiNewsPreference = {
       ...get().pref,
       email: trimmed,
       emailSubscribed: subscribed,
       updatedAt: new Date().toISOString(),
     };
-    writePref(userId, workspaceId, next);
+    persistUser(userId, next);
     set({ pref: next });
     return {
       ok: true,

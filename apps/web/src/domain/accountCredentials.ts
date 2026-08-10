@@ -1,12 +1,16 @@
 /**
- * 短期生产：账号密码由平台运营配置，浏览器本地哈希存储（非服务端 IAM）。
- * 正式 SSO/JWT 上线前，用于关掉「全员演示密码」漏洞。
+ * 账号密码：落 Nest platform-docs（auth-credentials），内存态运行。
+ * 不再写入 localStorage。
  */
 
-const CREDS_KEY = 'mssclaw_account_creds_v1';
-const POLICY_KEY = 'mssclaw_auth_policy_v1';
-/** 一次性：将当前账号密码全部初始化为 mssclaw */
-const CREDS_INIT_MSSCLAW_KEY = 'mssclaw_creds_init_all_mssclaw_v1';
+import {
+  canUsePlatformDocsApi,
+  currentWorkspaceId,
+  fetchPlatformDoc,
+  peekPlatformDocMemory,
+  scheduleSavePlatformDoc,
+  setPlatformDocMemory,
+} from '@/api/platformDocsApi';
 
 export type AccountCredential = {
   salt: string;
@@ -17,17 +21,25 @@ export type AccountCredential = {
 type CredMap = Record<string, AccountCredential>;
 
 export type AuthPolicy = {
-  /** 未单独设密时是否允许演示密码登录（生产应关闭） */
   allowDemoPassword: boolean;
 };
 
-const DEFAULT_POLICY: AuthPolicy = { allowDemoPassword: true };
+type CredPayload = {
+  policy: AuthPolicy;
+  credentials: CredMap;
+};
 
-/** 与 authAccounts.DEMO_PASSWORD 保持一致 */
+const DEFAULT_POLICY: AuthPolicy = { allowDemoPassword: true };
 export const DEFAULT_ACCOUNT_PASSWORD = 'mssclaw';
 
+let memory: CredPayload = {
+  policy: { ...DEFAULT_POLICY },
+  credentials: {},
+};
+let hydratedWs: string | null = null;
+
 function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
+  return email.trim().toLowerCase().replace(/@company\.com$/i, '@huawei.com');
 }
 
 function bytesToHex(buf: ArrayBuffer): string {
@@ -50,51 +62,66 @@ export async function hashPassword(password: string, salt: string): Promise<stri
   return sha256Hex(`${salt}:${password}`);
 }
 
-function loadCreds(): CredMap {
-  try {
-    const raw = localStorage.getItem(CREDS_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as CredMap;
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
+function normalizePayload(raw: unknown): CredPayload {
+  const p = (raw && typeof raw === 'object' ? raw : {}) as Partial<CredPayload>;
+  return {
+    policy: {
+      allowDemoPassword:
+        typeof p.policy?.allowDemoPassword === 'boolean'
+          ? p.policy.allowDemoPassword
+          : DEFAULT_POLICY.allowDemoPassword,
+    },
+    credentials:
+      p.credentials && typeof p.credentials === 'object' ? { ...p.credentials } : {},
+  };
 }
 
-function saveCreds(map: CredMap) {
-  localStorage.setItem(CREDS_KEY, JSON.stringify(map));
+async function flush(): Promise<void> {
+  const ws = currentWorkspaceId();
+  setPlatformDocMemory(ws, 'auth-credentials', memory);
+  if (!canUsePlatformDocsApi()) {
+    throw new Error('共享服务未连通，无法保存账号密码。请先部署 Nest /api。');
+  }
+  await scheduleSavePlatformDoc(ws, 'auth-credentials', memory, 200);
+}
+
+export async function hydrateAccountCredentials(workspaceId?: string): Promise<void> {
+  const ws = workspaceId || currentWorkspaceId();
+  if (hydratedWs === ws && Object.keys(memory.credentials).length) return;
+  try {
+    const remote = await fetchPlatformDoc<unknown>(ws, 'auth-credentials');
+    if (remote) {
+      memory = normalizePayload(remote);
+      hydratedWs = ws;
+      return;
+    }
+  } catch {
+    /* keep memory */
+  }
+  const peeked = peekPlatformDocMemory<unknown>(ws, 'auth-credentials');
+  if (peeked) memory = normalizePayload(peeked);
+  hydratedWs = ws;
 }
 
 export function loadAuthPolicy(): AuthPolicy {
-  try {
-    const raw = localStorage.getItem(POLICY_KEY);
-    if (!raw) return { ...DEFAULT_POLICY };
-    const parsed = JSON.parse(raw) as Partial<AuthPolicy>;
-    return {
-      allowDemoPassword:
-        typeof parsed.allowDemoPassword === 'boolean'
-          ? parsed.allowDemoPassword
-          : DEFAULT_POLICY.allowDemoPassword,
-    };
-  } catch {
-    return { ...DEFAULT_POLICY };
-  }
+  return { ...memory.policy };
 }
 
-export function saveAuthPolicy(policy: AuthPolicy) {
-  localStorage.setItem(POLICY_KEY, JSON.stringify(policy));
+export async function saveAuthPolicy(policy: AuthPolicy): Promise<void> {
+  memory = { ...memory, policy: { ...policy } };
+  await flush();
 }
 
-export function setAllowDemoPassword(allow: boolean) {
-  saveAuthPolicy({ ...loadAuthPolicy(), allowDemoPassword: allow });
+export async function setAllowDemoPassword(allow: boolean): Promise<void> {
+  await saveAuthPolicy({ ...loadAuthPolicy(), allowDemoPassword: allow });
 }
 
 export function hasCredential(email: string): boolean {
-  return Boolean(loadCreds()[normalizeEmail(email)]);
+  return Boolean(memory.credentials[normalizeEmail(email)]);
 }
 
 export function listCredentialEmails(): string[] {
-  return Object.keys(loadCreds()).sort();
+  return Object.keys(memory.credentials).sort();
 }
 
 export async function setAccountPassword(
@@ -106,45 +133,51 @@ export async function setAccountPassword(
   if (!password || password.length < 6) {
     return { ok: false, error: '密码至少 6 位' };
   }
-  const salt = randomSalt();
-  const hash = await hashPassword(password, salt);
-  const map = loadCreds();
-  map[e] = { salt, hash, updatedAt: new Date().toISOString() };
-  saveCreds(map);
-  return { ok: true };
-}
-
-export function clearAccountPassword(email: string) {
-  const map = loadCreds();
-  delete map[normalizeEmail(email)];
-  saveCreds(map);
-}
-
-/** 将本地已存密码的 @company.com 键迁移为 @huawei.com */
-export function migrateCredentialEmailDomain() {
-  const map = loadCreds();
-  let changed = false;
-  for (const email of Object.keys(map)) {
-    const next = email.replace(/@company\.com$/i, '@huawei.com');
-    if (next === email) continue;
-    if (!map[next]) map[next] = map[email]!;
-    delete map[email];
-    changed = true;
+  try {
+    await hydrateAccountCredentials();
+    const salt = randomSalt();
+    const hash = await hashPassword(password, salt);
+    memory = {
+      ...memory,
+      credentials: {
+        ...memory.credentials,
+        [e]: { salt, hash, updatedAt: new Date().toISOString() },
+      },
+    };
+    await flush();
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : '保存密码失败',
+    };
   }
-  if (changed) saveCreds(map);
+}
+
+export async function clearAccountPassword(email: string): Promise<void> {
+  await hydrateAccountCredentials();
+  const next = { ...memory.credentials };
+  delete next[normalizeEmail(email)];
+  memory = { ...memory, credentials: next };
+  await flush();
+}
+
+/** @deprecated 域名迁移已在服务端 normalize */
+export function migrateCredentialEmailDomain() {
+  /* no-op：不再使用 localStorage */
 }
 
 export async function verifyAccountPassword(
   email: string,
   password: string,
 ): Promise<'match' | 'mismatch' | 'unset'> {
-  const cred = loadCreds()[normalizeEmail(email)];
+  await hydrateAccountCredentials();
+  const cred = memory.credentials[normalizeEmail(email)];
   if (!cred) return 'unset';
   const hash = await hashPassword(password, cred.salt);
   return hash === cred.hash ? 'match' : 'mismatch';
 }
 
-/** 批量：每行 `邮箱,密码` 或 `邮箱 密码` / Tab 分隔 */
 export async function batchSetAccountPasswords(
   text: string,
 ): Promise<{ ok: number; fail: { line: string; error: string }[] }> {
@@ -169,10 +202,6 @@ export async function batchSetAccountPasswords(
   return { ok, fail };
 }
 
-/**
- * 将给定邮箱列表的密码全部设为指定值（默认 mssclaw）。
- * 用于种子角色账号初始化 / 运营一键重置。
- */
 export async function setPasswordsForEmails(
   emails: string[],
   password: string = DEFAULT_ACCOUNT_PASSWORD,
@@ -188,34 +217,21 @@ export async function setPasswordsForEmails(
   return { ok, fail };
 }
 
-/**
- * 启动迁移：一次性把当前全部可登录账号密码初始化为 mssclaw。
- * 已执行过则跳过；未设密的后续种子账号仍会在 ensureMissing 中补齐。
- */
 export async function migrateInitAllPasswordsToMssclaw(
   emails: string[],
 ): Promise<{ ran: boolean; ok: number }> {
-  try {
-    if (localStorage.getItem(CREDS_INIT_MSSCLAW_KEY) === '1') {
-      return { ran: false, ok: 0 };
-    }
-  } catch {
-    /* ignore */
-  }
-  const { ok } = await setPasswordsForEmails(emails, DEFAULT_ACCOUNT_PASSWORD);
-  try {
-    localStorage.setItem(CREDS_INIT_MSSCLAW_KEY, '1');
-  } catch {
-    /* ignore */
-  }
+  await hydrateAccountCredentials();
+  const missing = emails.filter((e) => !hasCredential(e));
+  if (!missing.length) return { ran: false, ok: 0 };
+  const { ok } = await setPasswordsForEmails(missing, DEFAULT_ACCOUNT_PASSWORD);
   return { ran: true, ok };
 }
 
-/** 对尚未设密的账号补齐默认密码 mssclaw（不覆盖已有密码） */
 export async function ensureMissingPasswords(
   emails: string[],
   password: string = DEFAULT_ACCOUNT_PASSWORD,
 ): Promise<number> {
+  await hydrateAccountCredentials();
   let n = 0;
   for (const email of emails) {
     if (hasCredential(email)) continue;
@@ -225,7 +241,6 @@ export async function ensureMissingPasswords(
   return n;
 }
 
-/** 生成临时密码（邀请/重置时展示一次） */
 export function generateTempPassword(length = 10): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
   const bytes = new Uint8Array(length);

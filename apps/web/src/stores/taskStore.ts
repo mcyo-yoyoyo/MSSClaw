@@ -2,17 +2,6 @@ import { create } from 'zustand';
 import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
 import { useConversationStore } from '@/stores/conversationStore';
 
-const LS_ARTIFACT = 'mssclaw_artifact_collapsed';
-const LS_SESSION_GROUPS = 'mssclaw_session_groups';
-
-function loadSessionGroups(): Record<string, boolean> {
-  try {
-    return JSON.parse(localStorage.getItem(LS_SESSION_GROUPS) || '{}');
-  } catch {
-    return {};
-  }
-}
-
 /** 任务区空态/高亮：任务记录 vs 协作空间 */
 export type TaskLanding = 'tasks' | 'collab';
 
@@ -39,9 +28,9 @@ interface TaskState {
 }
 
 export const useTaskStore = create<TaskState>((set, get) => ({
-  artifactPanelCollapsed: localStorage.getItem(LS_ARTIFACT) === '1',
+  artifactPanelCollapsed: false,
   focusBannerVisible: false,
-  sessionGroupsCollapsed: loadSessionGroups(),
+  sessionGroupsCollapsed: {},
   sessionSearch: '',
   createDialogOpen: false,
   resourceExplorerOpen: false,
@@ -50,17 +39,18 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   setTaskLanding: (taskLanding) => set({ taskLanding }),
 
   toggleArtifactPanel: () => {
-    const next = !get().artifactPanelCollapsed;
-    localStorage.setItem(LS_ARTIFACT, next ? '1' : '0');
-    set({ artifactPanelCollapsed: next });
+    set({ artifactPanelCollapsed: !get().artifactPanelCollapsed });
   },
 
   dismissFocusBanner: () => set({ focusBannerVisible: false }),
 
   toggleSessionGroup: (group) => {
-    const next = { ...get().sessionGroupsCollapsed, [group]: !get().sessionGroupsCollapsed[group] };
-    localStorage.setItem(LS_SESSION_GROUPS, JSON.stringify(next));
-    set({ sessionGroupsCollapsed: next });
+    set({
+      sessionGroupsCollapsed: {
+        ...get().sessionGroupsCollapsed,
+        [group]: !get().sessionGroupsCollapsed[group],
+      },
+    });
   },
 
   setSessionSearch: (q) => set({ sessionSearch: q }),

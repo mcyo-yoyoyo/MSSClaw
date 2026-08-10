@@ -6,7 +6,6 @@ import { writeAppRouteToLocation } from '@/domain/appRoute';
 import { MARKET_SHELF_META } from '@/domain/marketShelf';
 import { NAV_PRESENTATION_META } from '@/domain/navPresentation';
 import { canExecuteChat } from '@/domain/permissions';
-import { allowsTaskExecutionSurfaces } from '@/domain/marketRunCapability';
 import { ROLE_LABELS } from '@/domain/rbac';
 import { formatRolePerspective } from '@/domain/rolePerspective';
 import { defaultShellPerspective, isOpsOnlyView } from '@/domain/shellPerspective';
@@ -68,9 +67,7 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
   const logout = useSessionStore((s) => s.logout);
   const isOpsShell = defaultShellPerspective(user?.platformRole) === 'ops';
   const executeAllowed = canExecuteChat(user?.platformRole);
-  const navPreset = useNavPresentationStore((s) => s.preset);
-  const showTaskEntry =
-    executeAllowed && isViewEnabled('task') && allowsTaskExecutionSurfaces(navPreset);
+  const showTaskEntry = executeAllowed && isViewEnabled('task');
   const adminItems = useMemo(
     () => ADMIN_MENU_ITEMS.filter((i) => isViewEnabled(i.view)),
     [isViewEnabled],

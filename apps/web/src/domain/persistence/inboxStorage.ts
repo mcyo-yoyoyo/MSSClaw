@@ -1,36 +1,38 @@
 import type { InboxMessage } from '@/domain/inbox';
+import {
+  canUsePlatformDocsApi,
+  fetchPlatformDoc,
+  scheduleSavePlatformDoc,
+} from '@/api/platformDocsApi';
 
-const VERSION = 'v3-inbox';
-
-function versionKey(workspaceId: string) {
-  return `mssclaw_inbox_ver_${workspaceId}`;
-}
-
-function dataKey(workspaceId: string) {
-  return `mssclaw_inbox_${workspaceId}`;
-}
+/** 内存态：禁止写入 localStorage */
+const memoryInbox = new Map<string, InboxMessage[]>();
 
 export function loadInboxMessages(workspaceId: string): InboxMessage[] {
-  try {
-    if (localStorage.getItem(versionKey(workspaceId)) !== VERSION) {
-      localStorage.setItem(versionKey(workspaceId), VERSION);
-      localStorage.removeItem(dataKey(workspaceId));
-      return [];
-    }
-    const raw = localStorage.getItem(dataKey(workspaceId));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as InboxMessage[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  return memoryInbox.has(workspaceId)
+    ? structuredClone(memoryInbox.get(workspaceId)!)
+    : [];
 }
 
 export function saveInboxMessages(workspaceId: string, messages: InboxMessage[]) {
+  memoryInbox.set(workspaceId, structuredClone(messages));
+  if (!canUsePlatformDocsApi()) return;
+  void scheduleSavePlatformDoc(workspaceId, 'inbox', { messages });
+}
+
+export async function hydrateInboxMessages(workspaceId: string): Promise<InboxMessage[]> {
+  if (!canUsePlatformDocsApi()) {
+    return loadInboxMessages(workspaceId);
+  }
   try {
-    localStorage.setItem(versionKey(workspaceId), VERSION);
-    localStorage.setItem(dataKey(workspaceId), JSON.stringify(messages));
+    const remote = await fetchPlatformDoc<{ messages?: InboxMessage[] }>(
+      workspaceId,
+      'inbox',
+    );
+    const messages = Array.isArray(remote?.messages) ? remote.messages : [];
+    memoryInbox.set(workspaceId, messages);
+    return structuredClone(messages);
   } catch {
-    /* quota */
+    return loadInboxMessages(workspaceId);
   }
 }

@@ -18,11 +18,6 @@ export const useShellPerspectiveStore = create<ShellPerspectiveState>((set, get)
   perspective: 'business',
 
   hydrate: (role) => {
-    try {
-      localStorage.removeItem('mssclaw_shell_perspective');
-    } catch {
-      /* ignore */
-    }
     set({ perspective: loadShellPerspective(role) });
   },
 

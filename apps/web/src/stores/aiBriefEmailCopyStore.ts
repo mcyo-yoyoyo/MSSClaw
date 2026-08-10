@@ -3,9 +3,12 @@ import {
   DEFAULT_AI_BRIEF_EMAIL_COPY,
   type AiBriefEmailCopy,
 } from '@/domain/aiBriefEmailCopy';
-
-const LS_KEY = 'mssclaw_ai_brief_email_copy_v2';
-const LS_KEY_V1 = 'mssclaw_ai_brief_email_copy_v1';
+import {
+  canUsePlatformDocsApi,
+  currentWorkspaceId,
+  fetchPlatformDoc,
+  scheduleSavePlatformDoc,
+} from '@/api/platformDocsApi';
 
 function normalize(raw: Partial<AiBriefEmailCopy> | null | undefined): AiBriefEmailCopy {
   return {
@@ -34,41 +37,9 @@ function normalize(raw: Partial<AiBriefEmailCopy> | null | undefined): AiBriefEm
   };
 }
 
-/** v1 → v2：强制初始化主标题 / 引导标题 / 按钮文案，保留其余配置 */
-function migrateV1ToV2(raw: Partial<AiBriefEmailCopy>): AiBriefEmailCopy {
-  return normalize({
-    ...raw,
-    headline: DEFAULT_AI_BRIEF_EMAIL_COPY.headline,
-    ctaTitle: DEFAULT_AI_BRIEF_EMAIL_COPY.ctaTitle,
-    ctaButtonLabel: DEFAULT_AI_BRIEF_EMAIL_COPY.ctaButtonLabel,
-  });
-}
-
-function load(): AiBriefEmailCopy {
-  try {
-    const rawV2 = localStorage.getItem(LS_KEY);
-    if (rawV2) {
-      const parsed = JSON.parse(rawV2) as Partial<AiBriefEmailCopy>;
-      return normalize(parsed);
-    }
-    const rawV1 = localStorage.getItem(LS_KEY_V1);
-    if (rawV1) {
-      const parsed = JSON.parse(rawV1) as Partial<AiBriefEmailCopy>;
-      const migrated = migrateV1ToV2(parsed);
-      persist(migrated);
-      localStorage.removeItem(LS_KEY_V1);
-      return migrated;
-    }
-  } catch {
-    /* ignore */
-  }
-  const defaults = { ...DEFAULT_AI_BRIEF_EMAIL_COPY };
-  persist(defaults);
-  return defaults;
-}
-
 function persist(copy: AiBriefEmailCopy) {
-  localStorage.setItem(LS_KEY, JSON.stringify(copy));
+  if (!canUsePlatformDocsApi()) return;
+  void scheduleSavePlatformDoc(currentWorkspaceId(), 'ai-brief-email-copy', copy);
 }
 
 interface AiBriefEmailCopyState {
@@ -81,15 +52,36 @@ interface AiBriefEmailCopyState {
 }
 
 export const useAiBriefEmailCopyStore = create<AiBriefEmailCopyState>((set, get) => ({
-  copy: load(),
+  copy: { ...DEFAULT_AI_BRIEF_EMAIL_COPY },
   toast: null,
 
-  hydrate: () => set({ copy: load() }),
+  hydrate: () => {
+    void (async () => {
+      if (!canUsePlatformDocsApi()) {
+        set({ copy: { ...DEFAULT_AI_BRIEF_EMAIL_COPY } });
+        return;
+      }
+      try {
+        const remote = await fetchPlatformDoc<Partial<AiBriefEmailCopy>>(
+          currentWorkspaceId(),
+          'ai-brief-email-copy',
+        );
+        set({ copy: normalize(remote) });
+      } catch {
+        set({ copy: { ...DEFAULT_AI_BRIEF_EMAIL_COPY } });
+      }
+    })();
+  },
 
   update: (patch) => {
     const next = normalize({ ...get().copy, ...patch });
     persist(next);
-    set({ copy: next, toast: '已保存 AI 快讯邮件文案' });
+    set({
+      copy: next,
+      toast: canUsePlatformDocsApi()
+        ? '已保存 AI 快讯邮件文案'
+        : '共享服务未连通，文案未持久化',
+    });
   },
 
   resetToDefaults: () => {

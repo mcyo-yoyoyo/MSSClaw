@@ -159,7 +159,7 @@ export async function* mockExecutionStream(params: {
   };
 }
 
-/** Unified entry — LLM client stream when configured, else remote SSE or mock */
+/** Unified entry — Nest SSE first when API online (persists history); browser LLM only offline */
 export async function* streamExecution(params: {
   chatId: string;
   message: string;
@@ -174,11 +174,55 @@ export async function* streamExecution(params: {
   skillId?: string;
   skillName?: string;
 }): AsyncGenerator<StreamEvent> {
+  const actionType = params.actionType ?? resolveAgentType(params.chatId, params.message);
+  const agentName =
+    params.agentName ||
+    params.skillName ||
+    resolveSkillFromText(params.message)?.name ||
+    getAgentName(params.chatId, actionType);
+
+  if (shouldUseRemoteStream()) {
+    try {
+      const response = await fetch(apiUrl('/api/v1/executions/stream'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+        body: JSON.stringify({
+          chatId: params.chatId,
+          message: params.message,
+          workspaceId: params.workspaceId,
+          planSteps: params.planSteps,
+          systemPrompt: params.systemPrompt,
+          agentName,
+          actionType,
+          kbContext: params.kbContext,
+        }),
+        signal: params.signal,
+      });
+
+      if (!response.ok || !response.body) {
+        yield {
+          type: 'error',
+          message: `执行服务异常（HTTP ${response.status || 'no-body'}），未回退本地 Mock`,
+        };
+        return;
+      }
+
+      yield* parseSSEStream(response.body);
+      return;
+    } catch (error) {
+      if (params.signal?.aborted) return;
+      const msg = error instanceof Error ? error.message : '未知错误';
+      yield { type: 'error', message: `执行流中断：${msg}` };
+      return;
+    }
+  }
+
+  // API 离线：若本机配置了 LLM，走浏览器直连；否则明确报错（禁止静默 Mock）
   if (isLlmConfigured() && params.planSteps?.length) {
     yield* llmExecutionStream({
       message: params.message,
-      actionType: params.actionType ?? resolveAgentType(params.chatId, params.message),
-      agentName: params.agentName ?? 'Agent',
+      actionType,
+      agentName,
       systemPrompt: params.systemPrompt,
       planSteps: params.planSteps,
       kbContext: params.kbContext,
@@ -187,33 +231,10 @@ export async function* streamExecution(params: {
     return;
   }
 
-  if (!shouldUseRemoteStream()) {
-    yield* mockExecutionStream(params);
-    return;
-  }
-
-  try {
-    const response = await fetch(apiUrl('/api/v1/executions/stream'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify({
-        chatId: params.chatId,
-        message: params.message,
-        workspaceId: params.workspaceId,
-      }),
-      signal: params.signal,
-    });
-
-    if (!response.ok || !response.body) {
-      yield* mockExecutionStream(params);
-      return;
-    }
-
-    yield* parseSSEStream(response.body);
-  } catch (error) {
-    if (params.signal?.aborted) return;
-    yield* mockExecutionStream(params);
-  }
+  yield {
+    type: 'error',
+    message: '共享执行服务未连接。请启动 Nest API 后再运行任务（已禁止静默本地 Mock）。',
+  };
 }
 
 export function exportExecutionSnapshot(params: {
@@ -238,38 +259,38 @@ export async function pushArtifactToGroup(params: {
   artifactType?: 'marketing' | 'knowledge';
   query?: string;
   webhookUrl?: string;
-}): Promise<{ ok: boolean; message: string }> {
+}): Promise<{ ok: boolean; message: string; skipped?: boolean }> {
   const webhookUrl = params.webhookUrl?.trim();
 
-  if (webhookUrl) {
-    try {
-      const res = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event: 'artifact.push',
-          chatTitle: params.chatTitle,
-          targetGroup: params.targetGroup,
-          artifactType: params.artifactType ?? 'marketing',
-          query: params.query ?? '',
-          pushedAt: new Date().toISOString(),
-        }),
-      });
-
-      if (!res.ok) {
-        return { ok: false, message: `Webhook 推送失败 · HTTP ${res.status}` };
-      }
-
-      return { ok: true, message: `已通过 Webhook 推送到「${params.targetGroup}」` };
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : '未知错误';
-      return { ok: false, message: `Webhook 推送失败：${msg}` };
-    }
+  if (!webhookUrl) {
+    return {
+      ok: true,
+      skipped: true,
+      message: '未配置外部 Webhook（仅站内推送）',
+    };
   }
 
-  await sleep(600);
-  return {
-    ok: true,
-    message: `已将 Artifact 推送到「${params.targetGroup}」`,
-  };
+  try {
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event: 'artifact.push',
+        chatTitle: params.chatTitle,
+        targetGroup: params.targetGroup,
+        artifactType: params.artifactType ?? 'marketing',
+        query: params.query ?? '',
+        pushedAt: new Date().toISOString(),
+      }),
+    });
+
+    if (!res.ok) {
+      return { ok: false, message: `Webhook 推送失败 · HTTP ${res.status}` };
+    }
+
+    return { ok: true, message: `已通过 Webhook 推送到「${params.targetGroup}」` };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '未知错误';
+    return { ok: false, message: `Webhook 推送失败：${msg}` };
+  }
 }

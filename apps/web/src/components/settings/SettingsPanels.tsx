@@ -626,7 +626,7 @@ function AccountPasswordAdminSection({
   return (
     <div className="space-y-3">
       <p className="text-[11px] leading-relaxed text-zinc-500">
-        密码保存在本机浏览器。生产前请关闭演示密码，并为账号单独设密。已设密：{credCount}。
+        密码保存在共享服务端（工作区 docs）。生产前请关闭演示密码，并为账号单独设密。已设密：{credCount}。
       </p>
       <label className="flex items-start gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-[12px] text-zinc-700">
         <input
@@ -636,7 +636,7 @@ function AccountPasswordAdminSection({
           onChange={(e) => {
             const next = e.target.checked;
             setAllowDemo(next);
-            setAllowDemoPassword(next);
+            void setAllowDemoPassword(next);
             setToast(
               next
                 ? '已开启演示密码（未设密账号仍可用 mssclaw）'

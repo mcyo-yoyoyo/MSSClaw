@@ -22,13 +22,12 @@ import { canRoleAccessView } from '@/domain/navRbac';
 import type { PlatformRole } from '@/domain/rbac';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
-
-/** v8: 业务壳增加三货架槽位（顶栏）；完整能力在运营/超管角色上配置 */
-const LS_KEY = 'mssclaw_nav_presentation_v8';
-const LS_KEY_V7 = 'mssclaw_nav_presentation_v7';
-const LS_KEY_V6 = 'mssclaw_nav_presentation_v6';
-const LS_KEY_V5 = 'mssclaw_nav_presentation_v5';
-const LS_KEY_V4 = 'mssclaw_nav_presentation_v4';
+import {
+  canUsePlatformDocsApi,
+  currentWorkspaceId,
+  fetchPlatformDoc,
+  scheduleSavePlatformDoc,
+} from '@/api/platformDocsApi';
 
 interface PersistedNavPresentation {
   preset: NavPresetId;
@@ -53,7 +52,7 @@ function mergeRoleEnabled(parsed: Partial<RoleNavMatrix> | undefined): RoleNavMa
 }
 
 function normalizePersisted(preset: NavPresetId, roleEnabled: RoleNavMatrix): PersistedNavPresentation {
-  // 命名预设以代码矩阵为准（避免旧 localStorage 卡住超管精简菜单）
+  // 命名预设以代码矩阵为准（避免旧配置卡住超管精简菜单）
   if (preset === 'customer' || preset === 'standard' || preset === 'full') {
     return { preset, roleEnabled: buildRoleNavPreset(preset) };
   }
@@ -61,105 +60,21 @@ function normalizePersisted(preset: NavPresetId, roleEnabled: RoleNavMatrix): Pe
   return { preset, roleEnabled: clampBusinessShellSlots(roleEnabled) };
 }
 
-function loadPersisted(): PersistedNavPresentation {
-  try {
-    const v8 = localStorage.getItem(LS_KEY);
-    if (v8) {
-      const parsed = JSON.parse(v8) as Partial<PersistedNavPresentation>;
-      const preset =
-        parsed.preset === 'customer' ||
-        parsed.preset === 'standard' ||
-        parsed.preset === 'custom' ||
-        parsed.preset === 'full'
-          ? parsed.preset
-          : 'customer';
-      return normalizePersisted(preset, mergeRoleEnabled(parsed.roleEnabled));
-    }
-
-    const v7 = localStorage.getItem(LS_KEY_V7);
-    if (v7) {
-      const parsed = JSON.parse(v7) as Partial<PersistedNavPresentation>;
-      const preset =
-        parsed.preset === 'customer' ||
-        parsed.preset === 'standard' ||
-        parsed.preset === 'custom' ||
-        parsed.preset === 'full'
-          ? parsed.preset
-          : 'customer';
-      // 命名预设以代码为准（写入三货架）；custom 合并后由 clamp 补齐
-      const next = normalizePersisted(preset, mergeRoleEnabled(parsed.roleEnabled));
-      persist(next);
-      return next;
-    }
-
-    const v6 = localStorage.getItem(LS_KEY_V6);
-    if (v6) {
-      const parsed = JSON.parse(v6) as Partial<PersistedNavPresentation>;
-      const preset =
-        parsed.preset === 'customer' ||
-        parsed.preset === 'standard' ||
-        parsed.preset === 'custom' ||
-        parsed.preset === 'full'
-          ? parsed.preset
-          : 'customer';
-      const next = normalizePersisted(preset, mergeRoleEnabled(parsed.roleEnabled));
-      persist(next);
-      return next;
-    }
-
-    const v5 = localStorage.getItem(LS_KEY_V5);
-    if (v5) {
-      const parsed = JSON.parse(v5) as Partial<PersistedNavPresentation>;
-      const preset =
-        parsed.preset === 'customer' ||
-        parsed.preset === 'standard' ||
-        parsed.preset === 'custom' ||
-        parsed.preset === 'full'
-          ? parsed.preset
-          : 'customer';
-      const next = normalizePersisted(preset, mergeRoleEnabled(parsed.roleEnabled));
-      persist(next);
-      return next;
-    }
-
-    const v4 = localStorage.getItem(LS_KEY_V4);
-    if (v4) {
-      const parsed = JSON.parse(v4) as Partial<PersistedNavPresentation>;
-      const preset =
-        parsed.preset === 'customer' ||
-        parsed.preset === 'standard' ||
-        parsed.preset === 'custom' ||
-        parsed.preset === 'full'
-          ? parsed.preset
-          : 'customer';
-      const next = normalizePersisted(preset, mergeRoleEnabled(parsed.roleEnabled));
-      persist(next);
-      return next;
-    }
-
-    const v3 = localStorage.getItem('mssclaw_nav_presentation_v3');
-    if (v3) {
-      const parsed = JSON.parse(v3) as { preset?: NavPresetId; enabled?: Record<string, boolean> };
-      const roleEnabled = migrateLegacyEnabled(parsed.enabled ?? {});
-      const preset =
-        parsed.preset === 'customer' ||
-        parsed.preset === 'standard' ||
-        parsed.preset === 'custom' ||
-        parsed.preset === 'full'
-          ? parsed.preset
-          : 'customer';
-      const next = normalizePersisted(preset, roleEnabled);
-      persist(next);
-      return next;
-    }
-  } catch {
-    /* fallthrough */
-  }
-  return defaultState();
+function fromRemote(remote: Partial<PersistedNavPresentation> | null): PersistedNavPresentation {
+  if (!remote) return defaultState();
+  const preset =
+    remote.preset === 'customer' ||
+    remote.preset === 'standard' ||
+    remote.preset === 'custom' ||
+    remote.preset === 'full'
+      ? remote.preset
+      : 'customer';
+  return normalizePersisted(preset, mergeRoleEnabled(remote.roleEnabled));
 }
 
 function persist(state: PersistedNavPresentation) {
-  localStorage.setItem(LS_KEY, JSON.stringify(state));
+  if (!canUsePlatformDocsApi()) return;
+  void scheduleSavePlatformDoc(currentWorkspaceId(), 'nav-presentation', state);
 }
 
 function currentRole(): PlatformRole {
@@ -168,6 +83,7 @@ function currentRole(): PlatformRole {
 
 interface NavPresentationState extends PersistedNavPresentation {
   editingRole: PlatformRole;
+  hydrate: () => void;
   setEditingRole: (role: PlatformRole) => void;
   isSlotEnabled: (slot: NavSlotId, role?: PlatformRole) => boolean;
   isViewEnabled: (view: AppView) => boolean;
@@ -182,11 +98,29 @@ interface NavPresentationState extends PersistedNavPresentation {
 }
 
 export const useNavPresentationStore = create<NavPresentationState>((set, get) => {
-  const initial = loadPersisted();
+  const initial = defaultState();
 
   return {
     ...initial,
     editingRole: 'business_user',
+
+    hydrate: () => {
+      void (async () => {
+        if (!canUsePlatformDocsApi()) {
+          set(defaultState());
+          return;
+        }
+        try {
+          const remote = await fetchPlatformDoc<Partial<PersistedNavPresentation>>(
+            currentWorkspaceId(),
+            'nav-presentation',
+          );
+          set(fromRemote(remote));
+        } catch {
+          set(defaultState());
+        }
+      })();
+    },
 
     setEditingRole: (editingRole) => set({ editingRole }),
 

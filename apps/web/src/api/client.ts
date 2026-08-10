@@ -98,8 +98,22 @@ export function setApiAuthKey(value: string): void {
 }
 
 export function apiAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
   const key = getApiAuthKey();
-  return key ? { 'X-API-Key': key } : {};
+  if (key) headers['X-API-Key'] = key;
+  try {
+    const token =
+      typeof sessionStorage !== 'undefined'
+        ? sessionStorage.getItem('mssclaw_auth_token')?.trim()
+        : '';
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+      headers['X-Session-Token'] = token;
+    }
+  } catch {
+    /* ignore */
+  }
+  return headers;
 }
 
 export function apiUrl(path: string) {

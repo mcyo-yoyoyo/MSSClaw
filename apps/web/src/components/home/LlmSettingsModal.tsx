@@ -101,7 +101,14 @@ export function LlmSettingsModal({ open, onClose }: LlmSettingsModalProps) {
 
         <div className="space-y-3 p-5 text-left">
           <p className="text-[12px] text-[#86868b]">
-            预设模型 ID 与厂商 API 一致。也可自定义添加任意 OpenAI 兼容模型。保存 API Key 后用于 Plan / 流式回复；未配置时走本地 Mock。
+            预设模型 ID 与厂商 API 一致。保存后写入
+            <span className="font-semibold text-zinc-700">工作区共享</span>
+            配置（同租户可见，会覆盖同事的模型 Key）：共享 API 在线时执行优先用服务端
+            LLM_*，未设置则用本配置；离线时用于 Plan / 本机直连。未配置且服务端也无 LLM_*
+            时，执行会明确报错（禁止假完成）。
+          </p>
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] leading-relaxed text-amber-900">
+            局域网多人演示建议优先配置服务端 LLM_*；仅一人维护工作区 Key，避免互相覆盖。
           </p>
 
           <div>

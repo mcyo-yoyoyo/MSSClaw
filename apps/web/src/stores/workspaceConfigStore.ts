@@ -5,15 +5,17 @@ import {
   buildDefaultWorkspaceConfigs,
   configToWorkspace,
   isBuiltinTenantId,
-  LS_WORKSPACE_CONFIG,
   resolveWorkspaceDisplay,
   slugifyTenantId,
   type WorkspaceDisplayConfig,
 } from '@/domain/workspaceConfig';
 import { PROTOTYPE_WORKSPACE_ID } from '@/domain/prototype/constants';
-import { MEMBERS_LS_PREFIX } from '@/domain/authAccounts';
-
-const LS_KEY = LS_WORKSPACE_CONFIG;
+import {
+  canUsePlatformDocsApi,
+  currentWorkspaceId,
+  fetchPlatformDoc,
+  scheduleSavePlatformDoc,
+} from '@/api/platformDocsApi';
 
 interface PersistedWorkspaceConfig {
   defaultWorkspaceId: string;
@@ -55,48 +57,50 @@ function normalizeItem(row: Partial<WorkspaceDisplayConfig>, index: number, fall
   };
 }
 
-function loadPersisted(): PersistedWorkspaceConfig {
+function mergePersisted(parsed: Partial<PersistedWorkspaceConfig> | null): PersistedWorkspaceConfig {
   const defaults = buildDefaultWorkspaceConfigs();
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) {
-      return { defaultWorkspaceId: PROTOTYPE_WORKSPACE_ID, items: defaults };
-    }
-    const parsed = JSON.parse(raw) as Partial<PersistedWorkspaceConfig>;
-    const byId = new Map(defaults.map((d) => [d.id, d]));
-    const items: WorkspaceDisplayConfig[] = [];
-    const seen = new Set<string>();
-
-    if (Array.isArray(parsed.items)) {
-      parsed.items.forEach((row, index) => {
-        if (!row?.id || seen.has(row.id)) return;
-        const builtin = byId.get(row.id);
-        const normalized = normalizeItem(row, index, builtin);
-        if (!normalized) return;
-        items.push(normalized);
-        seen.add(row.id);
-        byId.delete(row.id);
-      });
-    }
-
-    byId.forEach((d) => {
-      if (!seen.has(d.id)) items.push(d);
-    });
-
-    const defaultWorkspaceId =
-      typeof parsed.defaultWorkspaceId === 'string' &&
-      items.some((i) => i.id === parsed.defaultWorkspaceId && i.enabled)
-        ? parsed.defaultWorkspaceId
-        : items.find((i) => i.enabled)?.id ?? PROTOTYPE_WORKSPACE_ID;
-
-    return { defaultWorkspaceId, items: items.sort((a, b) => a.sortOrder - b.sortOrder) };
-  } catch {
+  if (!parsed) {
     return { defaultWorkspaceId: PROTOTYPE_WORKSPACE_ID, items: defaults };
   }
+  const byId = new Map(defaults.map((d) => [d.id, d]));
+  const items: WorkspaceDisplayConfig[] = [];
+  const seen = new Set<string>();
+
+  if (Array.isArray(parsed.items)) {
+    parsed.items.forEach((row, index) => {
+      if (!row?.id || seen.has(row.id)) return;
+      const builtin = byId.get(row.id);
+      const normalized = normalizeItem(row, index, builtin);
+      if (!normalized) return;
+      items.push(normalized);
+      seen.add(row.id);
+      byId.delete(row.id);
+    });
+  }
+
+  byId.forEach((d) => {
+    if (!seen.has(d.id)) items.push(d);
+  });
+
+  const defaultWorkspaceId =
+    typeof parsed.defaultWorkspaceId === 'string' &&
+    items.some((i) => i.id === parsed.defaultWorkspaceId && i.enabled)
+      ? parsed.defaultWorkspaceId
+      : items.find((i) => i.enabled)?.id ?? PROTOTYPE_WORKSPACE_ID;
+
+  return { defaultWorkspaceId, items: items.sort((a, b) => a.sortOrder - b.sortOrder) };
+}
+
+function loadPersisted(): PersistedWorkspaceConfig {
+  return mergePersisted(null);
 }
 
 function persist(state: PersistedWorkspaceConfig) {
-  localStorage.setItem(LS_KEY, JSON.stringify(state));
+  if (!canUsePlatformDocsApi()) return;
+  void scheduleSavePlatformDoc(currentWorkspaceId(), 'workspace-config', {
+    defaultWorkspaceId: state.defaultWorkspaceId,
+    items: state.items,
+  });
 }
 
 function itemToWorkspace(cfg: WorkspaceDisplayConfig): Workspace {
@@ -130,7 +134,6 @@ function syncWorkspaceList(state: PersistedWorkspaceConfig) {
     const customCatalogs = buildCatalogsFromItems(state.items);
     useWorkspaceStore.setState((prev) => {
       const nextCatalogs = { ...prev.catalogs };
-      // 刷新自定义租�?catalog 元数据；移除已删除的自定�?
       Object.keys(nextCatalogs).forEach((id) => {
         if (!isBuiltinTenantId(id) && !state.items.some((i) => i.id === id)) {
           delete nextCatalogs[id];
@@ -158,19 +161,11 @@ function ensureActiveWorkspace(state: PersistedWorkspaceConfig) {
         const defaultChatId = switchWorkspace(nextId);
         useConversationStore.getState().loadWorkspace(nextId, defaultChatId);
         useConversationStore.setState({
-          pushToast: `当前租户已不可用，已切换到�?{state.items.find((i) => i.id === nextId)?.name ?? nextId}」`,
+          pushToast: `Current tenant disabled; switched to ${state.items.find((i) => i.id === nextId)?.name ?? nextId}`,
         });
       }
     });
   });
-}
-
-function clearTenantLocalData(id: string) {
-  try {
-    localStorage.removeItem(`${MEMBERS_LS_PREFIX}${id}`);
-  } catch {
-    /* ignore */
-  }
 }
 
 export interface AddTenantInput {
@@ -182,6 +177,7 @@ export interface AddTenantInput {
 }
 
 interface WorkspaceConfigState extends PersistedWorkspaceConfig {
+  hydrate: () => void;
   getConfig: (id: string) => WorkspaceDisplayConfig | undefined;
   getAllConfigs: () => WorkspaceDisplayConfig[];
   getVisibleWorkspaces: () => Workspace[];
@@ -207,6 +203,25 @@ export const useWorkspaceConfigStore = create<WorkspaceConfigState>((set, get) =
 
   return {
     ...initial,
+
+    hydrate: () => {
+      void (async () => {
+        if (!canUsePlatformDocsApi()) return;
+        try {
+          const remote = await fetchPlatformDoc<Partial<PersistedWorkspaceConfig>>(
+            currentWorkspaceId(),
+            'workspace-config',
+          );
+          if (!remote) return;
+          const next = mergePersisted(remote);
+          set(next);
+          syncWorkspaceList(next);
+          ensureActiveWorkspace(next);
+        } catch {
+          /* keep current in-memory state */
+        }
+      })();
+    },
 
     getConfig: (id) => get().items.find((i) => i.id === id),
 
@@ -238,7 +253,7 @@ export const useWorkspaceConfigStore = create<WorkspaceConfigState>((set, get) =
 
     setDefaultWorkspaceId: (id) => {
       if (!get().items.some((i) => i.id === id && i.enabled)) return;
-      const next = { ...get(), defaultWorkspaceId: id };
+      const next = { defaultWorkspaceId: id, items: get().items };
       persist(next);
       set({ defaultWorkspaceId: id });
     },
@@ -262,7 +277,7 @@ export const useWorkspaceConfigStore = create<WorkspaceConfigState>((set, get) =
 
     updateWorkspace: (id, patch) => {
       const items = get().items.map((i) => (i.id === id ? { ...i, ...patch, id, custom: i.custom } : i));
-      const next = { ...get(), items };
+      const next = { defaultWorkspaceId: get().defaultWorkspaceId, items };
       persist(next);
       set({ items });
       syncWorkspaceList(next);
@@ -279,7 +294,7 @@ export const useWorkspaceConfigStore = create<WorkspaceConfigState>((set, get) =
         if (idx === swapWith) return { ...item, sortOrder: index };
         return { ...item, sortOrder: idx };
       });
-      const next = { ...get(), items: reordered };
+      const next = { defaultWorkspaceId: get().defaultWorkspaceId, items: reordered };
       persist(next);
       set({ items: reordered });
       syncWorkspaceList(next);
@@ -306,7 +321,7 @@ export const useWorkspaceConfigStore = create<WorkspaceConfigState>((set, get) =
         enabled: true,
         sortOrder: maxOrder + 1,
         name,
-        description: input.description?.trim() || `${name} 租户空间`,
+        description: input.description?.trim() || `${name} tenant space`,
         namespace,
         memberCount: input.memberCount ?? 1,
         locale: input.locale ?? 'zh-CN',
@@ -314,7 +329,7 @@ export const useWorkspaceConfigStore = create<WorkspaceConfigState>((set, get) =
       };
 
       const items = [...get().items, item];
-      const next = { ...get(), items };
+      const next = { defaultWorkspaceId: get().defaultWorkspaceId, items };
       persist(next);
       set({ items });
       syncWorkspaceList(next);
@@ -334,7 +349,6 @@ export const useWorkspaceConfigStore = create<WorkspaceConfigState>((set, get) =
         defaultWorkspaceId = enabledItems[0]?.id ?? items[0]?.id ?? defaultWorkspaceId;
       }
       const next = { defaultWorkspaceId, items };
-      clearTenantLocalData(id);
       persist(next);
       set(next);
       syncWorkspaceList(next);
@@ -358,40 +372,8 @@ export const useWorkspaceConfigStore = create<WorkspaceConfigState>((set, get) =
     importConfig: (json) => {
       try {
         const parsed = JSON.parse(json) as Partial<PersistedWorkspaceConfig>;
-        const defaults = buildDefaultWorkspaceConfigs();
-        const byBuiltin = new Map(defaults.map((d) => [d.id, d]));
-        const items: WorkspaceDisplayConfig[] = [];
-        const seen = new Set<string>();
-
-        if (Array.isArray(parsed.items)) {
-          parsed.items.forEach((row, index) => {
-            if (!row?.id || seen.has(row.id)) return;
-            const normalized = normalizeItem(row, index, byBuiltin.get(row.id));
-            if (!normalized) return;
-            items.push(normalized);
-            seen.add(row.id);
-            byBuiltin.delete(row.id);
-          });
-        }
-
-        byBuiltin.forEach((d) => {
-          if (!seen.has(d.id)) items.push(d);
-        });
-
-        if (!items.length) return false;
-
-        let defaultWorkspaceId =
-          typeof parsed.defaultWorkspaceId === 'string'
-            ? parsed.defaultWorkspaceId
-            : PROTOTYPE_WORKSPACE_ID;
-        if (!items.some((i) => i.id === defaultWorkspaceId && i.enabled)) {
-          defaultWorkspaceId = items.find((i) => i.enabled)?.id ?? items[0].id;
-        }
-
-        const next = {
-          defaultWorkspaceId,
-          items: items.sort((a, b) => a.sortOrder - b.sortOrder),
-        };
+        const next = mergePersisted(parsed);
+        if (!next.items.length) return false;
         persist(next);
         set(next);
         syncWorkspaceList(next);

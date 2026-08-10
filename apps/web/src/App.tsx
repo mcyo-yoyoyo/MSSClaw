@@ -36,8 +36,11 @@ import {
   LazySettingsDrawer,
 } from '@/features/lazyPages';
 import { useCommandPaletteStore } from '@/stores/commandPaletteStore';
+import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useWorkspaceConfigStore } from '@/stores/workspaceConfigStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
+import { getNavMetaLabel } from '@/domain/navPresentation';
+import { roleNavDisabledToast } from '@/domain/permissions';
 import { useShellPerspectiveStore } from '@/stores/shellPerspectiveStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { TaskGlobalModals } from '@/components/task/TaskGlobalModals';
@@ -48,6 +51,8 @@ import { cn } from '@/lib/utils';
 
 export function App() {
   const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
+  const sessionBootstrapped = useSessionStore((s) => s.bootstrapped);
+  const hydrateFromServer = useSessionStore((s) => s.hydrateFromServer);
   const shellPerspective = useShellPerspectiveStore((s) => s.perspective);
   const switchWorkspace = useWorkspaceStore((s) => s.switchWorkspace);
   const bootstrap = useWorkspaceStore((s) => s.bootstrap);
@@ -97,6 +102,14 @@ export function App() {
   });
 
   const goToTaskWithTransit = useCallback((summary: string, chatId?: string) => {
+    const nav = useNavPresentationStore.getState();
+    if (!nav.isViewEnabled('task')) {
+      const fallback = nav.getFallbackView();
+      useConversationStore.setState({
+        pushToast: roleNavDisabledToast(getNavMetaLabel('task'), getNavMetaLabel(fallback)),
+      });
+      return;
+    }
     if (transitTimerRef.current) clearTimeout(transitTimerRef.current);
     const preview = summary.trim().length > 48 ? `${summary.trim().slice(0, 48)}…` : summary.trim();
     useTaskStore.getState().setTaskLanding('tasks');
@@ -124,6 +137,10 @@ export function App() {
   useEffect(() => {
     registerShareSyncToast((msg) => useMarketplaceStore.getState().showToast(msg));
   }, []);
+
+  useEffect(() => {
+    void hydrateFromServer();
+  }, [hydrateFromServer]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -165,6 +182,12 @@ export function App() {
         await usePortalContentStore.getState().bootstrap(wsId);
         usePlazaToolGuideStore.getState().bootstrap(wsId);
         useInboxStore.getState().bootstrap(wsId);
+        try {
+          const { hydrateAllPlatformDocs } = await import('@/domain/hydratePlatformDocs');
+          await hydrateAllPlatformDocs(wsId);
+        } catch {
+          /* docs optional until API ready */
+        }
 
         const persisted = await loadSessions(wsId);
         const catalogChats = getCatalog(wsId).chats;
@@ -190,6 +213,12 @@ export function App() {
         await usePortalContentStore.getState().bootstrap(nextWorkspaceId);
         usePlazaToolGuideStore.getState().bootstrap(nextWorkspaceId);
         useInboxStore.getState().bootstrap(nextWorkspaceId);
+        try {
+          const { hydrateAllPlatformDocs } = await import('@/domain/hydratePlatformDocs');
+          await hydrateAllPlatformDocs(nextWorkspaceId);
+        } catch {
+          /* docs optional until API ready */
+        }
         const persisted = await loadSessions(nextWorkspaceId);
         const catalog = useWorkspaceStore.getState().getCatalog(nextWorkspaceId);
         const mergedSessions = persisted
@@ -419,6 +448,15 @@ export function App() {
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [closeSettings]);
+
+  if (!sessionBootstrapped) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-[#fbfbfd]">
+        <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-zinc-200 border-t-claw-600" />
+        <p className="text-[13px] text-[#86868b]">正在校验登录会话…</p>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <LoginPage />;

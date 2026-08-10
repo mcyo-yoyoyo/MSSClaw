@@ -66,7 +66,11 @@ export function SettingsDrawerBody({ onClose }: SettingsDrawerBodyProps) {
 
   const saveWebhook = () => {
     saveWarroomWebhookUrl(webhookInput);
-    showToast(webhookInput.trim() ? '作战室 Webhook 已保存' : '已清除 Webhook，将使用本地 Mock 推送');
+    showToast(
+      webhookInput.trim()
+        ? '作战室 Webhook 已保存'
+        : '已清除 Webhook，推送将仅走站内（协作空间 / 我的消息）',
+    );
   };
 
   const openModelSettings = () => {
@@ -133,7 +137,7 @@ export function SettingsDrawerBody({ onClose }: SettingsDrawerBodyProps) {
             </div>
           </SettingsCard>
 
-          <SettingsCard title="安全策略" hint="作用于本机演示环境的全局开关。">
+          <SettingsCard title="安全策略" hint="作用于当前工作区共享环境的全局开关。">
             <label className="flex cursor-pointer items-center justify-between py-2">
               <span className="text-[13px] text-[#1d1d1f]">PII 自动脱敏</span>
               <input
@@ -165,7 +169,7 @@ export function SettingsDrawerBody({ onClose }: SettingsDrawerBodyProps) {
 
           <SettingsCard
             title="演示内容"
-            hint="内网正式使用前，可清空系统自带示例案例/工具/消息等，再导入真实数据。登录账号与成员不会被清除。"
+            hint="内网正式使用前，可清空工作区共享的系统示例案例/工具/消息等，再导入真实数据。登录账号与成员不会被清除。"
           >
             <p className="mb-3 text-[12px] text-[#1d1d1f]">
               当前状态：
@@ -177,13 +181,13 @@ export function SettingsDrawerBody({ onClose }: SettingsDrawerBodyProps) {
                 onClick={() => {
                   if (
                     !window.confirm(
-                      '确定清空本机演示数据并关闭示例注入？\n\n将清除：门户案例、Agent/Skill/工具示例、How to、站内消息与互动示意等。\n不会清除：登录态、成员、租户与密码配置。\n\n清空后页面将刷新，便于导入真实数据。',
+                      '确定清空工作区演示数据并关闭示例注入？\n\n将清除：门户案例、Agent/Skill/工具示例、How to、站内消息与互动示意等（共享配置，同事也会受影响）。\n不会清除：登录态、成员、租户与密码配置。\n\n清空后页面将刷新，便于导入真实数据。',
                     )
                   ) {
                     return;
                   }
                   const { removed } = clearDemoContentAndDisable();
-                  showToast(`已清空演示数据（${removed} 项缓存），即将刷新…`);
+                  showToast(`已清空演示数据（${removed} 项），即将刷新…`);
                   window.setTimeout(() => window.location.reload(), 400);
                 }}
                 className="w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-700 transition hover:bg-red-100"
@@ -201,7 +205,7 @@ export function SettingsDrawerBody({ onClose }: SettingsDrawerBodyProps) {
                     onClick={() => {
                       if (
                         !window.confirm(
-                          '确定一键恢复系统自带演示内容？\n\n将重新加载示例案例、Agent/Skill/工具、How to 等，并覆盖本机当前门户相关数据。\n登录与成员不受影响。恢复后页面将刷新。',
+                          '确定一键恢复系统自带演示内容？\n\n将重新加载示例案例、Agent/Skill/工具、How to 等，并覆盖当前工作区门户相关共享数据。\n登录与成员不受影响。恢复后页面将刷新。',
                         )
                       ) {
                         return;
@@ -251,7 +255,9 @@ export function SettingsDrawerBody({ onClose }: SettingsDrawerBodyProps) {
             >
               恢复自动连接
             </button>
-            <label className="mb-1 block text-[12px] text-[#86868b]">作战室 Webhook（可选）</label>
+            <label className="mb-1 block text-[12px] text-[#86868b]">
+              作战室 Webhook（可选 · 未配置时仅站内推送）
+            </label>
             <input
               type="url"
               value={webhookInput}

@@ -2,6 +2,11 @@ export interface StreamExecutionDto {
   chatId: string;
   message: string;
   workspaceId?: string;
+  planSteps?: string[];
+  systemPrompt?: string;
+  agentName?: string;
+  actionType?: AgentType;
+  kbContext?: string;
 }
 
 export interface ExecutionStep {
@@ -13,8 +18,10 @@ export interface ExecutionStep {
 
 export type AgentType = 'marketing' | 'knowledge';
 
+export type ExecutionSource = 'llm' | 'scripted';
+
 export type StreamEvent =
-  | { type: 'execution_start'; executionId: string }
+  | { type: 'execution_start'; executionId: string; source?: ExecutionSource }
   | { type: 'skill_start'; skill: string; label: string }
   | { type: 'skill_end'; skill: string; latency: string }
   | { type: 'token'; content: string }
@@ -24,6 +31,7 @@ export type StreamEvent =
       totalTime: string;
       steps: ExecutionStep[];
       agentName: string;
+      source?: ExecutionSource;
       followUp?: {
         role: 'other';
         name: string;

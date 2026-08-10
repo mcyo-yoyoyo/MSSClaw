@@ -1,11 +1,14 @@
 import { create } from 'zustand';
 import { AI_NEWS_SEEDS, type AiNewsCadence, type AiNewsItem } from '@/domain/aiNewsSeeds';
 import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
-
-const LS_KEY = 'mssclaw_ai_news_v1';
+import {
+  canUsePlatformDocsApi,
+  currentWorkspaceId,
+  fetchPlatformDoc,
+  scheduleSavePlatformDoc,
+} from '@/api/platformDocsApi';
 
 export type AiNewsRecord = AiNewsItem & {
-  /** 是否在首页跑马灯露出 */
   published: boolean;
 };
 
@@ -29,7 +32,6 @@ function normalize(list: AiNewsRecord[]): AiNewsRecord[] {
     .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
 }
 
-/** 日更：同一自然日只保留一条；周报按周保留一条（列表已按新→旧） */
 function dedupeByCadence(list: AiNewsRecord[]): AiNewsRecord[] {
   const seenDay = new Set<string>();
   const seenWeek = new Set<string>();
@@ -53,26 +55,15 @@ function dedupeByCadence(list: AiNewsRecord[]): AiNewsRecord[] {
   return out;
 }
 
-function load(): AiNewsRecord[] {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as AiNewsRecord[];
-      if (Array.isArray(parsed)) return dedupeByCadence(normalize(parsed));
-    }
-  } catch {
-    /* ignore */
-  }
-  if (isDemoContentEnabled()) {
-    return dedupeByCadence(
-      normalize(AI_NEWS_SEEDS.map((a) => ({ ...a, published: true }))),
-    );
-  }
-  return [];
+function seedItems(): AiNewsRecord[] {
+  if (!isDemoContentEnabled()) return [];
+  return dedupeByCadence(normalize(AI_NEWS_SEEDS.map((a) => ({ ...a, published: true }))));
 }
 
 function persist(items: AiNewsRecord[]) {
-  localStorage.setItem(LS_KEY, JSON.stringify(items));
+  const ws = currentWorkspaceId();
+  if (!canUsePlatformDocsApi()) return;
+  void scheduleSavePlatformDoc(ws, 'ai-news', { items });
 }
 
 interface AiNewsState {
@@ -87,90 +78,63 @@ interface AiNewsState {
   dismissToast: () => void;
 }
 
-const initial = load();
-
 export const useAiNewsStore = create<AiNewsState>((set, get) => ({
-  items: initial,
+  items: seedItems(),
   toast: null,
 
   hydrate: () => {
-    set({ items: load() });
+    void (async () => {
+      if (!canUsePlatformDocsApi()) {
+        set({ items: seedItems() });
+        return;
+      }
+      try {
+        const remote = await fetchPlatformDoc<{ items?: AiNewsRecord[] }>(
+          currentWorkspaceId(),
+          'ai-news',
+        );
+        const list = Array.isArray(remote?.items) ? remote.items : [];
+        set({
+          items: list.length ? dedupeByCadence(normalize(list)) : seedItems(),
+        });
+      } catch {
+        set({ items: seedItems() });
+      }
+    })();
   },
 
-  listPublished: () =>
-    get()
-      .items.filter((a) => a.published)
-      .map(({ published: _p, ...rest }) => rest),
+  listPublished: () => get().items.filter((i) => i.published),
 
   upsert: (item, isNew = false) => {
-    const nextItem = normalize([item])[0];
-    if (!nextItem) {
-      set({ toast: '请填写新闻标题' });
-      return;
-    }
-    const items = get().items;
-    const day = newsDayKey(nextItem.publishedAt);
-    const sameDay = items.find(
-      (a) =>
-        a.cadence === 'daily' &&
-        nextItem.cadence === 'daily' &&
-        newsDayKey(a.publishedAt) === day,
+    const next = dedupeByCadence(
+      normalize(
+        isNew
+          ? [item, ...get().items]
+          : get().items.map((x) => (x.id === item.id ? item : x)),
+      ),
     );
-    const merged: AiNewsRecord =
-      sameDay && sameDay.id !== nextItem.id
-        ? { ...nextItem, id: sameDay.id }
-        : nextItem;
-    const next = [
-      merged,
-      ...items.filter((a) => {
-        if (a.id === merged.id) return false;
-        if (merged.cadence === 'daily' && a.cadence === 'daily') {
-          return newsDayKey(a.publishedAt) !== day;
-        }
-        return true;
-      }),
-    ];
-    const normalized = dedupeByCadence(normalize(next));
-    persist(normalized);
-    const covered = Boolean(sameDay && sameDay.id !== nextItem.id);
-    set({
-      items: normalized,
-      toast: covered
-        ? '已更新当日 AI 新闻（每天仅一条）'
-        : isNew
-          ? '已新增 AI 新闻'
-          : '已保存 AI 新闻',
-    });
+    persist(next);
+    set({ items: next, toast: isNew ? '已新增 AI 新闻' : '已保存 AI 新闻' });
   },
 
   remove: (id) => {
-    const normalized = dedupeByCadence(
-      normalize(get().items.filter((a) => a.id !== id)),
-    );
-    persist(normalized);
-    set({ items: normalized, toast: '已删除新闻' });
+    const next = get().items.filter((x) => x.id !== id);
+    persist(next);
+    set({ items: next, toast: '已删除' });
   },
 
   togglePublished: (id) => {
-    const normalized = dedupeByCadence(
-      normalize(
-        get().items.map((a) => (a.id === id ? { ...a, published: !a.published } : a)),
-      ),
+    const next = get().items.map((x) =>
+      x.id === id ? { ...x, published: !x.published } : x,
     );
-    persist(normalized);
-    const hit = normalized.find((a) => a.id === id);
-    set({
-      items: normalized,
-      toast: hit?.published ? '已上架到首页与总览' : '已下架',
-    });
+    persist(next);
+    set({ items: next });
   },
 
   resetToSeeds: () => {
-    const normalized = dedupeByCadence(
-      normalize(AI_NEWS_SEEDS.map((a) => ({ ...a, published: true }))),
-    );
-    persist(normalized);
-    set({ items: normalized, toast: '已恢复默认 AI 新闻示例' });
+    const next = seedItems();
+    persist(next);
+    set({ items: next, toast: '已恢复种子稿' });
   },
 
   dismissToast: () => set({ toast: null }),

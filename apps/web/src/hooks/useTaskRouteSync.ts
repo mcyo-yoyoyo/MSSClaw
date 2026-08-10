@@ -1,9 +1,12 @@
 import { useEffect, useRef } from 'react';
 import type { AppView } from '@/domain/appView';
 import { parseAppRoute, writeAppRouteToLocation } from '@/domain/appRoute';
+import { getNavMetaLabel } from '@/domain/navPresentation';
+import { roleNavDisabledToast } from '@/domain/permissions';
 import { useConversationStore } from '@/stores/conversationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useAppViewStore } from '@/stores/appViewStore';
+import { useNavPresentationStore } from '@/stores/navPresentationStore';
 
 /**
  * Sync #/task?chat=<id> deep links with conversationStore.
@@ -50,6 +53,14 @@ export function useTaskRouteSync(appView: AppView) {
 
 /** Navigate to task view with a shareable deep link */
 export function navigateToTaskChat(chatId: string): void {
+  const nav = useNavPresentationStore.getState();
+  if (!nav.isViewEnabled('task')) {
+    const fallback = nav.getFallbackView();
+    useConversationStore.setState({
+      pushToast: roleNavDisabledToast(getNavMetaLabel('task'), getNavMetaLabel(fallback)),
+    });
+    return;
+  }
   writeAppRouteToLocation({ view: 'task', chat: chatId });
   useAppViewStore.getState().setAppView('task');
   const { chats, switchChat } = useConversationStore.getState();

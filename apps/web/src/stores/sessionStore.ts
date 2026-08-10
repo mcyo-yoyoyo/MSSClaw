@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { authenticate, buildLoginAccounts, migrateDemoEmailDomain, type LoginAccount } from '@/domain/authAccounts';
+import { authenticate, type LoginAccount } from '@/domain/authAccounts';
 import { normalizePlatformRole, type PlatformRole } from '@/domain/rbac';
 import {
   normalizeOrgAffiliation,
@@ -7,6 +7,13 @@ import {
   type OrgAffiliation,
   type RegionId,
 } from '@/domain/orgTaxonomy';
+import {
+  fetchSessionMeApi,
+  loginWithApi,
+  logoutWithApi,
+} from '@/api/platformDocsApi';
+import { isApiEnabled } from '@/api/client';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 export interface SessionUser {
   id: string;
@@ -21,6 +28,9 @@ export interface SessionUser {
 interface SessionState {
   user: SessionUser | null;
   isAuthenticated: boolean;
+  bootstrapped: boolean;
+  /** 启动时用服务端 token 恢复会话（不再信任本地用户 JSON） */
+  hydrateFromServer: () => Promise<void>;
   login: (
     email: string,
     password: string,
@@ -32,85 +42,23 @@ interface SessionState {
   getOrgAffiliation: () => OrgAffiliation;
 }
 
-const LS_KEY = 'mssclaw_session';
+const TOKEN_KEY = 'mssclaw_auth_token';
 
-function persist(user: SessionUser | null) {
-  if (!user) {
-    localStorage.removeItem(LS_KEY);
-    return;
-  }
-  localStorage.setItem(LS_KEY, JSON.stringify(user));
-}
-
-/** ? session ??????????????????? */
-function enrichOrgFromDirectory(user: SessionUser): SessionUser {
-  if (user.deptIds.length > 0 || user.regionId) return user;
-  const account = buildLoginAccounts().find(
-    (a) => a.email.toLowerCase() === user.email.toLowerCase(),
-  );
-  if (!account) return user;
-  const aff = normalizeOrgAffiliation({
-    deptIds: account.deptIds,
-    regionId: account.regionId,
-  });
-  return {
-    ...user,
-    deptIds: aff.deptIds,
-    regionId: aff.regionId ?? null,
-  };
-}
-
-function loadSession(): SessionUser | null {
+function readToken(): string | null {
   try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<SessionUser>;
-    if (
-      typeof parsed.id === 'string' &&
-      typeof parsed.name === 'string' &&
-      typeof parsed.email === 'string' &&
-      typeof parsed.platformRole === 'string'
-    ) {
-      const aff = normalizeOrgAffiliation({
-        deptIds: Array.isArray(parsed.deptIds) ? (parsed.deptIds as DeptId[]) : [],
-        regionId: (parsed.regionId as RegionId | null | undefined) ?? null,
-      });
-      const base: SessionUser = {
-        id: parsed.id,
-        name: parsed.name,
-        email: migrateDemoEmailDomain(parsed.email),
-        platformRole: normalizePlatformRole(parsed.platformRole),
-        avatar: typeof parsed.avatar === 'string' ? parsed.avatar : 'bg-zinc-900',
-        deptIds: aff.deptIds,
-        regionId: aff.regionId ?? null,
-      };
-      const directory = buildLoginAccounts().find(
-        (a) => a.email.toLowerCase() === base.email.toLowerCase(),
-      );
-      const withDirectory: SessionUser = directory
-        ? {
-            ...base,
-            email: directory.email,
-            platformRole: directory.platformRole,
-            name: directory.name,
-            deptIds: directory.deptIds,
-            regionId: directory.regionId,
-          }
-        : base;
-      const enriched = enrichOrgFromDirectory(withDirectory);
-      const changed =
-        enriched.email !== parsed.email ||
-        enriched.platformRole !== (parsed.platformRole as string) ||
-        enriched.deptIds.join(',') !== (Array.isArray(parsed.deptIds) ? parsed.deptIds.join(',') : '') ||
-        enriched.regionId !== ((parsed.regionId as RegionId | null | undefined) ?? null) ||
-        enriched.name !== base.name;
-      if (changed) persist(enriched);
-      return enriched;
-    }
+    return sessionStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeToken(token: string | null) {
+  try {
+    if (!token) sessionStorage.removeItem(TOKEN_KEY);
+    else sessionStorage.setItem(TOKEN_KEY, token);
   } catch {
     /* ignore */
   }
-  return null;
 }
 
 function toSessionUser(account: LoginAccount): SessionUser {
@@ -129,33 +77,106 @@ function toSessionUser(account: LoginAccount): SessionUser {
   };
 }
 
-export const useSessionStore = create<SessionState>((set, get) => {
-  const initial = loadSession();
+function fromApiUser(u: {
+  id: string;
+  name: string;
+  email: string;
+  platformRole: string;
+  avatar: string;
+  deptIds: string[];
+  regionId: string | null;
+}): SessionUser {
+  const aff = normalizeOrgAffiliation({
+    deptIds: (u.deptIds ?? []) as DeptId[],
+    regionId: (u.regionId as RegionId | null) ?? null,
+  });
   return {
-    user: initial,
-    isAuthenticated: Boolean(initial),
-
-    login: async (email, password) => {
-      const result = await authenticate(email, password);
-      if (!result.ok) return { ok: false, error: result.error };
-      const user = toSessionUser(result.account);
-      persist(user);
-      set({ user, isAuthenticated: true });
-      return { ok: true };
-    },
-
-    logout: () => {
-      persist(null);
-      set({ user: null, isAuthenticated: false });
-    },
-
-    getUserId: () => get().user?.id ?? '',
-    getUserName: () => get().user?.name ?? '',
-    getPlatformRole: () => get().user?.platformRole ?? 'viewer',
-    getOrgAffiliation: () =>
-      normalizeOrgAffiliation({
-        deptIds: get().user?.deptIds ?? [],
-        regionId: get().user?.regionId ?? null,
-      }),
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    platformRole: normalizePlatformRole(u.platformRole),
+    avatar: u.avatar || 'bg-zinc-900',
+    deptIds: aff.deptIds,
+    regionId: aff.regionId ?? null,
   };
-});
+}
+
+export const useSessionStore = create<SessionState>((set, get) => ({
+  user: null,
+  isAuthenticated: false,
+  bootstrapped: false,
+
+  hydrateFromServer: async () => {
+    const token = readToken();
+    if (!token || !isApiEnabled()) {
+      writeToken(null);
+      set({ user: null, isAuthenticated: false, bootstrapped: true });
+      return;
+    }
+    const ws = useWorkspaceStore.getState().workspaceId || 'ws-mss-ai';
+    try {
+      const me = await fetchSessionMeApi(ws);
+      if (me.ok) {
+        set({ user: fromApiUser(me.user), isAuthenticated: true, bootstrapped: true });
+        return;
+      }
+    } catch {
+      /* fallthrough */
+    }
+    writeToken(null);
+    set({ user: null, isAuthenticated: false, bootstrapped: true });
+  },
+
+  login: async (email, password) => {
+    const ws = useWorkspaceStore.getState().workspaceId || 'ws-mss-ai';
+
+    // Prefer server login + token
+    if (isApiEnabled() && useWorkspaceStore.getState().apiConnected) {
+      try {
+        const remote = await loginWithApi({ email, password, workspaceId: ws });
+        if (remote.ok && remote.token) {
+          writeToken(remote.token);
+          set({
+            user: fromApiUser(remote.user),
+            isAuthenticated: true,
+            bootstrapped: true,
+          });
+          return { ok: true };
+        }
+        if (remote.ok === false) {
+          return { ok: false, error: remote.error || '登录失败' };
+        }
+      } catch {
+        /* fall through */
+      }
+      return { ok: false, error: '登录服务不可用，请检查共享 API' };
+    }
+
+    // Offline fallback: memory-only session (no browser user profile cache)
+    const result = await authenticate(email, password);
+    if (!result.ok) return { ok: false, error: result.error };
+    writeToken(null);
+    set({
+      user: toSessionUser(result.account),
+      isAuthenticated: true,
+      bootstrapped: true,
+    });
+    return { ok: true };
+  },
+
+  logout: () => {
+    const ws = useWorkspaceStore.getState().workspaceId || 'ws-mss-ai';
+    void logoutWithApi(ws);
+    writeToken(null);
+    set({ user: null, isAuthenticated: false });
+  },
+
+  getUserId: () => get().user?.id ?? '',
+  getUserName: () => get().user?.name ?? '',
+  getPlatformRole: () => get().user?.platformRole ?? 'viewer',
+  getOrgAffiliation: () =>
+    normalizeOrgAffiliation({
+      deptIds: get().user?.deptIds ?? [],
+      regionId: get().user?.regionId ?? null,
+    }),
+}));

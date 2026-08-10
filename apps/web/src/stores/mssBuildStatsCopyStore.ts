@@ -3,8 +3,12 @@ import {
   DEFAULT_MSS_BUILD_STATS_COPY,
   type MssBuildStatsCopy,
 } from '@/domain/mssBuildStatsCopy';
-
-const LS_KEY = 'mssclaw_mss_build_stats_copy_v1';
+import {
+  canUsePlatformDocsApi,
+  currentWorkspaceId,
+  fetchPlatformDoc,
+  scheduleSavePlatformDoc,
+} from '@/api/platformDocsApi';
 
 function normalize(raw: Partial<MssBuildStatsCopy> | null | undefined): MssBuildStatsCopy {
   return {
@@ -16,21 +20,9 @@ function normalize(raw: Partial<MssBuildStatsCopy> | null | undefined): MssBuild
   };
 }
 
-function load(): MssBuildStatsCopy {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<MssBuildStatsCopy>;
-      return normalize(parsed);
-    }
-  } catch {
-    /* ignore */
-  }
-  return { ...DEFAULT_MSS_BUILD_STATS_COPY };
-}
-
 function persist(copy: MssBuildStatsCopy) {
-  localStorage.setItem(LS_KEY, JSON.stringify(copy));
+  if (!canUsePlatformDocsApi()) return;
+  void scheduleSavePlatformDoc(currentWorkspaceId(), 'mss-build-stats', copy);
 }
 
 interface MssBuildStatsCopyState {
@@ -43,10 +35,26 @@ interface MssBuildStatsCopyState {
 }
 
 export const useMssBuildStatsCopyStore = create<MssBuildStatsCopyState>((set, get) => ({
-  copy: load(),
+  copy: { ...DEFAULT_MSS_BUILD_STATS_COPY },
   toast: null,
 
-  hydrate: () => set({ copy: load() }),
+  hydrate: () => {
+    void (async () => {
+      if (!canUsePlatformDocsApi()) {
+        set({ copy: { ...DEFAULT_MSS_BUILD_STATS_COPY } });
+        return;
+      }
+      try {
+        const remote = await fetchPlatformDoc<Partial<MssBuildStatsCopy>>(
+          currentWorkspaceId(),
+          'mss-build-stats',
+        );
+        set({ copy: normalize(remote) });
+      } catch {
+        set({ copy: { ...DEFAULT_MSS_BUILD_STATS_COPY } });
+      }
+    })();
+  },
 
   update: (patch) => {
     const next = normalize({ ...get().copy, ...patch });

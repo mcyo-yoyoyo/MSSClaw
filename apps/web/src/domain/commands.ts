@@ -189,6 +189,14 @@ const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
     run: () => h.goto('portal-ops'),
   },
   {
+    id: 'goto-executions',
+    label: '打开执行历史',
+    icon: 'fa-clock-rotate-left',
+    keywords: 'execution history 执行 历史 运行记录',
+    view: 'executions',
+    run: () => h.goto('executions'),
+  },
+  {
     id: 'goto-warroom',
     label: '打开协作空间',
     icon: 'fa-users',

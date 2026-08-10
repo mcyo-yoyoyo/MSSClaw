@@ -6,8 +6,12 @@ import {
   type BusinessScenarioId,
   isBusinessScenarioId,
 } from '@/domain/businessScenarios';
-
-const LS_KEY = 'mssclaw_business_scene_catalog_v1';
+import {
+  canUsePlatformDocsApi,
+  currentWorkspaceId,
+  fetchPlatformDoc,
+  scheduleSavePlatformDoc,
+} from '@/api/platformDocsApi';
 
 const ICON_PRESETS = [
   'fa-chart-line',
@@ -62,22 +66,12 @@ function mergeWithDefaults(
   return result;
 }
 
-function load(): BusinessScenarioCategory[] {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as BusinessScenarioCategory[];
-      if (Array.isArray(parsed)) return mergeWithDefaults(parsed);
-    }
-  } catch {
-    /* ignore */
-  }
-  return mergeWithDefaults(null);
-}
-
 function persist(categories: BusinessScenarioCategory[]) {
-  localStorage.setItem(LS_KEY, JSON.stringify(categories));
   setBusinessScenarioCatalog(categories);
+  if (!canUsePlatformDocsApi()) return;
+  void scheduleSavePlatformDoc(currentWorkspaceId(), 'business-scenario-catalog', {
+    categories,
+  });
 }
 
 interface BusinessScenarioCatalogState {
@@ -93,7 +87,7 @@ interface BusinessScenarioCatalogState {
   dismissToast: () => void;
 }
 
-const initial = load();
+const initial = mergeWithDefaults(null);
 setBusinessScenarioCatalog(initial);
 
 export const useBusinessScenarioCatalogStore = create<BusinessScenarioCatalogState>(
@@ -102,9 +96,31 @@ export const useBusinessScenarioCatalogStore = create<BusinessScenarioCatalogSta
     toast: null,
 
     hydrate: () => {
-      const categories = load();
-      setBusinessScenarioCatalog(categories);
-      set({ categories });
+      void (async () => {
+        if (!canUsePlatformDocsApi()) {
+          const categories = mergeWithDefaults(null);
+          setBusinessScenarioCatalog(categories);
+          set({ categories });
+          return;
+        }
+        try {
+          const remote = await fetchPlatformDoc<
+            BusinessScenarioCategory[] | { categories?: BusinessScenarioCategory[] }
+          >(currentWorkspaceId(), 'business-scenario-catalog');
+          const list = Array.isArray(remote)
+            ? remote
+            : Array.isArray(remote?.categories)
+              ? remote.categories
+              : null;
+          const categories = mergeWithDefaults(list);
+          setBusinessScenarioCatalog(categories);
+          set({ categories });
+        } catch {
+          const categories = mergeWithDefaults(null);
+          setBusinessScenarioCatalog(categories);
+          set({ categories });
+        }
+      })();
     },
 
     updateCategory: (id, patch) => {

@@ -1,12 +1,7 @@
-import { PORTAL_CONTENT_VERSION } from '@/domain/prototype/constants';
 import { PROTOTYPE_PORTAL_CONTENT } from '@/domain/prototype/portalContent';
 import type { PortalContentItem } from '@/domain/prototype/portalContent';
 import { RETIRED_DEMO_TOOL_IDS } from '@/domain/prototype/tools';
-import {
-  LS_PORTAL_CONTENT_VERSION,
-  mergeCatalog,
-  portalContentKeyForWorkspace,
-} from '@/domain/persistence/keys';
+import { mergeCatalog } from '@/domain/persistence/keys';
 import {
   fetchPortalContentApi,
   savePortalContentApi,
@@ -42,6 +37,8 @@ export type PortalSaveResult = {
 
 /** 各 workspace 当前已知的服务端 revision（乐观锁） */
 const revisionByWorkspace = new Map<string, number>();
+/** 内存态：禁止写入 localStorage */
+const memoryPortal = new Map<string, PortalContentSnapshot>();
 
 export function getPortalRevision(workspaceId: string): number {
   return revisionByWorkspace.get(workspaceId) ?? 0;
@@ -51,46 +48,27 @@ function setPortalRevision(workspaceId: string, revision: number) {
   revisionByWorkspace.set(workspaceId, revision);
 }
 
-function clearStalePortalContentCaches() {
-  if (localStorage.getItem(LS_PORTAL_CONTENT_VERSION) === PORTAL_CONTENT_VERSION) return;
-  for (let i = localStorage.length - 1; i >= 0; i -= 1) {
-    const key = localStorage.key(i);
-    if (key?.startsWith('mssclaw_portal_content_')) localStorage.removeItem(key);
-  }
-  localStorage.setItem(LS_PORTAL_CONTENT_VERSION, PORTAL_CONTENT_VERSION);
-}
-
 function readLocalPortalContent(workspaceId: string): PortalContentSnapshot {
-  clearStalePortalContentCaches();
-
-  try {
-    const raw = localStorage.getItem(portalContentKeyForWorkspace(workspaceId));
-    const saved = raw ? (JSON.parse(raw) as PortalContentItem[] | null) : null;
-    const defaults = demoDefaults(PROTOTYPE_PORTAL_CONTENT);
+  const cached = memoryPortal.get(workspaceId);
+  if (cached) {
     return {
-      items: pruneRetiredPortalToolRefs(mergeCatalog(defaults, saved)),
-      revision: getPortalRevision(workspaceId),
-    };
-  } catch {
-    return {
-      items: pruneRetiredPortalToolRefs(
-        structuredClone(demoDefaults(PROTOTYPE_PORTAL_CONTENT)),
-      ),
-      revision: getPortalRevision(workspaceId),
+      items: pruneRetiredPortalToolRefs(structuredClone(cached.items)),
+      revision: cached.revision ?? getPortalRevision(workspaceId),
     };
   }
+  return {
+    items: pruneRetiredPortalToolRefs(
+      structuredClone(demoDefaults(PROTOTYPE_PORTAL_CONTENT)),
+    ),
+    revision: getPortalRevision(workspaceId),
+  };
 }
 
 function writeLocalPortalContent(workspaceId: string, snapshot: PortalContentSnapshot) {
-  try {
-    localStorage.setItem(
-      portalContentKeyForWorkspace(workspaceId),
-      JSON.stringify(snapshot.items),
-    );
-    localStorage.setItem(LS_PORTAL_CONTENT_VERSION, PORTAL_CONTENT_VERSION);
-  } catch (err) {
-    console.warn('[portal] localStorage write failed (quota?):', err);
-  }
+  memoryPortal.set(workspaceId, {
+    items: structuredClone(snapshot.items),
+    revision: snapshot.revision,
+  });
 }
 
 export async function loadPortalContent(workspaceId: string): Promise<PortalContentSnapshot> {

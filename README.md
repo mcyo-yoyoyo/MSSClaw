@@ -9,10 +9,12 @@
 | 渠道 | 地址 |
 |------|------|
 | GitHub Pages | https://mcyo-yoyoyo.github.io/MSSClaw/ |
+| Vercel | 推送 `main` 后由 Vercel 自动构建前端（见下方） |
 
 - 演示账号：`mcyo@huawei.com`（平台运营）；另有 `jacky` / `dickson` / `somebody` 与 `test1`–`test10@huawei.com`；
 - **生产前**：在「系统设置 · 组织权限」关闭演示密码，并用「账号密码」批量配置各账号密码
 - 与本地 `npm run dev` 为同一套 React 应用（静态托管 `apps/web` 构建产物）
+- **共享配置**：API 在线时业务配置走 Nest 平台文档 / SQLite，不以浏览器 localStorage 为真理源；仅登录 token、API Base 等本机偏好可留在浏览器
 
 ### Vercel
 
@@ -24,7 +26,7 @@
 | Framework | Vite / Other |
 | Build | `npm run build --workspace @mss-claw/web` |
 | Output | `apps/web/dist`（Root 为仓库根时） |
-| 数据库 / Serverless | 不需要（纯静态即可） |
+| 数据库 / Serverless | 不需要（纯静态即可；Nest API 需另外部署） |
 
 ### GitHub Pages
 

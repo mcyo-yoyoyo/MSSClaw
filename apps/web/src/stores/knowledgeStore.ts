@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { fetchKnowledgeBases, runKnowledgePipelineApi } from '@/api/centerApi';
+import { CenterApiError, fetchKnowledgeBases, runKnowledgePipelineApi } from '@/api/centerApi';
 import {
   findKnowledgeBaseByName,
   getKnowledgeBasesByWorkspace,
@@ -56,39 +56,51 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     if (get().pipelineRunning) return;
 
     set({ pipelineRunning: true });
-    const { workspaceId } = get();
+    const { workspaceId, bases } = get();
 
-    const stages: Array<{ status: 'chunking' | 'embedding' | 'indexed'; stage: PipelineStage }> = [
-      { status: 'chunking', stage: 'chunk' },
-      { status: 'embedding', stage: 'embedding' },
-      { status: 'indexed', stage: 'ready' },
-    ];
+    try {
+      const stages: Array<{ status: 'chunking' | 'embedding' | 'indexed'; stage: PipelineStage }> = [
+        { status: 'chunking', stage: 'chunk' },
+        { status: 'embedding', stage: 'embedding' },
+        { status: 'indexed', stage: 'ready' },
+      ];
 
-    for (const step of stages) {
-      await new Promise((r) => setTimeout(r, 600));
-      set((state) => ({
-        bases: state.bases.map((base) => {
-          if (base.id !== baseId) return base;
-          return {
-            ...base,
-            pipelineStage: step.stage,
-            documents: base.documents.map((doc) =>
-              doc.id === docId ? { ...doc, status: step.status, chunks: step.status === 'indexed' ? 64 : doc.chunks } : doc,
-            ),
-          };
-        }),
-      }));
+      for (const step of stages) {
+        await new Promise((r) => setTimeout(r, 400));
+        set((state) => ({
+          bases: state.bases.map((base) => {
+            if (base.id !== baseId) return base;
+            return {
+              ...base,
+              pipelineStage: step.stage,
+              documents: base.documents.map((doc) =>
+                doc.id === docId
+                  ? {
+                      ...doc,
+                      status: step.status,
+                      chunks: step.status === 'indexed' ? 64 : doc.chunks,
+                    }
+                  : doc,
+              ),
+            };
+          }),
+        }));
+      }
+
+      const updated = await runKnowledgePipelineApi(workspaceId, baseId, docId);
+      const doc = updated.documents.find((d) => d.id === docId);
+      set({
+        bases: bases.map((b) => (b.id === baseId ? updated : b)),
+        pipelineRunning: false,
+        toast: doc ? `「${doc.name}」索引完成 · 已写入共享库` : 'Pipeline 完成并已写入共享库',
+      });
+    } catch (err) {
+      set({
+        pipelineRunning: false,
+        bases,
+        toast: err instanceof CenterApiError ? err.message : 'Pipeline 写入共享库失败',
+      });
     }
-
-    const nextBases = await runKnowledgePipelineApi(workspaceId, baseId, docId, get().bases);
-    const base = nextBases.find((b) => b.id === baseId);
-    const doc = base?.documents.find((d) => d.id === docId);
-
-    set({
-      bases: nextBases,
-      pipelineRunning: false,
-      toast: doc ? `�?{doc.name}」索引完�?· 64 chunks` : 'Pipeline 完成',
-    });
   },
   dismissToast: () => set({ toast: null }),
 

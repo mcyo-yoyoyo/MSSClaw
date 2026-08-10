@@ -1,8 +1,17 @@
 import { create } from 'zustand';
 import type { MarketShelfKind } from '@/domain/marketShelf';
+import { getCurrentUserId } from '@/domain/currentUser';
+import {
+  canUsePlatformDocsApi,
+  currentWorkspaceId,
+  fetchPlatformDoc,
+  peekPlatformDocMemory,
+  scheduleSavePlatformDoc,
+  setPlatformDocMemory,
+} from '@/api/platformDocsApi';
 
-const LS_KEY = 'mssclaw_market_favorites_v1';
 const MAX = 40;
+const DOC_KIND = 'market-favorites' as const;
 
 export type MarketFavoriteItem = {
   id: string;
@@ -12,23 +21,34 @@ export type MarketFavoriteItem = {
   at: number;
 };
 
-function readLocal(): MarketFavoriteItem[] {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as MarketFavoriteItem[];
-    return Array.isArray(parsed) ? parsed.slice(0, MAX) : [];
-  } catch {
-    return [];
-  }
+type FavoritesDoc = {
+  byUserId?: Record<string, MarketFavoriteItem[]>;
+  /** @deprecated 旧版工作区共享列表 */
+  items?: MarketFavoriteItem[];
+};
+
+function userBucket(): string {
+  return getCurrentUserId() || 'anonymous';
 }
 
-function writeLocal(items: MarketFavoriteItem[]) {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(items.slice(0, MAX)));
-  } catch {
-    /* ignore quota */
-  }
+function readUserItems(doc: FavoritesDoc | null | undefined, uid: string): MarketFavoriteItem[] {
+  const fromUser = doc?.byUserId?.[uid];
+  if (Array.isArray(fromUser)) return fromUser.slice(0, MAX);
+  // 兼容旧文档：仅迁移到当前用户桶，避免多人共用一份收藏
+  if (Array.isArray(doc?.items)) return doc.items.slice(0, MAX);
+  return [];
+}
+
+function persistForUser(items: MarketFavoriteItem[]) {
+  if (!canUsePlatformDocsApi()) return;
+  const ws = currentWorkspaceId();
+  const uid = userBucket();
+  const mem = peekPlatformDocMemory<FavoritesDoc>(ws, DOC_KIND) ?? {};
+  const byUserId: Record<string, MarketFavoriteItem[]> = { ...(mem.byUserId ?? {}) };
+  byUserId[uid] = items.slice(0, MAX);
+  const payload: FavoritesDoc = { byUserId };
+  setPlatformDocMemory(ws, DOC_KIND, payload);
+  void scheduleSavePlatformDoc(ws, DOC_KIND, payload);
 }
 
 interface MarketFavoriteState {
@@ -41,7 +61,23 @@ interface MarketFavoriteState {
 export const useMarketFavoriteStore = create<MarketFavoriteState>((set, get) => ({
   items: [],
 
-  hydrate: () => set({ items: readLocal() }),
+  hydrate: () => {
+    void (async () => {
+      if (!canUsePlatformDocsApi()) {
+        set({ items: [] });
+        return;
+      }
+      try {
+        const remote = await fetchPlatformDoc<FavoritesDoc>(currentWorkspaceId(), DOC_KIND);
+        const uid = userBucket();
+        const list = readUserItems(remote, uid);
+        if (remote) setPlatformDocMemory(currentWorkspaceId(), DOC_KIND, remote);
+        set({ items: list });
+      } catch {
+        set({ items: [] });
+      }
+    })();
+  },
 
   isFavorite: (id, kind) =>
     get().items.some((x) => x.id === id && x.kind === kind),
@@ -51,7 +87,7 @@ export const useMarketFavoriteStore = create<MarketFavoriteState>((set, get) => 
     const next = exists
       ? get().items.filter((x) => !(x.id === item.id && x.kind === item.kind))
       : [{ ...item, at: Date.now() }, ...get().items].slice(0, MAX);
-    writeLocal(next);
+    persistForUser(next);
     set({ items: next });
     return !exists;
   },

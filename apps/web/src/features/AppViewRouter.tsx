@@ -17,6 +17,7 @@ import {
   LazyMemoryCenterPage,
   LazyPresentationConfigPage,
   LazyPortalContentOpsPage,
+  LazyExecutionHistoryPage,
   LazyWorkspaceConfigPage,
   LazyPromptCenterPage,
   LazySettingsPage,
@@ -67,6 +68,7 @@ const VIEW_LABELS: Partial<Record<AppView, string>> = {
   presentation: '展示配置',
   'workspace-config': '租户配置',
   'portal-ops': '门户运营',
+  executions: '执行历史',
 };
 
 function LazyView({ label, children }: { label: string; children: ReactNode }) {
@@ -239,6 +241,12 @@ export function AppViewRouter({ appView, handlers }: AppViewRouterProps) {
       return (
         <LazyView label={label}>
           <LazyPortalContentOpsPage />
+        </LazyView>
+      );
+    case 'executions':
+      return (
+        <LazyView label={label}>
+          <LazyExecutionHistoryPage />
         </LazyView>
       );
     default:

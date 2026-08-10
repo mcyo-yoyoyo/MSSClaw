@@ -1,6 +1,6 @@
 ﻿import { create } from 'zustand';
 import type { InboxMessage, InboxMessageKind } from '@/domain/inbox';
-import { loadInboxMessages, saveInboxMessages } from '@/domain/persistence/inboxStorage';
+import { saveInboxMessages } from '@/domain/persistence/inboxStorage';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
 import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -41,10 +41,13 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   messages: [],
 
   bootstrap: (wsId) => {
-    const messages = loadInboxMessages(wsId);
-    set({ messages, ready: true });
-    const uid = getCurrentUserId();
-    if (uid) get().seedDemoIfEmpty(uid);
+    void (async () => {
+      const { hydrateInboxMessages } = await import('@/domain/persistence/inboxStorage');
+      const messages = await hydrateInboxMessages(wsId);
+      set({ messages, ready: true });
+      const uid = getCurrentUserId();
+      if (uid) get().seedDemoIfEmpty(uid);
+    })();
   },
 
   persist: () => {

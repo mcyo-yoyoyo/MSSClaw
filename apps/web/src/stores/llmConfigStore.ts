@@ -8,49 +8,42 @@ import {
   type CustomLlmModel,
   type LlmConfig,
 } from '@/domain/llmConfig';
+import {
+  canUsePlatformDocsApi,
+  currentWorkspaceId,
+  fetchPlatformDoc,
+  scheduleSavePlatformDoc,
+} from '@/api/platformDocsApi';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 
-const LS_PREFIX = 'mssclaw_llm_';
-
-function loadCustomModels(): CustomLlmModel[] {
-  try {
-    const raw = localStorage.getItem(`${LS_PREFIX}custom_models`);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (m): m is CustomLlmModel =>
-        !!m && typeof m === 'object' && typeof (m as CustomLlmModel).id === 'string',
-    );
-  } catch {
-    return [];
-  }
+function defaultConfig(): LlmConfig {
+  return {
+    ...DEFAULT_LLM_CONFIG,
+    customModels: [],
+    apiKey: '',
+  };
 }
 
-function loadConfig(): LlmConfig {
-  const customModels = loadCustomModels();
-  const rawModel = localStorage.getItem(`${LS_PREFIX}model`) || DEFAULT_LLM_CONFIG.model;
-  const model = normalizeLlmModelId(rawModel);
+function normalizeConfig(raw: Partial<LlmConfig> | null | undefined): LlmConfig {
+  const customModels = Array.isArray(raw?.customModels)
+    ? raw!.customModels.filter(
+        (m): m is CustomLlmModel =>
+          !!m && typeof m === 'object' && typeof m.id === 'string',
+      )
+    : [];
+  const model = normalizeLlmModelId(raw?.model || DEFAULT_LLM_CONFIG.model);
   const meta = resolveModelMeta({ model, customModels });
-  const storedUrl = localStorage.getItem(`${LS_PREFIX}base_url`);
-  // 若本地还存着旧展示名，写回官�?API id，避免下次再传错
-  if (model !== rawModel) {
-    localStorage.setItem(`${LS_PREFIX}model`, model);
-  }
   return {
     model,
-    baseUrl: storedUrl || meta.baseUrl || DEFAULT_LLM_CONFIG.baseUrl,
-    apiKey: localStorage.getItem(`${LS_PREFIX}api_key`) || '',
+    baseUrl: (raw?.baseUrl || meta.baseUrl || DEFAULT_LLM_CONFIG.baseUrl).trim(),
+    apiKey: typeof raw?.apiKey === 'string' ? raw.apiKey : '',
     customModels,
   };
 }
 
-function persistConfig(cfg: Partial<LlmConfig>) {
-  if (cfg.baseUrl != null) localStorage.setItem(`${LS_PREFIX}base_url`, cfg.baseUrl);
-  if (cfg.apiKey != null) localStorage.setItem(`${LS_PREFIX}api_key`, cfg.apiKey);
-  if (cfg.model != null) localStorage.setItem(`${LS_PREFIX}model`, cfg.model);
-  if (cfg.customModels != null) {
-    localStorage.setItem(`${LS_PREFIX}custom_models`, JSON.stringify(cfg.customModels));
-  }
+function persist(cfg: LlmConfig) {
+  if (!canUsePlatformDocsApi()) return;
+  void scheduleSavePlatformDoc(currentWorkspaceId(), 'llm-config', cfg);
 }
 
 export interface ModelOption {
@@ -62,6 +55,7 @@ export interface ModelOption {
 interface LlmConfigState {
   config: LlmConfig;
   settingsOpen: boolean;
+  hydrate: () => void;
   saveConfig: (patch: Partial<LlmConfig>) => void;
   selectModel: (modelId: string) => void;
   addCustomModel: (model: CustomLlmModel) => void;
@@ -74,13 +68,31 @@ interface LlmConfigState {
 }
 
 export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
-  config: loadConfig(),
+  config: defaultConfig(),
   settingsOpen: false,
   settingsFocusAdd: false,
 
+  hydrate: () => {
+    void (async () => {
+      if (!canUsePlatformDocsApi()) {
+        set({ config: defaultConfig() });
+        return;
+      }
+      try {
+        const remote = await fetchPlatformDoc<Partial<LlmConfig>>(
+          currentWorkspaceId(),
+          'llm-config',
+        );
+        set({ config: normalizeConfig(remote) });
+      } catch {
+        set({ config: defaultConfig() });
+      }
+    })();
+  },
+
   saveConfig: (patch) => {
-    const next = { ...get().config, ...patch };
-    persistConfig(patch);
+    const next = normalizeConfig({ ...get().config, ...patch });
+    persist(next);
     set({ config: next });
   },
 
@@ -141,7 +153,6 @@ export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
       label: m.label || m.id,
       group: 'custom',
     }));
-    // 当前模型若不在列表中，补一�?
     const known = new Set([...defaults, ...customs].map((m) => m.id));
     const orphan: ModelOption[] =
       config.model && !known.has(config.model)
@@ -153,9 +164,22 @@ export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
   statusLabel: () => {
     const { config } = get();
     const meta = resolveModelMeta(config);
+    const { apiConnected, nestLlmEnvConfigured } = useWorkspaceStore.getState();
+
     if (isLlmConfigComplete(config)) {
-      return { text: `${meta.label} · 已接�?Plan/Execute`, configured: true };
+      if (apiConnected) {
+        return {
+          text: nestLlmEnvConfigured
+            ? `${meta.label} ? ????????????? LLM_*?`
+            : `${meta.label} ? ?????????????`,
+          configured: true,
+        };
+      }
+      return { text: `${meta.label} ? ??????? Plan/???`, configured: true };
     }
-    return { text: `${meta.label} · 未配�?API Key · 本地 Mock`, configured: false };
+    if (apiConnected && nestLlmEnvConfigured) {
+      return { text: `${meta.label} ? ????? LLM_*`, configured: true };
+    }
+    return { text: `${meta.label} ? ??? API Key`, configured: false };
   },
 }));

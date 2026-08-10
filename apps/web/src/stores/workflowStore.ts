@@ -1,8 +1,7 @@
 import { create } from 'zustand';
-import { advanceWorkflowStatus as advanceWorkflowStatusApi, fetchWorkflows } from '@/api/centerApi';
+import { advanceWorkflowStatus as advanceWorkflowStatusApi, CenterApiError, fetchWorkflows } from '@/api/centerApi';
 import {
   findWorkflowByName,
-  getNextWorkflowStatus,
   getWorkflowsByWorkspace,
   type Workflow,
   type WorkflowStatus,
@@ -70,21 +69,17 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       const { workflows, workspaceId } = get();
       const target = workflows.find((w) => w.id === workflowId);
       if (!target) return;
-
-      let nextWorkflows = await advanceWorkflowStatusApi(workspaceId, workflowId, workflows);
-      if (nextWorkflows === workflows) {
-        const next = getNextWorkflowStatus(target.status);
-        if (!next) return;
-        nextWorkflows = workflows.map((w) =>
-          w.id === workflowId ? { ...w, status: next, updatedAt: new Date().toISOString().slice(0, 10) } : w,
-        );
+      try {
+        const updated = await advanceWorkflowStatusApi(workspaceId, workflowId);
+        set({
+          workflows: workflows.map((w) => (w.id === workflowId ? updated : w)),
+          toast: `「${target.name}」已推进到 ${updated.status}`,
+        });
+      } catch (err) {
+        set({
+          toast: err instanceof CenterApiError ? err.message : '状态推进失败',
+        });
       }
-
-      const updated = nextWorkflows.find((w) => w.id === workflowId);
-      set({
-        workflows: nextWorkflows,
-        toast: updated ? `�?{target.name}」已推进�?${updated.status}` : `�?{target.name}」已更新`,
-      });
     })();
   },
 
@@ -92,19 +87,19 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     const wf = get().workflows.find((w) => w.id === workflowId);
     if (!wf || get().debugRunning) return;
 
-    set({ debugRunning: true, debugTrace: ['�?启动 Workflow Debug...'] });
+    set({ debugRunning: true, debugTrace: ['▶ 启动 Workflow Debug...'] });
 
     for (const node of wf.nodes) {
       await new Promise((r) => setTimeout(r, 400));
       set((state) => ({
         selectedNodeId: node.id,
-        debugTrace: [...state.debugTrace, `�?${node.label} (${node.type})`],
+        debugTrace: [...state.debugTrace, `✓ ${node.label} (${node.type})`],
       }));
     }
 
     set({
       debugRunning: false,
-      toast: `�?{wf.name}」Debug 完成 · ${wf.nodes.length} nodes`,
+      toast: `「${wf.name}」Debug 完成 · ${wf.nodes.length} nodes（本地演示）`,
     });
   },
 

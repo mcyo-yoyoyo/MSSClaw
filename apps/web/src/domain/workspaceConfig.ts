@@ -98,16 +98,7 @@ export function slugifyTenantId(name: string): string {
 /** v5：六大战区数据空间 + 四角色成员种子，强制刷新旧配置 */
 export const LS_WORKSPACE_CONFIG = 'mssclaw_workspace_config_v5';
 
-/** 启动时读取默认租户（避免 store 循环依赖） */
+/** 启动时默认租户（配置从服务端 docs 灌入后由 store 覆盖） */
 export function getInitialWorkspaceId(): string {
-  try {
-    const raw = localStorage.getItem(LS_WORKSPACE_CONFIG);
-    if (!raw) return PROTOTYPE_WORKSPACE_ID;
-    const parsed = JSON.parse(raw) as { defaultWorkspaceId?: string };
-    return typeof parsed.defaultWorkspaceId === 'string'
-      ? parsed.defaultWorkspaceId
-      : PROTOTYPE_WORKSPACE_ID;
-  } catch {
-    return PROTOTYPE_WORKSPACE_ID;
-  }
+  return PROTOTYPE_WORKSPACE_ID;
 }

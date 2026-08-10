@@ -47,10 +47,6 @@ export const LazyAutomationCenterPage = lazy(() =>
   import('@/features/automation/AutomationCenterPage').then((m) => ({ default: m.AutomationCenterPage })),
 );
 
-export const LazyAgentStudioPage = lazy(() =>
-  import('@/features/_legacy/agent/AgentStudioPage').then((m) => ({ default: m.AgentStudioPage })),
-);
-
 export const LazyWorkflowStudioPage = lazy(() =>
   import('@/features/_legacy/workflow/WorkflowStudioPage').then((m) => ({ default: m.WorkflowStudioPage })),
 );
@@ -83,6 +79,10 @@ export const LazyPortalContentOpsPage = lazy(() =>
   import('@/features/ops/PortalContentOpsPage').then((m) => ({ default: m.PortalContentOpsPage })),
 );
 
+export const LazyExecutionHistoryPage = lazy(() =>
+  import('@/features/ops/ExecutionHistoryPage').then((m) => ({ default: m.ExecutionHistoryPage })),
+);
+
 export const LazyCommandPalette = lazy(() =>
   import('@/components/shell/CommandPalette').then((m) => ({ default: m.CommandPalette })),
 );
@@ -101,7 +101,7 @@ export const ROUTE_PREFETCH: Partial<Record<AppView, () => void>> = {
   messages: () => void import('@/features/messages/MyMessagesPage'),
   'ai-brief': () => void import('@/features/ai-brief/AiBriefPage'),
   agents: () => void import('@/features/agent/AgentCenterPage'),
-  'agent-studio': () => void import('@/features/_legacy/agent/AgentStudioPage'),
+  'agent-studio': () => void import('@/features/agent/AgentCenterPage'),
   skills: () => void import('@/features/skill/SkillCenterPage'),
   'ai-map': () => void import('@/features/ai-map/AiMapPage'),
   'market-external': () => void import('@/features/market/MarketShelfPage'),
@@ -119,4 +119,5 @@ export const ROUTE_PREFETCH: Partial<Record<AppView, () => void>> = {
   presentation: () => void import('@/features/presentation/PresentationConfigPage'),
   'workspace-config': () => void import('@/features/workspace/WorkspaceConfigPage'),
   'portal-ops': () => void import('@/features/ops/PortalContentOpsPage'),
+  executions: () => void import('@/features/ops/ExecutionHistoryPage'),
 };

@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import {
   advancePromptLifecycle as advancePromptLifecycleApi,
+  CenterApiError,
   fetchPrompts,
 } from '@/api/centerApi';
 import {
   findPromptByName,
-  getNextLifecycle,
   getPromptsByWorkspace,
   type Prompt,
   type PromptLifecycle,
@@ -61,21 +61,17 @@ export const usePromptStore = create<PromptState>((set, get) => ({
       const { prompts, workspaceId } = get();
       const target = prompts.find((p) => p.id === promptId);
       if (!target) return;
-
-      let nextPrompts = await advancePromptLifecycleApi(workspaceId, promptId, prompts);
-      if (nextPrompts === prompts) {
-        const next = getNextLifecycle(target.lifecycle);
-        if (!next) return;
-        nextPrompts = prompts.map((p) =>
-          p.id === promptId ? { ...p, lifecycle: next, updatedAt: new Date().toISOString().slice(0, 10) } : p,
-        );
+      try {
+        const updated = await advancePromptLifecycleApi(workspaceId, promptId);
+        set({
+          prompts: prompts.map((p) => (p.id === promptId ? updated : p)),
+          toast: `「${target.name}」已推进到 ${updated.lifecycle}`,
+        });
+      } catch (err) {
+        set({
+          toast: err instanceof CenterApiError ? err.message : '生命周期推进失败',
+        });
       }
-
-      const updated = nextPrompts.find((p) => p.id === promptId);
-      set({
-        prompts: nextPrompts,
-        toast: updated ? `�?{target.name}」已推进�?${updated.lifecycle}` : `�?{target.name}」已更新`,
-      });
     })();
   },
 

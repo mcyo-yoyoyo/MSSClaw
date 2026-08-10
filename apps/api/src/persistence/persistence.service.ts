@@ -1,14 +1,13 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  listMappedFromMarketplace,
+  toPrismaJson,
+  type MarketplacePayload,
+} from './marketplace-center-sync';
 
-export interface MarketplacePayload {
-  agents?: unknown[];
-  skills?: unknown[];
-  tools?: unknown[];
-  automations?: unknown[];
-  kbDocs?: unknown[];
-}
+export type { MarketplacePayload };
 
 export interface PortalContentPayload {
   items?: unknown[];
@@ -61,7 +60,32 @@ export class PersistenceService {
         payload: payload as Prisma.InputJsonValue,
       },
     });
+    await this.syncMarketplaceToCenters(workspaceId, payload);
     return payload;
+  }
+
+  /** 集市为权威源：写入时镜像 agent/skill/tool 到 center 记录，供中心 API 合并读取 */
+  private async syncMarketplaceToCenters(workspaceId: string, payload: MarketplacePayload) {
+    const kinds = ['agent', 'skill', 'tool'] as const;
+    for (const kind of kinds) {
+      const items = listMappedFromMarketplace(kind, payload);
+      for (const item of items) {
+        const id = String(item.id);
+        if (!id) continue;
+        await this.prisma.centerRecord.upsert({
+          where: { id },
+          create: {
+            id,
+            workspaceId,
+            kind,
+            payload: toPrismaJson(item),
+          },
+          update: {
+            payload: toPrismaJson(item),
+          },
+        });
+      }
+    }
   }
 
   async getPortalContent(workspaceId: string): Promise<PortalContentPayload | null> {

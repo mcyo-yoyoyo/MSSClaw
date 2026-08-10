@@ -849,21 +849,24 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     const fromName = getCurrentUserName() || '同事';
     const fromUserId = getCurrentUserId() || undefined;
     let pushedRooms = 0;
-    let lastMessage = '';
+    let webhookOk = 0;
+    let webhookSkipped = 0;
+    let webhookFailMsg = '';
 
     for (const rid of warroomIds) {
       const warroom = chats[rid];
       if (!warroom || !isWarRoom(warroom)) continue;
       const targetGroup = warroom.title;
-      const result = await pushArtifactToGroup({
+      const webhookResult = await pushArtifactToGroup({
         chatTitle,
         targetGroup,
         artifactType: sandboxType ?? 'marketing',
         query: sandboxQuery,
         webhookUrl: loadWarroomWebhookUrl(),
       });
-      lastMessage = result.message;
-      if (!result.ok) continue;
+      if (webhookResult.skipped) webhookSkipped += 1;
+      else if (webhookResult.ok) webhookOk += 1;
+      else webhookFailMsg = webhookResult.message;
 
       const pushMsg: ChatMessage = {
         role: 'system',
@@ -921,11 +924,13 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     const parts: string[] = [];
     if (pushedRooms) parts.push(`${pushedRooms} 个协作空间`);
     if (memberIds.length) parts.push(`${memberIds.length} 位成员（我的消息）`);
-    set({
-      pushToast: parts.length
-        ? `已推送到 ${parts.join(' · ')}`
-        : lastMessage || '推送完成',
-    });
+    let toast = parts.length ? `已站内推送到 ${parts.join(' · ')}` : '未完成站内推送';
+    if (pushedRooms) {
+      if (webhookOk) toast += ' · 外部 Webhook 已送达';
+      else if (webhookFailMsg) toast += ` · ${webhookFailMsg}`;
+      else if (webhookSkipped) toast += ' · 未配置外部 Webhook';
+    }
+    set({ pushToast: toast });
   },
 
   dismissToast: () => set({ pushToast: null }),

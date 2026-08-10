@@ -22,6 +22,7 @@ export const APP_VIEWS = [
   'presentation',
   'workspace-config',
   'portal-ops',
+  'executions',
 ] as const;
 export type AppView = (typeof APP_VIEWS)[number];
 
@@ -76,6 +77,7 @@ export const APP_VIEW_NAV: AppViewNavItem[] = [
  */
 export const ADMIN_MENU_VIEWS = [
   'portal-ops',
+  'executions',
   'skills',
   'agents',
   'tools',

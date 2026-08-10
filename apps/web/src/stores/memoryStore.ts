@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import { fetchMemoryStores, patchMemoryLayerPolicyApi, runMemoryReflectionApi } from '@/api/centerApi';
+import {
+  CenterApiError,
+  fetchMemoryStores,
+  patchMemoryLayerPolicyApi,
+  runMemoryReflectionApi,
+} from '@/api/centerApi';
 import {
   findMemoryStoreByName,
   getMemoryStoresByWorkspace,
@@ -69,11 +74,17 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
   updateLayerPolicy: (storeId, layer, patch) => {
     void (async () => {
       const { stores, workspaceId } = get();
-      const nextStores = await patchMemoryLayerPolicyApi(workspaceId, storeId, layer, patch, stores);
-      set({
-        stores: nextStores,
-        toast: `${layer} �?Retention 策略已更新`,
-      });
+      try {
+        const updated = await patchMemoryLayerPolicyApi(workspaceId, storeId, layer, patch);
+        set({
+          stores: stores.map((s) => (s.id === storeId ? updated : s)),
+          toast: `${layer} · Retention 策略已写入共享库`,
+        });
+      } catch (err) {
+        set({
+          toast: err instanceof CenterApiError ? err.message : '策略保存失败',
+        });
+      }
     })();
   },
 
@@ -82,22 +93,23 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     if (!store || get().reflectionRunning) return;
 
     set({ reflectionRunning: true });
-
-    await new Promise((r) => setTimeout(r, 800));
-    await new Promise((r) => setTimeout(r, 700));
-    await new Promise((r) => setTimeout(r, 600));
-
     const { workspaceId, stores } = get();
-    const nextStores = await runMemoryReflectionApi(workspaceId, storeId, stores);
-    const newLog = nextStores.find((s) => s.id === storeId)?.reflectionLogs[0];
-
-    set({
-      stores: nextStores,
-      reflectionRunning: false,
-      toast: newLog
-        ? `�?{store.name}」Reflection 完成 · 晋升 ${newLog.promoted} / 清理 ${newLog.pruned}`
-        : `�?{store.name}」Reflection 完成`,
-    });
+    try {
+      const updated = await runMemoryReflectionApi(workspaceId, storeId);
+      const newLog = updated.reflectionLogs[0];
+      set({
+        stores: stores.map((s) => (s.id === storeId ? updated : s)),
+        reflectionRunning: false,
+        toast: newLog
+          ? `「${store.name}」Reflection 完成 · 晋升 ${newLog.promoted} / 清理 ${newLog.pruned}`
+          : `「${store.name}」Reflection 完成`,
+      });
+    } catch (err) {
+      set({
+        reflectionRunning: false,
+        toast: err instanceof CenterApiError ? err.message : 'Reflection 写入失败',
+      });
+    }
   },
 
   dismissToast: () => set({ toast: null }),

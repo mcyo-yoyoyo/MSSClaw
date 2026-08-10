@@ -13,7 +13,6 @@ import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
 import { HQ_DEPTS, REGIONS } from '@/domain/orgTaxonomy';
 import {
   buildLoginAccounts,
-  MEMBERS_LS_PREFIX,
   migrateDemoEmailDomain,
 } from '@/domain/authAccounts';
 import {
@@ -22,8 +21,15 @@ import {
   migrateCredentialEmailDomain,
   migrateInitAllPasswordsToMssclaw,
   ensureMissingPasswords,
+  hydrateAccountCredentials,
 } from '@/domain/accountCredentials';
 import { PROTOTYPE_WORKSPACE_ID } from '@/domain/prototype/constants';
+import {
+  canUsePlatformDocsApi,
+  fetchPlatformDoc,
+  scheduleSavePlatformDoc,
+  setPlatformDocMemory,
+} from '@/api/platformDocsApi';
 
 function normalizeStoredMember(m: WorkspaceMember): WorkspaceMember {
   return {
@@ -39,6 +45,7 @@ let accountPasswordsReady: Promise<void> | null = null;
 export function ensureAccountPasswordsReady(): Promise<void> {
   if (!accountPasswordsReady) {
     accountPasswordsReady = (async () => {
+      await hydrateAccountCredentials();
       const emails = [
         ...SEED_MEMBERS.map((m) => m.email),
         ...buildLoginAccounts().map((a) => a.email),
@@ -71,29 +78,39 @@ function mergeWithSeedMembers(
   return [...byEmail.values()];
 }
 
-function loadMembers(workspaceId: string): WorkspaceMember[] {
+function membersFromPayload(raw: unknown, workspaceId: string): WorkspaceMember[] {
+  const list = Array.isArray(raw)
+    ? raw
+    : Array.isArray((raw as { members?: unknown })?.members)
+      ? ((raw as { members: WorkspaceMember[] }).members)
+      : [];
+  if (!list.length) return getMembersByWorkspace(workspaceId).map(normalizeStoredMember);
+  return mergeWithSeedMembers(workspaceId, list as WorkspaceMember[]);
+}
+
+function loadMembersSync(workspaceId: string): WorkspaceMember[] {
   migrateCredentialEmailDomain();
-  const raw = localStorage.getItem(`${MEMBERS_LS_PREFIX}${workspaceId}`);
-  if (!raw) {
-    const seeds = getMembersByWorkspace(workspaceId).map(normalizeStoredMember);
-    persistMembers(workspaceId, seeds);
-    return seeds;
-  }
-  try {
-    const parsed = JSON.parse(raw) as WorkspaceMember[];
-    if (!Array.isArray(parsed) || !parsed.length) {
-      return getMembersByWorkspace(workspaceId).map(normalizeStoredMember);
-    }
-    const merged = mergeWithSeedMembers(workspaceId, parsed);
-    persistMembers(workspaceId, merged);
-    return merged;
-  } catch {
-    return getMembersByWorkspace(workspaceId).map(normalizeStoredMember);
-  }
+  return getMembersByWorkspace(workspaceId).map(normalizeStoredMember);
 }
 
 function persistMembers(workspaceId: string, members: WorkspaceMember[]) {
-  localStorage.setItem(`${MEMBERS_LS_PREFIX}${workspaceId}`, JSON.stringify(members));
+  const payload = { members };
+  setPlatformDocMemory(workspaceId, 'members', payload);
+  if (!canUsePlatformDocsApi()) return;
+  void scheduleSavePlatformDoc(workspaceId, 'members', payload).catch(() => {
+    /* toast via caller if needed */
+  });
+}
+
+export async function hydrateMembersFromServer(workspaceId: string): Promise<WorkspaceMember[]> {
+  try {
+    const remote = await fetchPlatformDoc<unknown>(workspaceId, 'members');
+    const members = membersFromPayload(remote, workspaceId);
+    setPlatformDocMemory(workspaceId, 'members', { members });
+    return members;
+  } catch {
+    return loadMembersSync(workspaceId);
+  }
 }
 
 export interface InviteMemberInput {
@@ -137,14 +154,17 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   workspaceId: PROTOTYPE_WORKSPACE_ID,
   activeTab: 'members',
-  members: loadMembers(PROTOTYPE_WORKSPACE_ID),
+  members: loadMembersSync(PROTOTYPE_WORKSPACE_ID),
   toast: null,
 
   loadWorkspace: (workspaceId) => {
     set({
       workspaceId,
-      members: loadMembers(workspaceId),
+      members: loadMembersSync(workspaceId),
       activeTab: 'members',
+    });
+    void hydrateMembersFromServer(workspaceId).then((members) => {
+      set({ workspaceId, members });
     });
   },
 

@@ -1,13 +1,13 @@
 import { create } from 'zustand';
 import {
   advanceAgentStatus as advanceAgentStatusApi,
+  CenterApiError,
   fetchAgents,
   patchAgentPersona,
 } from '@/api/centerApi';
 import {
   findAgentByName,
   getAgentsByWorkspace,
-  getNextAgentStatus,
   type Agent,
   type AgentStatus,
 } from '@/domain/agent';
@@ -68,8 +68,17 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   updatePersona: (agentId, persona) => {
     void (async () => {
       const { agents, workspaceId } = get();
-      const nextAgents = await patchAgentPersona(workspaceId, agentId, persona, agents);
-      set({ agents: nextAgents });
+      try {
+        const updated = await patchAgentPersona(workspaceId, agentId, persona);
+        set({
+          agents: agents.map((a) => (a.id === agentId ? updated : a)),
+          toast: `「${updated.name}」人设已保存到共享库`,
+        });
+      } catch (err) {
+        set({
+          toast: err instanceof CenterApiError ? err.message : '人设保存失败',
+        });
+      }
     })();
   },
 
@@ -78,21 +87,17 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const { agents, workspaceId } = get();
       const target = agents.find((a) => a.id === agentId);
       if (!target) return;
-
-      let nextAgents = await advanceAgentStatusApi(workspaceId, agentId, agents);
-      if (nextAgents === agents) {
-        const next = getNextAgentStatus(target.status);
-        if (!next) return;
-        nextAgents = agents.map((a) =>
-          a.id === agentId ? { ...a, status: next, updatedAt: new Date().toISOString().slice(0, 10) } : a,
-        );
+      try {
+        const updated = await advanceAgentStatusApi(workspaceId, agentId);
+        set({
+          agents: agents.map((a) => (a.id === agentId ? updated : a)),
+          toast: `「${target.name}」已推进到 ${updated.status}`,
+        });
+      } catch (err) {
+        set({
+          toast: err instanceof CenterApiError ? err.message : '状态推进失败',
+        });
       }
-
-      const updated = nextAgents.find((a) => a.id === agentId);
-      set({
-        agents: nextAgents,
-        toast: updated ? `�?{target.name}」已推进�?${updated.status}` : `�?{target.name}」已更新`,
-      });
     })();
   },
 
@@ -106,7 +111,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     await new Promise((resolve) => setTimeout(resolve, 1200));
     set({
       testRunning: false,
-      toast: `�?{agent.name}」测试通过 · 绑定 ${agent.bindings.skillIds.length} Skills · Latency 1.2s`,
+      toast: `「${agent.name}」测试通过 · 绑定 ${agent.bindings.skillIds.length} Skills · Latency 1.2s（本地演示）`,
     });
   },
 

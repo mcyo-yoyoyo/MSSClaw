@@ -43,6 +43,7 @@ const VIEW_RBAC: Partial<Record<AppView, { module: ResourceModule; min: Permissi
   presentation: { module: 'settings', min: 'admin' },
   'workspace-config': { module: 'settings', min: 'admin' },
   'portal-ops': { module: 'settings', min: 'admin' },
+  executions: { module: 'agent', min: 'read' },
 };
 
 export function canRoleAccessView(

@@ -6,8 +6,12 @@ import {
   type InternalOfficeSceneCatalogEntry,
   type InternalOfficeSceneId,
 } from '@/domain/internalOfficeScenes';
-
-const LS_KEY = 'mssclaw_internal_office_scenes_v4';
+import {
+  canUsePlatformDocsApi,
+  currentWorkspaceId,
+  fetchPlatformDoc,
+  scheduleSavePlatformDoc,
+} from '@/api/platformDocsApi';
 
 function mergeWithDefaults(
   saved: InternalOfficeSceneCatalogEntry[] | null,
@@ -52,22 +56,10 @@ function mergeWithDefaults(
   return result;
 }
 
-function load(): InternalOfficeSceneCatalogEntry[] {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as InternalOfficeSceneCatalogEntry[];
-      if (Array.isArray(parsed)) return mergeWithDefaults(parsed);
-    }
-  } catch {
-    /* ignore */
-  }
-  return mergeWithDefaults(null);
-}
-
 function persist(entries: InternalOfficeSceneCatalogEntry[]) {
-  localStorage.setItem(LS_KEY, JSON.stringify(entries));
   setInternalOfficeSceneCatalog(entries);
+  if (!canUsePlatformDocsApi()) return;
+  void scheduleSavePlatformDoc(currentWorkspaceId(), 'internal-office-scenes', entries);
 }
 
 interface InternalOfficeSceneCatalogState {
@@ -85,7 +77,7 @@ interface InternalOfficeSceneCatalogState {
   dismissToast: () => void;
 }
 
-const initial = load();
+const initial = mergeWithDefaults(null);
 setInternalOfficeSceneCatalog(initial);
 
 export const useInternalOfficeSceneCatalogStore =
@@ -94,9 +86,31 @@ export const useInternalOfficeSceneCatalogStore =
     toast: null,
 
     hydrate: () => {
-      const entries = load();
-      setInternalOfficeSceneCatalog(entries);
-      set({ entries });
+      void (async () => {
+        if (!canUsePlatformDocsApi()) {
+          const entries = mergeWithDefaults(null);
+          setInternalOfficeSceneCatalog(entries);
+          set({ entries });
+          return;
+        }
+        try {
+          const remote = await fetchPlatformDoc<
+            InternalOfficeSceneCatalogEntry[] | { entries?: InternalOfficeSceneCatalogEntry[] }
+          >(currentWorkspaceId(), 'internal-office-scenes');
+          const list = Array.isArray(remote)
+            ? remote
+            : Array.isArray(remote?.entries)
+              ? remote.entries
+              : null;
+          const entries = mergeWithDefaults(list);
+          setInternalOfficeSceneCatalog(entries);
+          set({ entries });
+        } catch {
+          const entries = mergeWithDefaults(null);
+          setInternalOfficeSceneCatalog(entries);
+          set({ entries });
+        }
+      })();
     },
 
     updateEntry: (id, patch) => {
