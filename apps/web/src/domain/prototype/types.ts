@@ -68,6 +68,8 @@ export interface PrototypeAgentSeed {
   visibility?: AssetVisibility;
   /** 场景地图聚合标签（与 Tool/门户 content 对齐） */
   scenarioTags?: string[];
+  /** 业务场景分类（与业务用户 MSS 集市视角对齐；缺省回退技能/静态映射） */
+  businessScenarioId?: BusinessScenarioId;
 }
 
 export interface PrototypeSkillSeed extends AssetOwnershipFields {

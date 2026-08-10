@@ -11,7 +11,6 @@ import {
   type RegionId,
 } from '@/domain/orgTaxonomy';
 import type { PlatformRole } from '@/domain/rbac';
-import { hasGlobalOrgScope } from '@/domain/rolePerspective';
 import { SKILL_ROLE_CATEGORIES, SKILL_ROLE_BY_ID, type SkillRoleId } from '@/domain/skillRoles';
 
 /** 卡片上展示的组织轴标签（数字员工角色 / 区域 / 领域） */
@@ -98,7 +97,7 @@ export function getScenarioOrgAxisTags(input: {
   return tags.slice(0, 3);
 }
 
-/** 筛选下拉：区域二级（全量字典；UI 应按账号裁剪） */
+/** 筛选下拉：区域二级（全量字典） */
 export const REGION_FILTER_OPTIONS: RegionId[] = [
   HQ_REGION_ID,
   'apac',
@@ -109,41 +108,50 @@ export const REGION_FILTER_OPTIONS: RegionId[] = [
   CHINA_REGION_ID,
 ];
 
-/** 筛选下拉：领域二级（全量字典；UI 应按账号裁剪） */
+/** 筛选下拉：领域二级（全量字典） */
 export const DEPT_FILTER_OPTIONS: DeptId[] = DEPT_SHOW;
 
 /**
- * 视角筛选项 · 领域：平台运营看全量；其余仅本人所属职能（无归属时不展示可选领域，避免越权筛选）。
- * 内容侧另有 public/org 可见性闸门，空选=权限范围内的「全部」。
- * 返回已按展示序排序。
+ * 左侧「领域 / 区域」菜单是否展示全量选项。
+ * 短期上线：全角色看全量，不做菜单级数据权限；成员归属标签仍保留，供后续
+ * MSS 工具集市 Agent/Skill「本组织可见」匹配职能/区域。
+ */
+export function hasFullOrgFilterCatalog(_role?: PlatformRole): boolean {
+  void _role;
+  return true;
+}
+
+/**
+ * 视角筛选项 · 领域：短期全量；后续若恢复菜单裁剪，非全量角色仅本人所属职能。
  */
 export function getScopedDeptFilterOptions(
   affiliation: OrgAffiliation,
   role?: PlatformRole,
 ): DeptId[] {
-  if (hasGlobalOrgScope(role)) return sortDeptIdsByLabel([...DEPT_FILTER_OPTIONS]);
+  if (hasFullOrgFilterCatalog(role)) {
+    return sortDeptIdsByLabel([...DEPT_FILTER_OPTIONS]);
+  }
   const mine = (affiliation.deptIds ?? []).filter((d) => DEPT_FILTER_OPTIONS.includes(d));
   return sortDeptIdsByLabel(mine);
 }
 
 /**
- * 视角筛选项 · 区域：
- * - 平台运营：全量（机关置顶、中国区置底、其余拼音）
- * - 一线：仅本区域
- * - 机关岗（无 regionId）：至少可选「机关」
+ * 视角筛选项 · 区域：短期全量；后续若恢复菜单裁剪，一线仅本区域、机关岗至少「机关」。
  */
 export function getScopedRegionFilterOptions(
   affiliation: OrgAffiliation,
   role?: PlatformRole,
 ): RegionId[] {
-  if (hasGlobalOrgScope(role)) return sortRegionIdsByLabel([...REGION_FILTER_OPTIONS]);
+  if (hasFullOrgFilterCatalog(role)) {
+    return sortRegionIdsByLabel([...REGION_FILTER_OPTIONS]);
+  }
   if (affiliation.regionId && REGION_FILTER_OPTIONS.includes(affiliation.regionId)) {
     return sortRegionIdsByLabel([affiliation.regionId]);
   }
   return [HQ_REGION_ID];
 }
 
-/** 去掉已越权的勾选（换账号 / 改归属后）；全球轴随账号重置由调用方清空 */
+/** 去掉越权勾选（换账号后）；短期全量目录下等同透传 */
 export function clampOrgPerspectiveSelection(
   sel: OrgPerspectiveSelection,
   affiliation: OrgAffiliation,

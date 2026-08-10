@@ -15,23 +15,23 @@ export function hasGlobalOrgScope(role?: PlatformRole): boolean {
   return isSystemAdmin(role);
 }
 
-/** 对话助理可见的机关职能 chips */
+/** 对话助理可见的机关职能 chips（短期：全角色全量，不做菜单/入口裁剪） */
 export function getVisibleHomeDepts(
-  affiliation: OrgAffiliation,
-  role?: PlatformRole,
+  _affiliation: OrgAffiliation,
+  _role?: PlatformRole,
 ): DeptId[] {
-  if (hasGlobalOrgScope(role)) return HQ_DEPTS.map((d) => d.id);
-  if (affiliation.deptIds?.length) return affiliation.deptIds;
+  void _affiliation;
+  void _role;
   return HQ_DEPTS.map((d) => d.id);
 }
 
-/** 对话助理可见的一线区域 chips */
+/** 对话助理可见的一线区域 chips（短期：全角色全量） */
 export function getVisibleHomeRegions(
-  affiliation: OrgAffiliation,
-  role?: PlatformRole,
+  _affiliation: OrgAffiliation,
+  _role?: PlatformRole,
 ): RegionId[] {
-  if (hasGlobalOrgScope(role)) return REGIONS.map((r) => r.id);
-  if (affiliation.regionId) return [affiliation.regionId];
+  void _affiliation;
+  void _role;
   return REGIONS.map((r) => r.id);
 }
 

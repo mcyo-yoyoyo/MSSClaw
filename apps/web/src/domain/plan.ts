@@ -2,6 +2,7 @@ import { PROTOTYPE_AGENTS } from '@/domain/prototype/agents';
 import { PROTOTYPE_SKILLS } from '@/domain/prototype/skills';
 import { generatePlanStepsWithLlm, isLlmConfigured } from '@/api/llmClient';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
+import { skillDisplayName } from '@/domain/skillDisplay';
 
 export const EXEC_PLANS = {
   marketing: [
@@ -33,7 +34,11 @@ export function getSkillLabels(agentId?: string): string[] {
   if (!agent) return [];
   const skills = useMarketplaceStore.getState().skills;
   return agent.skillIds
-    .map((id) => skills.find((s) => s.id === id)?.name ?? PROTOTYPE_SKILLS.find((s) => s.id === id)?.name ?? id)
+    .map((id) => {
+      const hit = skills.find((s) => s.id === id) ?? PROTOTYPE_SKILLS.find((s) => s.id === id);
+      if (!hit) return id;
+      return skillDisplayName(hit);
+    })
     .filter(Boolean);
 }
 

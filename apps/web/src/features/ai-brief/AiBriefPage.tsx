@@ -5,6 +5,13 @@ import { useAiBotDailyNewsStore } from '@/stores/aiBotDailyNewsStore';
 import { useAiNewsPreferenceStore } from '@/stores/aiNewsPreferenceStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
+import { useSessionStore } from '@/stores/sessionStore';
+import {
+  buildAiBriefEmailHtml,
+  downloadAiBriefEmailTemplate,
+} from '@/domain/aiBriefEmailTemplate';
+import { resolveAiBriefPlatformUrl } from '@/domain/aiBriefEmailCopy';
+import { useAiBriefEmailCopyStore } from '@/stores/aiBriefEmailCopyStore';
 import { PageCanvas } from '@/components/layout/PageCanvas';
 import { PageStageHero } from '@/components/layout/PageStageHero';
 
@@ -15,8 +22,10 @@ export function AiBriefPage() {
   const consumeAiNewsOverview = useNavigationIntentStore((s) => s.consumeAiNewsOverview);
   const pref = useAiNewsPreferenceStore((s) => s.pref);
   const hydratePref = useAiNewsPreferenceStore((s) => s.hydrate);
-  const setEmailSubscription = useAiNewsPreferenceStore((s) => s.setEmailSubscription);
+  const emailCopy = useAiBriefEmailCopyStore((s) => s.copy);
+  const hydrateEmailCopy = useAiBriefEmailCopyStore((s) => s.hydrate);
   const showToast = useMarketplaceStore((s) => s.showToast);
+  const loginEmail = useSessionStore((s) => s.user?.email ?? '');
 
   const [activeDate, setActiveDate] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -25,11 +34,13 @@ export function AiBriefPage() {
   useEffect(() => {
     void hydrate();
     hydratePref();
-  }, [hydrate, hydratePref]);
+    hydrateEmailCopy();
+  }, [hydrate, hydratePref, hydrateEmailCopy]);
 
   useEffect(() => {
-    setEmailDraft(pref.email || '');
-  }, [pref.email]);
+    // 已登记邮箱优先；否则默认填入当前登录账号邮箱
+    setEmailDraft(pref.email?.trim() || loginEmail || '');
+  }, [pref.email, loginEmail]);
 
   useEffect(() => {
     const intent = consumeAiNewsOverview();
@@ -50,15 +61,21 @@ export function AiBriefPage() {
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [highlightId, flat.length]);
 
-  const saveEmailSub = (subscribed: boolean) => {
-    const result = setEmailSubscription(emailDraft, subscribed);
-    showToast(result.message);
-  };
-
-  const platformUrl =
+  const runtimeOrigin =
     typeof window !== 'undefined'
       ? `${window.location.origin}${window.location.pathname}`
       : '';
+  const platformUrl = resolveAiBriefPlatformUrl(emailCopy.platformUrl, runtimeOrigin);
+
+  const downloadTemplate = () => {
+    const html = buildAiBriefEmailHtml({
+      payload,
+      runtimeOrigin,
+      copy: emailCopy,
+    });
+    downloadAiBriefEmailTemplate(html, payload.groups[0]?.dateLabel);
+    showToast('已下载 AI 快讯 HTML，可用企业邮箱打开后发送');
+  };
 
   return (
     <div className="center-surface scroll-hidden flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -67,7 +84,7 @@ export function AiBriefPage() {
           className="mb-4 shrink-0"
           tone="brief"
           title="AI快讯"
-          subtitle="每日 AI 产业动态 · 精选速读 · 可订阅邮件推送（含平台入口）"
+          subtitle="每日 AI 产业动态 · 精选速读 · 可下载 HTML 人工发送（自动推送待开通）"
         >
           <div className="ai-brief-subscribe">
             <button
@@ -80,45 +97,42 @@ export function AiBriefPage() {
               <span>订阅 WeLink 推送（待上线）</span>
             </button>
             <div className="ai-brief-subscribe__email">
-              <p className="ai-brief-subscribe__email-title">订阅邮件推送</p>
+              <p className="ai-brief-subscribe__email-title">邮件推送</p>
               <div className="ai-brief-subscribe__email-row">
                 <label className="relative min-w-0 flex-1">
                   <i className="fa-regular fa-envelope pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-[#86868b]" />
                   <input
                     type="email"
                     value={emailDraft}
-                    onChange={(e) => setEmailDraft(e.target.value)}
-                    placeholder="name@company.com"
-                    className="w-full rounded-lg border-0 bg-zinc-50 py-2 pl-8 pr-2.5 text-[12px] text-[#1d1d1f] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] outline-none transition placeholder:text-[#a1a1aa] focus:bg-white focus:shadow-[inset_0_0_0_1px_rgba(0,113,227,0.35)]"
+                    readOnly
+                    disabled
+                    placeholder={loginEmail || 'name@huawei.com'}
+                    className="w-full cursor-not-allowed rounded-lg border-0 bg-zinc-100 py-2 pl-8 pr-2.5 text-[12px] text-[#a1a1aa] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.04)] outline-none"
                   />
                 </label>
                 <button
                   type="button"
-                  onClick={() => saveEmailSub(true)}
-                  className="shrink-0 rounded-lg bg-[#1d1d1f] px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-[#2c2c2e]"
+                  disabled
+                  title="邮件自动订阅待开通"
+                  className="shrink-0 cursor-not-allowed rounded-lg bg-zinc-200 px-3 py-2 text-[11px] font-semibold text-zinc-400"
                 >
-                  {pref.emailSubscribed ? '更新' : '订阅'}
+                  订阅
                 </button>
-                {pref.emailSubscribed ? (
-                  <button
-                    type="button"
-                    onClick={() => saveEmailSub(false)}
-                    className="shrink-0 rounded-lg px-2 py-2 text-[11px] font-medium text-[#71717a] transition hover:bg-black/[0.04]"
-                  >
-                    取消
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  onClick={downloadTemplate}
+                  className="shrink-0 rounded-lg bg-[#1d1d1f] px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-[#2c2c2e]"
+                  title="下载含快讯内容与平台链接的 HTML，便于人工发送；文案与链接可在门户运营配置"
+                >
+                  <i className="fa-solid fa-download mr-1 text-[10px]" />
+                  下载
+                </button>
               </div>
-              {pref.emailSubscribed && pref.email ? (
-                <p className="ai-brief-subscribe__hint">
-                  已订阅 {pref.email}
-                  {platformUrl ? ` · 邮件附带 ${platformUrl}` : ''}
-                </p>
-              ) : (
-                <p className="ai-brief-subscribe__hint">
-                  定时发送快讯摘要，并附带本平台入口
-                </p>
-              )}
+              <p className="ai-brief-subscribe__hint">
+                浏览器无法直发企业邮件；请点「下载」后用 Outlook / 企业邮箱发送。落地文案与链接在「门户运营 ·
+                AI快讯邮件」配置。
+                {platformUrl ? ` · 链接 ${platformUrl}` : ''}
+              </p>
             </div>
           </div>
         </PageStageHero>

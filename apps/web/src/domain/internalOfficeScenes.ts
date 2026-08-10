@@ -144,7 +144,7 @@ export const INTERNAL_OFFICE_SCENES: InternalOfficeScene[] = [
   },
   {
     id: 'specialist',
-    label: '达一下',
+    label: '答一下',
     english: 'SPECIALIST',
     description: '面向专项业务知识答疑，适合深入某一领域的连续追问',
     tools: [XIAOLUBAN],

@@ -35,6 +35,7 @@ import { resolveToolLogoUrl } from '@/domain/toolLogo';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
+import { shareSyncSaveHint } from '@/domain/shareSync';
 
 const LOGO_MAX_BYTES = 512 * 1024;
 
@@ -233,9 +234,9 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
         assetId: id,
         assetName: name,
       });
-      showToast('工具已保存，已进入上架审批');
+      showToast('工具已保存，已进入上架审批' + shareSyncSaveHint());
     } else {
-      showToast(form.published ? '工具已保存' : '工具已保存（草稿）');
+      showToast((form.published ? '工具已保存' : '工具已保存（草稿）') + shareSyncSaveHint());
     }
   };
 

@@ -40,13 +40,22 @@
 
 ### 1. 拉代码并构建前端
 
+构建前端时：
+
+- **阶段 1 体验首发建议保留演示内容**（不要设 `VITE_INCLUDE_DEMO_CONTENT=false`），便于同事先逛通路径。  
+- 若必须关闭演示样例，开放前用平台运营账号导入公司 Skill/Agent/工具后再发访问地址。
+
 ```bash
 cd /opt/mssclaw   # 路径自定
 # git clone / 解压代码到此处
 
-# 正式环境建议关掉演示样例注入
-VITE_INCLUDE_DEMO_CONTENT=false npm ci
-VITE_INCLUDE_DEMO_CONTENT=false npm run build --workspace @mss-claw/web
+# 阶段 1 体验（推荐，带演示样例）：
+npm ci
+npm run build --workspace @mss-claw/web
+
+# 若正式去演示样例（须先备好导入数据）：
+# VITE_INCLUDE_DEMO_CONTENT=false npm ci
+# VITE_INCLUDE_DEMO_CONTENT=false npm run build --workspace @mss-claw/web
 ```
 
 若后端开启了 `API_KEY`，构建时一并写入（或事后在偏好设置里填）：
@@ -105,12 +114,18 @@ npm run start:prod
 
 ## 四、验收清单（业务 + IT 一起点）
 
-1. 打开内网地址能登录。  
+### 阶段 1（部门机体验 · 必须过）
+
+1. 打开内网地址能登录（体验账号见组织权限说明，默认演示口令以登录页提示为准）。  
 2. 普通同事**看不到**、也**不用填** API 地址。  
-3. 管理员若曾在旧版手填过地址：偏好 →「数据同步」→「恢复自动连接」。  
-4. 开发者工具 Network：`/api/v1/health` = 200 JSON。  
-5. 电脑 A 上传案例附件（PPT 建议另传 PDF 视觉预览）并保存 → 电脑 B **刷新**后能打开同一附件。  
-6. （可选）两人几乎同时改同一门户条目：后保存方应提示冲突并加载最新版，避免静默互覆盖。
+3. 开发者工具 Network：`/api/v1/health` = 200 JSON（失败则 Agent/Skill/工具无法跨人共享）。  
+4. **双机共享**：电脑 A 用平台运营账号新建并保存一条 Skill（或工具）→ 电脑 B 刷新后能看到并可下载。  
+5. 若构建时关闭了演示内容（`VITE_INCLUDE_DEMO_CONTENT=false`），开放前须先导入公司 Skill/Agent/工具，否则目录为空。  
+6. 平台运营保存时若出现「仅存本机 / 同步失败」Toast 或顶栏橙/红条，说明 `/api` 未通，**先修部署再开放体验**。  
+7. 电脑 A 上传案例附件并保存 → 电脑 B **刷新**后能打开同一附件。  
+8. （可选）两人几乎同时改同一门户条目：后保存方应提示冲突并加载最新版。
+
+补充：管理员若曾在旧版手填过 API 地址 → 偏好「数据同步」→「恢复自动连接」。
 
 ---
 

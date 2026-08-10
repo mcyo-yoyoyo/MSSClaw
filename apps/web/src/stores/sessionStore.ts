@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { authenticate, buildLoginAccounts, type LoginAccount } from '@/domain/authAccounts';
+import { authenticate, buildLoginAccounts, migrateDemoEmailDomain, type LoginAccount } from '@/domain/authAccounts';
 import { normalizePlatformRole, type PlatformRole } from '@/domain/rbac';
 import {
   normalizeOrgAffiliation,
@@ -78,7 +78,7 @@ function loadSession(): SessionUser | null {
       const base: SessionUser = {
         id: parsed.id,
         name: parsed.name,
-        email: parsed.email,
+        email: migrateDemoEmailDomain(parsed.email),
         platformRole: normalizePlatformRole(parsed.platformRole),
         avatar: typeof parsed.avatar === 'string' ? parsed.avatar : 'bg-zinc-900',
         deptIds: aff.deptIds,
@@ -90,6 +90,7 @@ function loadSession(): SessionUser | null {
       const withDirectory: SessionUser = directory
         ? {
             ...base,
+            email: directory.email,
             platformRole: directory.platformRole,
             name: directory.name,
             deptIds: directory.deptIds,
@@ -98,6 +99,7 @@ function loadSession(): SessionUser | null {
         : base;
       const enriched = enrichOrgFromDirectory(withDirectory);
       const changed =
+        enriched.email !== parsed.email ||
         enriched.platformRole !== (parsed.platformRole as string) ||
         enriched.deptIds.join(',') !== (Array.isArray(parsed.deptIds) ? parsed.deptIds.join(',') : '') ||
         enriched.regionId !== ((parsed.regionId as RegionId | null | undefined) ?? null) ||

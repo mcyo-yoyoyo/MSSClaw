@@ -56,7 +56,10 @@ export const HOME_BUSINESS_AGENTS: Record<BusinessScenarioId, string[]> = {
   S7: ['agent-meeting', 'agent-hr-resume', 'agent-file-organize'],
 };
 
-export function getAgentBusinessScenario(agent: PrototypeAgentSeed): BusinessScenarioId | null {
+export function resolveAgentBusinessScenario(
+  agent: PrototypeAgentSeed,
+): BusinessScenarioId | null {
+  if (agent.businessScenarioId) return agent.businessScenarioId;
   const primaryId = agent.primarySkillId || agent.skillIds?.[0];
   if (primaryId) {
     const fromPrimary = getSkillBusinessScenario(primaryId);
@@ -69,10 +72,19 @@ export function getAgentBusinessScenario(agent: PrototypeAgentSeed): BusinessSce
   return AGENT_TO_BUSINESS_SCENARIO[agent.id] ?? null;
 }
 
+export function getAgentBusinessScenario(agent: PrototypeAgentSeed): BusinessScenarioId | null {
+  return resolveAgentBusinessScenario(agent);
+}
+
 export function getAgentBusinessLabel(agent: PrototypeAgentSeed): string | null {
-  const id = getAgentBusinessScenario(agent);
+  const id = resolveAgentBusinessScenario(agent);
   if (!id) return null;
   return getBusinessScenarioMeta(id).label;
+}
+
+/** 业务场景 → 对话任务类型（内部编排用，UI 不再暴露） */
+export function chatIdForBusinessScenario(id?: BusinessScenarioId | null): string {
+  return id === 'S6' ? 'knowledge' : 'marketing';
 }
 
 /** 未显式配置时：短名单内视为精选露出 */

@@ -1,8 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
 import { ASSET_VISIBILITY_LABELS, getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
 import { SKILL_VISIBILITY_SCOPE_OPTIONS } from '@/domain/assetFilters';
+import {
+  getBusinessScenarioMeta,
+} from '@/domain/businessScenarios';
+import { resolveSkillBusinessScenario } from '@/domain/skillBusinessScenarios';
 import {
   CenterModal,
   CenterPageHeader,
@@ -11,10 +15,12 @@ import {
 } from '@/components/center/CenterShell';
 import { OrgAssetFilterBar } from '@/components/center/OrgAssetFilters';
 import { SkillEditorModal, type SkillEditorTarget } from '@/components/center/SkillEditorModal';
+import { SharedCatalogEmptyHint } from '@/components/common/SharedCatalogEmptyHint';
 import { downloadAllSkillsFile, downloadSkillFile } from '@/domain/skillExport';
 import { skillDisplayDesc, skillDisplayName } from '@/domain/skillDisplay';
 import { resolveSkillAccentColor } from '@/domain/skillAccent';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
+import { useBusinessScenarioCatalogStore } from '@/stores/businessScenarioCatalogStore';
 
 interface SkillCenterPageProps {
   onInvoke: (skill: PrototypeSkillSeed) => void;
@@ -28,13 +34,20 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
     skillDeptFilter,
     skillRegionFilter,
     skillScopeFilter,
+    skillBusinessFilter,
     setSkillDeptFilter,
     setSkillRegionFilter,
     setSkillScopeFilter,
+    setSkillBusinessFilter,
     filteredSkills,
     bumpSkillInvokes,
     showToast,
   } = useMarketplaceStore();
+  const hydrateBusinessCatalog = useBusinessScenarioCatalogStore((s) => s.hydrate);
+
+  useEffect(() => {
+    hydrateBusinessCatalog();
+  }, [hydrateBusinessCatalog]);
 
   const [detail, setDetail] = useState<PrototypeSkillSeed | null>(null);
   const [editorTarget, setEditorTarget] = useState<SkillEditorTarget>(null);
@@ -42,12 +55,12 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
 
   const stats = useMemo(() => {
     const pub = skills.filter((s) => s.published).length;
-    const orgVis = skills.filter((s) => (s.visibility ?? 'org') === 'org').length;
+    const orgVis = skills.filter((s) => (s.visibility ?? 'public') === 'org').length;
     const totalInvokes = skills.reduce((n, s) => n + s.invokes, 0);
     return [
       ['Skill 总数', skills.length],
       ['可调用', pub],
-      ['本组织可见', orgVis],
+      ['组织内', orgVis],
       ['总调用', totalInvokes.toLocaleString()],
     ] as [string, string | number][];
   }, [skills]);
@@ -71,12 +84,13 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
     <div className="center-surface center-page scroll-hidden flex-1 overflow-y-auto">
       <div className="mx-auto max-w-6xl">
         <CenterPageHeader
-          title="配置技能"
-          subtitle="优先上传 Skill 包解析 · 默认组织内沉淀 · 上架可调用 / 公开可见需审批"
+          title="配置Skill"
+          subtitle="优先上传 Skill 包解析 · 发布可选组织内 / 公开可见（默认公开）· 上架可调用需审批"
           tip={
             <>
-              参照 Skill Hub：上传标准包 → 配置中英文与标签 → 组织内沉淀。公开跨部门或上架可调用模型任务时触发评审。
-              1.0 不打通连接器。输入 <code className="rounded bg-black/[0.04] px-1">/skill名</code> 调用已上架技能。
+              上传标准包 → 配置中英文与标签 → 设置发布权限范围。上架可调用模型任务时触发评审。1.0
+              不打通连接器。输入 <code className="rounded bg-black/[0.04] px-1">/skill名</code>{' '}
+              调用已上架技能。
             </>
           }
           actions={
@@ -108,7 +122,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
                 className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white transition"
               >
                 <i className="fa-solid fa-plus mr-1" />
-                创建技能
+                创建 Skill
               </button>
             </>
           }
@@ -119,10 +133,12 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
         <OrgAssetFilterBar
           deptFilter={skillDeptFilter}
           regionFilter={skillRegionFilter}
+          businessFilter={skillBusinessFilter}
           scopeFilter={skillScopeFilter}
           scopeOptions={SKILL_VISIBILITY_SCOPE_OPTIONS}
           onDeptChange={setSkillDeptFilter}
           onRegionChange={setSkillRegionFilter}
+          onBusinessChange={setSkillBusinessFilter}
           onScopeChange={setSkillScopeFilter}
           showScope
         />
@@ -173,10 +189,16 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
                         {skillDisplayDesc(s) || '暂无描述'}
                       </p>
                       <p className="mt-1 truncate text-[10px] text-zinc-400">
-                        {(s.ownerDeptIds ?? []).slice(0, 2).map(getDeptLabel).join(' · ') || '未指定职能'}
+                        {(() => {
+                          const biz = resolveSkillBusinessScenario(s);
+                          return biz ? getBusinessScenarioMeta(biz).label : '未分类场景';
+                        })()}
+                        <span className="mx-1 text-zinc-300">·</span>
+                        {(s.ownerDeptIds ?? []).slice(0, 2).map(getDeptLabel).join(' · ') ||
+                          '未指定职能'}
                         {s.ownerRegionId ? ` · ${getRegionLabel(s.ownerRegionId)}` : ''}
                         {' · '}
-                        {ASSET_VISIBILITY_LABELS[s.visibility ?? 'org']}
+                        {ASSET_VISIBILITY_LABELS[s.visibility ?? 'public']}
                       </p>
                       {[...(s.tags ?? []), ...(s.searchKeywords ?? [])].length ? (
                         <div className="mt-1.5 flex flex-wrap gap-1">
@@ -230,9 +252,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
               );
             })
           ) : (
-            <div className="apple-card col-span-3 p-6 text-center text-[13px] text-[#86868b]">
-              未找到匹配的 Skill
-            </div>
+            <SharedCatalogEmptyHint assetLabel="Skill" />
           )}
         </div>
       </div>
@@ -288,10 +308,15 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
             <p className="text-[#86868b]">{skillDisplayDesc(detail)}</p>
             <p className="mono text-claw-600">{detail.command}</p>
             <p className="text-[11px] text-[#86868b]">
+              {(() => {
+                const biz = resolveSkillBusinessScenario(detail);
+                return biz ? getBusinessScenarioMeta(biz).label : '未分类场景';
+              })()}
+              {' · '}
               v{detail.version}
               {detail.ownerRegionId ? ` · ${getRegionLabel(detail.ownerRegionId)}` : ''}
               {' · '}
-              {ASSET_VISIBILITY_LABELS[detail.visibility ?? 'org']}
+              {ASSET_VISIBILITY_LABELS[detail.visibility ?? 'public']}
               {' · '}
               {detail.invokes} 次调用
             </p>

@@ -39,7 +39,12 @@ const ROLE_RANK: Record<PlatformRole, number> = {
 };
 
 /** 平台级超级管理员邮箱（可管理租户配置） */
-const SUPER_ADMIN_EMAILS = new Set(['mcyo@company.com']);
+const SUPER_ADMIN_EMAILS = new Set(['mcyo@huawei.com', 'mcyo@company.com']);
+
+/** @company.com → @huawei.com（兼容旧本地缓存） */
+export function migrateDemoEmailDomain(email: string): string {
+  return email.trim().replace(/@company\.com$/i, '@huawei.com');
+}
 
 /** 与 settingsStore 同步的成员持久化前缀 */
 export const MEMBERS_LS_PREFIX = 'mssclaw_members_v6_';
@@ -90,7 +95,7 @@ export function buildLoginAccounts(): LoginAccount[] {
   const byEmail = new Map<string, LoginAccount>();
 
   const pushMember = (member: WorkspaceMember, workspaceId?: string) => {
-    const email = member.email.trim().toLowerCase();
+    const email = migrateDemoEmailDomain(member.email).toLowerCase();
     if (!email) return;
 
     const normalizedRole = normalizePlatformRole(member.role as string);
@@ -98,13 +103,14 @@ export function buildLoginAccounts(): LoginAccount[] {
       ? 'super_admin'
       : normalizedRole;
     const aff = memberAffiliation(member);
+    const displayEmail = migrateDemoEmailDomain(member.email);
 
     const existing = byEmail.get(email);
     if (!existing) {
       byEmail.set(email, {
         id: member.id,
         name: member.name,
-        email: member.email.trim(),
+        email: displayEmail,
         platformRole,
         avatar: member.avatar,
         status: member.status,
@@ -198,22 +204,30 @@ export async function authenticate(
   return { ok: false, error: '密码错误' };
 }
 
-/** 登录页展示的演示账号提示（按角色排序的四位种子） */
+/** 登录页展示的演示账号提示（种子角色各取一位） */
 export function getDemoAccountHints(): {
   email: string;
   name: string;
   role: PlatformRole;
   orgLabel?: string;
 }[] {
-  return buildLoginAccounts()
-    .filter((a) => a.status === 'active')
-    .slice(0, 4)
-    .map((a) => ({
-      email: a.email,
-      name: a.name,
-      role: a.platformRole,
-      orgLabel: formatAccountOrg(a),
-    }));
+  const accounts = buildLoginAccounts().filter((a) => a.status === 'active');
+  const preferred = [
+    'mcyo@huawei.com',
+    'jacky@huawei.com',
+    'dickson@huawei.com',
+    'somebody@huawei.com',
+  ];
+  const picked = preferred
+    .map((em) => accounts.find((a) => a.email.toLowerCase() === em))
+    .filter((a): a is LoginAccount => Boolean(a));
+  const list = picked.length ? picked : accounts.slice(0, 4);
+  return list.map((a) => ({
+    email: a.email,
+    name: a.name,
+    role: a.platformRole,
+    orgLabel: formatAccountOrg(a),
+  }));
 }
 
 function formatAccountOrg(a: LoginAccount): string {

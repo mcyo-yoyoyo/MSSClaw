@@ -9,6 +9,13 @@ export interface AssetViewerContext {
   role?: PlatformRole;
 }
 
+/**
+ * 组织数据权限开关（短期上线关闭）。
+ * - false：不做职能/区域数据权限；「本组织可见」与「全员可见」浏览效果相同（仅 private 仍限发布方）
+ * - true：仅应对 MSS 工具集市 Agent / Skill 启用——公开=全领域全区域；本组织=按观众角色归属匹配
+ */
+export const ORG_DATA_PERMISSION_ENABLED = false;
+
 /** 平台运营可旁路资产可见性，查看/管理全部 Skill */
 export function canBypassAssetVisibility(role?: PlatformRole): boolean {
   return role === 'super_admin';
@@ -26,10 +33,10 @@ function isAssetPublisher(asset: OwnableAsset, viewer: AssetViewerContext): bool
 }
 
 /**
- * 是否属于资产「所属组织」：
+ * 是否属于资产「所属组织」（后续数据权限启用时使用）：
  * - 声明了职能：须与观众职能有交集
  * - 声明了区域：观众有区域时须匹配；观众无区域（总部岗）不挡区域
- * - 未声明职能/区域：不再放行（避免脏缓存导致业务用户看见全站技能）
+ * - 未声明职能/区域：不放行
  */
 export function matchesAssetOrgScope(asset: OwnableAsset, affiliation: OrgAffiliation): boolean {
   const viewerDepts = affiliation.deptIds ?? [];
@@ -63,18 +70,22 @@ export function matchesAssetOrgScope(asset: OwnableAsset, affiliation: OrgAffili
  * 资产可见性：
  * - public：全员（含跨部门）
  * - private：仅发布方
- * - org：发布方，或所属组织（职能/区域）内成员；缺省按 org
+ * - org：本组织可见——短期等同 public；启用 ORG_DATA_PERMISSION_ENABLED 后按职能/区域匹配
  * - 平台运营旁路全部
  */
 export function canViewAsset(asset: OwnableAsset, viewer: AssetViewerContext): boolean {
   if (canBypassAssetVisibility(viewer.role)) return true;
 
-  const vis = (asset.visibility ?? 'org') as AssetVisibility;
+  const vis = (asset.visibility ?? 'public') as AssetVisibility;
   if (vis === 'public') return true;
 
   if (isAssetPublisher(asset, viewer)) return true;
   if (vis === 'private') return false;
 
-  // org（及未知值）：所属组织内可见，避免跨部门看到未公开资产
+  // org（及未知值）
+  if (!ORG_DATA_PERMISSION_ENABLED) {
+    // 短期：不做组织数据权限，本组织可见与全员浏览一致
+    return true;
+  }
   return matchesAssetOrgScope(asset, viewer.affiliation);
 }

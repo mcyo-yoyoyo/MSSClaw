@@ -5,6 +5,8 @@
 
 const CREDS_KEY = 'mssclaw_account_creds_v1';
 const POLICY_KEY = 'mssclaw_auth_policy_v1';
+/** 一次性：将当前账号密码全部初始化为 mssclaw */
+const CREDS_INIT_MSSCLAW_KEY = 'mssclaw_creds_init_all_mssclaw_v1';
 
 export type AccountCredential = {
   salt: string;
@@ -20,6 +22,9 @@ export type AuthPolicy = {
 };
 
 const DEFAULT_POLICY: AuthPolicy = { allowDemoPassword: true };
+
+/** 与 authAccounts.DEMO_PASSWORD 保持一致 */
+export const DEFAULT_ACCOUNT_PASSWORD = 'mssclaw';
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -115,6 +120,20 @@ export function clearAccountPassword(email: string) {
   saveCreds(map);
 }
 
+/** 将本地已存密码的 @company.com 键迁移为 @huawei.com */
+export function migrateCredentialEmailDomain() {
+  const map = loadCreds();
+  let changed = false;
+  for (const email of Object.keys(map)) {
+    const next = email.replace(/@company\.com$/i, '@huawei.com');
+    if (next === email) continue;
+    if (!map[next]) map[next] = map[email]!;
+    delete map[email];
+    changed = true;
+  }
+  if (changed) saveCreds(map);
+}
+
 export async function verifyAccountPassword(
   email: string,
   password: string,
@@ -148,6 +167,62 @@ export async function batchSetAccountPasswords(
     else fail.push({ line, error: result.error });
   }
   return { ok, fail };
+}
+
+/**
+ * 将给定邮箱列表的密码全部设为指定值（默认 mssclaw）。
+ * 用于种子角色账号初始化 / 运营一键重置。
+ */
+export async function setPasswordsForEmails(
+  emails: string[],
+  password: string = DEFAULT_ACCOUNT_PASSWORD,
+): Promise<{ ok: number; fail: string[] }> {
+  const unique = [...new Set(emails.map(normalizeEmail).filter((e) => e.includes('@')))];
+  let ok = 0;
+  const fail: string[] = [];
+  for (const email of unique) {
+    const r = await setAccountPassword(email, password);
+    if (r.ok) ok += 1;
+    else fail.push(email);
+  }
+  return { ok, fail };
+}
+
+/**
+ * 启动迁移：一次性把当前全部可登录账号密码初始化为 mssclaw。
+ * 已执行过则跳过；未设密的后续种子账号仍会在 ensureMissing 中补齐。
+ */
+export async function migrateInitAllPasswordsToMssclaw(
+  emails: string[],
+): Promise<{ ran: boolean; ok: number }> {
+  try {
+    if (localStorage.getItem(CREDS_INIT_MSSCLAW_KEY) === '1') {
+      return { ran: false, ok: 0 };
+    }
+  } catch {
+    /* ignore */
+  }
+  const { ok } = await setPasswordsForEmails(emails, DEFAULT_ACCOUNT_PASSWORD);
+  try {
+    localStorage.setItem(CREDS_INIT_MSSCLAW_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+  return { ran: true, ok };
+}
+
+/** 对尚未设密的账号补齐默认密码 mssclaw（不覆盖已有密码） */
+export async function ensureMissingPasswords(
+  emails: string[],
+  password: string = DEFAULT_ACCOUNT_PASSWORD,
+): Promise<number> {
+  let n = 0;
+  for (const email of emails) {
+    if (hasCredential(email)) continue;
+    const r = await setAccountPassword(email, password);
+    if (r.ok) n += 1;
+  }
+  return n;
 }
 
 /** 生成临时密码（邀请/重置时展示一次） */

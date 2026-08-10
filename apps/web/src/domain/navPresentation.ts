@@ -126,12 +126,12 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
     /** 项目详情进阶；配置入口在系统设置 · 门户运营 */
     hiddenFromSidebar: true,
   },
-  { id: 'skills', label: '配置技能', subtitle: '上架 · 挂载 · 导出（运营）', icon: 'fa-cube', section: 'platform' },
-  { id: 'agents', label: '配置专家', subtitle: '上架 · 发布 · 编排（运营）', icon: 'fa-robot', section: 'platform' },
+  { id: 'skills', label: '配置Skill', subtitle: '上架 · 挂载 · 导出（运营）', icon: 'fa-cube', section: 'platform' },
+  { id: 'agents', label: '配置Agent', subtitle: '上架 · 发布 · 编排（运营）', icon: 'fa-robot', section: 'platform' },
   {
     id: 'agent-studio',
     label: 'Agent Studio',
-    subtitle: '已并入配置专家',
+    subtitle: '已并入配置Agent',
     icon: 'fa-wand-magic-sparkles',
     section: 'platform',
     hiddenFromSidebar: true,
@@ -168,7 +168,7 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   {
     id: 'admin',
     label: '组织权限',
-    subtitle: '组织 · 部门 · 角色 · 成员治理',
+    subtitle: '成员 · 角色归属标签 · 部门字典（短期不做数据权限）',
     icon: 'fa-shield-halved',
     section: 'system',
     adminOnly: true,

@@ -27,8 +27,14 @@ import {
   type RegionFilter,
 } from '@/domain/assetFilters';
 import { getCurrentOrgAffiliation, getCurrentPlatformRole, getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
+import {
+  resolveAgentBusinessScenario,
+} from '@/domain/agentBusinessScenarios';
+import { resolveSkillBusinessScenario } from '@/domain/skillBusinessScenarios';
+import type { BusinessScenarioId } from '@/domain/businessScenarios';
 
 type CategoryFilter = EfficiencyCategory | 'all';
+type BusinessFilter = BusinessScenarioId | 'all';
 
 interface MarketplaceState {
   ready: boolean;
@@ -39,6 +45,8 @@ interface MarketplaceState {
   kbDocs: PrototypeKbDocument[];
   agentFilter: CategoryFilter;
   skillFilter: CategoryFilter;
+  agentBusinessFilter: BusinessFilter;
+  skillBusinessFilter: BusinessFilter;
   agentSearch: string;
   skillSearch: string;
   toolSearch: string;
@@ -75,6 +83,8 @@ interface MarketplaceState {
   getPublishedTools: () => PrototypeToolSeed[];
   setAgentFilter: (f: CategoryFilter) => void;
   setSkillFilter: (f: CategoryFilter) => void;
+  setAgentBusinessFilter: (f: BusinessFilter) => void;
+  setSkillBusinessFilter: (f: BusinessFilter) => void;
   setAgentSearch: (q: string) => void;
   setSkillSearch: (q: string) => void;
   setToolSearch: (q: string) => void;
@@ -115,6 +125,8 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   kbDocs: structuredClone(demoDefaults(PROTOTYPE_KB_DOCS)),
   agentFilter: 'all',
   skillFilter: 'all',
+  agentBusinessFilter: 'all',
+  skillBusinessFilter: 'all',
   agentSearch: '',
   skillSearch: '',
   toolSearch: '',
@@ -234,7 +246,9 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
           publisherUserId: userId || parsed.publisherUserId,
           author: parsed.author || userName,
           published: false,
-          visibility: parsed.visibility === 'private' ? 'private' : 'org',
+          visibility: parsed.visibility === 'org' || parsed.visibility === 'private'
+            ? parsed.visibility
+            : 'public',
         };
 
         get().upsertSkill(skill, true);
@@ -337,6 +351,8 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
 
   setAgentFilter: (f) => set({ agentFilter: f }),
   setSkillFilter: (f) => set({ skillFilter: f }),
+  setAgentBusinessFilter: (f) => set({ agentBusinessFilter: f }),
+  setSkillBusinessFilter: (f) => set({ skillBusinessFilter: f }),
   setAgentSearch: (q) => set({ agentSearch: q }),
   setSkillSearch: (q) => set({ skillSearch: q }),
   setToolSearch: (q) => set({ toolSearch: q }),
@@ -359,7 +375,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   filteredAgents: () => {
     const {
       agents,
-      agentFilter,
+      agentBusinessFilter,
       agentSearch,
       agentDeptFilter,
       agentRegionFilter,
@@ -371,11 +387,8 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     const affiliation = getCurrentOrgAffiliation();
     const role = getCurrentPlatformRole();
     return agents.filter((a) => {
-      if (agentFilter !== 'all') {
-        if (agentFilter === 'office' && a.category !== 'office' && a.category !== 'experience') {
-          return false;
-        }
-        if (agentFilter !== 'office' && a.category !== agentFilter) return false;
+      if (agentBusinessFilter !== 'all') {
+        if (resolveAgentBusinessScenario(a) !== agentBusinessFilter) return false;
       }
       if (q && !`${a.name} ${a.desc} ${a.bizLine}`.toLowerCase().includes(q)) return false;
       return matchesAssetOrgFilters(
@@ -399,7 +412,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   filteredSkills: () => {
     const {
       skills,
-      skillFilter,
+      skillBusinessFilter,
       skillSearch,
       skillDeptFilter,
       skillRegionFilter,
@@ -411,11 +424,8 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     const affiliation = getCurrentOrgAffiliation();
     const role = getCurrentPlatformRole();
     return skills.filter((s) => {
-      if (skillFilter !== 'all') {
-        if (skillFilter === 'office' && s.category !== 'office' && s.category !== 'experience') {
-          return false;
-        }
-        if (skillFilter !== 'office' && s.category !== skillFilter) return false;
+      if (skillBusinessFilter !== 'all') {
+        if (resolveSkillBusinessScenario(s) !== skillBusinessFilter) return false;
       }
       if (
         q &&

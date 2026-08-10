@@ -128,8 +128,8 @@ export const PORTAL_ASSET_TYPE_LABELS: Record<PortalAssetType, string> = {
 };
 
 export const ASSET_VISIBILITY_LABELS: Record<AssetVisibility, string> = {
-  public: '全员可见',
-  org: '本组织可见',
+  public: '公开可见',
+  org: '组织内',
   private: '仅发布方',
 };
 

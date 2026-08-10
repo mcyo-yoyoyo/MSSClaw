@@ -192,7 +192,7 @@ export function OrgPerspectiveFilter({ value, onChange }: OrgPerspectiveFilterPr
             })}
           </div>
           <p className="border-t border-zinc-50 px-2 py-1 text-[10px] leading-snug text-zinc-400">
-            空选=权限内全部（含公开）；选项仅本组织范围
+            空选=全部；领域/区域为浏览筛选（短期不做数据权限裁剪）
           </p>
         </div>
       ) : null}

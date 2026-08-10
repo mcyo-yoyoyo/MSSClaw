@@ -4,6 +4,7 @@ import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { getAgentPack } from '@/domain/agents/catalog';
 import { getSkillPack } from '@/domain/skills/catalog';
 import { buildSkillDemoPrompt, getSkillById } from '@/domain/skillRuntime';
+import { skillDisplayName } from '@/domain/skillDisplay';
 
 export function getPrimarySkill(agent: PrototypeAgentSeed): PrototypeSkillSeed | null {
   const pack = getAgentPack(agent.id);
@@ -45,14 +46,16 @@ export function buildAgentOrchestrationSteps(
   if (pack?.planSteps?.length) return [...pack.planSteps];
 
   const marketSkills = useMarketplaceStore.getState().skills;
-  const resolveName = (id: string) =>
-    marketSkills.find((s) => s.id === id)?.name ??
-    PROTOTYPE_SKILLS.find((s) => s.id === id)?.name ??
-    id;
+  const resolveSkill = (id: string) =>
+    marketSkills.find((s) => s.id === id) ?? PROTOTYPE_SKILLS.find((s) => s.id === id);
+  const resolveName = (id: string) => {
+    const hit = resolveSkill(id);
+    return hit ? skillDisplayName(hit) : id;
+  };
 
   const steps: string[] = [];
   if (mountedSkill?.planSteps?.length) {
-    steps.push(`【主 Skill · ${mountedSkill.name}】`);
+    steps.push(`【主 Skill · ${skillDisplayName(mountedSkill)}】`);
     steps.push(...mountedSkill.planSteps);
   }
   for (const id of agent.skillIds) {

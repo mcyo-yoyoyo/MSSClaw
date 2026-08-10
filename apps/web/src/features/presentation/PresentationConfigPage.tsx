@@ -177,7 +177,7 @@ export function PresentationConfigPage() {
           </p>
           {isBusinessShellRole(editingRole) ? (
             <p className="mt-2 rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2 text-[11px] leading-relaxed text-amber-900/80">
-              当前角色为业务壳：仅显示「工作平台」可选项。要配置专家/技能/工具等完整能力，请上方切换到「能力开发」或「平台运营」。
+              当前角色为业务壳：仅显示「工作平台」可选项。要配置 Agent/Skill/工具等完整能力，请上方切换到「能力开发」或「平台运营」。
             </p>
           ) : null}
         </section>

@@ -15,6 +15,7 @@ import {
 import { externalizePortalItemAttachments } from '@/api/blobApi';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { demoDefaults } from '@/domain/demoContentPolicy';
+import { reportShareSync } from '@/domain/shareSync';
 
 const RETIRED_TOOL_IDS = new Set<string>(RETIRED_DEMO_TOOL_IDS);
 
@@ -131,6 +132,7 @@ export async function savePortalContent(
   };
   writeLocalPortalContent(workspaceId, next);
   if (!useWorkspaceStore.getState().apiConnected) {
+    reportShareSync({ kind: 'portal', synced: false, reason: 'offline' });
     return { synced: false, error: 'api_offline', items };
   }
   try {
@@ -145,6 +147,7 @@ export async function savePortalContent(
       items: saved.items ?? items,
       revision: getPortalRevision(workspaceId),
     });
+    reportShareSync({ kind: 'portal', synced: true });
     return {
       synced: true,
       items: saved.items ?? items,
@@ -161,6 +164,7 @@ export async function savePortalContent(
           mergeCatalog(demoDefaults(PROTOTYPE_PORTAL_CONTENT), remote.items),
         );
           writeLocalPortalContent(workspaceId, { items: merged, revision });
+          reportShareSync({ kind: 'portal', synced: false, reason: 'conflict' });
           return {
             synced: false,
             conflict: true,
@@ -172,8 +176,15 @@ export async function savePortalContent(
       } catch {
         /* ignore reload failure */
       }
+      reportShareSync({ kind: 'portal', synced: false, reason: 'conflict' });
       return { synced: false, conflict: true, error: 'conflict', items };
     }
+    reportShareSync({
+      kind: 'portal',
+      synced: false,
+      reason: 'failed',
+      detail: err instanceof Error ? err.message : undefined,
+    });
     return {
       synced: false,
       error: err instanceof Error ? err.message : 'save_failed',

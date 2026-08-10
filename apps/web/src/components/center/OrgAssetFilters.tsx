@@ -10,6 +10,10 @@ import {
   type RegionFilter,
   EFFICIENCY_FILTER_OPTIONS,
 } from '@/domain/assetFilters';
+import {
+  listVisibleBusinessScenarioCategories,
+  type BusinessScenarioId,
+} from '@/domain/businessScenarios';
 
 type ScenarioScopeFilter = 'related' | 'all';
 
@@ -17,6 +21,8 @@ interface OrgAssetFilterBarProps {
   deptFilter: DeptFilter;
   regionFilter: RegionFilter;
   efficiencyFilter?: EfficiencyFilter;
+  /** 业务场景分类（与业务用户 MSS 视角对齐） */
+  businessFilter?: BusinessScenarioId | 'all';
   scopeFilter?: AssetScopeFilter;
   /** 覆盖默认范围选项（如技能页用可见范围口径） */
   scopeOptions?: { id: AssetScopeFilter; label: string }[];
@@ -25,6 +31,7 @@ interface OrgAssetFilterBarProps {
   onDeptChange: (v: DeptFilter) => void;
   onRegionChange: (v: RegionFilter) => void;
   onEfficiencyChange?: (v: EfficiencyFilter) => void;
+  onBusinessChange?: (v: BusinessScenarioId | 'all') => void;
   onScopeChange?: (v: AssetScopeFilter) => void;
   onScenarioFilterChange?: (v: ScenarioScopeFilter) => void;
   /** 是否展示「范围」行，默认不展示 */
@@ -34,17 +41,19 @@ interface OrgAssetFilterBarProps {
   extra?: ReactNode;
 }
 
-/** 能力沉淀统一筛选：默认折叠摘要，展开后职能+区域一行，提效场景+范围一行 */
+/** 能力沉淀统一筛选：默认折叠摘要；业务场景对齐 MSS 业务用户视角 */
 export function OrgAssetFilterBar({
   deptFilter,
   regionFilter,
   efficiencyFilter = 'all',
+  businessFilter = 'all',
   scopeFilter = 'all',
   scopeOptions = ASSET_SCOPE_OPTIONS,
   scenarioFilter = 'all',
   onDeptChange,
   onRegionChange,
   onEfficiencyChange,
+  onBusinessChange,
   onScopeChange,
   onScenarioFilterChange,
   showScope = false,
@@ -52,6 +61,7 @@ export function OrgAssetFilterBar({
   extra,
 }: OrgAssetFilterBarProps) {
   const [open, setOpen] = useState(!collapsible);
+  const businessOptions = useMemo(() => listVisibleBusinessScenarioCategories(), []);
 
   const summary = useMemo(() => {
     const parts: string[] = [];
@@ -63,6 +73,11 @@ export function OrgAssetFilterBar({
     }
     if (regionFilter !== 'all') {
       parts.push(REGIONS.find((r) => r.id === regionFilter)?.label ?? regionFilter);
+    }
+    if (onBusinessChange && businessFilter !== 'all') {
+      parts.push(
+        businessOptions.find((o) => o.id === businessFilter)?.label ?? businessFilter,
+      );
     }
     if (onEfficiencyChange && efficiencyFilter !== 'all') {
       parts.push(
@@ -77,10 +92,13 @@ export function OrgAssetFilterBar({
     deptFilter,
     regionFilter,
     efficiencyFilter,
+    businessFilter,
+    businessOptions,
     scopeFilter,
     scopeOptions,
     scenarioFilter,
     onEfficiencyChange,
+    onBusinessChange,
     onScenarioFilterChange,
     showScope,
     onScopeChange,
@@ -157,8 +175,36 @@ export function OrgAssetFilterBar({
         </div>
       </div>
 
-      {(onEfficiencyChange || (showScope && onScopeChange) || extra) && (
+      {(onBusinessChange || onEfficiencyChange || (showScope && onScopeChange) || extra) && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          {onBusinessChange ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="mr-0.5 text-[10px] font-semibold text-zinc-400">业务场景</span>
+              <button
+                type="button"
+                onClick={() => onBusinessChange('all')}
+                className={cn(
+                  'filter-chip px-2.5 py-1 text-[11px] font-medium',
+                  businessFilter === 'all' && 'active',
+                )}
+              >
+                全部
+              </button>
+              {businessOptions.map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => onBusinessChange(o.id)}
+                  className={cn(
+                    'filter-chip px-2.5 py-1 text-[11px] font-medium',
+                    businessFilter === o.id && 'active',
+                  )}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {onEfficiencyChange ? (
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="mr-0.5 text-[10px] font-semibold text-zinc-400">提效场景</span>
@@ -179,7 +225,7 @@ export function OrgAssetFilterBar({
           ) : null}
           {showScope && onScopeChange ? (
             <>
-              {onEfficiencyChange ? (
+              {onBusinessChange || onEfficiencyChange ? (
                 <span className="hidden h-4 w-px bg-zinc-200 sm:block" aria-hidden />
               ) : null}
               <div className="flex flex-wrap items-center gap-1.5">
@@ -326,9 +372,9 @@ export function OwnershipFormFields({
             }
             className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-[12px]"
           >
-            <option value="public">公开</option>
+            <option value="public">公开可见</option>
             <option value="org">组织内</option>
-            <option value="private">私有</option>
+            <option value="private">仅发布方</option>
           </select>
         </label>
       </div>

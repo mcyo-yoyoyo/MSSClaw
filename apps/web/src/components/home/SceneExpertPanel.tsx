@@ -11,7 +11,7 @@ export function SceneExpertPanel({
   agents,
   selectedId,
   onSelect,
-  emptyText = '暂无精选专家，可先用上方场景技能；运营可在「配置专家」勾选精选露出',
+  emptyText = '暂无精选专家，可先用上方场景技能；运营可在「配置Agent」勾选精选露出',
 }: {
   agents: PrototypeAgentSeed[];
   selectedId: string | null;

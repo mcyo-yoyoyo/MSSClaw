@@ -1,4 +1,4 @@
-﻿import { useMemo, useState, type ReactNode } from 'react';
+﻿import { useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Workspace } from '@/domain/workspace';
 import {
   getRoleBadgeClass,
@@ -34,6 +34,11 @@ import {
   setAccountPassword,
   setAllowDemoPassword,
 } from '@/domain/accountCredentials';
+import {
+  buildMemberImportTemplateCsv,
+  downloadMemberImportTemplate,
+  readImportFileAsText,
+} from '@/domain/memberImportTemplate';
 import { getNavMetaLabel } from '@/domain/navPresentation';
 import { cn } from '@/lib/utils';
 import type { InviteMemberInput } from '@/stores/settingsStore';
@@ -115,29 +120,21 @@ function MembersAndOrgPanel({
   const canManage = currentUser?.platformRole === 'super_admin';
 
   const [nameDraft, setNameDraft] = useState(workspace.name);
+  const [addMode, setAddMode] = useState<'single' | 'batch'>('single');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [role, setRole] = useState<PlatformRole>('business_user');
   const [deptId, setDeptId] = useState<DeptId | ''>('');
   const [regionId, setRegionId] = useState<RegionId | ''>('');
-  const [activateNow, setActivateNow] = useState(true);
   const [pwdTick, setPwdTick] = useState(0);
-
-  const deptCoverage = useMemo(() => {
-    const set = new Set<string>();
-    members.forEach((m) => m.deptIds?.forEach((d) => set.add(d)));
-    return set.size;
-  }, [members]);
+  const [pwdOpen, setPwdOpen] = useState(false);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <Section title="组织概览">
-        <p className="mb-3 text-[12px] text-[#6e6e73]">
-          组织名称用于侧栏与登录视角；成员归属决定资产可见性与权限申请/管控的基础单元。部门与区域字典请在「部门区域」维护。
-        </p>
-        <div className="mb-4 flex flex-wrap items-end gap-2">
-          <label className="min-w-[220px] flex-1 text-[11px] font-semibold text-zinc-500">
-            组织显示名
+    <div className="mx-auto max-w-5xl space-y-5">
+      <section className="rounded-2xl border border-zinc-200/90 bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="min-w-[200px] flex-1 text-[11px] font-semibold text-zinc-500">
+            组织名称
             <input
               value={nameDraft}
               onChange={(e) => setNameDraft(e.target.value)}
@@ -146,12 +143,12 @@ function MembersAndOrgPanel({
             />
           </label>
           {canManage ? (
-          <button
-            type="button"
-            onClick={() => {
-              const next = nameDraft.trim();
-              if (!next) return;
-              updateWorkspace(workspace.id, { name: next });
+            <button
+              type="button"
+              onClick={() => {
+                const next = nameDraft.trim();
+                if (!next) return;
+                updateWorkspace(workspace.id, { name: next });
                 recordAudit({
                   category: 'org',
                   action: 'org.rename',
@@ -159,119 +156,137 @@ function MembersAndOrgPanel({
                   detail: `更新组织显示名为「${next}」`,
                   workspaceId: workspace.id,
                 });
-            }}
-            className="rounded-lg bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white"
-          >
-            保存名称
-          </button>
+              }}
+              className="rounded-lg bg-zinc-900 px-3.5 py-2 text-[12px] font-semibold text-white"
+            >
+              保存
+            </button>
           ) : null}
-        </div>
-        <dl className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
-          <Field label="当前组织" value={workspace.name} />
-          <Field label="Namespace" value={`ns/${workspace.namespace}`} mono />
-          <Field label="成员" value={`${members.length} 人`} />
-          <Field label="覆盖部门" value={`${deptCoverage || depts.length} 个`} />
-        </dl>
-        <ol className="mt-4 list-decimal space-y-1 pl-4 text-[11px] leading-relaxed text-zinc-500">
-          <li>平台运营邀请邮箱并指定角色 / 部门 / 区域</li>
-          <li>激活或批量设密后，用户用专属密码登录（生产请关闭演示密码）</li>
-          <li>会话携带角色与组织归属，驱动菜单、资产可见性与审计回溯</li>
-        </ol>
-      </Section>
-
-      <Section title="邀请成员">
-        {!canManage ? (
-          <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
-            当前账号无成员管理权限（需平台运营），仅可查看。
-          </p>
-        ) : (
-          <div className="space-y-2 rounded-xl border border-zinc-200 bg-white p-4">
-            <div className="grid gap-2 sm:grid-cols-2">
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="邮箱 email@company.com"
-                className="rounded-lg border border-black/[0.06] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
-              />
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="显示名（可选）"
-                className="rounded-lg border border-black/[0.06] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
-              />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value as PlatformRole)}
-                className="rounded-lg border border-black/[0.06] px-3 py-2 text-sm"
-              >
-                {INVITEABLE_ROLES.map((r) => (
-                  <option key={r} value={r}>
-                    {ROLE_LABELS[r]}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={deptId}
-                onChange={(e) => setDeptId(e.target.value as DeptId | '')}
-                className="rounded-lg border border-black/[0.06] px-3 py-2 text-sm"
-              >
-                <option value="">部门（可选）</option>
-                {depts.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={regionId}
-                onChange={(e) => setRegionId(e.target.value as RegionId | '')}
-                className="rounded-lg border border-black/[0.06] px-3 py-2 text-sm"
-              >
-                <option value="">区域（可选）</option>
-                {regions.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
-              <label className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-[12px] text-zinc-700">
-                <input
-                  type="checkbox"
-                  checked={activateNow}
-                  onChange={(e) => setActivateNow(e.target.checked)}
-                  className="accent-claw-600"
-                />
-                立即激活
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!email.trim()) return;
-                  onInvite({
-                    email: email.trim(),
-                    role,
-                    name: name.trim() || undefined,
-                    deptIds: deptId ? [deptId] : [],
-                    regionId: regionId || null,
-                    activateNow,
-                  });
-                  setEmail('');
-                  setName('');
-                }}
-                className="rounded-lg bg-claw-600 px-4 py-2 text-sm font-bold text-white hover:bg-zinc-800"
-              >
-                邀请
-              </button>
-            </div>
+          <div className="flex flex-wrap gap-2 text-[12px] text-zinc-500">
+            <span className="rounded-full bg-zinc-100 px-2.5 py-1 font-medium text-zinc-700">
+              {members.length} 人
+            </span>
+            <span className="rounded-full bg-zinc-50 px-2.5 py-1">
+              ns/{workspace.namespace}
+            </span>
           </div>
-        )}
-      </Section>
+        </div>
+        <p className="mt-2 text-[11px] leading-relaxed text-zinc-400">
+          三步：添加成员 → 指定角色与部门/区域归属 → 设密登录。归属短期不作菜单/数据权限裁剪。
+        </p>
+      </section>
 
-      <Section title={`成员列表 (${members.length})`}>
+      {canManage ? (
+        <Section title="添加成员">
+          <div className="mb-3 inline-flex rounded-full bg-zinc-100 p-0.5">
+            {(
+              [
+                { id: 'single' as const, label: '单个添加' },
+                { id: 'batch' as const, label: '批量导入' },
+              ] as const
+            ).map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setAddMode(m.id)}
+                className={cn(
+                  'rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition',
+                  addMode === m.id
+                    ? 'bg-white text-zinc-900 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-800',
+                )}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          {addMode === 'single' ? (
+            <div className="space-y-2 rounded-xl border border-zinc-200 bg-zinc-50/50 p-3.5">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="邮箱 name@huawei.com"
+                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-[13px]"
+                />
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="姓名（可选）"
+                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-[13px]"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value as PlatformRole)}
+                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-[13px]"
+                >
+                  {INVITEABLE_ROLES.map((r) => (
+                    <option key={r} value={r}>
+                      {ROLE_LABELS[r]}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={deptId}
+                  onChange={(e) => setDeptId(e.target.value as DeptId | '')}
+                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-[13px]"
+                >
+                  <option value="">部门（可选）</option>
+                  {depts.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={regionId}
+                  onChange={(e) => setRegionId(e.target.value as RegionId | '')}
+                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-[13px]"
+                >
+                  <option value="">区域（可选）</option>
+                  {regions.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!email.trim()) return;
+                    onInvite({
+                      email: email.trim(),
+                      role,
+                      name: name.trim() || undefined,
+                      deptIds: deptId ? [deptId] : [],
+                      regionId: regionId || null,
+                      activateNow: true,
+                    });
+                    setEmail('');
+                    setName('');
+                  }}
+                  className="rounded-lg bg-claw-600 px-4 py-2 text-[13px] font-semibold text-white hover:bg-zinc-800"
+                >
+                  添加并激活
+                </button>
+              </div>
+            </div>
+          ) : (
+            <BatchAccountImportSection />
+          )}
+        </Section>
+      ) : (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+          当前账号无成员管理权限（需平台运营），仅可查看。
+        </p>
+      )}
+
+      <Section title={`成员列表 · ${members.length}`}>
         <div className="overflow-x-auto rounded-xl border border-black/[0.06]">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="border-b border-black/[0.06] bg-[#fafafa] text-[11px] font-bold uppercase text-[#86868b]">
@@ -457,8 +472,131 @@ function MembersAndOrgPanel({
       </Section>
 
       {canManage ? (
-        <AccountPasswordAdminSection members={members} tick={pwdTick} onChanged={() => setPwdTick((n) => n + 1)} />
+        <section className="rounded-2xl border border-zinc-200/90 bg-white">
+          <button
+            type="button"
+            onClick={() => setPwdOpen((v) => !v)}
+            className="flex w-full items-center justify-between px-4 py-3 text-left"
+          >
+            <span>
+              <span className="text-[13px] font-semibold text-zinc-900">登录与密码</span>
+              <span className="mt-0.5 block text-[11px] text-zinc-400">
+                演示密码开关 · 单账号设密（高级）
+              </span>
+            </span>
+            <i
+              className={cn(
+                'fa-solid fa-chevron-down text-[11px] text-zinc-400 transition',
+                pwdOpen && 'rotate-180',
+              )}
+            />
+          </button>
+          {pwdOpen ? (
+            <div className="border-t border-zinc-100 px-4 pb-4 pt-3">
+              <AccountPasswordAdminSection
+                members={members}
+                tick={pwdTick}
+                onChanged={() => setPwdTick((n) => n + 1)}
+              />
+            </div>
+          ) : null}
+        </section>
       ) : null}
+    </div>
+  );
+}
+
+function BatchAccountImportSection() {
+  const batchImportAccounts = useSettingsStore((s) => s.batchImportAccounts);
+  const setToast = useSettingsStore((s) => s.setToast);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-3.5">
+      <p className="text-[12px] leading-relaxed text-zinc-600">
+        <strong className="font-semibold text-zinc-800">推荐流程：</strong>
+        下载模板 → Excel 填写 → 上传或粘贴 → 一键导入。
+        列：邮箱、密码、角色、姓名、部门、区域。
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            downloadMemberImportTemplate();
+            setToast('已下载「MSS-成员导入模板.csv」，可用 Excel 打开填写');
+          }}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#1d1d1f] px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-[#2c2c2e]"
+        >
+          <i className="fa-solid fa-download text-[10px]" />
+          下载导入模板
+        </button>
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3.5 py-2 text-[12px] font-semibold text-zinc-700 hover:bg-zinc-50"
+        >
+          <i className="fa-solid fa-file-import text-[10px]" />
+          上传已填模板
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv,text/csv,text/plain"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (!file) return;
+            void (async () => {
+              try {
+                const content = await readImportFileAsText(file);
+                setText(content);
+                setToast(`已载入 ${file.name}，确认后点击「开始导入」`);
+              } catch {
+                setToast('读取文件失败，请改用粘贴');
+              }
+            })();
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => setText(buildMemberImportTemplateCsv())}
+          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-[12px] font-medium text-zinc-600 hover:bg-zinc-50"
+        >
+          填入示例到下方
+        </button>
+      </div>
+      <textarea
+        rows={8}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={'先点「下载导入模板」，填好后上传；也可直接粘贴 CSV 内容…'}
+        className="w-full rounded-lg border border-zinc-200 bg-white px-2.5 py-2 font-mono text-[11px] text-zinc-800"
+        spellCheck={false}
+      />
+      <button
+        type="button"
+        disabled={busy || !text.trim()}
+        onClick={() => {
+          void (async () => {
+            setBusy(true);
+            const r = await batchImportAccounts(text);
+            setBusy(false);
+            if (r.fail.length) {
+              setToast(
+                `导入：新增 ${r.ok}、更新 ${r.updated}、失败 ${r.fail.length}（首条：${r.fail[0]?.error}）`,
+              );
+            } else if (r.ok + r.updated === 0) {
+              setToast('没有可导入的数据行，请先下载模板填写');
+            }
+          })();
+        }}
+        className="rounded-lg bg-claw-600 px-4 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
+      >
+        {busy ? '导入中…' : '开始导入'}
+      </button>
     </div>
   );
 }
@@ -474,7 +612,7 @@ function AccountPasswordAdminSection({
 }) {
   const [allowDemo, setAllowDemo] = useState(() => loadAuthPolicy().allowDemoPassword);
   const [batchText, setBatchText] = useState(
-    '# 每行：邮箱,密码\nmcyo@company.com,ChangeMe123\n',
+    '# 每行：邮箱,密码\nmcyo@huawei.com,ChangeMe123\n',
   );
   const [singleEmail, setSingleEmail] = useState('');
   const [singlePwd, setSinglePwd] = useState('');
@@ -486,12 +624,11 @@ function AccountPasswordAdminSection({
   const activeEmails = members.filter((m) => m.status === 'active').map((m) => m.email);
 
   return (
-    <Section title="账号密码（短期生产）">
-      <p className="mb-3 text-[11px] leading-relaxed text-zinc-500">
-        密码以哈希保存在本机浏览器（平台运营配置用）。关闭演示密码后，仅已设密账号可登录。
-        正式 SSO 上线前作过渡方案。已设密账号：{credCount}。
+    <div className="space-y-3">
+      <p className="text-[11px] leading-relaxed text-zinc-500">
+        密码保存在本机浏览器。生产前请关闭演示密码，并为账号单独设密。已设密：{credCount}。
       </p>
-      <label className="mb-4 flex items-start gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-[12px] text-zinc-700">
+      <label className="flex items-start gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-[12px] text-zinc-700">
         <input
           type="checkbox"
           className="mt-0.5 accent-claw-600"
@@ -510,99 +647,100 @@ function AccountPasswordAdminSection({
         <span>
           <span className="font-semibold">允许演示密码登录</span>
           <span className="mt-0.5 block text-[11px] text-zinc-400">
-            生产部署前请关闭。关闭后，未设密账号无法登录。
+            默认开启便于试用；上线前请关闭。
           </span>
         </span>
       </label>
 
-      <div className="mb-4 space-y-2 rounded-xl border border-zinc-200 bg-white p-3">
-        <p className="text-[12px] font-semibold text-zinc-800">单账号设密</p>
-        <div className="flex flex-wrap gap-2">
-          <select
-            value={singleEmail}
-            onChange={(e) => setSingleEmail(e.target.value)}
-            className="min-w-[200px] rounded-lg border border-zinc-200 px-2 py-1.5 text-[12px]"
-          >
-            <option value="">选择成员邮箱</option>
-            {activeEmails.map((em) => (
-              <option key={em} value={em}>
-                {em}
-                {hasCredential(em) ? ' · 已设密' : ' · 未设密'}
-              </option>
-            ))}
-          </select>
-          <input
-            type="text"
-            value={singlePwd}
-            onChange={(e) => setSinglePwd(e.target.value)}
-            placeholder="新密码（≥6 位）"
-            className="min-w-[160px] flex-1 rounded-lg border border-zinc-200 px-2 py-1.5 text-[12px]"
-          />
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              void (async () => {
-                setBusy(true);
-                const r = await setAccountPassword(singleEmail, singlePwd);
-                setBusy(false);
-                if (r.ok) {
-                  setToast(`已为 ${singleEmail} 设置密码`);
-                  setSinglePwd('');
-                  onChanged();
-                } else setToast(r.error);
-              })();
-            }}
-            className="rounded-lg bg-zinc-900 px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
-          >
-            保存
-          </button>
-        </div>
+      <div className="flex flex-wrap gap-2">
+        <select
+          value={singleEmail}
+          onChange={(e) => setSingleEmail(e.target.value)}
+          className="min-w-[180px] rounded-lg border border-zinc-200 px-2 py-1.5 text-[12px]"
+        >
+          <option value="">选择成员设密</option>
+          {activeEmails.map((em) => (
+            <option key={em} value={em}>
+              {em}
+              {hasCredential(em) ? ' · 已设密' : ' · 未设密'}
+            </option>
+          ))}
+        </select>
+        <input
+          type="text"
+          value={singlePwd}
+          onChange={(e) => setSinglePwd(e.target.value)}
+          placeholder="新密码（≥6 位）"
+          className="min-w-[140px] flex-1 rounded-lg border border-zinc-200 px-2 py-1.5 text-[12px]"
+        />
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            void (async () => {
+              setBusy(true);
+              const r = await setAccountPassword(singleEmail, singlePwd);
+              setBusy(false);
+              if (r.ok) {
+                setToast(`已为 ${singleEmail} 设置密码`);
+                setSinglePwd('');
+                onChanged();
+              } else setToast(r.error);
+            })();
+          }}
+          className="rounded-lg bg-zinc-900 px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
+        >
+          保存密码
+        </button>
       </div>
 
-      <div className="space-y-2 rounded-xl border border-zinc-200 bg-white p-3">
-        <p className="text-[12px] font-semibold text-zinc-800">批量导入密码</p>
-        <textarea
-          rows={5}
-          value={batchText}
-          onChange={(e) => setBatchText(e.target.value)}
-          className="w-full rounded-lg border border-zinc-200 px-2.5 py-2 font-mono text-[11px] text-zinc-800"
-          spellCheck={false}
-        />
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              void (async () => {
-                setBusy(true);
-                const r = await batchSetAccountPasswords(batchText);
-                setBusy(false);
-                onChanged();
-                setToast(
-                  r.fail.length
-                    ? `成功 ${r.ok} 条，失败 ${r.fail.length} 条`
-                    : `已批量设置 ${r.ok} 个账号密码`,
-                );
-              })();
-            }}
-            className="rounded-lg bg-claw-600 px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
-          >
-            批量应用
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const lines = activeEmails.map((em) => `${em},${generateTempPassword()}`);
-              setBatchText(`# 已生成临时密码草稿，确认后点「批量应用」\n${lines.join('\n')}\n`);
-            }}
-            className="rounded-lg border border-zinc-200 px-3 py-1.5 text-[12px] font-medium text-zinc-700 hover:bg-zinc-50"
-          >
-            为全部激活成员生成草稿
-          </button>
+      <details className="rounded-xl border border-zinc-200 bg-white">
+        <summary className="cursor-pointer px-3 py-2 text-[12px] font-semibold text-zinc-700">
+          仅批量改密（已有账号）
+        </summary>
+        <div className="space-y-2 border-t border-zinc-100 px-3 py-2.5">
+          <textarea
+            rows={4}
+            value={batchText}
+            onChange={(e) => setBatchText(e.target.value)}
+            className="w-full rounded-lg border border-zinc-200 px-2.5 py-2 font-mono text-[11px] text-zinc-800"
+            spellCheck={false}
+          />
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                void (async () => {
+                  setBusy(true);
+                  const r = await batchSetAccountPasswords(batchText);
+                  setBusy(false);
+                  onChanged();
+                  setToast(
+                    r.fail.length
+                      ? `成功 ${r.ok} 条，失败 ${r.fail.length} 条`
+                      : `已批量设置 ${r.ok} 个账号密码`,
+                  );
+                })();
+              }}
+              className="rounded-lg bg-claw-600 px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
+            >
+              批量应用
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const lines = activeEmails.map((em) => `${em},${generateTempPassword()}`);
+                setBatchText(`# 临时密码草稿\n${lines.join('\n')}\n`);
+              }}
+              className="rounded-lg border border-zinc-200 px-3 py-1.5 text-[12px] font-medium text-zinc-700 hover:bg-zinc-50"
+            >
+              生成草稿
+            </button>
+          </div>
         </div>
-      </div>
-    </Section>
+      </details>
+    </div>
   );
 }
 
@@ -663,7 +801,7 @@ function DeptsPanel({ members }: { members: WorkspaceMember[] }) {
 
       <Section title="部门（机关职能）">
         <p className="mb-3 text-[12px] text-[#6e6e73]">
-          部门字典是成员归属、资产可见性与后续权限申请的基础数据。可增删改；删除前需先清空成员归属。
+          维护部门/区域名称，供成员归属标签与左侧浏览筛选使用。短期不做数据权限；删除前请先调整相关成员归属。
         </p>
         {!canManage ? (
           <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
@@ -959,10 +1097,10 @@ function RolesAndRbacPanel({ workspace }: { workspace: Workspace }) {
 
   return (
     <div className="space-y-6">
-      <Section title={`角色与权限 · ${workspace.name}`}>
-        <p className="mb-4 text-xs text-[#86868b]">
-          四角色统一矩阵：平台运营为全模块 Admin（由系统预置账号或白名单开通，不能靠邀请产生）。Admin =
-          完全控制 · Write = 创建/编辑 · Execute = 运行 · R = 只读 · — = 无权限。实际授权通过「成员与组织」改派角色。
+      <Section title={`角色权限 · ${workspace.name}`}>
+        <p className="mb-4 text-xs leading-relaxed text-[#86868b]">
+          看懂这一表即可：改谁的权限 → 去「成员」改角色。Admin=完全控制 · Write=编辑 · Execute=运行 ·
+          R=只读 · —=无。平台运营为系统预置，不可通过邀请创建。
         </p>
         <div className="overflow-x-auto rounded-xl border border-black/[0.06]">
           <table className="w-full min-w-[780px] text-center text-xs">
@@ -1156,7 +1294,7 @@ function AuditPanel({ workspace }: { workspace: Workspace }) {
             <input
               value={accountQuery}
               onChange={(e) => setAccountQuery(e.target.value)}
-              placeholder="如 Dickson 或 @company.com"
+              placeholder="如 Dickson 或 @huawei.com"
               className="mt-1 w-full rounded-lg border border-zinc-200 px-2.5 py-2 text-[12px] font-medium text-zinc-800"
             />
           </label>
@@ -1299,15 +1437,6 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
       <h3 className="mb-3 text-sm font-bold text-[#1d1d1f]">{title}</h3>
       {children}
     </section>
-  );
-}
-
-function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div>
-      <dt className="text-[11px] font-bold uppercase text-[#aeaeb2]">{label}</dt>
-      <dd className={cn('mt-1 text-[#1d1d1f]', mono && 'font-mono text-sm')}>{value}</dd>
-    </div>
   );
 }
 

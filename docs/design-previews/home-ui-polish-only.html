@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSS · 首页 UI 精修预览（仅视觉 · UX 不变）</title>
+  <style>
+    :root {
+      --bg: #f5f5f7;
+      --surface: #ffffff;
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --faint: #86868b;
+      --line: rgba(0, 0, 0, 0.08);
+      --line-soft: rgba(0, 0, 0, 0.05);
+      --blue: #0071e3;
+      --ext: #2563eb;
+      --int: #0d9488;
+      --mss: #4f46e5;
+      --global-bg: #eef3fa;
+      --china-bg: #f7f2ec;
+      --shadow: 0 1px 2px rgba(0,0,0,0.03), 0 8px 24px rgba(0,0,0,0.05);
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+        "Microsoft YaHei", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+      letter-spacing: -0.011em;
+    }
+
+    .preview-bar {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 18px;
+      background: rgba(29, 29, 31, 0.92);
+      color: #f5f5f7;
+      font-size: 12px;
+      backdrop-filter: blur(14px);
+    }
+    .preview-bar strong { font-weight: 600; }
+    .preview-bar span { color: rgba(255,255,255,0.62); }
+    .tabs {
+      display: flex;
+      gap: 6px;
+    }
+    .tabs button {
+      border: 0;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+    }
+    .tabs button.active {
+      background: #fff;
+      color: #1d1d1f;
+    }
+
+    .wrap {
+      max-width: 1360px;
+      margin: 0 auto;
+      padding: 20px 20px 64px;
+    }
+
+    /* —— Shared structure (UX) —— */
+    .announce {
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 8px 14px;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 16px;
+      box-shadow: 0 6px 18px -16px rgba(24,24,27,0.35);
+    }
+
+    .hero {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px 20px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: linear-gradient(90deg, #fff, #fafafa 50%, #fff);
+      padding: 16px 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 10px 28px -24px rgba(24,24,27,0.35);
+    }
+    .hero-kicker { margin: 0; font-size: 12px; color: var(--muted); font-weight: 500; }
+    .hero h1 {
+      margin: 2px 0 0;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    .hero-sub { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+    .search-row {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+      max-width: 420px;
+      flex: 1;
+    }
+    .search-row input {
+      flex: 1;
+      height: 40px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      padding: 0 12px 0 36px;
+      font: inherit;
+      font-size: 13px;
+      outline: none;
+      background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Ccircle cx='6' cy='6' r='4.5'/%3E%3Cpath d='M10 10l3 3'/%3E%3C/svg%3E") 12px center no-repeat;
+    }
+    .search-row button {
+      height: 40px;
+      padding: 0 16px;
+      border: 0;
+      border-radius: 12px;
+      background: #18181b;
+      color: #fff;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .channels {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    @media (max-width: 980px) {
+      .channels { grid-template-columns: 1fr; }
+    }
+
+    .col {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.9);
+      box-shadow: 0 8px 22px -20px rgba(24,24,27,0.35);
+      overflow: hidden;
+    }
+    .col-head {
+      padding: 10px 12px 10px;
+      border-bottom: 1px solid #f4f4f5;
+    }
+    .col-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .col-title {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 8px;
+      min-width: 0;
+    }
+    .col-title h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 2px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(24,24,27,0.06);
+      font-size: 10px;
+      color: var(--faint);
+      font-weight: 500;
+    }
+    .badge b {
+      font-size: 14px;
+      color: #27272a;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .badge.skill { background: #f0f9ff; color: #0369a1; }
+    .badge.skill b { color: #0c4a6e; }
+    .badge.agent { background: #f4f4f5; color: #52525b; }
+    .badge.agent b { color: #18181b; }
+    .enter {
+      border: 0;
+      background: transparent;
+      color: #71717a;
+      font: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 8px;
+    }
+    .enter:hover { background: #fafafa; color: #27272a; }
+    .col-blurb {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: #a1a1aa;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .col-meta {
+      margin: 8px 0 0;
+      font-size: 10px;
+      color: #a1a1aa;
+    }
+    .rank-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+    .rank-tabs span {
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 500;
+      background: #fafafa;
+      color: #71717a;
+    }
+    .rank-tabs span.on {
+      background: #18181b;
+      color: #fff;
+    }
+
+    .col-body {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 10px;
+      flex: 1;
+    }
+
+    .card {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(228,228,231,0.95);
+      background: #fff;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+    .card:hover {
+      transform: translateY(-1px);
+      border-color: #d4d4d8;
+      box-shadow: 0 10px 28px -16px rgba(24,24,27,0.35);
+    }
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .logo {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+      background: #71717a;
+    }
+    .card h3 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+    }
+    .card p {
+      margin: 2px 0 0;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .tag {
+      font-size: 9px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 5px;
+      background: #f4f4f5;
+      color: #52525b;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      justify-content: flex-start;
+    }
+    .actions button {
+      flex: 0 0 auto;
+      width: auto;
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 8px;
+      border: 1px solid #e4e4e7;
+      background: #fff;
+      font: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      color: #3f3f46;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .actions button.primary {
+      background: #18181b;
+      border-color: #18181b;
+      color: #fff;
+    }
+
+    .recent {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid #f4f4f5;
+    }
+    .recent h2 {
+      margin: 0 0 10px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .recent-row { display: flex; flex-wrap: wrap; gap: 12px; }
+    .recent-item {
+      width: 76px;
+      text-align: center;
+      font-size: 10px;
+      color: #52525b;
+    }
+    .recent-item .logo {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 6px;
+      border-radius: 14px;
+      background: #fafafa;
+      color: #3f3f46;
+      border: 1px solid #f4f4f5;
+    }
+
+    .note {
+      margin-top: 28px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: rgba(0,0,0,0.035);
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    /* ========== UI polish overrides (same UX) ========== */
+    body.ui .announce {
+      border-color: transparent;
+      background: rgba(255,255,255,0.82);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+
+    body.ui .hero {
+      border-color: transparent;
+      background:
+        radial-gradient(900px 220px at 100% 0%, rgba(0,113,227,0.07), transparent 55%),
+        linear-gradient(180deg, #fff 0%, #fafafa 100%);
+      box-shadow: var(--shadow);
+      padding: 20px 22px;
+    }
+    body.ui .hero h1 {
+      font-size: 24px;
+      font-weight: 650;
+      letter-spacing: -0.028em;
+    }
+    body.ui .hero-sub { font-size: 13px; color: var(--muted); }
+    body.ui .search-row input {
+      height: 44px;
+      border-color: transparent;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06);
+      background-color: #fff;
+      font-size: 14px;
+    }
+    body.ui .search-row button {
+      height: 44px;
+      border-radius: 11px;
+      background: var(--ink);
+    }
+
+    body.ui .channels { gap: 14px; }
+
+    body.ui .col {
+      border-color: transparent;
+      background: #fff;
+      box-shadow: var(--shadow);
+      border-radius: 20px;
+      position: relative;
+    }
+    /* Channel identity: thin top accent only */
+    body.ui .col::before {
+      content: "";
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      top: 0;
+      height: 3px;
+      border-radius: 0 0 3px 3px;
+      opacity: 0.9;
+    }
+    body.ui .col.ext::before { background: var(--ext); }
+    body.ui .col.int::before { background: var(--int); }
+    body.ui .col.mss::before { background: var(--mss); }
+
+    body.ui .col-head {
+      border-bottom-color: rgba(0,0,0,0.04);
+      padding: 14px 14px 12px;
+      background: linear-gradient(180deg, rgba(245,245,247,0.55), transparent);
+    }
+    body.ui .col.ext .col-head {
+      background: linear-gradient(180deg, rgba(239,246,255,0.7), transparent);
+    }
+    body.ui .col.int .col-head {
+      background: linear-gradient(180deg, rgba(240,253,250,0.7), transparent);
+    }
+    body.ui .col.mss .col-head {
+      background: linear-gradient(180deg, rgba(238,242,255,0.7), transparent);
+    }
+    body.ui .col-title h2 {
+      font-size: 19px;
+      font-weight: 650;
+      letter-spacing: -0.025em;
+    }
+    body.ui .col-blurb { color: var(--muted); }
+    body.ui .enter { color: var(--blue); }
+    body.ui .enter:hover { background: var(--blue); color: #fff; }
+
+    /* External: region strip (visual only, same list UX) */
+    body.ui .region-strip {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    body.ui .region-chip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 650;
+    }
+    body.ui .region-chip.global {
+      background: var(--global-bg);
+      color: #1e3a5f;
+    }
+    body.ui .region-chip.china {
+      background: var(--china-bg);
+      color: #5c4030;
+    }
+    body.ui .region-chip em {
+      font-style: normal;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      opacity: 0.55;
+    }
+
+    body.ui .card {
+      border-color: transparent;
+      background: #fafafa;
+      box-shadow: none;
+      border-radius: 14px;
+      position: relative;
+    }
+    body.ui .card:hover {
+      background: #fff;
+      box-shadow: var(--shadow);
+      border-color: transparent;
+    }
+    /* Region cards: soft wash + left accent (not full-bleed stretch chrome) */
+    body.ui .card.global {
+      background:
+        linear-gradient(90deg, rgba(37, 99, 235, 0.55) 0 3px, transparent 3px),
+        linear-gradient(145deg, #eef4fb 0%, #f5f8fc 48%, #eef2f7 100%);
+      box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.08);
+    }
+    body.ui .card.china {
+      background:
+        linear-gradient(90deg, rgba(180, 83, 9, 0.5) 0 3px, transparent 3px),
+        linear-gradient(145deg, #f8f1e9 0%, #faf6f1 48%, #f3ebe3 100%);
+      box-shadow: inset 0 0 0 1px rgba(180, 83, 9, 0.1);
+    }
+    body.ui .card.global:hover {
+      background:
+        linear-gradient(90deg, rgba(37, 99, 235, 0.7) 0 3px, transparent 3px),
+        #fff;
+      box-shadow: var(--shadow), inset 0 0 0 1px rgba(37, 99, 235, 0.12);
+    }
+    body.ui .card.china:hover {
+      background:
+        linear-gradient(90deg, rgba(180, 83, 9, 0.65) 0 3px, transparent 3px),
+        #fff;
+      box-shadow: var(--shadow), inset 0 0 0 1px rgba(180, 83, 9, 0.14);
+    }
+
+    body.ui .tag.global {
+      background: rgba(37, 99, 235, 0.12);
+      color: #1d4ed8;
+    }
+    body.ui .tag.china {
+      background: rgba(180, 83, 9, 0.12);
+      color: #9a3412;
+    }
+    body.ui .actions button.primary {
+      background: var(--ink);
+      border-color: var(--ink);
+    }
+    body.ui .actions button:not(.primary) {
+      border-color: transparent;
+      background: rgba(0,0,0,0.04);
+    }
+
+    body.ui .recent h2 { color: var(--muted); font-weight: 500; }
+    body.ui .recent-item .logo {
+      background: #fff;
+      box-shadow: var(--shadow);
+      border-color: transparent;
+    }
+
+    /* hide region UI in before mode */
+    body.before .region-strip { display: none; }
+    body.before .tag.region-only { display: none; }
+
+    .panel { display: none; }
+    body.before .panel-before,
+    body.ui .panel-ui { display: block; }
+  </style>
+</head>
+<body class="ui">
+  <div class="preview-bar">
+    <div>
+      <strong>UI 精修预览</strong>
+      <span> — 信息结构 / 三列布局 / 交互不变，只调视觉 · 未改产品代码</span>
+    </div>
+    <div class="tabs">
+      <button type="button" data-mode="before">现状近似</button>
+      <button type="button" class="active" data-mode="ui">UI 精修</button>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <!-- ========== BEFORE (approx current) ========== -->
+    <div class="panel panel-before">
+      <div class="announce">站务公告：本周五 18:00–19:00 例行维护（示意）</div>
+      <section class="hero">
+        <div>
+          <p class="hero-kicker">下午好，演示账号</p>
+          <h1>探索 AI 的无限可能</h1>
+          <p class="hero-sub">工具分三类：外部工具精选 · 公司工具推荐 · MSS工具集市</p>
+        </div>
+        <div class="search-row">
+          <input readonly placeholder="搜索工具或项目（权限范围内）…" />
+          <button type="button">搜索</button>
+        </div>
+      </section>
+      <section class="channels">
+        <article class="col">
+          <header class="col-head">
+            <div class="col-title-row">
+              <div class="col-title">
+                <h2>外部工具精选</h2>
+                <span class="badge"><b>48</b>项</span>
+              </div>
+              <button class="enter" type="button">进入 →</button>
+            </div>
+            <p class="col-blurb">海外 / 国内对照 · 场景与类型筛选</p>
+            <p class="col-meta">精选由运营置顶 · 列表按点击量排序</p>
+          </header>
+          <div class="col-body" data-fill="ext-before"></div>
+        </article>
+        <article class="col">
+          <header class="col-head">
+            <div class="col-title-row">
+              <div class="col-title">
+                <h2>公司工具推荐</h2>
+                <span class="badge"><b>16</b>项</span>
+              </div>
+              <button class="enter" type="button">进入 →</button>
+            </div>
+            <p class="col-blurb">从记读写问等场景进入公司工具</p>
+            <p class="col-meta">与货架办公场景同源 · 点击进入工具详情</p>
+          </header>
+          <div class="col-body" data-fill="int-before"></div>
+        </article>
+        <article class="col">
+          <header class="col-head">
+            <div class="col-title-row">
+              <div class="col-title">
+                <h2>MSS工具集市</h2>
+                <span class="badge skill"><b>24</b> Skill</span>
+                <span class="badge agent"><b>12</b> Agent</span>
+              </div>
+              <button class="enter" type="button">进入 →</button>
+            </div>
+            <p class="col-blurb">Skill Hub · Agent Hub 分列统计</p>
+            <div class="rank-tabs">
+              <span class="on">热门</span><span>最新</span><span>下载</span>
+            </div>
+          </header>
+          <div class="col-body" data-fill="mss-before"></div>
+        </article>
+      </section>
+      <section class="recent">
+        <h2>最近使用</h2>
+        <div class="recent-row" data-fill="recent-before"></div>
+      </section>
+    </div>
+
+    <!-- ========== UI POLISH ========== -->
+    <div class="panel panel-ui">
+      <div class="announce">站务公告：本周五 18:00–19:00 例行维护（示意）</div>
+      <section class="hero">
+        <div>
+          <p class="hero-kicker">下午好，演示账号</p>
+          <h1>探索 AI 的无限可能</h1>
+          <p class="hero-sub">工具分三类：外部工具精选 · 公司工具推荐 · MSS工具集市</p>
+        </div>
+        <div class="search-row">
+          <input readonly placeholder="搜索工具或项目（权限范围内）…" />
+          <button type="button">搜索</button>
+        </div>
+      </section>
+      <section class="channels">
+        <article class="col ext">
+          <header class="col-head">
+            <div class="col-title-row">
+              <div class="col-title">
+                <h2>外部工具精选</h2>
+                <span class="badge"><b>48</b>项</span>
+              </div>
+              <button class="enter" type="button">进入 →</button>
+            </div>
+            <p class="col-blurb">海外 / 国内对照 · 场景与类型筛选</p>
+            <div class="region-strip" aria-hidden="true">
+              <div class="region-chip global">海外 <em>GLOBAL</em></div>
+              <div class="region-chip china">国内 <em>CHINA</em></div>
+            </div>
+            <p class="col-meta">精选由运营置顶 · 列表按点击量排序</p>
+          </header>
+          <div class="col-body" data-fill="ext-ui"></div>
+        </article>
+        <article class="col int">
+          <header class="col-head">
+            <div class="col-title-row">
+              <div class="col-title">
+                <h2>公司工具推荐</h2>
+                <span class="badge"><b>16</b>项</span>
+              </div>
+              <button class="enter" type="button">进入 →</button>
+            </div>
+            <p class="col-blurb">从记读写问等场景进入公司工具</p>
+            <p class="col-meta">与货架办公场景同源 · 点击进入工具详情</p>
+          </header>
+          <div class="col-body" data-fill="int-ui"></div>
+        </article>
+        <article class="col mss">
+          <header class="col-head">
+            <div class="col-title-row">
+              <div class="col-title">
+                <h2>MSS工具集市</h2>
+                <span class="badge skill"><b>24</b> Skill</span>
+                <span class="badge agent"><b>12</b> Agent</span>
+              </div>
+              <button class="enter" type="button">进入 →</button>
+            </div>
+            <p class="col-blurb">Skill Hub · Agent Hub 分列统计</p>
+            <div class="rank-tabs">
+              <span class="on">热门</span><span>最新</span><span>下载</span>
+            </div>
+          </header>
+          <div class="col-body" data-fill="mss-ui"></div>
+        </article>
+      </section>
+      <section class="recent">
+        <h2>最近使用</h2>
+        <div class="recent-row" data-fill="recent-ui"></div>
+      </section>
+    </div>
+
+    <p class="note">
+      <strong>本页约定：不动 UX。</strong>仍是「公告 → Hero 搜索 → 三列货架 → 最近使用」；
+      UI 精修只做：更轻的阴影与去硬边框、三类顶部分色条、外部列「海外/国内」区域卡背景与色签；
+      「立即体验 / 快速上手」保持内容宽、不拉满。右上可切换对比。确认后再改产品代码。
+    </p>
+  </div>
+
+  <script>
+    const EXT = [
+      { name: "ChatGPT", desc: "对话、写作与通用推理", color: "#10a37f", region: "global", letter: "G" },
+      { name: "Kimi", desc: "超长上下文阅读与总结", color: "#4e6ef2", region: "china", letter: "K" },
+      { name: "Claude", desc: "长文档分析与结构化输出", color: "#d97706", region: "global", letter: "C" },
+      { name: "通义千问", desc: "办公写作与企业知识问答", color: "#6366f1", region: "china", letter: "通" },
+    ];
+    const INT = [
+      { name: "会议纪要助手", desc: "录音转要点与待办", color: "#0d9488", letter: "记", tag: "记" },
+      { name: "制度速读", desc: "长文摘要与条款定位", color: "#14b8a6", letter: "读", tag: "读" },
+      { name: "周报生成", desc: "按模板整理本周进展", color: "#0f766e", letter: "写", tag: "写" },
+      { name: "政策问答", desc: "内网知识库检索回答", color: "#115e59", letter: "问", tag: "问" },
+    ];
+    const MSS = [
+      { name: "价格波动监测", desc: "竞品报价抓取与告警", color: "#4f46e5", letter: "价" },
+      { name: "本地化翻译包", desc: "术语表约束的批量翻译", color: "#6366f1", letter: "译" },
+      { name: "电商评论洞察", desc: "差评聚类与改进建议", color: "#818cf8", letter: "评" },
+      { name: "报价监测作战单元", desc: "采集 → 对比 → 汇报闭环", color: "#1d1d1f", letter: "案" },
+    ];
+    const RECENT = [
+      { name: "ChatGPT", color: "#10a37f", letter: "G" },
+      { name: "Kimi", color: "#4e6ef2", letter: "K" },
+      { name: "会议纪要", color: "#0d9488", letter: "记" },
+      { name: "价格监测", color: "#4f46e5", letter: "价" },
+    ];
+
+    function cardHTML(item, { showRegion, ui }) {
+      const regionClass = item.region && ui ? item.region : "";
+      const regionTag = item.region
+        ? `<span class="tag region-only ${item.region}">${item.region === "global" ? "海外" : "国内"}</span>`
+        : "";
+      const sceneTag = item.tag ? `<span class="tag">${item.tag}</span>` : "";
+      return `
+        <article class="card ${regionClass}">
+          <div class="card-top">
+            <div class="logo" style="background:${item.color}">${item.letter}</div>
+            <div style="min-width:0;flex:1">
+              <h3>${item.name}</h3>
+              <p>${item.desc}</p>
+              ${showRegion || item.tag ? `<div class="tags">${regionTag}${sceneTag}</div>` : ""}
+            </div>
+          </div>
+          <div class="actions">
+            <button type="button" class="primary">立即体验</button>
+            <button type="button">快速上手</button>
+          </div>
+        </article>`;
+    }
+
+    function fill(sel, html) {
+      document.querySelectorAll(`[data-fill="${sel}"]`).forEach((el) => {
+        el.innerHTML = html;
+      });
+    }
+
+    fill("ext-before", EXT.map((i) => cardHTML(i, { showRegion: false, ui: false })).join(""));
+    fill("ext-ui", EXT.map((i) => cardHTML(i, { showRegion: true, ui: true })).join(""));
+    fill("int-before", INT.map((i) => cardHTML(i, { showRegion: false, ui: false })).join(""));
+    fill("int-ui", INT.map((i) => cardHTML(i, { showRegion: false, ui: true })).join(""));
+    fill("mss-before", MSS.map((i) => cardHTML(i, { showRegion: false, ui: false })).join(""));
+    fill("mss-ui", MSS.map((i) => cardHTML(i, { showRegion: false, ui: true })).join(""));
+
+    const recentHTML = RECENT.map(
+      (i) => `<div class="recent-item"><div class="logo" style="background:${i.color};color:#fff">${i.letter}</div>${i.name}</div>`
+    ).join("");
+    fill("recent-before", recentHTML);
+    fill("recent-ui", recentHTML);
+
+    document.querySelectorAll(".tabs button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".tabs button").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        document.body.classList.remove("before", "ui");
+        document.body.classList.add(btn.dataset.mode);
+      });
+    });
+  </script>
+</body>
+</html>

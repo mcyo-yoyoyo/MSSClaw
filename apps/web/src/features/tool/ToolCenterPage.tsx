@@ -12,6 +12,7 @@ import {
 } from '@/components/center/CenterShell';
 import { OrgAssetFilterBar } from '@/components/center/OrgAssetFilters';
 import { ToolEditorModal, type ToolEditorTarget } from '@/components/center/ToolEditorModal';
+import { SharedCatalogEmptyHint } from '@/components/common/SharedCatalogEmptyHint';
 import { AssetAccentMark, assetAccentBorderStyle } from '@/components/brand/AssetAccentMark';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { resolveToolLogoUrl } from '@/domain/toolLogo';
@@ -72,7 +73,7 @@ export function ToolCenterPage() {
           subtitle="登记主数据与上架；外精选 / 公司推荐的陈列与 How to 在「门户运营」维护"
           tip={
             <>
-              各 NP 与区域可将内外部工具登记上架。可见性：全员 / 本组织（有区域则同区域）/ 仅发布方。外精选工具与 CSV 目录、公司内部工具与办公场景字典联动。
+              各 NP 与区域可将内外部工具登记上架。短期不做组织数据权限（全员/本组织浏览相同）；仅发布方仍限发布者。外精选与 CSV、公司工具与办公场景字典联动。
             </>
           }
           actions={
@@ -215,9 +216,7 @@ export function ToolCenterPage() {
               );
             })
           ) : (
-            <div className="apple-card col-span-3 p-8 text-center text-[#86868b]">
-              未找到匹配的工具
-            </div>
+            <SharedCatalogEmptyHint assetLabel="工具" />
           )}
         </div>
       </div>

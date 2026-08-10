@@ -1,7 +1,9 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { loadAuthPolicy } from '@/domain/accountCredentials';
+import { DEMO_PASSWORD } from '@/domain/authAccounts';
 import { MssZhishuMark } from '@/components/brand/MssZhishuMark';
 import { useSessionStore } from '@/stores/sessionStore';
+import { ensureAccountPasswordsReady } from '@/stores/settingsStore';
 
 /** Pages 子路径部署时需带 base（如 /MSSClaw/）；Vercel 根路径则为 / */
 const baseBrand = `${import.meta.env.BASE_URL}brand/`.replace(/([^:]\/)\/+/g, '$1');
@@ -16,17 +18,22 @@ const inputClass =
  */
 export function LoginPage() {
   const login = useSessionStore((s) => s.login);
-  const [email, setEmail] = useState('mcyo@company.com');
+  const [email, setEmail] = useState('mcyo@huawei.com');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const demoAllowed = loadAuthPolicy().allowDemoPassword;
+
+  useEffect(() => {
+    void ensureAccountPasswordsReady();
+  }, []);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
     setSubmitting(true);
     try {
+      await ensureAccountPasswordsReady();
       const result = await login(email, password);
       if (!result.ok) setError(result.error);
     } finally {
@@ -86,7 +93,7 @@ export function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className={inputClass}
-                placeholder="name@company.com"
+                placeholder="name@huawei.com"
               />
             </label>
 
@@ -118,7 +125,9 @@ export function LoginPage() {
 
             {demoAllowed ? (
               <p className="text-center text-[11px] text-zinc-400">
-                未单独设密时仍可用演示密码（生产请在组织权限中关闭）
+                当前角色账号初始密码均为{' '}
+                <span className="font-mono text-zinc-600">{DEMO_PASSWORD}</span>
+                （生产请在组织权限中改密或关闭演示策略）
               </p>
             ) : (
               <p className="text-center text-[11px] text-zinc-400">

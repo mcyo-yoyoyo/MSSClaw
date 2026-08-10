@@ -112,7 +112,7 @@ export const useAiNewsPreferenceStore = create<AiNewsPreferenceState>((set, get)
     return {
       ok: true,
       message: subscribed
-        ? '已保存邮箱并开启邮件推送（定时发送即将开通）'
+        ? '已登记邮箱（自动推送待开通，可先下载邮件模板人工发送）'
         : trimmed
           ? '已保存邮箱，邮件推送已关闭'
           : '已关闭邮件推送',

@@ -44,12 +44,14 @@ import { PortalStationAnnouncePanel } from '@/features/ops/PortalStationAnnounce
 import { PortalAiNewsPanel } from '@/features/ops/PortalAiNewsPanel';
 import { PortalSceneCategoryPanel } from '@/features/ops/PortalSceneCategoryPanel';
 import { PortalBuildStatsCopyPanel } from '@/features/ops/PortalBuildStatsCopyPanel';
+import { PortalAiBriefEmailPanel } from '@/features/ops/PortalAiBriefEmailPanel';
 import { PortalExternalTaxonomyPanel } from '@/features/ops/PortalExternalTaxonomyPanel';
 import { useBusinessScenarioCatalogStore } from '@/stores/businessScenarioCatalogStore';
 import { useExternalTaxonomyCatalogStore } from '@/stores/externalTaxonomyCatalogStore';
 import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
 import { useStationAnnouncementStore } from '@/stores/stationAnnouncementStore';
 import { useAiNewsStore } from '@/stores/aiNewsStore';
+import { useAiBriefEmailCopyStore } from '@/stores/aiBriefEmailCopyStore';
 
 type EditorTarget = string | 'new' | null;
 type OpsSurface =
@@ -59,6 +61,7 @@ type OpsSurface =
   | 'extaxonomy'
   | 'announce'
   | 'ainews'
+  | 'aibrief'
   | 'scenes'
   | 'buildstats';
 
@@ -114,6 +117,7 @@ export function PortalContentOpsPage() {
     useInternalOfficeSceneCatalogStore.getState().hydrate();
     useStationAnnouncementStore.getState().hydrate();
     useAiNewsStore.getState().hydrate();
+    useAiBriefEmailCopyStore.getState().hydrate();
   }, [bootstrapHowto]);
 
   useEffect(() => {
@@ -264,11 +268,13 @@ export function PortalContentOpsPage() {
                     ? '站点触达 · 首页站内公告跑马灯'
                     : opsSurface === 'ainews'
                       ? '站点触达 · 每日 / 每周 AI 新闻'
-                      : opsSurface === 'scenes'
-                        ? '场景分类字典 · 文案 / 图标 / 顺序'
-                        : opsSurface === 'buildstats'
-                          ? '站点触达 · MSS 建设概况口径'
-                          : '货架运营 · 外部 / 公司工具 How to'
+                      : opsSurface === 'aibrief'
+                        ? '站点触达 · AI快讯邮件模板文案'
+                        : opsSurface === 'scenes'
+                          ? '场景分类字典 · 文案 / 图标 / 顺序'
+                          : opsSurface === 'buildstats'
+                            ? '站点触达 · MSS 建设概况口径'
+                            : '货架运营 · 外部 / 公司工具 How to'
           }
           tip={
             opsSurface === 'packs' ? (
@@ -294,6 +300,10 @@ export function PortalContentOpsPage() {
               <>
                 维护每日 AI 新闻（每天一条）。上架后首页只露最新一期；历史在「AI新闻总览」累计。订阅为
                 WeLink 二期预留。
+              </>
+            ) : opsSurface === 'aibrief' ? (
+              <>
+                配置 AI快讯页「下载」生成的 HTML 邮件壳：探索引导、进入平台按钮与落地链接。正文仍来自当日快讯。
               </>
             ) : opsSurface === 'scenes' ? (
               <>
@@ -457,6 +467,7 @@ export function PortalContentOpsPage() {
               { id: 'howto' as const, label: '工具 How to', group: '货架' },
               { id: 'announce' as const, label: '站内公告', group: '站点' },
               { id: 'ainews' as const, label: 'AI新闻', group: '站点' },
+              { id: 'aibrief' as const, label: 'AI快讯邮件', group: '站点' },
               { id: 'buildstats' as const, label: '建设概况口径', group: '站点' },
             ] as const
           ).map((tab) => (
@@ -477,7 +488,7 @@ export function PortalContentOpsPage() {
           ))}
         </div>
         <p className="mb-4 text-[10px] leading-relaxed text-zinc-400">
-          分组：场景（内容/分类）→ 货架（外精选上架·置顶 / 公司办公场景 / 外精选分类 / How to）→ 站点（公告/AI新闻/建设口径）。工具主数据仍在「配置工具」。
+          分组：场景（内容/分类）→ 货架（外精选上架·置顶 / 公司办公场景 / 外精选分类 / How to）→ 站点（公告/AI新闻/AI快讯邮件/建设口径）。工具主数据仍在「配置工具」。
         </p>
 
         {howtoToast ? (
@@ -491,6 +502,7 @@ export function PortalContentOpsPage() {
         {opsSurface === 'extaxonomy' ? <PortalExternalTaxonomyPanel /> : null}
         {opsSurface === 'announce' ? <PortalStationAnnouncePanel /> : null}
         {opsSurface === 'ainews' ? <PortalAiNewsPanel /> : null}
+        {opsSurface === 'aibrief' ? <PortalAiBriefEmailPanel /> : null}
         {opsSurface === 'scenes' ? <PortalSceneCategoryPanel /> : null}
         {opsSurface === 'buildstats' ? <PortalBuildStatsCopyPanel /> : null}
 

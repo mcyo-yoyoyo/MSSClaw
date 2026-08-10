@@ -116,6 +116,6 @@ export const ASSET_SCOPE_OPTIONS: { id: AssetScopeFilter; label: string }[] = [
 export const SKILL_VISIBILITY_SCOPE_OPTIONS: { id: AssetScopeFilter; label: string }[] = [
   { id: 'all', label: '全部' },
   { id: 'mine', label: '我自己' },
-  { id: 'visibility_org', label: '本组织' },
+  { id: 'visibility_org', label: '组织内' },
   { id: 'visibility_public', label: '公开可见' },
 ];

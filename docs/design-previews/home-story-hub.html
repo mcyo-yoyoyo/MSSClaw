@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSS · 首页 Story Hub 风格预览（未接入产品代码）</title>
+  <style>
+    :root {
+      --bg: #f5f5f7;
+      --surface: #ffffff;
+      --ink: #1d1d1f;
+      --ink-2: #6e6e73;
+      --ink-3: #86868b;
+      --line: rgba(0, 0, 0, 0.06);
+      --blue: #0071e3;
+      --blue-soft: rgba(0, 113, 227, 0.08);
+      --external: #3b82f6;
+      --internal: #0d9488;
+      --mss: #4f46e5;
+      --rail-global: #eef3f9;
+      --rail-china: #f7f3ee;
+      --shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 12px 32px rgba(0, 0, 0, 0.05);
+      --radius: 22px;
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+        "Microsoft YaHei", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+      letter-spacing: -0.015em;
+    }
+
+    /* —— Preview chrome —— */
+    .preview-bar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 20px;
+      background: rgba(29, 29, 31, 0.92);
+      color: #f5f5f7;
+      backdrop-filter: blur(16px);
+      font-size: 12px;
+    }
+    .preview-bar strong { font-weight: 600; letter-spacing: 0; }
+    .preview-bar span { color: rgba(255,255,255,0.65); }
+    .preview-bar a {
+      color: #64b5ff;
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .shell {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 28px 20px 80px;
+    }
+
+    /* —— Hero —— */
+    .hero {
+      position: relative;
+      overflow: hidden;
+      border-radius: 28px;
+      background:
+        radial-gradient(1200px 420px at 85% -10%, rgba(0, 113, 227, 0.10), transparent 60%),
+        radial-gradient(900px 380px at 10% 110%, rgba(79, 70, 229, 0.06), transparent 55%),
+        linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+      padding: 48px 40px 40px;
+      box-shadow: var(--shadow);
+      animation: rise 0.7s ease both;
+    }
+    .hero-kicker {
+      margin: 0 0 10px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink-2);
+    }
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(32px, 4.2vw, 44px);
+      font-weight: 650;
+      letter-spacing: -0.03em;
+      line-height: 1.12;
+    }
+    .hero-sub {
+      margin: 14px 0 0;
+      max-width: 28em;
+      font-size: 17px;
+      line-height: 1.45;
+      color: var(--ink-2);
+      font-weight: 400;
+    }
+    .hero-row {
+      margin-top: 28px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px 18px;
+    }
+    .search {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1 1 320px;
+      max-width: 460px;
+      height: 48px;
+      padding: 0 8px 0 16px;
+      border-radius: 14px;
+      background: #fff;
+      border: 1px solid rgba(0,0,0,0.08);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+    .search i { color: var(--ink-3); font-style: normal; font-size: 14px; opacity: 0.7; }
+    .search input {
+      flex: 1;
+      border: 0;
+      outline: none;
+      font: inherit;
+      font-size: 15px;
+      background: transparent;
+      color: var(--ink);
+    }
+    .search button {
+      height: 34px;
+      padding: 0 16px;
+      border: 0;
+      border-radius: 10px;
+      background: var(--ink);
+      color: #fff;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .anchors {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .anchors a {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.04);
+      color: var(--ink);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      transition: background 0.2s ease;
+    }
+    .anchors a:hover { background: rgba(0,0,0,0.07); }
+    .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+    .dot.e { background: var(--external); }
+    .dot.i { background: var(--internal); }
+    .dot.m { background: var(--mss); }
+
+    /* —— Chapters —— */
+    .chapter {
+      margin-top: 56px;
+      animation: rise 0.75s ease both;
+    }
+    .chapter:nth-of-type(2) { animation-delay: 0.05s; }
+    .chapter:nth-of-type(3) { animation-delay: 0.1s; }
+    .chapter:nth-of-type(4) { animation-delay: 0.15s; }
+
+    .chapter-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 22px;
+      padding: 0 4px;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 8px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+    }
+    .eyebrow .bar {
+      width: 18px;
+      height: 3px;
+      border-radius: 2px;
+    }
+    .chapter h2 {
+      margin: 0;
+      font-size: clamp(26px, 3vw, 34px);
+      font-weight: 650;
+      letter-spacing: -0.028em;
+      line-height: 1.15;
+    }
+    .chapter-desc {
+      margin: 8px 0 0;
+      font-size: 15px;
+      color: var(--ink-2);
+      max-width: 36em;
+      line-height: 1.45;
+    }
+    .link-more {
+      flex-shrink: 0;
+      color: var(--blue);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      padding-bottom: 4px;
+    }
+    .link-more:hover { text-decoration: underline; }
+
+    /* —— Dual rail (overseas / domestic) —— */
+    .dual {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 840px) {
+      .dual { grid-template-columns: 1fr; }
+      .hero { padding: 32px 22px 28px; }
+    }
+
+    .rail {
+      border-radius: var(--radius);
+      padding: 22px 20px 18px;
+      box-shadow: var(--shadow);
+    }
+    .rail.global {
+      background:
+        linear-gradient(160deg, #f3f7fc 0%, var(--rail-global) 45%, #e8eef6 100%);
+    }
+    .rail.china {
+      background:
+        linear-gradient(160deg, #fbf8f4 0%, var(--rail-china) 45%, #f3ebe3 100%);
+    }
+    .rail-top {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding: 0 4px;
+    }
+    .rail-title {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+    .rail-sub {
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: 0.1em;
+      color: var(--ink-3);
+    }
+    .rail-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .tool {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 12px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.78);
+      border: 1px solid rgba(255,255,255,0.9);
+      transition: transform 0.22s ease, box-shadow 0.22s ease;
+      cursor: default;
+    }
+    .tool:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.07);
+    }
+    .logo {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+      letter-spacing: -0.02em;
+    }
+    .tool-body { min-width: 0; flex: 1; }
+    .tool-name {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+    }
+    .tool-desc {
+      margin: 2px 0 0;
+      font-size: 12px;
+      color: var(--ink-2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .hot {
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      color: #fff;
+      background: linear-gradient(135deg, #e11d48, #fb923c);
+      padding: 3px 6px;
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+    .rail-foot {
+      margin-top: 14px;
+      padding: 0 4px;
+    }
+    .rail-foot a {
+      font-size: 13px;
+      color: var(--blue);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    /* —— Company chapter —— */
+    .stage {
+      border-radius: 28px;
+      background: var(--surface);
+      padding: 22px;
+      box-shadow: var(--shadow);
+    }
+    .stage.internal-tint {
+      background:
+        radial-gradient(700px 280px at 0% 0%, rgba(13, 148, 136, 0.07), transparent 55%),
+        #fff;
+    }
+    .stage.mss-tint {
+      background:
+        radial-gradient(700px 280px at 100% 0%, rgba(79, 70, 229, 0.07), transparent 55%),
+        #fff;
+    }
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    @media (max-width: 900px) {
+      .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    }
+    .scene-card {
+      padding: 18px 16px;
+      border-radius: 18px;
+      background: rgba(245, 245, 247, 0.9);
+      transition: transform 0.22s ease, background 0.22s ease;
+    }
+    .scene-card:hover {
+      transform: translateY(-2px);
+      background: #fff;
+      box-shadow: var(--shadow);
+    }
+    .scene-tag {
+      display: inline-block;
+      margin-bottom: 10px;
+      font-size: 11px;
+      font-weight: 650;
+      color: #0f766e;
+      letter-spacing: 0.04em;
+    }
+    .scene-card h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 650;
+      letter-spacing: -0.015em;
+    }
+    .scene-card p {
+      margin: 6px 0 0;
+      font-size: 12px;
+      color: var(--ink-2);
+      line-height: 1.4;
+    }
+
+    /* —— MSS sub bands —— */
+    .hubs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 840px) {
+      .hubs { grid-template-columns: 1fr; }
+    }
+    .hub {
+      border-radius: 20px;
+      background: #f5f5f7;
+      padding: 18px 16px 14px;
+    }
+    .hub-top {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      padding: 0 4px;
+    }
+    .hub-top h3 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+    .hub-count {
+      font-size: 28px;
+      font-weight: 650;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
+      color: var(--ink);
+    }
+    .hub-count small {
+      margin-left: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--ink-3);
+    }
+    .hub .tool { background: #fff; }
+
+    /* —— Footer strip —— */
+    .recent {
+      margin-top: 48px;
+      padding-top: 28px;
+      border-top: 1px solid var(--line);
+      animation: rise 0.8s ease both;
+      animation-delay: 0.2s;
+    }
+    .recent h2 {
+      margin: 0 0 14px;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--ink-2);
+    }
+    .recent-row {
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+    .recent-item {
+      width: 72px;
+      text-align: center;
+    }
+    .recent-item .logo {
+      margin: 0 auto 8px;
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+    }
+    .recent-item span {
+      display: block;
+      font-size: 11px;
+      color: var(--ink-2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .note {
+      margin-top: 40px;
+      padding: 16px 18px;
+      border-radius: 14px;
+      background: rgba(0,0,0,0.03);
+      font-size: 12px;
+      color: var(--ink-2);
+      line-height: 1.55;
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(14px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="preview-bar">
+    <div>
+      <strong>风格预览 · Story Hub</strong>
+      <span> — 独立 HTML，未改产品代码 · 对照领导反馈：三类通道 + 海外/国内分区</span>
+    </div>
+    <a href="#chapter-external">跳到外部双轨</a>
+  </div>
+
+  <div class="shell">
+    <!-- HERO -->
+    <section class="hero" aria-label="首页舞台">
+      <p class="hero-kicker">下午好，演示账号</p>
+      <h1>探索 AI 的无限可能</h1>
+      <p class="hero-sub">按来源发现可用工具——全球精选、公司推荐，以及可复用的 Skill 与 Agent。</p>
+      <div class="hero-row">
+        <label class="search">
+          <i>⌕</i>
+          <input type="search" placeholder="搜索工具或项目…" readonly />
+          <button type="button">搜索</button>
+        </label>
+        <nav class="anchors" aria-label="货架锚点">
+          <a href="#chapter-external"><span class="dot e"></span>外部工具</a>
+          <a href="#chapter-internal"><span class="dot i"></span>公司工具</a>
+          <a href="#chapter-mss"><span class="dot m"></span>MSS 集市</a>
+        </nav>
+      </div>
+    </section>
+
+    <!-- CHAPTER 1: EXTERNAL DUAL RAIL -->
+    <section class="chapter" id="chapter-external">
+      <div class="chapter-head">
+        <div>
+          <p class="eyebrow"><span class="bar" style="background:var(--external)"></span>Channel 01</p>
+          <h2>外部工具精选</h2>
+          <p class="chapter-desc">海外与国内对照浏览——同一舞台、两条清晰轨道，不再靠一行小字区分。</p>
+        </div>
+        <a class="link-more" href="#">进入货架 ›</a>
+      </div>
+
+      <div class="dual">
+        <div class="rail global">
+          <div class="rail-top">
+            <h3 class="rail-title">海外</h3>
+            <span class="rail-sub">GLOBAL</span>
+          </div>
+          <div class="rail-list">
+            <div class="tool">
+              <div class="logo" style="background:#10a37f">G</div>
+              <div class="tool-body">
+                <p class="tool-name">ChatGPT</p>
+                <p class="tool-desc">对话、写作与通用推理</p>
+              </div>
+              <span class="hot">HOT</span>
+            </div>
+            <div class="tool">
+              <div class="logo" style="background:#d97706">C</div>
+              <div class="tool-body">
+                <p class="tool-name">Claude</p>
+                <p class="tool-desc">长文档分析与结构化输出</p>
+              </div>
+            </div>
+            <div class="tool">
+              <div class="logo" style="background:#4285f4">G</div>
+              <div class="tool-body">
+                <p class="tool-name">Gemini</p>
+                <p class="tool-desc">多模态理解与检索增强</p>
+              </div>
+            </div>
+            <div class="tool">
+              <div class="logo" style="background:#111827">P</div>
+              <div class="tool-body">
+                <p class="tool-name">Perplexity</p>
+                <p class="tool-desc">带引用来源的研究助手</p>
+              </div>
+            </div>
+          </div>
+          <div class="rail-foot"><a href="#">查看全部海外工具 ›</a></div>
+        </div>
+
+        <div class="rail china">
+          <div class="rail-top">
+            <h3 class="rail-title">国内</h3>
+            <span class="rail-sub">CHINA</span>
+          </div>
+          <div class="rail-list">
+            <div class="tool">
+              <div class="logo" style="background:#4e6ef2">K</div>
+              <div class="tool-body">
+                <p class="tool-name">Kimi</p>
+                <p class="tool-desc">超长上下文阅读与总结</p>
+              </div>
+              <span class="hot">HOT</span>
+            </div>
+            <div class="tool">
+              <div class="logo" style="background:#6366f1">T</div>
+              <div class="tool-body">
+                <p class="tool-name">通义千问</p>
+                <p class="tool-desc">办公写作与企业知识问答</p>
+              </div>
+            </div>
+            <div class="tool">
+              <div class="logo" style="background:#00a0e9">智</div>
+              <div class="tool-body">
+                <p class="tool-name">智谱清言</p>
+                <p class="tool-desc">中文场景与代码辅助</p>
+              </div>
+            </div>
+            <div class="tool">
+              <div class="logo" style="background:#00b96b">豆</div>
+              <div class="tool-body">
+                <p class="tool-name">豆包</p>
+                <p class="tool-desc">日常对话与创作灵感</p>
+              </div>
+            </div>
+          </div>
+          <div class="rail-foot"><a href="#">查看全部国内工具 ›</a></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CHAPTER 2: INTERNAL -->
+    <section class="chapter" id="chapter-internal">
+      <div class="chapter-head">
+        <div>
+          <p class="eyebrow"><span class="bar" style="background:var(--internal)"></span>Channel 02</p>
+          <h2>公司工具推荐</h2>
+          <p class="chapter-desc">从日常动作进入——记、读、写、问，降低「先学工具再办公」的门槛。</p>
+        </div>
+        <a class="link-more" href="#">进入货架 ›</a>
+      </div>
+      <div class="stage internal-tint">
+        <div class="grid-4">
+          <article class="scene-card">
+            <span class="scene-tag">记</span>
+            <h3>会议纪要助手</h3>
+            <p>录音转要点与待办</p>
+          </article>
+          <article class="scene-card">
+            <span class="scene-tag">读</span>
+            <h3>制度速读</h3>
+            <p>长文摘要与条款定位</p>
+          </article>
+          <article class="scene-card">
+            <span class="scene-tag">写</span>
+            <h3>周报生成</h3>
+            <p>按模板整理本周进展</p>
+          </article>
+          <article class="scene-card">
+            <span class="scene-tag">问</span>
+            <h3>政策问答</h3>
+            <p>内网知识库检索回答</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- CHAPTER 3: MSS -->
+    <section class="chapter" id="chapter-mss">
+      <div class="chapter-head">
+        <div>
+          <p class="eyebrow"><span class="bar" style="background:var(--mss)"></span>Channel 03</p>
+          <h2>MSS 工具集市</h2>
+          <p class="chapter-desc">自建可复用能力：Skill 上手即用，Agent 承载完整场景案例。</p>
+        </div>
+        <a class="link-more" href="#">进入集市 ›</a>
+      </div>
+      <div class="stage mss-tint">
+        <div class="hubs">
+          <div class="hub">
+            <div class="hub-top">
+              <h3>Skill Hub</h3>
+              <div class="hub-count">24<small>项</small></div>
+            </div>
+            <div class="rail-list">
+              <div class="tool">
+                <div class="logo" style="background:#4f46e5">价</div>
+                <div class="tool-body">
+                  <p class="tool-name">价格波动监测</p>
+                  <p class="tool-desc">竞品报价抓取与告警</p>
+                </div>
+              </div>
+              <div class="tool">
+                <div class="logo" style="background:#6366f1">译</div>
+                <div class="tool-body">
+                  <p class="tool-name">本地化翻译包</p>
+                  <p class="tool-desc">术语表约束的批量翻译</p>
+                </div>
+              </div>
+              <div class="tool">
+                <div class="logo" style="background:#818cf8">评</div>
+                <div class="tool-body">
+                  <p class="tool-name">电商评论洞察</p>
+                  <p class="tool-desc">差评聚类与改进建议</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="hub">
+            <div class="hub-top">
+              <h3>Agent Hub</h3>
+              <div class="hub-count">12<small>项</small></div>
+            </div>
+            <div class="rail-list">
+              <div class="tool">
+                <div class="logo" style="background:#1d1d1f">案</div>
+                <div class="tool-body">
+                  <p class="tool-name">报价监测作战单元</p>
+                  <p class="tool-desc">采集 → 对比 → 汇报闭环</p>
+                </div>
+              </div>
+              <div class="tool">
+                <div class="logo" style="background:#334155">案</div>
+                <div class="tool-body">
+                  <p class="tool-name">评论治理案例</p>
+                  <p class="tool-desc">多店铺口碑周报</p>
+                </div>
+              </div>
+              <div class="tool">
+                <div class="logo" style="background:#475569">案</div>
+                <div class="tool-body">
+                  <p class="tool-name">多语种上架案</p>
+                  <p class="tool-desc">文案本地化流水线</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RECENT (de-emphasized) -->
+    <section class="recent">
+      <h2>最近使用</h2>
+      <div class="recent-row">
+        <div class="recent-item"><div class="logo" style="background:#10a37f">G</div><span>ChatGPT</span></div>
+        <div class="recent-item"><div class="logo" style="background:#4e6ef2">K</div><span>Kimi</span></div>
+        <div class="recent-item"><div class="logo" style="background:#0d9488">记</div><span>会议纪要</span></div>
+        <div class="recent-item"><div class="logo" style="background:#4f46e5">价</div><span>价格监测</span></div>
+      </div>
+    </section>
+
+    <p class="note">
+      这是给领导评审用的<strong>静态风格稿</strong>：大字阶、章式分区、外部「海外 | 国内」双轨对照、弱化最近使用。
+      确认方向后，再按此视觉改 <code>HomePage</code> / <code>HomeMarketChannels</code>，避免直接大改产品代码。
+      工具名与数量为示意，不代表线上真实数据。
+    </p>
+  </div>
+</body>
+</html>

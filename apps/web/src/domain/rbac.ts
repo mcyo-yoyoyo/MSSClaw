@@ -71,9 +71,9 @@ export const ROLE_LABELS: Record<PlatformRole, string> = {
 export const ROLE_DESCRIPTIONS: Record<PlatformRole, string> = {
   super_admin: '平台运营：可查看/创建全部 Skill 与治理配置（租户/门户/展示/组织权限）',
   capability_ops:
-    '能力开发：配置专家/技能/工具；仅可访问公开 Skill 与本人所属组织（职能/区域）内未公开资产，避免跨部门窥见',
-  business_user: '业务壳：仅工作平台（找案例/做任务/任务记录；协作空间在完整产品可开）',
-  viewer: '业务壳：工作平台仅找案例，不可发起执行或修改配置',
+    '能力开发：配置 Agent/Skill/工具。短期不做组织数据权限；后续可按「公开可见 / 组织内」限制 MSS 集市 Agent/Skill',
+  business_user: '业务壳：工作平台（找案例/做任务/任务记录）；左侧领域/区域菜单全量可见，作浏览筛选',
+  viewer: '业务壳：工作平台以找案例为主；左侧领域/区域菜单全量可见，作浏览筛选',
 };
 
 /** 可邀请角色（超管由种子/白名单产生，不通过邀请下发） */
@@ -187,12 +187,12 @@ export const MODULE_LABELS: Record<ResourceModule, string> = {
   settings: 'Settings',
 };
 
-/** 全数据空间共用的四位种子成员（清除旧预设） */
+/** 全数据空间共用的种子成员（清除旧预设） */
 export const SEED_MEMBERS: WorkspaceMember[] = [
   {
     id: 'u-mcyo',
     name: 'Mcyo',
-    email: 'mcyo@company.com',
+    email: 'mcyo@huawei.com',
     role: 'super_admin',
     avatar: 'bg-indigo-600',
     lastActive: '刚刚',
@@ -203,7 +203,7 @@ export const SEED_MEMBERS: WorkspaceMember[] = [
   {
     id: 'u-jacky',
     name: 'Jacky',
-    email: 'jacky@company.com',
+    email: 'jacky@huawei.com',
     role: 'capability_ops',
     avatar: 'bg-teal-600',
     lastActive: '1 小时前',
@@ -214,7 +214,7 @@ export const SEED_MEMBERS: WorkspaceMember[] = [
   {
     id: 'u-dickson',
     name: 'Dickson',
-    email: 'dickson@company.com',
+    email: 'dickson@huawei.com',
     role: 'business_user',
     avatar: 'bg-amber-500',
     lastActive: '今天',
@@ -225,7 +225,7 @@ export const SEED_MEMBERS: WorkspaceMember[] = [
   {
     id: 'u-somebody',
     name: 'Somebody',
-    email: 'somebody@company.com',
+    email: 'somebody@huawei.com',
     role: 'viewer',
     avatar: 'bg-slate-500',
     lastActive: '昨天',
@@ -233,6 +233,41 @@ export const SEED_MEMBERS: WorkspaceMember[] = [
     deptIds: ['mkt'],
     regionId: 'europe',
   },
+  ...Array.from({ length: 10 }, (_, i) => {
+    const n = i + 1;
+    const roles: PlatformRole[] = [
+      'business_user',
+      'business_user',
+      'capability_ops',
+      'viewer',
+      'business_user',
+      'viewer',
+      'business_user',
+      'capability_ops',
+      'viewer',
+      'business_user',
+    ];
+    const depts = ['gtm', 'mkt', 'quality', 'hr', 'finance'] as const;
+    const regions = ['apac', 'europe', 'latam', null, 'mea'] as const;
+    const avatars = [
+      'bg-sky-600',
+      'bg-violet-600',
+      'bg-rose-600',
+      'bg-emerald-600',
+      'bg-orange-500',
+    ] as const;
+    return {
+      id: `u-test${n}`,
+      name: `Test${n}`,
+      email: `test${n}@huawei.com`,
+      role: roles[i]!,
+      avatar: avatars[i % avatars.length]!,
+      lastActive: '今天',
+      status: 'active' as const,
+      deptIds: [depts[i % depts.length]!],
+      regionId: regions[i % regions.length] ?? null,
+    };
+  }),
 ];
 
 /** 内置数据空间 id → 成员表（均指向同一套种子） */
@@ -279,9 +314,10 @@ export const SETTINGS_TABS: {
   id: Exclude<SettingsTab, 'org' | 'rbac'>;
   label: string;
   icon: string;
+  hint: string;
 }[] = [
-  { id: 'members', label: '成员与组织', icon: 'fa-users' },
-  { id: 'roles', label: '角色与权限', icon: 'fa-user-shield' },
-  { id: 'depts', label: '部门区域', icon: 'fa-building' },
-  { id: 'audit', label: '审计日志', icon: 'fa-clipboard-list' },
+  { id: 'members', label: '成员', icon: 'fa-users', hint: '添加 · 导入 · 改角色' },
+  { id: 'roles', label: '角色', icon: 'fa-user-shield', hint: '看权限矩阵' },
+  { id: 'depts', label: '部门', icon: 'fa-building', hint: '部门 · 区域字典' },
+  { id: 'audit', label: '审计', icon: 'fa-clipboard-list', hint: '操作日志' },
 ];

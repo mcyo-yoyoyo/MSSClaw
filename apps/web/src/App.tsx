@@ -4,6 +4,7 @@ import { AppShellSidebar } from '@/components/shell/AppShellSidebar';
 import { GlobalToastHost } from '@/components/common/GlobalToastHost';
 import { AssetApprovalModal } from '@/components/center/AssetApprovalModal';
 import { OfflineBanner } from '@/components/common/OfflineBanner';
+import { registerShareSyncToast } from '@/domain/shareSync';
 import { MssZhishuMark } from '@/components/brand/MssZhishuMark';
 import { HomeToTaskTransit } from '@/components/home/HomeToTaskTransit';
 import { useConversationStore } from '@/stores/conversationStore';
@@ -119,6 +120,10 @@ export function App() {
   useAppRouting();
   useTaskRouteSync(appView);
   usePlatformStoreLoader(appView);
+
+  useEffect(() => {
+    registerShareSyncToast((msg) => useMarketplaceStore.getState().showToast(msg));
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated) return;

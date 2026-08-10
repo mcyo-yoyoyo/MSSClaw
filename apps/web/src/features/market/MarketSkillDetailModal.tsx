@@ -310,7 +310,7 @@ export function MarketSkillDetailModal({
                 </div>
               ) : (
                 <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-4 py-10 text-center text-[12px] text-zinc-400">
-                  尚未配置 Skill 正文。可在「配置技能」中补充后，在此查看完整内容。
+                  尚未配置 Skill 正文。可在「配置Skill」中补充后，在此查看完整内容。
                 </div>
               )
             ) : null}
@@ -348,7 +348,7 @@ export function MarketSkillDetailModal({
             <MetaRow label="发布方" value={skill.publisher || skill.author || undefined} />
             <MetaRow label="连接器" value={skill.connector} />
             <MetaRow label="版本" value={`v${skill.version}`} />
-            <MetaRow label="可见性" value={ASSET_VISIBILITY_LABELS[skill.visibility ?? 'org']} />
+            <MetaRow label="可见性" value={ASSET_VISIBILITY_LABELS[skill.visibility ?? 'public']} />
             <MetaRow label="领域" value={bizLabel || undefined} />
             <MetaRow label="部门" value={deptLabel || undefined} />
             <MetaRow label="区域" value={regionLabel || undefined} />

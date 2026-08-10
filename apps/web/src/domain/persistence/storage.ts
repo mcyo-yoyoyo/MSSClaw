@@ -38,6 +38,7 @@ import {
 } from '@/api/persistenceApi';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { demoDefaults } from '@/domain/demoContentPolicy';
+import { reportShareSync } from '@/domain/shareSync';
 
 export interface MarketplaceSnapshot {
   agents: PrototypeAgentSeed[];
@@ -46,6 +47,12 @@ export interface MarketplaceSnapshot {
   automations: PrototypeAutomation[];
   kbDocs: PrototypeKbDocument[];
 }
+
+export type MarketplaceSaveResult = {
+  synced: boolean;
+  reason?: 'offline' | 'failed';
+  detail?: string;
+};
 
 /** 公司内部工具：种子里的真实跳转链接 / Logo 优先于本地缓存旧值 */
 function refreshHwInternalToolMeta(tools: PrototypeToolSeed[]): PrototypeToolSeed[] {
@@ -160,15 +167,39 @@ export async function loadMarketplace(workspaceId: string): Promise<MarketplaceS
   return readLocalMarketplace();
 }
 
-export async function saveMarketplace(workspaceId: string, snapshot: MarketplaceSnapshot): Promise<void> {
+export async function saveMarketplace(
+  workspaceId: string,
+  snapshot: MarketplaceSnapshot,
+): Promise<MarketplaceSaveResult> {
   writeLocalMarketplace(snapshot);
-  if (useWorkspaceStore.getState().apiConnected) {
-    try {
-      await saveMarketplaceApi(workspaceId, snapshot);
-    } catch {
-      /* local already saved */
-    }
+  if (!useWorkspaceStore.getState().apiConnected) {
+    const result: MarketplaceSaveResult = { synced: false, reason: 'offline' };
+    reportMarketplaceSync(result);
+    return result;
   }
+  try {
+    await saveMarketplaceApi(workspaceId, snapshot);
+    const result: MarketplaceSaveResult = { synced: true };
+    reportMarketplaceSync(result);
+    return result;
+  } catch (err) {
+    const result: MarketplaceSaveResult = {
+      synced: false,
+      reason: 'failed',
+      detail: err instanceof Error ? err.message : undefined,
+    };
+    reportMarketplaceSync(result);
+    return result;
+  }
+}
+
+function reportMarketplaceSync(result: MarketplaceSaveResult) {
+  reportShareSync({
+    kind: 'marketplace',
+    synced: result.synced,
+    reason: result.reason,
+    detail: result.detail,
+  });
 }
 
 function readLocalSessions(workspaceId: string): Record<string, ChatConfig> | null {
@@ -221,14 +252,20 @@ export async function loadSessions(
 export async function saveSessions(
   workspaceId: string,
   chats: Record<string, ChatConfig>,
-): Promise<void> {
+): Promise<MarketplaceSaveResult> {
   writeLocalSessions(workspaceId, chats);
-  if (useWorkspaceStore.getState().apiConnected) {
-    try {
-      await saveSessionsApi(workspaceId, chats);
-    } catch {
-      /* local already saved */
-    }
+  if (!useWorkspaceStore.getState().apiConnected) {
+    return { synced: false, reason: 'offline' };
+  }
+  try {
+    await saveSessionsApi(workspaceId, chats);
+    return { synced: true };
+  } catch (err) {
+    return {
+      synced: false,
+      reason: 'failed',
+      detail: err instanceof Error ? err.message : undefined,
+    };
   }
 }
 

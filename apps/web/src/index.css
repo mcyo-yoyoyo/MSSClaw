@@ -398,9 +398,14 @@
 
 .page-stage--brief {
   background:
-    radial-gradient(820px 260px at 100% 0%, rgba(0, 113, 227, 0.12), transparent 55%),
-    radial-gradient(480px 200px at 0% 100%, rgba(14, 165, 233, 0.05), transparent 50%),
+    radial-gradient(820px 260px at 0% 0%, rgba(0, 113, 227, 0.12), transparent 55%),
+    radial-gradient(480px 200px at 100% 100%, rgba(14, 165, 233, 0.05), transparent 50%),
     linear-gradient(165deg, #ffffff 0%, #f4f7fb 100%);
+}
+
+.page-stage--brief .page-stage__glow {
+  background: radial-gradient(ellipse at 20% 15%, rgba(0, 113, 227, 0.14), transparent 60%);
+  inset: -20% auto auto -10%;
 }
 
 .page-stage__eyebrow {

@@ -32,6 +32,7 @@ import { skillDisplayName, syncSkillZhPrimary } from '@/domain/skillDisplay';
 import type { AssetApprovalReason } from '@/domain/assetApproval';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
+import { shareSyncSaveHint } from '@/domain/shareSync';
 
 type EditorTarget = string | 'new' | null;
 type WizardStep = 0 | 1 | 2 | 3;
@@ -62,7 +63,7 @@ function emptySkill(): PrototypeSkillSeed {
     instructions: '',
     planSteps: [],
     sourceType: 'internal',
-    visibility: 'org',
+    visibility: 'public',
     ownerDeptIds: getCurrentDeptIds().slice(0, 1),
     ownerRegionId: getCurrentRegionId(),
     homepageUrl: '',
@@ -85,7 +86,7 @@ function normalizeSkillForm(skill: PrototypeSkillSeed): PrototypeSkillSeed {
       ? skill.ownerDeptIds.slice(0, 1)
       : getCurrentDeptIds().slice(0, 1),
     ownerRegionId: skill.ownerRegionId ?? getCurrentRegionId(),
-    visibility: skill.visibility ?? 'org',
+    visibility: skill.visibility === 'org' || skill.visibility === 'private' ? skill.visibility : 'public',
     published: Boolean(skill.published),
     featuredInDoTask: resolveSkillFeaturedInDoTask(skill),
     businessScenarioId: resolveSkillBusinessScenario(skill) ?? undefined,
@@ -110,7 +111,6 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   const [form, setForm] = useState<PrototypeSkillSeed>(emptySkill());
   const [step, setStep] = useState<WizardStep>(0);
   const [wantPublish, setWantPublish] = useState(false);
-  const [wantPublic, setWantPublic] = useState(false);
   const [packName, setPackName] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -134,7 +134,6 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       setForm(emptySkill());
       setStep(0);
       setWantPublish(false);
-      setWantPublic(false);
       setPackName(null);
       setShowAdvanced(false);
       return;
@@ -144,7 +143,6 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     setForm(normalized);
     setStep(1);
     setWantPublish(Boolean(normalized.published));
-    setWantPublic(normalized.visibility === 'public');
     setPackName(null);
     setShowAdvanced(false);
   }, [target, skills]);
@@ -157,7 +155,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       ...parsed,
       id: '',
       published: false,
-      visibility: 'org',
+      visibility: 'public',
       ownerDeptIds: form.ownerDeptIds?.length
         ? form.ownerDeptIds.slice(0, 1)
         : getCurrentDeptIds().slice(0, 1),
@@ -177,7 +175,6 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     setForm({ ...merged, searchKeywords: keywords });
     setPackName(fileLabel);
     setWantPublish(false);
-    setWantPublic(false);
     setStep(1);
     showToast(`已解析 Skill 包「${fileLabel}」，请确认信息与范围`);
   };
@@ -224,6 +221,10 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       return true;
     }
     if (s === 2) {
+      if (!form.businessScenarioId) {
+        showToast('请选择业务场景分类');
+        return false;
+      }
       if (!(form.ownerDeptIds?.length || form.ownerRegionId)) {
         showToast('请至少选择所属职能或区域（默认组织内可见）');
         return false;
@@ -240,10 +241,6 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
         }
       }
       return true;
-    }
-    if (s === 3 && form.featuredInDoTask && !form.businessScenarioId) {
-      showToast('精选露出到 MSS 场景技能时请选择业务场景');
-      return false;
     }
     return true;
   };
@@ -267,23 +264,14 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
 
     const reasons: AssetApprovalReason[] = [];
     if (wantPublish && !prev?.published) reasons.push('publish_executable');
-    if (wantPublic && prev?.visibility !== 'public') reasons.push('visibility_public');
-    // 新建且申请公开
-    if (wantPublic && isNew) {
-      if (!reasons.includes('visibility_public')) reasons.push('visibility_public');
-    }
 
     const needsApproval = reasons.length > 0;
     const userName = getCurrentUserName() || 'Mcyo';
     const userId = getCurrentUserId();
     const id = isNew ? `skill-${Date.now()}` : (target as string);
 
-    // 未审批前：不可调用；公开申请中仍落库为 org
-    const visibility: AssetVisibility = wantPublic && !needsApproval
-      ? 'public'
-      : wantPublic && needsApproval
-        ? 'org'
-        : ((form.visibility === 'private' ? 'private' : 'org') as AssetVisibility);
+    const visibility: AssetVisibility =
+      form.visibility === 'org' || form.visibility === 'private' ? form.visibility : 'public';
 
     let draft = syncSkillZhPrimary({
       ...form,
@@ -341,9 +329,12 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
         assetName: skillDisplayName(draft),
         reasons,
       });
-      showToast('技能已保存为组织内草稿，审批通过后生效申请项');
+      showToast('技能已保存为组织内草稿，审批通过后生效申请项' + shareSyncSaveHint());
     } else {
-      showToast(wantPublish ? '技能已保存并上架可调用' : '技能已保存（组织内沉淀 · 未上架调用）');
+      showToast(
+        (wantPublish ? '技能已保存并上架可调用' : '技能已保存（组织内沉淀 · 未上架调用）') +
+          shareSyncSaveHint(),
+      );
     }
   };
 
@@ -361,7 +352,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       open
       elevate
       size="lg"
-      title={isNew ? '创建技能' : '编辑技能'}
+      title={isNew ? '创建 Skill' : '编辑 Skill'}
       onClose={onClose}
       actions={
         <div className="flex w-full items-center justify-between gap-2">
@@ -586,6 +577,29 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
 
         {step === 2 ? (
           <div className="space-y-3">
+            <FormField
+              label="业务场景分类"
+              hint="与业务用户 MSS 集市视角对齐；用于场景技能筛选与归类"
+            >
+              <FormSelect
+                value={form.businessScenarioId ?? ''}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    businessScenarioId: (e.target.value || undefined) as
+                      | BusinessScenarioId
+                      | undefined,
+                  })
+                }
+              >
+                <option value="">— 请选择业务场景 —</option>
+                {listVisibleBusinessScenarioCategories().map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </FormSelect>
+            </FormField>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <FormField
                 label="所属职能（单选）"
@@ -682,51 +696,33 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
             </div>
 
             <div className="rounded-xl border border-zinc-200 px-3 py-2.5 space-y-2">
-              <p className="text-[13px] font-semibold text-zinc-800">可见范围</p>
+              <p className="text-[13px] font-semibold text-zinc-800">发布权限范围</p>
               <p className="text-[11px] text-zinc-500">
-                默认「本组织可见」，支撑部门 Skill 沉淀。改为公开（跨部门）将触发评审，避免货架杂乱。
+                默认公开可见。组织内：后续启用数据权限时按观众归属匹配；公开可见：全领域全区域可看。短期两者浏览效果相同。
               </p>
               <label className="flex cursor-pointer items-center gap-2">
                 <input
                   type="radio"
-                  name="vis"
+                  name="skill-vis"
                   className="accent-claw-600"
-                  checked={!wantPublic && form.visibility !== 'private'}
-                  onChange={() => {
-                    setWantPublic(false);
-                    setForm({ ...form, visibility: 'org' });
-                  }}
+                  checked={(form.visibility ?? 'public') === 'public'}
+                  onChange={() => setForm({ ...form, visibility: 'public' })}
                 />
-                <span className="text-[13px]">{ASSET_VISIBILITY_LABELS.org}（推荐）</span>
+                <span className="text-[13px] font-medium text-zinc-800">
+                  {ASSET_VISIBILITY_LABELS.public}
+                  <span className="ml-1.5 text-[11px] font-normal text-zinc-400">（默认）</span>
+                </span>
               </label>
               <label className="flex cursor-pointer items-center gap-2">
                 <input
                   type="radio"
-                  name="vis"
+                  name="skill-vis"
                   className="accent-claw-600"
-                  checked={form.visibility === 'private'}
-                  onChange={() => {
-                    setWantPublic(false);
-                    setForm({ ...form, visibility: 'private' });
-                  }}
+                  checked={form.visibility === 'org'}
+                  onChange={() => setForm({ ...form, visibility: 'org' })}
                 />
-                <span className="text-[13px]">{ASSET_VISIBILITY_LABELS.private}</span>
-              </label>
-              <label className="flex cursor-pointer items-start gap-2">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 accent-claw-600"
-                  checked={wantPublic}
-                  onChange={(e) => {
-                    setWantPublic(e.target.checked);
-                    if (e.target.checked) setForm({ ...form, visibility: 'org' });
-                  }}
-                />
-                <span>
-                  <span className="block text-[13px] font-medium text-zinc-800">申请公开可见（跨部门）</span>
-                  <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500">
-                    勾选后保存将进入审批；通过前仍保持组织内可见。
-                  </span>
+                <span className="text-[13px] font-medium text-zinc-800">
+                  {ASSET_VISIBILITY_LABELS.org}
                 </span>
               </label>
             </div>
@@ -775,26 +771,16 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                   </span>
                 </label>
                 {form.featuredInDoTask ? (
-                  <FormField label="业务场景篮子">
-                    <FormSelect
-                      value={form.businessScenarioId ?? ''}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          businessScenarioId: (e.target.value || undefined) as
-                            | BusinessScenarioId
-                            | undefined,
-                        })
-                      }
-                    >
-                      <option value="">— 请选择场景 —</option>
-                      {listVisibleBusinessScenarioCategories().map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.label}
-                        </option>
-                      ))}
-                    </FormSelect>
-                  </FormField>
+                  <p className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-[11px] text-zinc-600">
+                    将按第 2 步所选业务场景露出：
+                    <span className="ml-1 font-semibold text-zinc-800">
+                      {form.businessScenarioId
+                        ? listVisibleBusinessScenarioCategories().find(
+                            (c) => c.id === form.businessScenarioId,
+                          )?.label ?? form.businessScenarioId
+                        : '尚未选择'}
+                    </span>
+                  </p>
                 ) : null}
               </div>
             ) : null}
@@ -802,8 +788,13 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
             <div className="rounded-xl bg-zinc-900 px-3 py-2.5 text-[12px] leading-relaxed text-zinc-200">
               <p className="font-semibold text-white">保存后将生效</p>
               <ul className="mt-1 list-disc space-y-0.5 pl-4">
-                <li>资产写入：组织内沉淀（草稿或已有范围）</li>
-                {wantPublic ? <li>触发审批：公开可见</li> : <li>可见范围：组织内 / 仅发布方</li>}
+                <li>资产写入：Skill 沉淀</li>
+                <li>
+                  权限范围：
+                  {ASSET_VISIBILITY_LABELS[
+                    form.visibility === 'org' ? 'org' : 'public'
+                  ]}
+                </li>
                 {wantPublish ? <li>触发审批：上架可调用</li> : <li>调用状态：不可执行模型任务</li>}
               </ul>
             </div>

@@ -49,10 +49,11 @@ export function SettingsPage() {
         <div className="mx-auto max-w-5xl">
           <CenterPageHeader
             title="组织权限"
-            subtitle="成员邀请 · 角色改派 · 激活登录 · 部门区域归属"
+            subtitle="成员 · 角色 · 部门 · 审计"
             tip={
               <>
-                默认进入「成员管理」：邀请邮箱 → 指定角色与组织归属 → 激活后可用演示密码登录。权限矩阵随当前数字空间变化；组织概览可改显示名。
+                成员：添加账号 → 指定角色与部门/区域归属标签 → 设密登录。部门/区域短期只做归属与左侧浏览筛选，不做菜单或数据权限裁剪；后续若启用，仅 MSS
+                集市 Agent/Skill 按「全员 / 本组织」可见性匹配。
               </>
             }
           />

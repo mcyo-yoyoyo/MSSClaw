@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { getEfficiencyLabel } from '@/domain/prototype/constants';
 import { getSkillLabels } from '@/domain/plan';
 import type { PrototypeAgentSeed } from '@/domain/prototype/types';
+import { ASSET_VISIBILITY_LABELS } from '@/domain/orgTaxonomy';
+import { getAgentBusinessLabel } from '@/domain/agentBusinessScenarios';
 import {
   CenterModal,
   CenterPageHeader,
@@ -10,13 +11,15 @@ import {
 } from '@/components/center/CenterShell';
 import { OrgAssetFilterBar } from '@/components/center/OrgAssetFilters';
 import { AgentEditorModal, type AgentEditorTarget } from '@/components/center/AgentEditorModal';
+import { SharedCatalogEmptyHint } from '@/components/common/SharedCatalogEmptyHint';
 import { AssetAccentMark, assetAccentBorderStyle } from '@/components/brand/AssetAccentMark';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
-import type { EfficiencyFilter } from '@/domain/assetFilters';
 import { downloadAgentFile, downloadAllAgentsFile } from '@/domain/agentExport';
 import { getAgentPack } from '@/domain/agents/catalog';
 import { buildAgentDemoPrompt, getPrimarySkill } from '@/domain/agents/runtime';
 import { PROTOTYPE_SKILLS } from '@/domain/prototype/skills';
+import { skillDisplayName } from '@/domain/skillDisplay';
+import { useBusinessScenarioCatalogStore } from '@/stores/businessScenarioCatalogStore';
 
 interface AgentCenterPageProps {
   onInvoke: (agent: PrototypeAgentSeed, prompt?: string) => void;
@@ -25,22 +28,27 @@ interface AgentCenterPageProps {
 export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
   const {
     agents,
-    agentFilter,
     agentSearch,
     agentDeptFilter,
     agentRegionFilter,
     agentScopeFilter,
-    setAgentFilter,
+    agentBusinessFilter,
     setAgentSearch,
     setAgentDeptFilter,
     setAgentRegionFilter,
     setAgentScopeFilter,
+    setAgentBusinessFilter,
     filteredAgents,
     bumpAgentInvokes,
     importAgentFile,
     showToast,
     skills,
   } = useMarketplaceStore();
+  const hydrateBusinessCatalog = useBusinessScenarioCatalogStore((s) => s.hydrate);
+
+  useEffect(() => {
+    hydrateBusinessCatalog();
+  }, [hydrateBusinessCatalog]);
 
   const [detail, setDetail] = useState<PrototypeAgentSeed | null>(null);
   const [editorTarget, setEditorTarget] = useState<AgentEditorTarget>(null);
@@ -53,10 +61,11 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
     onInvoke(agent);
   };
 
-  const skillName = (id: string) =>
-    skills.find((s) => s.id === id)?.name ??
-    PROTOTYPE_SKILLS.find((s) => s.id === id)?.name ??
-    id;
+  const skillName = (id: string) => {
+    const hit =
+      skills.find((s) => s.id === id) ?? PROTOTYPE_SKILLS.find((s) => s.id === id);
+    return hit ? skillDisplayName(hit) : id;
+  };
 
   return (
     <div className="center-surface center-page scroll-hidden flex-1 overflow-y-auto">
@@ -82,8 +91,8 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
 
       <div className="mx-auto max-w-6xl">
         <CenterPageHeader
-          title="配置专家"
-          subtitle="能力上架进目录；勾选精选露出后出现在业务「做任务 · 场景专家」"
+          title="配置Agent"
+          subtitle="能力上架进目录；发布可选组织内 / 公开可见（默认公开）；勾选精选露出后出现在业务「做任务 · 场景专家」"
           tip={
             <>
               「调用」将自动发送演示任务并挂载主 Skill；可下载/导入 .agent.zip（含 AGENT.md）。配置 LLM
@@ -114,7 +123,7 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
                       title="导入为新专家"
                     >
                       <i className="fa-solid fa-file-import w-3.5 text-[10px] text-zinc-400" />
-                      导入专家包
+                      导入 Agent 包
                     </button>
                     <button
                       type="button"
@@ -137,7 +146,7 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
                 className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white transition"
               >
                 <i className="fa-solid fa-plus mr-1" />
-                创建专家
+                创建 Agent
               </button>
             </>
           }
@@ -146,11 +155,11 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
         <OrgAssetFilterBar
           deptFilter={agentDeptFilter}
           regionFilter={agentRegionFilter}
-          efficiencyFilter={agentFilter === 'experience' ? 'all' : (agentFilter as EfficiencyFilter)}
+          businessFilter={agentBusinessFilter}
           scopeFilter={agentScopeFilter}
           onDeptChange={setAgentDeptFilter}
           onRegionChange={setAgentRegionFilter}
-          onEfficiencyChange={(id) => setAgentFilter(id)}
+          onBusinessChange={setAgentBusinessFilter}
           onScopeChange={setAgentScopeFilter}
           showScope
         />
@@ -184,6 +193,9 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
                           >
                             {a.published ? '已发布' : '草稿'}
                           </span>
+                          <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[9px] font-semibold text-zinc-600">
+                            {ASSET_VISIBILITY_LABELS[a.visibility ?? 'public']}
+                          </span>
                           {runnable ? (
                             <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[9px] font-semibold text-sky-700">
                               可对话
@@ -192,7 +204,8 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
                         </div>
                       </div>
                       <p className="mt-0.5 truncate text-[10px] font-semibold text-claw-600">
-                        {getEfficiencyLabel(a.category)} · {a.bizLine}
+                        {getAgentBusinessLabel(a) || '未分类场景'}
+                        {a.bizLine ? ` · ${a.bizLine}` : ''}
                       </p>
                       <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-zinc-500">
                         {a.desc || '暂无描述'}
@@ -254,9 +267,7 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
               );
             })
           ) : (
-            <div className="apple-card col-span-3 p-8 text-center text-[#86868b]">
-              未找到匹配的专家
-            </div>
+            <SharedCatalogEmptyHint assetLabel="Agent" />
           )}
         </div>
       </div>
@@ -315,7 +326,8 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
           <div className="space-y-3 text-[13px] text-left">
             <p className="text-[#86868b]">{detail.desc}</p>
             <p className="text-[11px] text-[#86868b]">
-              {getEfficiencyLabel(detail.category)} · {detail.bizLine} · {detail.invokes} 次调用
+              {getAgentBusinessLabel(detail) || '未分类场景'}
+              {detail.bizLine ? ` · ${detail.bizLine}` : ''} · {detail.invokes} 次调用
             </p>
             {(detail.systemPrompt || getAgentPack(detail.id)?.systemPrompt) && (
               <div className="rounded-xl border border-sky-100 bg-sky-50/50 p-3">

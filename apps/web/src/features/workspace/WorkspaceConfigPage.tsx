@@ -99,10 +99,11 @@ export function WorkspaceConfigPage() {
       <div className="mx-auto max-w-3xl">
         <CenterPageHeader
           title="租户配置"
-          subtitle="数据空间开关与顶栏租户列表（战区/业务空间）。不控制工具、案例、Skill 的「全员/本组织」可见性——那由各资产的归属与可见性字段决定。"
+          subtitle="数据空间开关与顶栏租户列表（战区/业务空间）。不控制左侧领域/区域菜单，也不做短期数据权限；资产「全员/本组织」字段留给后续 MSS 集市 Agent/Skill。"
           tip={
             <>
-              短期生态繁荣阶段可保持全部租户启用即可；HR 等「仅组织内可见」场景请在配置技能/专家/工具里设可见性为「本组织」，无需改租户配置。
+              短期可保持租户全开。成员部门/区域是归属标签；左侧菜单全量可见。后续若启用数据权限，仅配置 Skill / Agent 的「公开可见 /
+              组织内」会按归属匹配。
             </>
           }
           actions={
@@ -225,7 +226,7 @@ export function WorkspaceConfigPage() {
                 ))}
               </div>
               <p className="mt-2 text-[10px] text-zinc-400">
-                与「组织权限」共用同一套部门字典；成员归属影响场景推荐与资产可见性。
+                与「组织权限」共用部门字典；成员归属作标签与浏览筛选，短期不做数据权限裁剪。
               </p>
             </div>
             <div className="apple-card p-4">
