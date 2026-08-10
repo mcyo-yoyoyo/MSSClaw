@@ -140,6 +140,19 @@ export default defineConfig({
         bypass(req) {
           if (req.url?.startsWith('/api/ai-daily-news')) return req.url;
         },
+        configure: (proxy) => {
+          proxy.on('error', (_err, _req, res) => {
+            const r = res as { writeHead?: (code: number, h: Record<string, string>) => void; end?: (b: string) => void; headersSent?: boolean };
+            if (!r.writeHead || r.headersSent) return;
+            r.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+            r.end?.(
+              JSON.stringify({
+                status: 'unreachable',
+                message: 'Nest API 未启动。请另开终端运行 npm run dev:api（默认 http://localhost:3000）。',
+              }),
+            );
+          });
+        },
       },
     },
   },

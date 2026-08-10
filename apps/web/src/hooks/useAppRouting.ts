@@ -4,16 +4,28 @@ import { parseAppRoute, writeAppRouteToLocation } from '@/domain/appRoute';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useConversationStore } from '@/stores/conversationStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
+import { useSessionStore } from '@/stores/sessionStore';
 
 /**
  * 同步 AppView 与 URL hash（#/home、#/task?chat=xxx、#/market-tool?id=xxx），支持浏览器前进/后退。
+ * 等会话恢复后再应用路由，避免运营角色在 hydrate 前被业务壳拦下。
  */
 export function useAppRouting() {
   const appView = useAppViewStore((s) => s.appView);
   const setAppView = useAppViewStore((s) => s.setAppView);
+  const sessionBootstrapped = useSessionStore((s) => s.bootstrapped);
+  const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
   const skipHashWrite = useRef(false);
+  const appliedInitial = useRef(false);
 
   useEffect(() => {
+    if (!sessionBootstrapped || !isAuthenticated) {
+      appliedInitial.current = false;
+      return;
+    }
+    if (appliedInitial.current) return;
+    appliedInitial.current = true;
+
     const initial = parseAppRoute(window.location.hash);
     skipHashWrite.current = true;
     setAppView(initial.view);
@@ -32,7 +44,7 @@ export function useAppRouting() {
         true,
       );
     }
-  }, [setAppView]);
+  }, [setAppView, sessionBootstrapped, isAuthenticated]);
 
   useEffect(() => {
     if (skipHashWrite.current) {
@@ -50,6 +62,8 @@ export function useAppRouting() {
   }, [appView]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
+
     const onNavigate = () => {
       const route = parseAppRoute(window.location.hash);
       if (route.view !== useAppViewStore.getState().appView) {
@@ -70,7 +84,7 @@ export function useAppRouting() {
       window.removeEventListener('hashchange', onNavigate);
       window.removeEventListener('popstate', onNavigate);
     };
-  }, [setAppView]);
+  }, [setAppView, isAuthenticated]);
 }
 
 export function navigateToAppView(view: AppView): void {

@@ -13,6 +13,7 @@ import {
   logoutWithApi,
 } from '@/api/platformDocsApi';
 import { isApiEnabled } from '@/api/client';
+import { useShellPerspectiveStore } from '@/stores/shellPerspectiveStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 export interface SessionUser {
@@ -110,6 +111,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const token = readToken();
     if (!token || !isApiEnabled()) {
       writeToken(null);
+      useShellPerspectiveStore.getState().hydrate(undefined);
       set({ user: null, isAuthenticated: false, bootstrapped: true });
       return;
     }
@@ -117,13 +119,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     try {
       const me = await fetchSessionMeApi(ws);
       if (me.ok) {
-        set({ user: fromApiUser(me.user), isAuthenticated: true, bootstrapped: true });
+        const user = fromApiUser(me.user);
+        useShellPerspectiveStore.getState().hydrate(user.platformRole);
+        set({ user, isAuthenticated: true, bootstrapped: true });
         return;
       }
     } catch {
       /* fallthrough */
     }
     writeToken(null);
+    useShellPerspectiveStore.getState().hydrate(undefined);
     set({ user: null, isAuthenticated: false, bootstrapped: true });
   },
 
@@ -136,8 +141,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         const remote = await loginWithApi({ email, password, workspaceId: ws });
         if (remote.ok && remote.token) {
           writeToken(remote.token);
+          const user = fromApiUser(remote.user);
+          useShellPerspectiveStore.getState().hydrate(user.platformRole);
           set({
-            user: fromApiUser(remote.user),
+            user,
             isAuthenticated: true,
             bootstrapped: true,
           });
@@ -156,8 +163,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const result = await authenticate(email, password);
     if (!result.ok) return { ok: false, error: result.error };
     writeToken(null);
+    const user = toSessionUser(result.account);
+    useShellPerspectiveStore.getState().hydrate(user.platformRole);
     set({
-      user: toSessionUser(result.account),
+      user,
       isAuthenticated: true,
       bootstrapped: true,
     });
@@ -168,6 +177,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const ws = useWorkspaceStore.getState().workspaceId || 'ws-mss-ai';
     void logoutWithApi(ws);
     writeToken(null);
+    useShellPerspectiveStore.getState().hydrate(undefined);
     set({ user: null, isAuthenticated: false });
   },
 

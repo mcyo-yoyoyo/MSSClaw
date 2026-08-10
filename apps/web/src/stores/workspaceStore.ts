@@ -106,10 +106,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
       const config = useWorkspaceConfigStore.getState();
       const apiList = await fetchWorkspaceList();
+      const apiIds = new Set(apiList.map((item) => item.id));
       const visible = config.getVisibleWorkspaces();
       const workspaceList = visible.length ? visible : apiList;
+      // Only hit API for tenants that exist remotely; fill the rest from local seed
+      // so Network does not fill with catalog 404s for frontend-only ids.
+      const remoteIds = workspaceList.map((item) => item.id).filter((id) => apiIds.has(id));
       const catalogs = {
-        ...(await fetchAllWorkspaceCatalogs(workspaceList.map((item) => item.id))),
+        ...getLocalWorkspaceCatalogs(),
+        ...(await fetchAllWorkspaceCatalogs(remoteIds)),
         ...config.getCustomCatalogs(),
       };
       set({
@@ -152,6 +157,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     });
 
     if (isApiEnabled() && !get().catalogs[workspaceId]) {
+      // Prefer local seed when already known; only refresh remotely for ids we have not cached.
       void fetchWorkspaceCatalog(workspaceId).then((fresh) => {
         set((state) => ({
           catalogs: { ...state.catalogs, [workspaceId]: fresh },

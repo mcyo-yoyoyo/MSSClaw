@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { buildCatalogPayload, WORKSPACE_CATALOGS } from '../data/workspace-catalogs';
 
 /** 允许持久化的平台文档 kind（对应原前端 localStorage 配置） */
 export const PLATFORM_DOC_KINDS = [
@@ -260,7 +261,36 @@ export class PlatformDocsService {
 
   private async ensureWorkspace(workspaceId: string) {
     const row = await this.prisma.workspace.findUnique({ where: { id: workspaceId } });
-    if (!row) throw new NotFoundException(`Workspace ${workspaceId} not found`);
+    if (row) return;
+
+    // 本地/首次启动：缺少工作区时自动补齐，避免 login/docs 直接 404
+    const catalog = WORKSPACE_CATALOGS.find((c) => c.workspace.id === workspaceId);
+    if (catalog) {
+      await this.prisma.workspace.create({
+        data: {
+          id: catalog.workspace.id,
+          name: catalog.workspace.name,
+          namespace: catalog.workspace.namespace,
+          description: catalog.workspace.description,
+          memberCount: catalog.workspace.memberCount,
+          defaultChatId: catalog.defaultChatId,
+          catalogJson: buildCatalogPayload(catalog) as Prisma.InputJsonValue,
+        },
+      });
+      return;
+    }
+
+    await this.prisma.workspace.create({
+      data: {
+        id: workspaceId,
+        name: workspaceId,
+        namespace: workspaceId,
+        description: 'Auto-provisioned workspace',
+        memberCount: 0,
+        defaultChatId: 'default',
+        catalogJson: {} as Prisma.InputJsonValue,
+      },
+    });
   }
 
   private async seedIfNeeded(workspaceId: string, kind: PlatformDocKind): Promise<unknown> {

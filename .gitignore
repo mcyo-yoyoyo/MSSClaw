@@ -6,6 +6,8 @@ dist/
 .env.*
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 apps/api/prisma/dev.db
 apps/api/data/blobs/
 coverage/

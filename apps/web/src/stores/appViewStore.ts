@@ -7,6 +7,7 @@ import { isOpsOnlyView } from '@/domain/shellPerspective';
 import { useConversationStore } from '@/stores/conversationStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
+import { useSessionStore } from '@/stores/sessionStore';
 import { useShellPerspectiveStore } from '@/stores/shellPerspectiveStore';
 
 function loadNavSections(): Record<NavSection, boolean> {
@@ -53,6 +54,8 @@ export const useAppViewStore = create<AppViewState>((set, get) => ({
       return;
     }
 
+    // Gate by login role, not stale default `business` before sidebar hydrate.
+    useShellPerspectiveStore.getState().hydrate(useSessionStore.getState().user?.platformRole);
     const perspective = useShellPerspectiveStore.getState().perspective;
     if (perspective === 'business' && isOpsOnlyView(view)) {
       set({ appView: 'home', blockedOpsView: view });
