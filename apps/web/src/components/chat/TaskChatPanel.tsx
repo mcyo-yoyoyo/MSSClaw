@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatConfig, ChatMessage } from '@/domain/chat';
 import { isUserCreatedTask, isWarRoom } from '@/domain/chat';
+import { getAgentById } from '@/domain/plan';
+import { AgentPortrait } from '@/components/brand/AgentPortrait';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { PlanMessageCard } from '@/components/chat/PlanMessageCard';
 import { StepMessageRow } from '@/components/chat/StepMessageRow';
 import { SharedComposer } from '@/components/chat/SharedComposer';
 import { cn } from '@/lib/utils';
 import { useConversationStore } from '@/stores/conversationStore';
+import { useMarketplaceStore } from '@/stores/marketplaceStore';
 
 const NEAR_BOTTOM_PX = 96;
 
@@ -30,6 +33,8 @@ interface TaskChatPanelProps {
   aiAllowed?: boolean;
   /** 右侧交付件预览已收起时，聊天区占满剩余宽度 */
   previewCollapsed?: boolean;
+  /** AI任务页：隐藏 / Skill 按钮 */
+  hideSkill?: boolean;
 }
 
 export function TaskChatPanel({
@@ -50,6 +55,7 @@ export function TaskChatPanel({
   onManageMembers,
   aiAllowed = true,
   previewCollapsed = false,
+  hideSkill = false,
 }: TaskChatPanelProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -59,6 +65,8 @@ export function TaskChatPanel({
   const canDelete = isUserCreatedTask(chat) && !!onDeleteChat;
   const warroom = isWarRoom(chat);
   const memberCount = chat.members?.length ?? 0;
+  const agents = useMarketplaceStore((s) => s.agents);
+  const agent = useMemo(() => getAgentById(chat.agentId), [chat.agentId, agents]);
 
   const distanceFromBottom = (el: HTMLDivElement) =>
     el.scrollHeight - el.scrollTop - el.clientHeight;
@@ -110,6 +118,7 @@ export function TaskChatPanel({
           message={message}
           iconBg={iconBg}
           iconClass={chat.icon}
+          agent={agent}
           onApprove={onApprovePlan}
           onSavePlan={onSavePlan}
         />
@@ -125,6 +134,7 @@ export function TaskChatPanel({
         accentColor="claw"
         iconClass={chat.icon}
         iconBg={iconBg}
+        agent={agent}
       />
     );
   };
@@ -135,19 +145,38 @@ export function TaskChatPanel({
         'task-chat-panel relative z-20 flex min-h-0 flex-col border-r border-zinc-200/80 bg-white',
         previewCollapsed
           ? 'min-w-0 flex-1'
-          : 'w-[340px] min-w-[300px] max-w-[380px] shrink-0',
+          : 'min-w-0 w-full max-w-full shrink-0 sm:w-[min(340px,38vw)] sm:max-w-[380px] lg:w-[340px]',
       )}
     >
       <header className="glass-bar flex h-14 shrink-0 items-center justify-between border-b border-black/[0.06] px-5">
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className={cn('relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-sm', iconBg)}>
-            <i className={cn('fa-solid', chat.icon)} />
+          <div className="relative shrink-0">
+            {agent ? (
+              <AgentPortrait
+                agentId={agent.id}
+                name={agent.name}
+                icon={agent.icon || chat.icon}
+                avatarUrl={agent.avatarUrl}
+                avatarPresetId={agent.avatarPresetId}
+                size={40}
+                className="shadow-sm ring-1 ring-black/5"
+              />
+            ) : (
+              <div
+                className={cn(
+                  'flex h-10 w-10 items-center justify-center rounded-full text-white shadow-sm',
+                  iconBg,
+                )}
+              >
+                <i className={cn('fa-solid', chat.icon)} />
+              </div>
+            )}
             <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-400" />
           </div>
           <div className="min-w-0 flex-col">
             <h2 className="truncate text-[14px] font-semibold leading-tight text-[#1d1d1f]">{chat.title}</h2>
             <span className={cn('truncate text-[10px]', chat.type === 'bot' ? 'font-medium text-claw-600' : 'text-[#86868b]')}>
-              {chat.status}
+              {agent?.name ? `${agent.name} · ${chat.status}` : chat.status}
             </span>
           </div>
         </div>
@@ -349,7 +378,14 @@ export function TaskChatPanel({
             onChange={onDraftChange}
             onSubmit={onSend}
             disabled={isAgentTyping}
-            placeholder={warroom ? '本室成员可 @ Agent、/ Skill…' : '继续对话… @ Agent · / Skill'}
+            hideSkill={hideSkill}
+            placeholder={
+              warroom
+                ? '本室成员可 @ Agent、/ Skill…'
+                : hideSkill
+                  ? '继续对话… @ Agent'
+                  : '继续对话… @ Agent · / Skill'
+            }
           />
         )}
       </div>

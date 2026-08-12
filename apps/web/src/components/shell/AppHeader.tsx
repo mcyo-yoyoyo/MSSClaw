@@ -25,6 +25,7 @@ const TOP_SHELF_NAV: { view: AppView; label: string }[] = [
   { view: MARKET_SHELF_META.internal.view, label: MARKET_SHELF_META.internal.label },
   { view: MARKET_SHELF_META.projects.view, label: MARKET_SHELF_META.projects.label },
   { view: 'ai-brief', label: 'AI快讯' },
+  { view: 'ai-tasks', label: 'AI任务' },
 ];
 
 const ADMIN_MENU_ITEMS: { view: AppView; label: string }[] = ADMIN_MENU_VIEWS.map((view) => ({
@@ -83,6 +84,8 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
   const [adminOpen, setAdminOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const adminRef = useRef<HTMLDivElement>(null);
+  const adminBtnRef = useRef<HTMLButtonElement>(null);
+  const [adminMenuPos, setAdminMenuPos] = useState<{ top: number; left: number } | null>(null);
 
   const perspectiveLabel = useMemo(() => {
     if (!user) return '未登录';
@@ -96,14 +99,45 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
   const initial = (user?.name?.trim()?.[0] ?? 'U').toUpperCase();
 
   useEffect(() => {
-    const onDocClick = (e: MouseEvent) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node))
+    const onDocDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (userMenuRef.current && !userMenuRef.current.contains(target)) {
         setUserMenuOpen(false);
-      if (adminRef.current && !adminRef.current.contains(e.target as Node)) setAdminOpen(false);
+      }
+      if (
+        adminRef.current &&
+        !adminRef.current.contains(target) &&
+        !(e.target as HTMLElement | null)?.closest?.('[data-admin-menu]')
+      ) {
+        setAdminOpen(false);
+      }
     };
-    document.addEventListener('click', onDocClick);
-    return () => document.removeEventListener('click', onDocClick);
+    document.addEventListener('mousedown', onDocDown);
+    return () => document.removeEventListener('mousedown', onDocDown);
   }, []);
+
+  useEffect(() => {
+    if (!adminOpen) {
+      setAdminMenuPos(null);
+      return;
+    }
+    const updatePos = () => {
+      const btn = adminBtnRef.current;
+      if (!btn) return;
+      const rect = btn.getBoundingClientRect();
+      setAdminMenuPos({
+        top: rect.bottom + 8,
+        left: rect.left + rect.width / 2,
+      });
+    };
+    updatePos();
+    window.addEventListener('resize', updatePos);
+    window.addEventListener('scroll', updatePos, true);
+    return () => {
+      window.removeEventListener('resize', updatePos);
+      window.removeEventListener('scroll', updatePos, true);
+    };
+  }, [adminOpen]);
 
   const goView = (view: AppView) => {
     if (view === 'home') {
@@ -115,17 +149,17 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
 
   const navBtn = (active: boolean) =>
     cn(
-      'relative truncate rounded-full px-3.5 py-1.5 text-[13px] font-medium tracking-tight transition',
+      'relative shrink-0 whitespace-nowrap rounded-full px-2.5 py-1.5 text-[12px] font-medium tracking-tight transition xl:px-3.5 xl:text-[13px]',
       active
         ? 'bg-zinc-900 text-white shadow-[0_6px_16px_-8px_rgba(24,24,27,0.55)]'
         : 'text-zinc-600 hover:bg-zinc-100/90 hover:text-zinc-900',
     );
 
   return (
-    <header className="apple-header z-50 flex h-[52px] shrink-0 items-center justify-between px-6">
-      <div className="flex min-w-0 items-center gap-3">
+    <header className="apple-header z-50 grid h-[52px] shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-3 sm:px-4 md:px-6">
+      <div className="flex min-w-0 items-center justify-self-start gap-2 sm:gap-3">
         <MssZhishuMark size={32} className="shrink-0" title="MSS AI提效作战平台" />
-        <div className="min-w-0 leading-tight">
+        <div className="min-w-0 leading-tight max-lg:hidden">
           <p className="truncate text-[14px] font-semibold tracking-tight text-zinc-900">
             MSS AI提效作战平台
           </p>
@@ -133,61 +167,95 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
       </div>
 
       <nav
-        className="mx-3 hidden min-w-0 flex-1 items-center justify-center lg:flex"
+        className="flex max-w-[min(100vw-8rem,760px)] items-center justify-center justify-self-center"
         aria-label="平台导航"
       >
         <div className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-zinc-200/80 bg-zinc-50/80 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
-          {TOP_SHELF_NAV.filter((item) => isViewEnabled(item.view)).map((item) => (
-            <button
-              key={item.view}
-              type="button"
-              onClick={() => goView(item.view)}
-              onMouseEnter={() => ROUTE_PREFETCH[item.view]?.()}
-              className={navBtn(appView === item.view || marketToolShelfHighlight === item.view)}
-            >
-              {item.label}
-            </button>
-          ))}
-          {canOpenAdmin ? (
-            <div className="relative" ref={adminRef}>
+          <div className="flex min-w-0 max-w-full items-center gap-0.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {TOP_SHELF_NAV.filter((item) => isViewEnabled(item.view)).map((item) => (
               <button
+                key={item.view}
                 type="button"
-                onClick={(e) => {
+                onClick={() => goView(item.view)}
+                onMouseEnter={() => ROUTE_PREFETCH[item.view]?.()}
+                className={navBtn(appView === item.view || marketToolShelfHighlight === item.view)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          {canOpenAdmin ? (
+            <div className="relative shrink-0" ref={adminRef}>
+              <button
+                ref={adminBtnRef}
+                type="button"
+                aria-expanded={adminOpen}
+                aria-haspopup="menu"
+                onMouseDown={(e) => {
+                  // 避免 document mousedown 先关掉再点开
                   e.stopPropagation();
-                  setAdminOpen((v) => !v);
                 }}
-                className={navBtn(adminActive)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setUserMenuOpen(false);
+                  setAdminOpen((v) => {
+                    const next = !v;
+                    if (next && adminBtnRef.current) {
+                      const rect = adminBtnRef.current.getBoundingClientRect();
+                      setAdminMenuPos({
+                        top: rect.bottom + 8,
+                        left: rect.left + rect.width / 2,
+                      });
+                    }
+                    return next;
+                  });
+                }}
+                className={navBtn(adminActive || adminOpen)}
               >
                 管理后台
-                <i className="fa-solid fa-chevron-down ml-1 text-[9px] opacity-70" />
+                <i
+                  className={cn(
+                    'fa-solid fa-chevron-down ml-1 text-[9px] opacity-70 transition',
+                    adminOpen && 'rotate-180',
+                  )}
+                />
               </button>
-              {adminOpen ? (
-                <div className="absolute left-1/2 top-full z-[60] mt-2 w-52 -translate-x-1/2 rounded-xl border border-zinc-200/80 bg-white py-1.5 shadow-apple-lg">
-                  {adminItems.map((item) => (
-                    <button
-                      key={item.view}
-                      type="button"
-                      onClick={() => {
-                        setAdminOpen(false);
-                        goView(item.view);
-                      }}
-                      onMouseEnter={() => ROUTE_PREFETCH[item.view]?.()}
-                      className={cn(
-                        'flex w-full px-4 py-2 text-left text-[12px] font-medium hover:bg-zinc-50',
-                        appView === item.view ? 'text-zinc-900' : 'text-zinc-600',
-                      )}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
             </div>
           ) : null}
         </div>
       </nav>
 
-      <div className="flex items-center gap-1.5">
+      {canOpenAdmin && adminOpen && adminMenuPos ? (
+        <div
+          data-admin-menu
+          role="menu"
+          className="fixed z-[80] w-52 -translate-x-1/2 rounded-xl border border-zinc-200/80 bg-white py-1.5 shadow-apple-lg"
+          style={{ top: adminMenuPos.top, left: adminMenuPos.left }}
+        >
+          {adminItems.map((item) => (
+            <button
+              key={item.view}
+              type="button"
+              role="menuitem"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => {
+                setAdminOpen(false);
+                goView(item.view);
+              }}
+              onMouseEnter={() => ROUTE_PREFETCH[item.view]?.()}
+              className={cn(
+                'flex w-full px-4 py-2 text-left text-[12px] font-medium hover:bg-zinc-50',
+                appView === item.view ? 'text-zinc-900' : 'text-zinc-600',
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="flex shrink-0 items-center justify-self-end gap-1 sm:gap-1.5">
         <button
           type="button"
           onClick={openPalette}
@@ -226,8 +294,10 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
             type="button"
             onClick={(e) => {
               e.stopPropagation();
+              setAdminOpen(false);
               setUserMenuOpen((v) => !v);
             }}
+            onMouseDown={(e) => e.stopPropagation()}
             className={cn(
               'flex h-9 w-9 items-center justify-center rounded-lg text-[11px] font-semibold text-white transition hover:opacity-90',
               user?.avatar || 'bg-zinc-900',

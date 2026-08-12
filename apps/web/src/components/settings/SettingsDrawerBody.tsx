@@ -92,17 +92,32 @@ export function SettingsDrawerBody({ onClose }: SettingsDrawerBodyProps) {
       </p>
 
       {showModelApi ? (
-        <SettingsCard title="模型 API" hint="仅影响当前浏览器中的对话调用，不改变他人配置。">
+        <SettingsCard
+          title="对话模型"
+          hint="对话里「选用」平台已启用模型；API Key 为工作区共享凭证。"
+        >
           <p className="mb-3 text-[12px] leading-relaxed text-[#86868b]">
-            {llmStatus.configured ? `已配置真实模型 Key · ${llmStatus.text}` : llmStatus.text}
+            {llmStatus.configured ? `状态 · ${llmStatus.text}` : llmStatus.text}
           </p>
           <button
             type="button"
             onClick={openModelSettings}
             className="flow-link-btn w-full py-2.5 text-[12px] font-semibold"
           >
-            配置模型 API Key
+            打开选用与凭证
           </button>
+          {isAdmin ? (
+            <button
+              type="button"
+              onClick={() => {
+                setAppView('model-ops');
+                onClose();
+              }}
+              className="mt-2 w-full rounded-xl border border-zinc-200 bg-white py-2 text-[12px] font-semibold text-zinc-700 hover:bg-zinc-50"
+            >
+              运营 · 模型配置目录
+            </button>
+          ) : null}
         </SettingsCard>
       ) : null}
 

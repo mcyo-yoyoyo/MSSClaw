@@ -30,8 +30,8 @@ export function parseAppRoute(rawHash: string): AppRouteParams {
 
 export function buildAppRoute(params: AppRouteParams): string {
   const qs = new URLSearchParams();
-  if (params.view === 'task' && params.chat) {
-    qs.set('chat', params.chat);
+  if (params.view === 'task' || params.view === 'ai-tasks') {
+    if (params.chat) qs.set('chat', params.chat);
   }
   if (params.view === 'market-tool' && params.id) {
     qs.set('id', params.id);

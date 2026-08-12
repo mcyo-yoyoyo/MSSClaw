@@ -33,6 +33,8 @@ export function agentManifest(agent: PrototypeAgentSeed) {
     planSteps: pack?.planSteps || [],
     published: !!agent.published,
     icon: agent.icon,
+    avatarPresetId: agent.avatarPresetId,
+    avatarUrl: agent.avatarUrl,
     exportedAt: new Date().toISOString(),
   };
 }
@@ -154,6 +156,8 @@ export function parseAgentImport(raw: unknown): PrototypeAgentSeed | null {
     chatId: typeof o.chatId === 'string' ? o.chatId : 'marketing',
     icon: typeof o.icon === 'string' ? o.icon : 'fa-robot',
     color: 'from-zinc-700 to-zinc-900',
+    avatarPresetId: typeof o.avatarPresetId === 'string' ? o.avatarPresetId : undefined,
+    avatarUrl: typeof o.avatarUrl === 'string' ? o.avatarUrl : undefined,
     systemPrompt: typeof o.systemPrompt === 'string' ? o.systemPrompt : '',
     demoPrompt: typeof o.demoPrompt === 'string' ? o.demoPrompt : undefined,
     primarySkillId: typeof o.primarySkillId === 'string' ? o.primarySkillId : skillIds[0],

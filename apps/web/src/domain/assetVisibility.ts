@@ -10,11 +10,14 @@ export interface AssetViewerContext {
 }
 
 /**
- * 组织数据权限开关（短期上线关闭）。
- * - false：不做职能/区域数据权限；「本组织可见」与「全员可见」浏览效果相同（仅 private 仍限发布方）
- * - true：仅应对 MSS 工具集市 Agent / Skill 启用——公开=全领域全区域；本组织=按观众角色归属匹配
+ * 组织数据权限（MSS 集市 Skill / Agent 等）：
+ * - public：不区分登录人领域/区域，全员可见
+ * - org（卡片角标「领域」）：仅当资产归属命中观众「本领域或本区域」时可见
+ * - private：仅发布方
+ *
+ * 平台运营（super_admin）旁路全部。
  */
-export const ORG_DATA_PERMISSION_ENABLED = false;
+export const ORG_DATA_PERMISSION_ENABLED = true;
 
 /** 平台运营可旁路资产可见性，查看/管理全部 Skill */
 export function canBypassAssetVisibility(role?: PlatformRole): boolean {
@@ -32,46 +35,43 @@ function isAssetPublisher(asset: OwnableAsset, viewer: AssetViewerContext): bool
   return false;
 }
 
+function assetRegionIds(asset: OwnableAsset): string[] {
+  // 勿用 `ownerRegionIds ?? ownerRegionId`：空数组 [] 会挡住单值 ownerRegionId
+  if (Array.isArray(asset.ownerRegionIds) && asset.ownerRegionIds.length > 0) {
+    return asset.ownerRegionIds;
+  }
+  return asset.ownerRegionId ? [asset.ownerRegionId] : [];
+}
+
 /**
- * 是否属于资产「所属组织」（后续数据权限启用时使用）：
- * - 声明了职能：须与观众职能有交集
- * - 声明了区域：观众有区域时须匹配；观众无区域（总部岗）不挡区域
- * - 未声明职能/区域：不放行
+ * 「领域」范围可见：本领域 **或** 本区域命中即可（与侧栏筛选无关，是登录归属权限）。
+ * - 资产未声明任何领域/区域：不放行（避免 org 技能被当成全员）
+ * - 领域命中：观众 deptIds 与资产 ownerDeptIds 有交集
+ * - 区域命中：观众 regionId 落在资产区域列表中（观众无区域=机关岗，不能靠区域命中）
  */
 export function matchesAssetOrgScope(asset: OwnableAsset, affiliation: OrgAffiliation): boolean {
   const viewerDepts = affiliation.deptIds ?? [];
   const viewerRegion = affiliation.regionId ?? null;
   const assetDepts = asset.ownerDeptIds ?? [];
-  // 勿用 `ownerRegionIds ?? ownerRegionId`：空数组 [] 会挡住单值 ownerRegionId
-  const assetRegions =
-    Array.isArray(asset.ownerRegionIds) && asset.ownerRegionIds.length > 0
-      ? asset.ownerRegionIds
-      : asset.ownerRegionId
-        ? [asset.ownerRegionId]
-        : [];
+  const assetRegions = assetRegionIds(asset);
 
   if (assetDepts.length === 0 && assetRegions.length === 0) return false;
 
-  const deptOk =
-    assetDepts.length === 0 || viewerDepts.some((d) => assetDepts.includes(d));
-  // 资产绑了区域时：观众有区域必须命中；总部岗（无区域）可看各区域组织资产
-  const regionOk =
-    assetRegions.length === 0 ||
-    !viewerRegion ||
-    assetRegions.includes(viewerRegion);
+  const deptHit =
+    assetDepts.length > 0 && viewerDepts.some((d) => assetDepts.includes(d));
+  const regionHit =
+    Boolean(viewerRegion) &&
+    assetRegions.length > 0 &&
+    assetRegions.includes(viewerRegion as string);
 
-  // 观众有职能时，资产若声明了职能则必须命中（禁止「只靠区域」跨职能看见）
-  if (viewerDepts.length > 0 && assetDepts.length > 0 && !deptOk) return false;
-
-  return deptOk && regionOk;
+  return deptHit || regionHit;
 }
 
 /**
  * 资产可见性：
- * - public：全员（含跨部门）
+ * - public：全员（含跨部门/跨区域），角标「公开」
  * - private：仅发布方
- * - org：本组织可见——短期等同 public；启用 ORG_DATA_PERMISSION_ENABLED 后按职能/区域匹配
- * - 平台运营旁路全部
+ * - org：角标「领域」——按本领域或本区域匹配；发布方可见；超管旁路
  */
 export function canViewAsset(asset: OwnableAsset, viewer: AssetViewerContext): boolean {
   if (canBypassAssetVisibility(viewer.role)) return true;
@@ -82,9 +82,8 @@ export function canViewAsset(asset: OwnableAsset, viewer: AssetViewerContext): b
   if (isAssetPublisher(asset, viewer)) return true;
   if (vis === 'private') return false;
 
-  // org（及未知值）
+  // org（及未知非 public）
   if (!ORG_DATA_PERMISSION_ENABLED) {
-    // 短期：不做组织数据权限，本组织可见与全员浏览一致
     return true;
   }
   return matchesAssetOrgScope(asset, viewer.affiliation);

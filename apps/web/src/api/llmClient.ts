@@ -1,4 +1,9 @@
-import { isLlmConfigComplete, normalizeLlmModelId, type LlmConfig } from '@/domain/llmConfig';
+import {
+  isLlmConfigComplete,
+  normalizeLlmModelId,
+  resolveActiveCredentials,
+  type LlmConfig,
+} from '@/domain/llmConfig';
 import { useLlmConfigStore } from '@/stores/llmConfigStore';
 import type { ActionType } from '@/domain/plan';
 import type { ExecutionStep } from '@/domain/chat';
@@ -15,6 +20,11 @@ export function getActiveLlmConfig(): LlmConfig {
   return useLlmConfigStore.getState().config;
 }
 
+/** 当前选用模型的执行凭证（按模型 Key） */
+export function getActiveLlmRuntime(): { model: string; baseUrl: string; apiKey: string } {
+  return resolveActiveCredentials(getActiveLlmConfig());
+}
+
 export function isLlmConfigured(config?: LlmConfig): boolean {
   return isLlmConfigComplete(config ?? getActiveLlmConfig());
 }
@@ -27,15 +37,15 @@ async function chatCompletion(
   messages: ChatMessage[],
   options?: { maxTokens?: number; temperature?: number; signal?: AbortSignal },
 ): Promise<string> {
-  const config = getActiveLlmConfig();
-  const res = await fetch(`${normalizeBaseUrl(config.baseUrl)}/chat/completions`, {
+  const runtime = getActiveLlmRuntime();
+  const res = await fetch(`${normalizeBaseUrl(runtime.baseUrl)}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.apiKey.trim()}`,
+      Authorization: `Bearer ${runtime.apiKey.trim()}`,
     },
     body: JSON.stringify({
-      model: normalizeLlmModelId(config.model),
+      model: normalizeLlmModelId(runtime.model),
       messages,
       max_tokens: options?.maxTokens ?? 512,
       temperature: options?.temperature ?? 0.3,
@@ -59,15 +69,15 @@ export async function* streamChatCompletion(
   messages: ChatMessage[],
   options?: { maxTokens?: number; temperature?: number; signal?: AbortSignal },
 ): AsyncGenerator<string> {
-  const config = getActiveLlmConfig();
-  const res = await fetch(`${normalizeBaseUrl(config.baseUrl)}/chat/completions`, {
+  const runtime = getActiveLlmRuntime();
+  const res = await fetch(`${normalizeBaseUrl(runtime.baseUrl)}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.apiKey.trim()}`,
+      Authorization: `Bearer ${runtime.apiKey.trim()}`,
     },
     body: JSON.stringify({
-      model: normalizeLlmModelId(config.model),
+      model: normalizeLlmModelId(runtime.model),
       messages,
       max_tokens: options?.maxTokens ?? 1200,
       temperature: options?.temperature ?? 0.5,

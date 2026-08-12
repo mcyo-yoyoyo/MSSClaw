@@ -90,6 +90,14 @@ export function openUseSkills(opts?: HomeJourneyOpts) {
   }
 
   useTaskStore.getState().closeCreateDialog();
+
+  // 完整产品已开放 AI 任务：落到页内新建对话壳，不再进首页旧 assistant
+  if (useNavPresentationStore.getState().isViewEnabled('ai-tasks')) {
+    useAppViewStore.getState().setAppView('ai-tasks');
+    useNavigationIntentStore.getState().requestAiTaskCompose();
+    return;
+  }
+
   useHomeStore.getState().setHomeMode('assistant');
   if (opts?.focusComposer !== false) {
     useHomeStore.getState().requestComposerFocus();

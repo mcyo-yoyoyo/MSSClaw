@@ -104,10 +104,10 @@ export function InternalOfficeSceneGrid({
 
   return (
     <>
-      <section className="flex min-h-0 flex-1 flex-col">
+      <section className="flex flex-col pb-4">
         <button
           type="button"
-          className="internal-assistant-chat shrink-0"
+          className="internal-assistant-chat mb-5 shrink-0 lg:mb-6"
           onClick={() => onExperience(assistantTool)}
           aria-label="员工助手待上线，点击前往员工助手下载页"
           title="点击前往员工助手下载页"
@@ -122,7 +122,7 @@ export function InternalOfficeSceneGrid({
               />
             ) : (
               <span className="internal-assistant-chat__logo inline-flex items-center justify-center">
-                <i className="fa-solid fa-robot text-[14px] text-[#a1a1aa]" />
+                <i className="fa-solid fa-robot text-[12px] text-[#a1a1aa]" />
               </span>
             )}
             <div className="internal-assistant-chat__copy">
@@ -134,23 +134,23 @@ export function InternalOfficeSceneGrid({
           <div className="internal-assistant-chat__composer" aria-hidden>
             <span className="min-w-0 flex-1 truncate">给员工助手发送消息…</span>
             <span className="internal-assistant-chat__send">
-              <i className="fa-solid fa-arrow-up text-[11px]" />
+              <i className="fa-solid fa-arrow-up text-[10px]" />
             </span>
           </div>
           <p className="internal-assistant-chat__hint">点击前往员工助手下载页</p>
         </button>
 
         {scenes.length ? (
-          <div className="grid min-h-0 flex-1 grid-cols-2 content-stretch gap-3 auto-rows-fr sm:grid-cols-3 lg:grid-cols-4 lg:gap-3.5">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4 lg:gap-3">
             {scenes.map((scene) => {
               const hasTools = scene.tools.length > 0;
               return (
                 <article
                   key={scene.id}
                   className={cn(
-                    'flex min-h-0 flex-col rounded-2xl border border-zinc-200/90 bg-white p-4 transition md:p-5',
+                    'flex h-full min-h-[176px] flex-col rounded-xl border border-zinc-200/90 bg-white px-3.5 py-4 transition',
                     hasTools
-                      ? 'hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-[0_14px_36px_-18px_rgba(24,24,27,0.4)]'
+                      ? 'hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-[0_10px_24px_-16px_rgba(24,24,27,0.35)]'
                       : 'opacity-80',
                   )}
                 >
@@ -159,49 +159,46 @@ export function InternalOfficeSceneGrid({
                     onClick={() => runWithTool(scene, 'detail')}
                     className="flex min-h-0 flex-1 flex-col text-left"
                   >
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex shrink-0 items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <h3 className="text-[17px] font-semibold tracking-tight text-zinc-900 md:text-[18px]">
+                        <h3 className="truncate text-[18px] font-semibold tracking-tight text-zinc-900">
                           {scene.label}
                         </h3>
-                        <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                          {scene.english}
-                        </p>
                       </div>
-                      <div className="flex shrink-0 -space-x-2">
+                      <div className="flex shrink-0 -space-x-1.5">
                         {hasTools ? (
                           scene.tools.slice(0, 3).map((t) => (
                             <img
                               key={`${scene.id}-${t.id}`}
                               src={t.logoUrl}
                               alt={`${t.name} Logo`}
-                              className="h-8 w-8 rounded-full bg-zinc-50 object-cover ring-2 ring-white md:h-9 md:w-9"
+                              className="h-6 w-6 rounded-full bg-zinc-50 object-cover ring-2 ring-white"
                               loading="lazy"
                             />
                           ))
                         ) : (
-                          <span className="rounded-full bg-zinc-100 px-2 py-1 text-[10px] font-medium text-zinc-400">
+                          <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] font-medium text-zinc-400">
                             待配置
                           </span>
                         )}
                       </div>
                     </div>
-                    <p className="mt-4 line-clamp-4 flex-1 text-[13px] leading-relaxed text-zinc-500 md:line-clamp-5 md:text-[14px]">
+                    <p className="mt-2.5 line-clamp-2 flex-1 text-[13px] leading-snug text-zinc-500">
                       {scene.description}
                     </p>
                     {!hasTools ? (
-                      <p className="mt-2 text-[11px] text-amber-700/80">
+                      <p className="mt-1 shrink-0 text-[10px] text-amber-700/80">
                         暂无已发布工具，请运营绑定后体验
                       </p>
                     ) : null}
                   </button>
-                  <div className="mt-4 flex items-center gap-2 border-t border-zinc-100 pt-3">
+                  <div className="mt-3 flex shrink-0 items-center gap-1.5 border-t border-zinc-100 pt-2.5">
                     <button
                       type="button"
                       disabled={!hasTools}
                       onClick={() => runWithTool(scene, 'howto')}
                       className={cn(
-                        'rounded-lg border px-2.5 py-1.5 text-[12px] font-medium transition',
+                        'rounded-md border px-2 py-1 text-[11px] font-medium transition',
                         hasTools
                           ? 'border-zinc-200 text-zinc-600 hover:bg-zinc-50'
                           : 'cursor-not-allowed border-zinc-100 text-zinc-300',
@@ -214,7 +211,7 @@ export function InternalOfficeSceneGrid({
                       disabled={!hasTools}
                       onClick={() => runWithTool(scene, 'experience')}
                       className={cn(
-                        'ml-auto rounded-lg px-3 py-1.5 text-[12px] font-semibold transition',
+                        'ml-auto rounded-md px-2.5 py-1 text-[11px] font-semibold transition',
                         hasTools
                           ? 'bg-zinc-900 text-white hover:bg-zinc-800'
                           : 'cursor-not-allowed bg-zinc-200 text-zinc-400',
@@ -228,7 +225,7 @@ export function InternalOfficeSceneGrid({
             })}
           </div>
         ) : (
-          <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-zinc-200 bg-white px-4 py-10 text-center text-[13px] text-zinc-400">
+          <div className="flex items-center justify-center rounded-2xl border border-dashed border-zinc-200 bg-white px-4 py-8 text-center text-[13px] text-zinc-400">
             {emptyCopy}
           </div>
         )}

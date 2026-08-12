@@ -53,6 +53,9 @@ export const ChatConfigSchema = z.object({
   businessScenarioId: z.enum(['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8']).optional(),
   /** 若由场景技能开工，记录 skill id */
   skillId: z.string().optional(),
+  /** 个人 AI 任务归属（非协作空间）；按登录用户隔离历史 */
+  ownerUserId: z.string().optional(),
+  ownerEmail: z.string().optional(),
   createdAt: z.number().optional(),
   pinnedAt: z.number().optional(),
   /** WarRoom 管理员用户 id */
@@ -104,6 +107,17 @@ export function canUseWarRoomAi(chat: ChatConfig, userId?: string): boolean {
   if (!chat.members?.length) return true;
   const member = chat.members.find((m) => m.id === uid);
   return Boolean(member?.canUseAi !== false);
+}
+
+/** 个人 AI 任务（非协作空间）是否属于当前登录用户 */
+export function isOwnedPersonalAiTask(
+  chat: Pick<ChatConfig, 'type' | 'sessionGroup' | 'ownerUserId'>,
+  userId?: string,
+): boolean {
+  if (isWarRoom(chat)) return false;
+  const uid = (userId ?? getCurrentUserId()).trim();
+  if (!uid) return false;
+  return chat.ownerUserId === uid;
 }
 
 /** 历史/验收遗留的默认会话 id（加载时剔除，且允许删除） */

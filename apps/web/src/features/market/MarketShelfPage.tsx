@@ -25,11 +25,12 @@ import {
   listFeaturedDoTaskSkillIds,
   resolveSkillBusinessScenario,
 } from '@/domain/skillBusinessScenarios';
-import { skillDisplayName, skillTechnicalName } from '@/domain/skillDisplay';
+import { skillDisplayName } from '@/domain/skillDisplay';
 import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
 import { canViewAsset } from '@/domain/assetVisibility';
 import { downloadSkillFile } from '@/domain/skillExport';
 import { MarketSkillDetailModal } from '@/features/market/MarketSkillDetailModal';
+import { MarketAgentDetailModal } from '@/features/market/MarketAgentDetailModal';
 import { useMssBuildStatsCopyStore } from '@/stores/mssBuildStatsCopyStore';
 import {
   type ExternalFilterMode,
@@ -55,8 +56,6 @@ import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useMarketFilterStore } from '@/stores/marketFilterStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
-import { ProjectDocsGallery } from '@/components/content/ProjectDocsGallery';
-import { CenterModal } from '@/components/center/CenterShell';
 import { resolveCaseItemsForScenarioId } from '@/domain/portalCase';
 import {
   preferAgentHubFeaturedOrder,
@@ -426,30 +425,33 @@ export function MarketShelfPage({
       const bizLabel = getSkillBusinessLabel(s);
       const eng = getEngagement(s.id);
       const badges: MarketShelfCardModel['badges'] = [];
-      if (bizLabel) badges.push({ label: bizLabel, tone: 'dept' });
+      // 平级：领域(dept) · 区域 · 业务场景（需求「职能=领域」）
       if (s.ownerDeptIds?.[0]) {
         badges.push({ label: getDeptLabel(s.ownerDeptIds[0]), tone: 'dept' });
       }
       if (s.ownerRegionId) {
         badges.push({ label: getRegionLabel(s.ownerRegionId), tone: 'region' });
       }
-      badges.push({ label: 'Skill', tone: 'type' });
+      if (bizLabel) badges.push({ label: bizLabel, tone: 'type' });
       return {
         id: s.id,
         kind: 'projects',
         title: skillDisplayName(s),
         description: (s.desc || '').replace(/^【[^】]+】/, '').trim(),
-        productName: skillTechnicalName(s),
         icon: s.icon || 'fa-cube',
         badges,
         featured: true,
         heat: s.invokes ?? 0,
         likes: eng.likes,
+        dislikes: eng.dislikes,
         downloads: eng.downloads,
+        scopeBadge: (s.visibility ?? 'public') === 'public' ? 'public' : 'scoped',
         hasHowto: Boolean(s.instructions || s.command),
         runnable: canRunSkills && Boolean(s.published && (s.instructions || s.command)),
         primaryAction: 'detail',
         scenarioId: biz ?? undefined,
+        ownerDeptIds: s.ownerDeptIds,
+        ownerRegionId: s.ownerRegionId,
       };
     });
   }, [mssSkills, canRunSkills, getEngagement, engagementById]);
@@ -610,6 +612,12 @@ export function MarketShelfPage({
     openMarketToolDetail(card.id, kind === 'projects' ? 'external' : kind);
   };
 
+  const openAgentDetail = (card: MarketShelfCardModel) => {
+    if (!card.scenarioId) return;
+    rememberCard(card);
+    setShowcaseId(card.scenarioId);
+  };
+
   const openInternalToolDetail = (
     tool: { id: string; name: string; logoUrl?: string },
     tab?: 'overview' | 'howto',
@@ -710,20 +718,11 @@ export function MarketShelfPage({
     if (kind === 'projects' && mssSurface === 'skills') {
       const skill = skills.find((s) => s.id === card.id);
       if (!skill) return;
-      if (canRunSkills) {
-        runSkill(skill);
-        return;
-      }
-      downloadSkillFile(skill);
-      showToast(`已下载技能包：${skill.name}`);
+      setSkillDetail(skill);
       return;
     }
     if (card.kind === 'projects') {
-      if (canRunProjects) {
-        runProjectDemo(card);
-        return;
-      }
-      downloadUseProject(card);
+      openAgentDetail(card);
       return;
     }
     if (openToolUrl(card)) return;
@@ -733,9 +732,9 @@ export function MarketShelfPage({
     }
   };
 
-  /** 标准/完整：案例主按钮一律「去打样」；MVP 为「下载」 */
-  const casePrimaryLabel = canRunProjects ? '去打样' : '下载';
-  const skillPrimaryLabel = canRunSkills ? '去执行' : '下载';
+  /** Agent / Skill 卡片主按钮均为「详情」 */
+  const agentPrimaryLabel = '详情';
+  const skillPrimaryLabel = '详情';
 
   const emptyHint =
     search.trim() || !isOrgPerspectiveEmpty(orgSelection) || businessFilter !== 'all'
@@ -764,15 +763,10 @@ export function MarketShelfPage({
     <div
       className={cn(
         'center-surface flex min-h-0 flex-1 flex-col',
-        kind === 'internal' ? 'overflow-hidden' : 'overflow-y-auto scroll-hidden',
+        'center-surface flex min-h-0 flex-1 flex-col overflow-y-auto scroll-hidden',
       )}
     >
-      <PageCanvas
-        className={cn(
-          'flex flex-col py-6',
-          kind === 'internal' && 'min-h-0 flex-1',
-        )}
-      >
+      <PageCanvas className="flex flex-col py-6 pb-8">
         <PageStageHero
           className="mb-5 shrink-0"
           tone={kind === 'projects' ? 'projects' : kind}
@@ -781,11 +775,11 @@ export function MarketShelfPage({
             kind === 'projects'
               ? mssSurface === 'skills'
                 ? allowScenarioRun
-                  ? 'Skill Hub · 快速上手 / 去执行 · 亦可下载技能包'
-                  : 'Skill Hub · 快速上手 / 下载技能包'
+                  ? 'Skill Hub · 详情了解 / 下载 · 可执行则执行'
+                  : 'Skill Hub · 详情了解 / 下载学习'
                 : allowScenarioRun
-                  ? 'Agent Hub · 快速上手 / 可执行则去打样 · 否则下载学习包'
-                  : 'Agent Hub · 快速上手 / 下载学习包'
+                  ? 'Agent Hub · 详情了解 / 下载 · 可执行则执行'
+                  : 'Agent Hub · 详情了解 / 下载学习包'
               : kind === 'external'
                 ? '从工作场景出发，浏览全球领先 AI · 海外 / 国内精选对照 · 快速上手'
                 : '不用先学会复杂工具，从「记、读、写、问」等日常动作开始'
@@ -812,7 +806,7 @@ export function MarketShelfPage({
           }
         >
           <div className="flex h-full w-full flex-col justify-center gap-2 sm:flex-row sm:items-center">
-            <MarketShelfFilterBar className="min-w-0 flex-1 sm:min-w-[220px]" />
+            <MarketShelfFilterBar className="min-w-0 flex-1" />
             {canSubmit && (kind === 'external' || kind === 'internal') ? (
               <button
                 type="button"
@@ -984,7 +978,7 @@ export function MarketShelfPage({
         ) : null}
 
         {kind === 'internal' ? (
-          <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex flex-col">
             <InternalOfficeSceneGrid
               search={search}
               catalogTools={tools}
@@ -1054,7 +1048,7 @@ export function MarketShelfPage({
                           </span>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
                         {col.items.map((c) => (
                           <MarketShelfCard
                             key={`hot-${c.id}`}
@@ -1083,7 +1077,7 @@ export function MarketShelfPage({
                   <h2 className="text-[15px] font-semibold tracking-tight text-[#1d1d1f]">精选推荐</h2>
                   <span className="text-[12px] text-[#86868b]">{activeFeatured.length} 项</span>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                   {activeFeatured.map((c) => {
                     if (kind === 'projects' && mssSurface === 'skills') {
                       const skill = skills.find((s) => s.id === c.id);
@@ -1093,10 +1087,8 @@ export function MarketShelfPage({
                           card={c}
                           showHot
                           primaryLabel={skillPrimaryLabel}
-                          howToLabel="快速上手"
                           onOpen={() => skill && setSkillDetail(skill)}
-                          onPrimary={() => openPrimary(c)}
-                          onHowTo={skill ? () => setSkillDetail(skill) : undefined}
+                          onPrimary={() => skill && setSkillDetail(skill)}
                         />
                       );
                     }
@@ -1105,10 +1097,10 @@ export function MarketShelfPage({
                         key={`hot-${c.id}`}
                         card={c}
                         showHot
-                        primaryLabel={kind === 'projects' ? casePrimaryLabel : undefined}
-                        onOpen={() => openCard(c)}
+                        primaryLabel={kind === 'projects' ? agentPrimaryLabel : undefined}
+                        onOpen={() => (kind === 'projects' ? openAgentDetail(c) : openCard(c))}
                         onPrimary={() => openPrimary(c)}
-                        onHowTo={() => openHowTo(c)}
+                        onHowTo={kind === 'projects' ? undefined : () => openHowTo(c)}
                       />
                     );
                   })}
@@ -1162,7 +1154,7 @@ export function MarketShelfPage({
                       <span className="text-[12px] text-[#86868b]">{col.items.length}</span>
                     </div>
                     {col.items.length ? (
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
                         {col.items.map((c) => (
                           <MarketShelfCard
                             key={c.id}
@@ -1189,7 +1181,7 @@ export function MarketShelfPage({
               </div>
             )
           ) : gridCards.length ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {gridCards.map((c) => {
                 if (kind === 'projects' && mssSurface === 'skills') {
                   const skill = skills.find((s) => s.id === c.id);
@@ -1198,10 +1190,8 @@ export function MarketShelfPage({
                       key={c.id}
                       card={c}
                       primaryLabel={skillPrimaryLabel}
-                      howToLabel="快速上手"
                       onOpen={() => skill && setSkillDetail(skill)}
-                      onPrimary={() => openPrimary(c)}
-                      onHowTo={skill ? () => setSkillDetail(skill) : undefined}
+                      onPrimary={() => skill && setSkillDetail(skill)}
                     />
                   );
                 }
@@ -1209,10 +1199,10 @@ export function MarketShelfPage({
                   <MarketShelfCard
                     key={c.id}
                     card={c}
-                    primaryLabel={kind === 'projects' ? casePrimaryLabel : undefined}
-                    onOpen={() => openCard(c)}
+                    primaryLabel={kind === 'projects' ? agentPrimaryLabel : undefined}
+                    onOpen={() => (kind === 'projects' ? openAgentDetail(c) : openCard(c))}
                     onPrimary={() => openPrimary(c)}
-                    onHowTo={() => openHowTo(c)}
+                    onHowTo={kind === 'projects' ? undefined : () => openHowTo(c)}
                   />
                 );
               })}
@@ -1278,120 +1268,74 @@ export function MarketShelfPage({
 
       <HowToGuidePreviewModal guide={guidePreview} onClose={() => setGuidePreview(null)} />
 
-      <CenterModal
-        open={!!showcaseId}
-        title={
-          FEATURED_SCENARIOS.find((s) => s.id === showcaseId)?.label ||
-          showcaseBundle?.label ||
-          '\u9879\u76ee\u8be6\u60c5'
-        }
-        onClose={() => setShowcaseId(null)}
-        size="fullscreen"
-        actions={
-          <>
-            <button
-              type="button"
-              onClick={() => {
-                if (!showcaseId) return;
-                const card: MarketShelfCardModel = {
-                  id: showcaseId,
-                  kind: 'projects',
-                  title:
-                    FEATURED_SCENARIOS.find((s) => s.id === showcaseId)?.label ||
-                    showcaseBundle?.label ||
-                    '项目',
-                  description: '',
-                  icon: 'fa-map',
-                  badges: [],
-                  featured: true,
-                  heat: 0,
-                  scenarioId: showcaseId,
-                  hasHowto: true,
-                  runnable: canRunProjects && Boolean(showcaseDemoPlan),
-                  primaryAction: 'detail',
-                };
-                setShowcaseId(null);
-                openProjectHowTo(card);
-              }}
-              className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium"
-            >
-              快速上手
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (!showcaseId) return;
-                const card: MarketShelfCardModel = {
-                  id: showcaseId,
-                  kind: 'projects',
-                  title:
-                    FEATURED_SCENARIOS.find((s) => s.id === showcaseId)?.label ||
-                    showcaseBundle?.label ||
-                    '项目',
-                  description: '',
-                  icon: 'fa-map',
-                  badges: [],
-                  featured: true,
-                  heat: 0,
-                  scenarioId: showcaseId,
-                  hasHowto: true,
-                  runnable: canRunProjects && Boolean(showcaseDemoPlan),
-                  primaryAction: 'detail',
-                };
-                downloadUseProject(card);
-              }}
-              className="rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white hover:bg-zinc-800"
-            >
-              下载
-            </button>
-            {canRunProjects && showcaseDemoPlan ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (!showcaseId) return;
-                  const card: MarketShelfCardModel = {
-                    id: showcaseId,
-                    kind: 'projects',
-                    title:
-                      FEATURED_SCENARIOS.find((s) => s.id === showcaseId)?.label ||
-                      showcaseBundle?.label ||
-                      '项目',
-                    description: '',
-                    icon: 'fa-map',
-                    badges: [],
-                    featured: true,
-                    heat: 0,
-                    scenarioId: showcaseId,
-                    hasHowto: true,
-                    runnable: true,
-                    primaryAction: 'run',
-                  };
-                  setShowcaseId(null);
-                  runProjectDemo(card);
-                }}
-                className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-[12px] font-semibold text-emerald-800"
-              >
-                去打样
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setShowcaseId(null)}
-              className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium"
-            >
-              关闭
-            </button>
-          </>
-        }
-      >
-        {showcaseId ? (
-          <ProjectDocsGallery
-            items={showcaseItems}
-            initialItemId={showcaseItems[0]?.id}
-            className="h-full"
-          />
-        ) : null}
-      </CenterModal>
+      {showcaseId ? (
+        <MarketAgentDetailModal
+          scenarioId={showcaseId}
+          title={
+            FEATURED_SCENARIOS.find((s) => s.id === showcaseId)?.label ||
+            showcaseBundle?.label ||
+            '项目详情'
+          }
+          description={
+            FEATURED_SCENARIOS.find((s) => s.id === showcaseId)?.desc ||
+            showcaseBundle?.desc ||
+            ''
+          }
+          icon={
+            FEATURED_SCENARIOS.find((s) => s.id === showcaseId)?.icon ||
+            showcaseBundle?.icon ||
+            'fa-map'
+          }
+          badges={cards.find((c) => c.scenarioId === showcaseId)?.badges ?? []}
+          bundle={showcaseBundle}
+          items={showcaseItems}
+          canRun={canRunProjects}
+          demoPlan={showcaseDemoPlan}
+          onClose={() => setShowcaseId(null)}
+          onDownload={() => {
+            const card: MarketShelfCardModel = {
+              id: showcaseId,
+              kind: 'projects',
+              title:
+                FEATURED_SCENARIOS.find((s) => s.id === showcaseId)?.label ||
+                showcaseBundle?.label ||
+                '项目',
+              description: '',
+              icon: 'fa-map',
+              badges: [],
+              featured: true,
+              heat: 0,
+              scenarioId: showcaseId,
+              hasHowto: true,
+              runnable: canRunProjects && Boolean(showcaseDemoPlan),
+              primaryAction: 'detail',
+            };
+            downloadUseProject(card);
+          }}
+          onRun={() => {
+            const card: MarketShelfCardModel = {
+              id: showcaseId,
+              kind: 'projects',
+              title:
+                FEATURED_SCENARIOS.find((s) => s.id === showcaseId)?.label ||
+                showcaseBundle?.label ||
+                '项目',
+              description: '',
+              icon: 'fa-map',
+              badges: [],
+              featured: true,
+              heat: 0,
+              scenarioId: showcaseId,
+              hasHowto: true,
+              runnable: true,
+              primaryAction: 'run',
+            };
+            setShowcaseId(null);
+            runProjectDemo(card);
+          }}
+          onToast={showToast}
+        />
+      ) : null}
     </div>
   );
 }

@@ -17,7 +17,7 @@ export function HomeToTaskTransit({ open, summary }: HomeToTaskTransitProps) {
         </div>
         <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-zinc-200 border-t-zinc-900" />
         <div className="text-center">
-          <p className="text-[14px] font-semibold text-zinc-900">正在打开工作台…</p>
+          <p className="text-[14px] font-semibold text-zinc-900">正在打开 AI 任务…</p>
           {summary ? (
             <p className="mt-2 line-clamp-2 text-[12px] leading-relaxed text-zinc-500">「{summary}」</p>
           ) : null}

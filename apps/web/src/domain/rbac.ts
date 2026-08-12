@@ -233,41 +233,6 @@ export const SEED_MEMBERS: WorkspaceMember[] = [
     deptIds: ['mkt'],
     regionId: 'europe',
   },
-  ...Array.from({ length: 10 }, (_, i) => {
-    const n = i + 1;
-    const roles: PlatformRole[] = [
-      'business_user',
-      'business_user',
-      'capability_ops',
-      'viewer',
-      'business_user',
-      'viewer',
-      'business_user',
-      'capability_ops',
-      'viewer',
-      'business_user',
-    ];
-    const depts = ['gtm', 'mkt', 'quality', 'hr', 'finance'] as const;
-    const regions = ['apac', 'europe', 'latam', null, 'mea'] as const;
-    const avatars = [
-      'bg-sky-600',
-      'bg-violet-600',
-      'bg-rose-600',
-      'bg-emerald-600',
-      'bg-orange-500',
-    ] as const;
-    return {
-      id: `u-test${n}`,
-      name: `Test${n}`,
-      email: `test${n}@huawei.com`,
-      role: roles[i]!,
-      avatar: avatars[i % avatars.length]!,
-      lastActive: '今天',
-      status: 'active' as const,
-      deptIds: [depts[i % depts.length]!],
-      regionId: regions[i % regions.length] ?? null,
-    };
-  }),
 ];
 
 /** 内置数据空间 id → 成员表（均指向同一套种子） */

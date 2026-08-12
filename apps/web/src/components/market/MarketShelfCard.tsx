@@ -28,10 +28,11 @@ export function MarketShelfCard({
   const featured = variant === 'featured';
   const compact = variant === 'compact';
   const homeDense = Boolean(className?.includes('home-channel-card'));
+  const isSkillMetrics = card.likes != null || card.downloads != null || card.dislikes != null;
   const primaryLabel =
     primaryLabelOverride ??
     (card.kind === 'projects'
-      ? '下载'
+      ? '详情'
       : card.primaryAction === 'howto'
         ? '快速上手'
         : '立即体验');
@@ -63,6 +64,30 @@ export function MarketShelfCard({
           HOT
         </span>
       ) : null}
+      {card.scopeBadge && !showHot ? (
+        <span
+          className={cn(
+            'absolute right-3 top-3 z-10 rounded-md px-1.5 py-0.5 text-[9px] font-semibold',
+            card.scopeBadge === 'public'
+              ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100'
+              : 'bg-sky-50 text-sky-800 ring-1 ring-sky-100',
+          )}
+        >
+          {card.scopeBadge === 'public' ? '公开' : '领域'}
+        </span>
+      ) : null}
+      {card.scopeBadge && showHot ? (
+        <span
+          className={cn(
+            'absolute right-3 top-7 z-10 rounded-md px-1.5 py-0.5 text-[9px] font-semibold',
+            card.scopeBadge === 'public'
+              ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100'
+              : 'bg-sky-50 text-sky-800 ring-1 ring-sky-100',
+          )}
+        >
+          {card.scopeBadge === 'public' ? '公开' : '领域'}
+        </span>
+      ) : null}
       <button type="button" onClick={onOpen} className="flex min-h-0 flex-1 flex-col text-left">
         <div className="flex items-start gap-3">
           <div
@@ -79,7 +104,7 @@ export function MarketShelfCard({
               className="rounded-xl"
             />
           </div>
-          <div className="min-w-0 flex-1">
+          <div className={cn('min-w-0 flex-1', card.scopeBadge && 'pr-10')}>
             <div className="flex flex-wrap items-center gap-1.5">
               <h3
                 className={cn(
@@ -100,16 +125,17 @@ export function MarketShelfCard({
                 </span>
               ) : null}
             </div>
-            {card.productName ? (
+            {/* Skill 卡弱化技术名，避免与 Skill ID 冗余感 */}
+            {card.productName && !card.scopeBadge ? (
               <p className="mt-0.5 truncate text-[11px] text-[#86868b]">{card.productName}</p>
             ) : null}
             <p
               className={cn(
                 'leading-relaxed text-[#6e6e73]',
-                card.productName ? 'mt-1' : 'mt-1.5',
+                card.productName && !card.scopeBadge ? 'mt-1' : 'mt-1.5',
                 compact
                   ? 'line-clamp-2 text-[11px]'
-                  : card.kind === 'external' || card.productName
+                  : card.kind === 'external' || (card.productName && !card.scopeBadge)
                     ? 'line-clamp-1 text-[12px]'
                     : featured
                       ? 'line-clamp-3 text-[13px]'
@@ -139,37 +165,47 @@ export function MarketShelfCard({
                   'rounded-md bg-zinc-100/90 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600',
                   b.label === '海外' && 'market-badge-overseas',
                   b.label === '国内' && 'market-badge-domestic',
+                  // 与 Skill Hub 一致：领域 / 区域 / 场景
+                  b.tone === 'dept' && 'bg-violet-50 text-violet-800',
+                  b.tone === 'region' && 'bg-teal-50 text-teal-800',
+                  b.tone === 'type' && 'bg-amber-50 text-amber-800',
                 )}
               >
                 {b.label}
               </span>
             ))}
-            {card.kind === 'projects' ? (
-              <span className="ml-auto inline-flex items-center gap-2.5 text-[10px] tabular-nums text-[#86868b]">
-                <span className="inline-flex items-center gap-1" title="下载量">
-                  <i className="fa-solid fa-download text-[9px] text-[#86868b]" />
-                  {formatToolInvokes(card.downloads ?? 0)}
-                </span>
-                <span className="inline-flex items-center gap-1" title="点赞">
-                  <i className="fa-solid fa-thumbs-up text-[9px] text-sky-500/80" />
-                  {formatToolInvokes(card.likes ?? 0)}
-                </span>
-              </span>
-            ) : card.heat > 0 ? (
-              <span className="ml-auto inline-flex items-center gap-1 text-[10px] tabular-nums text-[#86868b]">
-                <i className="fa-solid fa-fire text-[9px] text-amber-500/80" />
-                {formatToolInvokes(card.heat)}
-              </span>
-            ) : null}
           </div>
         ) : null}
       </button>
       <div
         className={cn(
-          'flex flex-wrap items-center justify-start gap-2 border-t border-black/[0.04]',
+          'flex flex-wrap items-center gap-2 border-t border-black/[0.04]',
           compact ? 'mt-2.5 pt-2.5' : homeDense ? 'mt-2.5 pt-2.5' : 'mt-3.5 pt-3',
         )}
       >
+        {isSkillMetrics ? (
+          <span className="mr-auto inline-flex items-center gap-2.5 text-[10px] tabular-nums text-[#86868b]">
+            <span className="inline-flex items-center gap-1" title="下载量">
+              <i className="fa-solid fa-download text-[9px] text-[#86868b]" />
+              {formatToolInvokes(card.downloads ?? 0)}
+            </span>
+            <span className="inline-flex items-center gap-1" title="点赞">
+              <i className="fa-solid fa-thumbs-up text-[9px] text-sky-500/80" />
+              {formatToolInvokes(card.likes ?? 0)}
+            </span>
+            <span className="inline-flex items-center gap-1" title="点踩">
+              <i className="fa-solid fa-thumbs-down text-[9px] text-zinc-400" />
+              {formatToolInvokes(card.dislikes ?? 0)}
+            </span>
+          </span>
+        ) : card.heat > 0 && !compact ? (
+          <span className="mr-auto inline-flex items-center gap-1 text-[10px] tabular-nums text-[#86868b]">
+            <i className="fa-solid fa-fire text-[9px] text-amber-500/80" />
+            {formatToolInvokes(card.heat)}
+          </span>
+        ) : (
+          <span className="mr-auto" />
+        )}
         {onHowTo ? (
           <button
             type="button"

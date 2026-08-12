@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatConfig } from '@/domain/chat';
+import { getAgentById } from '@/domain/plan';
+import { AgentPortrait } from '@/components/brand/AgentPortrait';
 import { MessageBubble } from '@/components/chat/MessageBubble';
+import { useMarketplaceStore } from '@/stores/marketplaceStore';
 
 interface ChatPanelProps {
   chat: ChatConfig;
@@ -14,6 +17,8 @@ export function ChatPanel({ chat, onSend, isAgentTyping, streamStatus, onCancelS
   const [input, setInput] = useState('');
   const [menuOpen, setMenuOpen] = useState(true);
   const messagesRef = useRef<HTMLDivElement>(null);
+  const agents = useMarketplaceStore((s) => s.agents);
+  const agent = useMemo(() => getAgentById(chat.agentId), [chat.agentId, agents]);
 
   useEffect(() => {
     const el = messagesRef.current;
@@ -34,21 +39,36 @@ export function ChatPanel({ chat, onSend, isAgentTyping, streamStatus, onCancelS
   };
 
   return (
-    <main className="relative z-30 flex w-[420px] shrink-0 flex-col border-r border-black/[0.06] bg-white">
+    <main className="relative z-30 flex w-full min-w-0 max-w-full shrink-0 flex-col border-r border-black/[0.06] bg-white sm:w-[min(420px,42vw)] sm:max-w-[420px]">
       <header className="z-20 flex h-16 shrink-0 items-center justify-between border-b border-black/[0.06] bg-white/90 px-5 shadow-sm backdrop-blur">
         <div className="flex items-center gap-3">
-          <div
-            className={`relative flex h-10 w-10 items-center justify-center rounded-full text-white shadow-sm ${
-              chat.type === 'group' ? 'bg-gradient-to-br from-zinc-600 to-zinc-800' : `bg-${chat.color}-600`
-            }`}
-          >
-            <i className={`fa-solid ${chat.icon}`} />
-            <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-green-500" />
-          </div>
+          {agent ? (
+            <div className="relative shrink-0">
+              <AgentPortrait
+                agentId={agent.id}
+                name={agent.name}
+                icon={agent.icon || chat.icon}
+                avatarUrl={agent.avatarUrl}
+                avatarPresetId={agent.avatarPresetId}
+                size={40}
+                className="shadow-sm ring-1 ring-black/5"
+              />
+              <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-green-500" />
+            </div>
+          ) : (
+            <div
+              className={`relative flex h-10 w-10 items-center justify-center rounded-full text-white shadow-sm ${
+                chat.type === 'group' ? 'bg-gradient-to-br from-zinc-600 to-zinc-800' : `bg-${chat.color}-600`
+              }`}
+            >
+              <i className={`fa-solid ${chat.icon}`} />
+              <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-green-500" />
+            </div>
+          )}
           <div className="flex flex-col">
             <h2 className="text-sm font-bold leading-tight text-zinc-900">{chat.title}</h2>
             <span className={`text-[10px] ${chat.type === 'bot' ? `text-${chat.color}-600 font-medium` : 'text-zinc-400'}`}>
-              {chat.status}
+              {agent?.name ? `${agent.name} · ${chat.status}` : chat.status}
             </span>
           </div>
         </div>
@@ -83,6 +103,7 @@ export function ChatPanel({ chat, onSend, isAgentTyping, streamStatus, onCancelS
             message={message}
             accentColor={chat.color}
             iconClass={chat.icon}
+            agent={agent}
           />
         ))}
       </div>

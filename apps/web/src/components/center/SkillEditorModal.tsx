@@ -30,6 +30,7 @@ import { parseSkillUpload } from '@/domain/skillExport';
 import { suggestSkillSearchKeywords } from '@/domain/skillKeywords';
 import { skillDisplayName, syncSkillZhPrimary } from '@/domain/skillDisplay';
 import type { AssetApprovalReason } from '@/domain/assetApproval';
+import { assertSkillScanAllowsApproval } from '@/domain/skillSecurityScan';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 import { shareSyncSaveHint } from '@/domain/shareSync';
@@ -39,6 +40,7 @@ type WizardStep = 0 | 1 | 2 | 3;
 
 function emptySkill(): PrototypeSkillSeed {
   const name = getCurrentUserName() || 'Mcyo';
+  const stamp = new Date().toISOString().slice(0, 10);
   return {
     id: '',
     name: '',
@@ -62,6 +64,17 @@ function emptySkill(): PrototypeSkillSeed {
     searchKeywords: [],
     instructions: '',
     planSteps: [],
+    usageNotes: '',
+    cases: [],
+    envInfo: {
+      dependencies: '',
+      framework: '',
+      runtimeVersion: '',
+      hardwareNetwork: '',
+    },
+    createdAt: stamp,
+    updatedAt: stamp,
+    updatedBy: name,
     sourceType: 'internal',
     visibility: 'public',
     ownerDeptIds: getCurrentDeptIds().slice(0, 1),
@@ -82,6 +95,17 @@ function normalizeSkillForm(skill: PrototypeSkillSeed): PrototypeSkillSeed {
     searchKeywords: Array.isArray(skill.searchKeywords) ? skill.searchKeywords : [],
     instructions: skill.instructions ?? '',
     planSteps: Array.isArray(skill.planSteps) ? skill.planSteps : [],
+    usageNotes: skill.usageNotes ?? '',
+    cases: Array.isArray(skill.cases) ? skill.cases : [],
+    envInfo: {
+      dependencies: skill.envInfo?.dependencies ?? '',
+      framework: skill.envInfo?.framework ?? '',
+      runtimeVersion: skill.envInfo?.runtimeVersion ?? '',
+      hardwareNetwork: skill.envInfo?.hardwareNetwork ?? '',
+    },
+    createdAt: skill.createdAt,
+    updatedAt: skill.updatedAt,
+    updatedBy: skill.updatedBy,
     ownerDeptIds: Array.isArray(skill.ownerDeptIds)
       ? skill.ownerDeptIds.slice(0, 1)
       : getCurrentDeptIds().slice(0, 1),
@@ -264,14 +288,34 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
 
     const reasons: AssetApprovalReason[] = [];
     if (wantPublish && !prev?.published) reasons.push('publish_executable');
+    // 已上架后取消勾选：走下架审批，不可直接下架
+    if (prev?.published && !wantPublish) reasons.push('unpublish_skill');
+
+    if (reasons.includes('publish_executable') || reasons.includes('update_version')) {
+      const gate = assertSkillScanAllowsApproval(form.securityScan ?? prev?.securityScan);
+      if (!gate.ok) {
+        showToast(gate.message || '安全扫描未通过，无法发起上架审批');
+        return;
+      }
+      if (gate.message) showToast(gate.message);
+    }
 
     const needsApproval = reasons.length > 0;
     const userName = getCurrentUserName() || 'Mcyo';
     const userId = getCurrentUserId();
     const id = isNew ? `skill-${Date.now()}` : (target as string);
+    const stamp = new Date().toISOString().slice(0, 10);
 
     const visibility: AssetVisibility =
       form.visibility === 'org' || form.visibility === 'private' ? form.visibility : 'public';
+
+    const envInfo = {
+      dependencies: form.envInfo?.dependencies?.trim() || undefined,
+      framework: form.envInfo?.framework?.trim() || undefined,
+      runtimeVersion: form.envInfo?.runtimeVersion?.trim() || undefined,
+      hardwareNetwork: form.envInfo?.hardwareNetwork?.trim() || undefined,
+    };
+    const hasEnv = Object.values(envInfo).some(Boolean);
 
     let draft = syncSkillZhPrimary({
       ...form,
@@ -288,6 +332,15 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       searchKeywords: Array.isArray(form.searchKeywords) ? form.searchKeywords : [],
       instructions: form.instructions?.trim() || undefined,
       planSteps: (form.planSteps ?? []).map((s) => s.trim()).filter(Boolean),
+      usageNotes: form.usageNotes?.trim() || undefined,
+      cases: (form.cases ?? [])
+        .map((c) => ({
+          title: (c.title || '').trim(),
+          input: c.input?.trim() || undefined,
+          output: c.output?.trim() || undefined,
+        }))
+        .filter((c) => c.title),
+      envInfo: hasEnv ? envInfo : undefined,
       author: prev?.author ?? userName,
       publisher: form.publisher || userName,
       publisherUserId: form.publisherUserId || userId || undefined,
@@ -299,9 +352,17 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       ownerDeptIds: ((form.ownerDeptIds ?? []).slice(0, 1) as DeptId[]),
       ownerRegionId: (form.ownerRegionId ?? null) as RegionId | null,
       homepageUrl: undefined,
-      published: needsApproval ? false : wantPublish,
+      // 下架审批中保持上架，直至终审通过
+      published: reasons.includes('unpublish_skill')
+        ? true
+        : needsApproval
+          ? false
+          : wantPublish,
       featuredInDoTask: wantPublish ? form.featuredInDoTask : false,
       featuredInMssMarket: wantPublish ? form.featuredInDoTask : false,
+      createdAt: prev?.createdAt || form.createdAt || stamp,
+      updatedAt: stamp,
+      updatedBy: userName,
     });
 
     if (!draft.searchKeywords?.length) {
@@ -328,8 +389,16 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
         assetId: id,
         assetName: skillDisplayName(draft),
         reasons,
+        note: reasons.includes('unpublish_skill')
+          ? '编辑器取消「上架可调用」，申请下架'
+          : undefined,
+        unpublishMode: reasons.includes('unpublish_skill') ? 'all' : undefined,
       });
-      showToast('技能已保存为组织内草稿，审批通过后生效申请项' + shareSyncSaveHint());
+      showToast(
+        (reasons.includes('unpublish_skill')
+          ? '已提交下架审批，通过前仍保持集市可见'
+          : '技能已保存为组织内草稿，审批通过后生效申请项') + shareSyncSaveHint(),
+      );
     } else {
       showToast(
         (wantPublish ? '技能已保存并上架可调用' : '技能已保存（组织内沉淀 · 未上架调用）') +
@@ -549,9 +618,10 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
               onClick={() => setShowAdvanced((v) => !v)}
               className="text-[12px] font-medium text-zinc-500 hover:text-zinc-800"
             >
-              {showAdvanced ? '收起高级项' : '展开高级项（执行计划）'}
+              {showAdvanced ? '收起高级项' : '展开高级项（计划 / 须知 / 案例 / 环境）'}
             </button>
             {showAdvanced ? (
+              <>
               <FormField label="执行计划步骤（每行一步）" hint="1.0 可选">
                 <FormTextarea
                   rows={4}
@@ -568,9 +638,97 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                   }
                 />
               </FormField>
+              <FormField
+                label="使用须知"
+                hint="前置条件、权限要求、注意事项与限制规则（详情「使用须知」Tab）"
+              >
+                <FormTextarea
+                  rows={4}
+                  value={form.usageNotes ?? ''}
+                  onChange={(e) => setForm({ ...form, usageNotes: e.target.value })}
+                  placeholder={'1. 前置条件…\n2. 权限要求…\n3. 注意事项…'}
+                />
+              </FormField>
+              <FormField
+                label="案例（每行一条：标题|输入|输出）"
+                hint="详情「案例」Tab；竖线分隔，可只填标题"
+              >
+                <FormTextarea
+                  rows={3}
+                  className="font-mono text-[12px]"
+                  value={(form.cases ?? [])
+                    .map((c) => [c.title, c.input || '', c.output || ''].join('|'))
+                    .join('\n')}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      cases: e.target.value
+                        .split('\n')
+                        .map((line) => line.trim())
+                        .filter(Boolean)
+                        .map((line) => {
+                          const [title, input, output] = line.split('|').map((s) => s.trim());
+                          return { title: title || line, input, output };
+                        }),
+                    })
+                  }
+                  placeholder="周报生成|输入本周要点…|输出结构化周报…"
+                />
+              </FormField>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <FormField label="环境依赖">
+                  <FormInput
+                    value={form.envInfo?.dependencies ?? ''}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        envInfo: { ...form.envInfo, dependencies: e.target.value },
+                      })
+                    }
+                    placeholder="Node / Python / 浏览器…"
+                  />
+                </FormField>
+                <FormField label="算法框架">
+                  <FormInput
+                    value={form.envInfo?.framework ?? ''}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        envInfo: { ...form.envInfo, framework: e.target.value },
+                      })
+                    }
+                    placeholder="LLM / RAG / 规则引擎…"
+                  />
+                </FormField>
+                <FormField label="运行版本">
+                  <FormInput
+                    value={form.envInfo?.runtimeVersion ?? ''}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        envInfo: { ...form.envInfo, runtimeVersion: e.target.value },
+                      })
+                    }
+                    placeholder="平台运行时 / 模型版本"
+                  />
+                </FormField>
+                <FormField label="硬件 / 网络">
+                  <FormInput
+                    value={form.envInfo?.hardwareNetwork ?? ''}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        envInfo: { ...form.envInfo, hardwareNetwork: e.target.value },
+                      })
+                    }
+                    placeholder="内网 / GPU / 带宽要求"
+                  />
+                </FormField>
+              </div>
+              </>
             ) : null}
             <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-[11px] text-zinc-500">
-              1.0 不配置连接器：Skill 以正文与指令沉淀为主，连接器打通列入后续版本。
+              1.0 不配置连接器：Skill 以正文与指令沉淀为主，连接器打通列入后续版本。使用须知 / 案例 / 环境请展开高级项填写。
             </p>
           </div>
         ) : null}
@@ -698,7 +856,9 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
             <div className="rounded-xl border border-zinc-200 px-3 py-2.5 space-y-2">
               <p className="text-[13px] font-semibold text-zinc-800">发布权限范围</p>
               <p className="text-[11px] text-zinc-500">
-                默认公开可见。组织内：后续启用数据权限时按观众归属匹配；公开可见：全领域全区域可看。短期两者浏览效果相同。
+                默认公开可见（角标「公开」）：不区分登录人领域/区域。
+                组织内可见（角标「领域」）：业务用户仅能看到归属命中本人领域或区域的
+                Skill；发布方与平台运营可看全部。
               </p>
               <label className="flex cursor-pointer items-center gap-2">
                 <input

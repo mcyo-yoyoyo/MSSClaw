@@ -5,25 +5,25 @@ import type { PrototypeAgentSeed } from '@/domain/prototype/types';
 import { ASSET_VISIBILITY_LABELS } from '@/domain/orgTaxonomy';
 import { getAgentBusinessLabel } from '@/domain/agentBusinessScenarios';
 import {
-  CenterModal,
   CenterPageHeader,
   CenterSearchInput,
 } from '@/components/center/CenterShell';
 import { OrgAssetFilterBar } from '@/components/center/OrgAssetFilters';
 import { AgentEditorModal, type AgentEditorTarget } from '@/components/center/AgentEditorModal';
 import { SharedCatalogEmptyHint } from '@/components/common/SharedCatalogEmptyHint';
-import { AssetAccentMark, assetAccentBorderStyle } from '@/components/brand/AssetAccentMark';
+import { AgentPortrait } from '@/components/brand/AgentPortrait';
+import { CatalogAgentDetailModal } from '@/features/market/CatalogAgentDetailModal';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { downloadAgentFile, downloadAllAgentsFile } from '@/domain/agentExport';
 import { getAgentPack } from '@/domain/agents/catalog';
-import { buildAgentDemoPrompt, getPrimarySkill } from '@/domain/agents/runtime';
-import { PROTOTYPE_SKILLS } from '@/domain/prototype/skills';
-import { skillDisplayName } from '@/domain/skillDisplay';
 import { useBusinessScenarioCatalogStore } from '@/stores/businessScenarioCatalogStore';
 
 interface AgentCenterPageProps {
   onInvoke: (agent: PrototypeAgentSeed, prompt?: string) => void;
 }
+
+const cardBtn =
+  'min-w-0 flex-1 basis-[calc(50%-0.2rem)] rounded-lg border border-zinc-200 bg-white px-1 py-1.5 text-[10px] font-semibold text-zinc-800 transition hover:bg-zinc-50 sm:basis-0 sm:text-[11px]';
 
 export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
   const {
@@ -42,7 +42,6 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
     bumpAgentInvokes,
     importAgentFile,
     showToast,
-    skills,
   } = useMarketplaceStore();
   const hydrateBusinessCatalog = useBusinessScenarioCatalogStore((s) => s.hydrate);
 
@@ -59,12 +58,6 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
   const handleInvoke = (agent: PrototypeAgentSeed) => {
     bumpAgentInvokes(agent.id);
     onInvoke(agent);
-  };
-
-  const skillName = (id: string) => {
-    const hit =
-      skills.find((s) => s.id === id) ?? PROTOTYPE_SKILLS.find((s) => s.id === id);
-    return hit ? skillDisplayName(hit) : id;
   };
 
   return (
@@ -95,8 +88,8 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
           subtitle="能力上架进目录；发布可选组织内 / 公开可见（默认公开）；勾选精选露出后出现在业务「做任务 · 场景专家」"
           tip={
             <>
-              「调用」将发送演示任务并进入执行面（需已开放任务记录）。请配置服务端 LLM_* 或「模型与
-              API」工作区密钥；未配置时执行会明确报错，不会静默假完成。可下载/导入 .agent.zip。
+              「执行」将发送演示任务并进入 AI 任务（完整产品）或任务记录。请配置服务端 LLM_* 或工作区模型密钥；可下载/导入
+              .agent.zip。详情弹层与集市用户视角一致。
             </>
           }
           actions={
@@ -173,10 +166,17 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
                 <div
                   key={a.id}
                   className="market-card apple-card flex flex-col px-3 py-2.5"
-                  style={assetAccentBorderStyle(a.id)}
                 >
-                  <div className="flex items-start gap-2">
-                    <AssetAccentMark id={a.id} />
+                  <div className="flex items-start gap-2.5">
+                    <AgentPortrait
+                      agentId={a.id}
+                      name={a.name}
+                      icon={a.icon}
+                      avatarUrl={a.avatarUrl}
+                      avatarPresetId={a.avatarPresetId}
+                      size={40}
+                      className="shrink-0 rounded-xl"
+                    />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-2">
                         <h3 className="truncate text-[13px] font-semibold leading-tight text-zinc-900">
@@ -229,13 +229,16 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
                       ) : null}
                     </div>
                   </div>
-                  <div className="mt-2 flex gap-1.5 border-t border-black/[0.04] pt-2">
+                  <div className="mt-2 flex flex-wrap gap-1.5 border-t border-black/[0.04] pt-2">
+                    <button type="button" onClick={() => setDetail(a)} className={cardBtn}>
+                      详情
+                    </button>
                     <button
                       type="button"
-                      onClick={() => handleInvoke(a)}
-                      className="apple-btn-primary flex-1 rounded-md py-1 text-[11px] font-semibold text-white transition"
+                      onClick={() => setEditorTarget(a.id)}
+                      className={cardBtn}
                     >
-                      调用
+                      编辑
                     </button>
                     <button
                       type="button"
@@ -243,24 +246,13 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
                         downloadAgentFile(a);
                         showToast(`已下载专家包 ${a.name}.agent.zip`);
                       }}
-                      className="rounded-md border border-black/8 px-2.5 py-1 text-[11px] font-medium transition hover:bg-black/[0.03]"
-                      title="下载专家包（AGENT.md + reference/templates）"
+                      className={cardBtn}
+                      title="下载专家包"
                     >
-                      <i className="fa-solid fa-download" />
+                      下载
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setDetail(a)}
-                      className="rounded-md border border-black/8 px-2.5 py-1 text-[11px] font-medium transition hover:bg-black/[0.03]"
-                    >
-                      详情
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditorTarget(a.id)}
-                      className="rounded-md border border-black/8 px-2.5 py-1 text-[11px] font-medium transition hover:bg-black/[0.03]"
-                    >
-                      配置
+                    <button type="button" onClick={() => handleInvoke(a)} className={cardBtn}>
+                      执行
                     </button>
                   </div>
                 </div>
@@ -272,106 +264,25 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
         </div>
       </div>
 
-      <CenterModal
-        open={!!detail}
-        title={detail?.name ?? ''}
-        size="lg"
-        onClose={() => setDetail(null)}
-        actions={
-          detail && (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  handleInvoke(detail);
-                  setDetail(null);
-                }}
-                className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white"
-              >
-                调用
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  downloadAgentFile(detail);
-                  showToast(`已下载专家包 ${detail.name}.agent.zip`);
-                }}
-                className="rounded-xl border border-black/8 px-4 py-2 text-[12px]"
-              >
-                下载包
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const id = detail.id;
-                  setDetail(null);
-                  setEditorTarget(id);
-                }}
-                className="rounded-xl border border-black/8 px-4 py-2 text-[12px]"
-              >
-                配置
-              </button>
-              <button
-                type="button"
-                onClick={() => setDetail(null)}
-                className="rounded-xl border border-black/8 px-4 py-2 text-[12px]"
-              >
-                关闭
-              </button>
-            </>
-          )
-        }
-      >
-        {detail && (
-          <div className="space-y-3 text-[13px] text-left">
-            <p className="text-[#86868b]">{detail.desc}</p>
-            <p className="text-[11px] text-[#86868b]">
-              {getAgentBusinessLabel(detail) || '未分类场景'}
-              {detail.bizLine ? ` · ${detail.bizLine}` : ''} · {detail.invokes} 次调用
-            </p>
-            {(detail.systemPrompt || getAgentPack(detail.id)?.systemPrompt) && (
-              <div className="rounded-xl border border-sky-100 bg-sky-50/50 p-3">
-                <p className="mb-1.5 text-[11px] font-semibold text-sky-800">Persona（对话注入）</p>
-                <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap text-[11px] leading-relaxed text-zinc-700">
-                  {detail.systemPrompt || getAgentPack(detail.id)?.systemPrompt}
-                </pre>
-              </div>
-            )}
-            <div className="rounded-xl border border-zinc-100 bg-zinc-50/60 p-3">
-              <p className="mb-1.5 text-[11px] font-semibold text-zinc-700">挂载 Skills</p>
-              <ul className="space-y-1 text-[11px] text-zinc-600">
-                {detail.skillIds.map((id) => (
-                  <li key={id}>
-                    {skillName(id)}
-                    {(detail.primarySkillId || getPrimarySkill(detail)?.id) === id ? (
-                      <span className="ml-1 text-sky-700">· 主</span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            {(detail.planSteps?.length || getAgentPack(detail.id)?.planSteps?.length) && (
-              <div className="rounded-xl border border-zinc-100 bg-zinc-50/60 p-3">
-                <p className="mb-1.5 text-[11px] font-semibold text-zinc-700">编排计划</p>
-                <ol className="list-decimal space-y-1 pl-4 text-[11px] text-zinc-600">
-                  {(detail.planSteps?.length
-                    ? detail.planSteps
-                    : getAgentPack(detail.id)?.planSteps ?? []
-                  ).map((step) => (
-                    <li key={step}>{step}</li>
-                  ))}
-                </ol>
-              </div>
-            )}
-            <div className="rounded-xl border border-dashed border-zinc-200 bg-white p-3">
-              <p className="mb-1.5 text-[11px] font-semibold text-zinc-700">演示任务（调用自动发送）</p>
-              <pre className="whitespace-pre-wrap text-[11px] text-zinc-600">
-                {detail.demoPrompt || buildAgentDemoPrompt(detail)}
-              </pre>
-            </div>
-          </div>
-        )}
-      </CenterModal>
+      {detail ? (
+        <CatalogAgentDetailModal
+          agent={detail}
+          canRun={Boolean(detail.systemPrompt || getAgentPack(detail.id)?.systemPrompt)}
+          onClose={() => setDetail(null)}
+          onRun={(a) => {
+            handleInvoke(a);
+            setDetail(null);
+          }}
+          onToast={showToast}
+          adminActions={{
+            onEdit: () => {
+              const id = detail.id;
+              setDetail(null);
+              setEditorTarget(id);
+            },
+          }}
+        />
+      ) : null}
 
       <AgentEditorModal target={editorTarget} onClose={() => setEditorTarget(null)} />
     </div>

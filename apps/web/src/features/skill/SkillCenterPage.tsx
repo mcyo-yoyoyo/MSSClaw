@@ -1,29 +1,64 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
-import { ASSET_VISIBILITY_LABELS, getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
+import {
+  getDeptLabel,
+  getRegionLabel,
+  HQ_DEPTS,
+  REGIONS,
+} from '@/domain/orgTaxonomy';
 import { SKILL_VISIBILITY_SCOPE_OPTIONS } from '@/domain/assetFilters';
 import {
-  getBusinessScenarioMeta,
+  listVisibleBusinessScenarioCategories,
 } from '@/domain/businessScenarios';
-import { resolveSkillBusinessScenario } from '@/domain/skillBusinessScenarios';
+import { resolveSkillBusinessScenario, getSkillBusinessLabel } from '@/domain/skillBusinessScenarios';
 import {
-  CenterModal,
   CenterPageHeader,
   CenterSearchInput,
   StatCardGrid,
 } from '@/components/center/CenterShell';
 import { OrgAssetFilterBar } from '@/components/center/OrgAssetFilters';
 import { SkillEditorModal, type SkillEditorTarget } from '@/components/center/SkillEditorModal';
+import {
+  SkillOpsRequestModal,
+  type SkillOpsRequestKind,
+} from '@/components/center/SkillOpsRequestModal';
 import { SharedCatalogEmptyHint } from '@/components/common/SharedCatalogEmptyHint';
+import { MarketShelfCard } from '@/components/market/MarketShelfCard';
+import { MarketSkillDetailModal } from '@/features/market/MarketSkillDetailModal';
+import type { MarketShelfCard as MarketShelfCardModel } from '@/domain/marketShelf';
 import { downloadAllSkillsFile, downloadSkillFile } from '@/domain/skillExport';
 import { skillDisplayDesc, skillDisplayName } from '@/domain/skillDisplay';
-import { resolveSkillAccentColor } from '@/domain/skillAccent';
+import {
+  findHomogenizationHits,
+  homogenizationWarningCount,
+} from '@/domain/skillHomogenization';
+import {
+  getSecurityScanGateMode,
+  setSecurityScanGateMode,
+  type SkillSecurityScanGateMode,
+} from '@/domain/skillSecurityScan';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useBusinessScenarioCatalogStore } from '@/stores/businessScenarioCatalogStore';
+import { useContentEngagementStore } from '@/stores/contentEngagementStore';
+import { useSkillReviewStore } from '@/stores/skillReviewStore';
+import { useAppViewStore } from '@/stores/appViewStore';
+
+type DistTab = 'dept' | 'region' | 'scene' | 'homo';
 
 interface SkillCenterPageProps {
   onInvoke: (skill: PrototypeSkillSeed) => void;
+}
+
+function monthKey(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function skillMonthStamp(s: PrototypeSkillSeed): string | null {
+  const raw = s.createdAt || s.updatedAt || null;
+  if (!raw || raw === '—') return null;
+  const m = String(raw).match(/^(\d{4}-\d{2})/);
+  return m?.[1] ?? null;
 }
 
 export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
@@ -44,26 +79,107 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
     showToast,
   } = useMarketplaceStore();
   const hydrateBusinessCatalog = useBusinessScenarioCatalogStore((s) => s.hydrate);
+  const getEngagement = useContentEngagementStore((s) => s.get);
+  const engagementById = useContentEngagementStore((s) => s.byId);
+  const hydrateReviews = useSkillReviewStore((s) => s.hydrate);
+  const setAppView = useAppViewStore((s) => s.setAppView);
+  void engagementById;
 
   useEffect(() => {
     hydrateBusinessCatalog();
-  }, [hydrateBusinessCatalog]);
+    hydrateReviews();
+  }, [hydrateBusinessCatalog, hydrateReviews]);
 
   const [detail, setDetail] = useState<PrototypeSkillSeed | null>(null);
   const [editorTarget, setEditorTarget] = useState<SkillEditorTarget>(null);
+  const [opsRequest, setOpsRequest] = useState<{
+    skill: PrototypeSkillSeed;
+    kind: SkillOpsRequestKind;
+  } | null>(null);
+  const [distTab, setDistTab] = useState<DistTab>('dept');
+  const [scanGate, setScanGate] = useState<SkillSecurityScanGateMode>(() => getSecurityScanGateMode());
+  useEffect(() => {
+    setScanGate(getSecurityScanGateMode());
+  }, []);
   const list = filteredSkills();
 
   const stats = useMemo(() => {
-    const pub = skills.filter((s) => s.published).length;
-    const orgVis = skills.filter((s) => (s.visibility ?? 'public') === 'org').length;
-    const totalInvokes = skills.reduce((n, s) => n + s.invokes, 0);
+    const total = skills.length;
+    const publicCount = skills.filter((s) => (s.visibility ?? 'public') === 'public').length;
+    const scopedCount = skills.filter((s) => (s.visibility ?? 'public') !== 'public').length;
+    const thisMonth = monthKey();
+    const monthNew = skills.filter((s) => skillMonthStamp(s) === thisMonth).length;
+    const homo = homogenizationWarningCount(skills);
     return [
-      ['Skill 总数', skills.length],
-      ['可调用', pub],
-      ['组织内', orgVis],
-      ['总调用', totalInvokes.toLocaleString()],
+      ['Skill 总数', total],
+      ['公开 Skill', publicCount],
+      ['领域权限 Skill', scopedCount],
+      ['本月新增', monthNew],
+      ['同质化预警', homo],
     ] as [string, string | number][];
   }, [skills]);
+
+  const homoHits = useMemo(() => findHomogenizationHits(skills), [skills]);
+
+  const distRows = useMemo(() => {
+    if (distTab === 'homo') return [];
+    if (distTab === 'dept') {
+      return HQ_DEPTS.map((d) => ({
+        id: d.id,
+        label: d.label,
+        count: skills.filter((s) => (s.ownerDeptIds ?? []).includes(d.id)).length,
+      }));
+    }
+    if (distTab === 'region') {
+      return REGIONS.map((r) => ({
+        id: r.id,
+        label: r.label,
+        count: skills.filter((s) => s.ownerRegionId === r.id).length,
+      }));
+    }
+    return listVisibleBusinessScenarioCategories().map((c) => ({
+      id: c.id,
+      label: c.label,
+      count: skills.filter((s) => resolveSkillBusinessScenario(s) === c.id).length,
+    }));
+  }, [distTab, skills]);
+
+  const maxDist = Math.max(1, 0, ...distRows.map((r) => r.count));
+
+  const listCards = useMemo((): { skill: PrototypeSkillSeed; card: MarketShelfCardModel }[] => {
+    return list.map((s) => {
+      const bizLabel = getSkillBusinessLabel(s);
+      const eng = getEngagement(s.id);
+      const badges: MarketShelfCardModel['badges'] = [];
+      if (s.ownerDeptIds?.[0]) {
+        badges.push({ label: getDeptLabel(s.ownerDeptIds[0]), tone: 'dept' });
+      }
+      if (s.ownerRegionId) {
+        badges.push({ label: getRegionLabel(s.ownerRegionId), tone: 'region' });
+      }
+      if (bizLabel) badges.push({ label: bizLabel, tone: 'type' });
+      return {
+        skill: s,
+        card: {
+          id: s.id,
+          kind: 'projects',
+          title: skillDisplayName(s),
+          description: skillDisplayDesc(s).replace(/^【[^】]+】/, '').trim() || '暂无描述',
+          icon: s.icon || 'fa-cube',
+          badges,
+          featured: Boolean(s.published),
+          heat: s.invokes ?? 0,
+          likes: eng.likes,
+          dislikes: eng.dislikes,
+          downloads: eng.downloads,
+          scopeBadge: (s.visibility ?? 'public') === 'public' ? 'public' : 'scoped',
+          hasHowto: Boolean(s.instructions || s.command),
+          runnable: Boolean(s.published && (s.instructions || s.command)),
+          primaryAction: 'detail',
+        },
+      };
+    });
+  }, [list, getEngagement, engagementById]);
 
   const handleInvoke = (skill: PrototypeSkillSeed) => {
     if (!skill.published) {
@@ -85,12 +201,11 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
       <div className="mx-auto max-w-6xl">
         <CenterPageHeader
           title="配置Skill"
-          subtitle="优先上传 Skill 包解析 · 发布可选组织内 / 公开可见（默认公开）· 上架可调用需审批"
+          subtitle="运营看板 · 多维筛选 · 与集市统一的 Skill 卡片 · 上架可调用需审批"
           tip={
             <>
-              上传标准包 → 配置中英文与标签 → 设置发布权限范围。上架可调用模型任务时触发评审。1.0
-              不打通连接器。输入 <code className="rounded bg-black/[0.04] px-1">/skill名</code>{' '}
-              调用已上架技能。
+              上传标准包 → 配置中英文与标签 → 设置发布权限范围。上架可调用模型任务时触发评审。安全扫描模块已预留（待对接
+              IT）。输入 <code className="rounded bg-black/[0.04] px-1">/skill名</code> 调用已上架技能。
             </>
           }
           actions={
@@ -100,18 +215,21 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
                 type="button"
                 onClick={() => {
                   try {
-                    downloadAllSkillsFile(skills);
-                    const totalInvokes = skills.reduce((n, s) => n + (s.invokes || 0), 0);
-                    showToast(
-                      `已导出 Excel：${skills.length} 个 Skill（含调用 ${totalInvokes.toLocaleString()} 次）`,
+                    const engMap = Object.fromEntries(
+                      skills.map((s) => {
+                        const e = getEngagement(s.id);
+                        return [s.id, { likes: e.likes, dislikes: e.dislikes, downloads: e.downloads }];
+                      }),
                     );
+                    downloadAllSkillsFile(skills, engMap);
+                    showToast(`已导出 Excel：${skills.length} 个 Skill（调用/Token 列预留为 —）`);
                   } catch (err) {
                     console.error(err);
                     showToast('导出 Excel 失败，请重试或检查浏览器下载权限');
                   }
                 }}
                 className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03]"
-                title="导出含调用次数、上架与可见状态的运营分析清单"
+                title="导出运营分析清单"
               >
                 <i className="fa-solid fa-file-export mr-1 text-[10px] text-zinc-400" />
                 导出全部清单
@@ -130,6 +248,130 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
 
         <StatCardGrid items={stats} />
 
+        <section className="mb-4 rounded-2xl border border-zinc-200/90 bg-white p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-[13px] font-semibold text-zinc-800">多维度分布看板</h3>
+            <div className="flex flex-wrap gap-1 rounded-lg bg-zinc-100/80 p-0.5">
+              {(
+                [
+                  ['dept', '领域'],
+                  ['region', '区域'],
+                  ['scene', '业务场景'],
+                  ['homo', '同质化'],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setDistTab(id)}
+                  className={cn(
+                    'rounded-md px-2.5 py-1 text-[11px] font-semibold transition',
+                    distTab === id
+                      ? 'bg-white text-zinc-900 shadow-sm'
+                      : 'text-zinc-500 hover:text-zinc-800',
+                  )}
+                >
+                  {label}
+                  {id === 'homo' && homoHits.length ? (
+                    <span className="ml-1 text-amber-700">({homoHits.length})</span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          </div>
+          {distTab === 'homo' ? (
+            <div className="space-y-2">
+              {homoHits.length ? (
+                homoHits.slice(0, 12).map((h) => (
+                  <div
+                    key={`${h.skillId}-${h.peerId}`}
+                    className="relative rounded-xl border border-amber-100 bg-amber-50/40 px-3 py-2.5"
+                  >
+                    <span className="absolute right-3 top-2.5 rounded-md bg-white px-1.5 py-0.5 text-[10px] font-bold text-amber-800 ring-1 ring-amber-200">
+                      {h.similarity}%
+                    </span>
+                    <p className="pr-14 text-[12px] font-semibold text-zinc-800">
+                      {h.skillName}
+                      <span className="mx-1.5 font-normal text-zinc-400">vs</span>
+                      {h.peerName}
+                    </p>
+                    <p className="mt-1 text-[11px] text-zinc-500">
+                      重叠：{h.overlap.join(' · ') || '标签/场景相近'}
+                    </p>
+                    <p className="mt-1 text-[11px] text-amber-900/80">{h.suggestion}</p>
+                  </div>
+                ))
+              ) : (
+                <p className="py-6 text-center text-[12px] text-zinc-400">
+                  当前无达到阈值的同质化预警（规则相似度，非模型）
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              {distRows.map((row) => (
+                <div
+                  key={row.id}
+                  className="rounded-xl border border-zinc-100 bg-zinc-50/70 px-3 py-2.5"
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="truncate text-[12px] font-medium text-zinc-700">{row.label}</span>
+                    <span className="tabular-nums text-[13px] font-semibold text-zinc-900">
+                      {row.count}
+                    </span>
+                  </div>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-200/80">
+                    <div
+                      className="h-full rounded-full bg-zinc-800/80"
+                      style={{ width: `${Math.round((row.count / maxDist) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 pt-3">
+            <p className="text-[10px] text-zinc-400">
+              安全扫描门禁：{scanGate === 'off' ? '关闭（默认）' : scanGate === 'warn' ? '告警' : '拦截'}
+              · 对接 IT 后可切 block
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {(['off', 'warn', 'block'] as SkillSecurityScanGateMode[]).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => {
+                    setSecurityScanGateMode(m);
+                    setScanGate(m);
+                    showToast(
+                      m === 'off'
+                        ? '安全扫描门禁已关闭'
+                        : m === 'warn'
+                          ? '门禁=告警：未通过仍可提交'
+                          : '门禁=拦截：未通过禁止上架/更新审批',
+                    );
+                  }}
+                  className={cn(
+                    'rounded-md px-2 py-0.5 text-[10px] font-semibold',
+                    scanGate === m
+                      ? 'bg-zinc-900 text-white'
+                      : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200',
+                  )}
+                >
+                  {m}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setAppView('approvals')}
+                className="rounded-md border border-zinc-200 px-2 py-0.5 text-[10px] font-semibold text-zinc-700"
+              >
+                审批中心
+              </button>
+            </div>
+          </div>
+        </section>
+
         <OrgAssetFilterBar
           deptFilter={skillDeptFilter}
           regionFilter={skillRegionFilter}
@@ -143,208 +385,91 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
           showScope
         />
 
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {list.length ? (
-            list.map((s) => {
-              const accent = resolveSkillAccentColor(s.accentColor);
-              const creator = s.author || s.publisher || '未知';
-              return (
-                <div
-                  key={s.id}
-                  className="market-card apple-card flex flex-col px-3 py-2.5"
-                  style={{ borderLeft: `3px solid ${accent}` }}
-                >
-                  <div className="flex items-start gap-2">
-                    <span
-                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: accent }}
-                      title="标识色"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="truncate text-[13px] font-semibold leading-tight text-zinc-900">
-                          {skillDisplayName(s)}
-                        </h3>
-                        <span
-                          className={cn(
-                            'shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold',
-                            s.published
-                              ? 'bg-claw-50 text-claw-700'
-                              : 'bg-zinc-100 text-zinc-500',
-                          )}
-                        >
-                          {s.published ? '可调用' : '已沉淀'}
-                        </span>
-                      </div>
-                      <p className="mt-0.5 truncate text-[10px] text-zinc-500">
-                        创建人 {creator}
-                        <span className="mx-1 text-zinc-300">·</span>
-                        <span className="mono text-zinc-600">{s.command}</span>
-                        <span className="mx-1 text-zinc-300">·</span>
-                        v{s.version}
-                        <span className="mx-1 text-zinc-300">·</span>
-                        {s.invokes} 次
-                      </p>
-                      <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-zinc-500">
-                        {skillDisplayDesc(s) || '暂无描述'}
-                      </p>
-                      <p className="mt-1 truncate text-[10px] text-zinc-400">
-                        {(() => {
-                          const biz = resolveSkillBusinessScenario(s);
-                          return biz ? getBusinessScenarioMeta(biz).label : '未分类场景';
-                        })()}
-                        <span className="mx-1 text-zinc-300">·</span>
-                        {(s.ownerDeptIds ?? []).slice(0, 2).map(getDeptLabel).join(' · ') ||
-                          '未指定职能'}
-                        {s.ownerRegionId ? ` · ${getRegionLabel(s.ownerRegionId)}` : ''}
-                        {' · '}
-                        {ASSET_VISIBILITY_LABELS[s.visibility ?? 'public']}
-                      </p>
-                      {[...(s.tags ?? []), ...(s.searchKeywords ?? [])].length ? (
-                        <div className="mt-1.5 flex flex-wrap gap-1">
-                          {[...(s.tags ?? []), ...(s.searchKeywords ?? [])].slice(0, 3).map((t) => (
-                            <span
-                              key={t}
-                              className="rounded bg-zinc-100 px-1.5 py-0.5 text-[9px] text-zinc-600"
-                            >
-                              {t}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="mt-2 flex gap-1.5 border-t border-black/[0.04] pt-2">
-                    <button
-                      type="button"
-                      onClick={() => handleInvoke(s)}
-                      className="apple-btn-primary flex-1 rounded-md py-1 text-[11px] font-semibold text-white transition"
-                    >
-                      调用
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        downloadSkillFile(s);
-                        showToast(`已下载 Skill 包 ${skillDisplayName(s)}.skill.zip`);
-                      }}
-                      className="rounded-md border border-black/8 px-2 py-1 text-[11px] font-medium transition hover:bg-black/[0.03]"
-                      title="下载 Skill 包"
-                    >
-                      <i className="fa-solid fa-download" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDetail(s)}
-                      className="rounded-md border border-black/8 px-2 py-1 text-[11px] font-medium transition hover:bg-black/[0.03]"
-                    >
-                      详情
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditorTarget(s.id)}
-                      className="rounded-md border border-black/8 px-2 py-1 text-[11px] font-medium transition hover:bg-black/[0.03]"
-                    >
-                      编辑
-                    </button>
-                  </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {listCards.length ? (
+            listCards.map(({ skill: s, card }) => (
+              <div key={s.id} className="flex flex-col gap-1.5">
+                <MarketShelfCard
+                  card={card}
+                  primaryLabel="详情"
+                  onOpen={() => setDetail(s)}
+                  onPrimary={() => setDetail(s)}
+                />
+                <div className="flex flex-wrap gap-1.5 px-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleInvoke(s)}
+                    className="apple-btn-primary flex-1 rounded-lg py-1.5 text-[11px] font-semibold text-white transition"
+                  >
+                    调用
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      downloadSkillFile(s);
+                      showToast(`已下载 Skill 包 ${skillDisplayName(s)}.skill.zip`);
+                    }}
+                    className="rounded-lg border border-black/8 px-2.5 py-1.5 text-[11px] font-medium transition hover:bg-black/[0.03]"
+                    title="下载 Skill 包"
+                  >
+                    <i className="fa-solid fa-download" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditorTarget(s.id)}
+                    className="rounded-lg border border-black/8 px-2.5 py-1.5 text-[11px] font-medium transition hover:bg-black/[0.03]"
+                  >
+                    编辑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOpsRequest({ skill: s, kind: 'update' })}
+                    className="rounded-lg border border-sky-200 bg-sky-50/80 px-2 py-1.5 text-[11px] font-medium text-sky-900 transition hover:bg-sky-100"
+                  >
+                    更新
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOpsRequest({ skill: s, kind: 'unpublish' })}
+                    className="rounded-lg border border-amber-200 bg-amber-50/80 px-2 py-1.5 text-[11px] font-medium text-amber-900 transition hover:bg-amber-100"
+                  >
+                    下架
+                  </button>
                 </div>
-              );
-            })
+              </div>
+            ))
           ) : (
             <SharedCatalogEmptyHint assetLabel="Skill" />
           )}
         </div>
       </div>
 
-      <CenterModal
-        open={!!detail}
-        title={detail ? skillDisplayName(detail) : ''}
-        onClose={() => setDetail(null)}
-        actions={
-          detail && (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  handleInvoke(detail);
-                  setDetail(null);
-                }}
-                className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white"
-              >
-                调用
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const id = detail.id;
-                  setDetail(null);
-                  setEditorTarget(id);
-                }}
-                className="rounded-xl border border-black/8 px-4 py-2 text-[12px]"
-              >
-                编辑
-              </button>
-              <button
-                type="button"
-                onClick={() => setDetail(null)}
-                className="rounded-xl border border-black/8 px-4 py-2 text-[12px]"
-              >
-                关闭
-              </button>
-            </>
-          )
-        }
-      >
-        {detail && (
-          <div className="space-y-3 text-[13px]">
-            <p className="text-[11px] text-zinc-500">
-              创建人：
-              <span className="font-semibold text-zinc-800">{detail.author || detail.publisher || '未知'}</span>
-              <span className="mx-1.5 text-zinc-300">·</span>
-              发布方：
-              <span className="font-semibold text-zinc-800">{detail.publisher || detail.author || '未知'}</span>
-            </p>
-            <p className="text-[#86868b]">{skillDisplayDesc(detail)}</p>
-            <p className="mono text-claw-600">{detail.command}</p>
-            <p className="text-[11px] text-[#86868b]">
-              {(() => {
-                const biz = resolveSkillBusinessScenario(detail);
-                return biz ? getBusinessScenarioMeta(biz).label : '未分类场景';
-              })()}
-              {' · '}
-              v{detail.version}
-              {detail.ownerRegionId ? ` · ${getRegionLabel(detail.ownerRegionId)}` : ''}
-              {' · '}
-              {ASSET_VISIBILITY_LABELS[detail.visibility ?? 'public']}
-              {' · '}
-              {detail.invokes} 次调用
-            </p>
-            {detail.instructions ? (
-              <div className="rounded-xl border border-sky-100 bg-sky-50/50 p-3">
-                <p className="mb-1.5 text-[11px] font-semibold text-sky-800">Skill 正文（对话执行时注入）</p>
-                <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap text-[11px] leading-relaxed text-zinc-700">
-                  {detail.instructions}
-                </pre>
-              </div>
-            ) : (
-              <p className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-3 py-2 text-[11px] text-zinc-500">
-                尚未配置 Skill 正文。点击「编辑」可补充，保存后即可对话执行。
-              </p>
-            )}
-            {detail.planSteps?.length ? (
-              <div className="rounded-xl border border-zinc-100 bg-zinc-50/60 p-3">
-                <p className="mb-1.5 text-[11px] font-semibold text-zinc-700">默认执行计划</p>
-                <ol className="list-decimal space-y-1 pl-4 text-[11px] text-zinc-600">
-                  {detail.planSteps.map((step) => (
-                    <li key={step}>{step}</li>
-                  ))}
-                </ol>
-              </div>
-            ) : null}
-          </div>
-        )}
-      </CenterModal>
+      {detail ? (
+        <MarketSkillDetailModal
+          skill={detail}
+          canRun={Boolean(detail.published)}
+          onClose={() => setDetail(null)}
+          onRun={(s) => {
+            handleInvoke(s);
+            setDetail(null);
+          }}
+          onToast={showToast}
+          adminActions={{
+            onUpdateRequest: () => {
+              setOpsRequest({ skill: detail, kind: 'update' });
+            },
+            onUnpublishRequest: () => {
+              setOpsRequest({ skill: detail, kind: 'unpublish' });
+            },
+          }}
+        />
+      ) : null}
+
+      <SkillOpsRequestModal
+        skill={opsRequest?.skill ?? null}
+        kind={opsRequest?.kind ?? null}
+        onClose={() => setOpsRequest(null)}
+      />
 
       <SkillEditorModal target={editorTarget} onClose={() => setEditorTarget(null)} />
     </div>

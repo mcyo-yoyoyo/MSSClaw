@@ -13,6 +13,10 @@ export const LazyAiBriefPage = lazy(() =>
   import('@/features/ai-brief/AiBriefPage').then((m) => ({ default: m.AiBriefPage })),
 );
 
+export const LazyAiTasksPage = lazy(() =>
+  import('@/features/ai-tasks/AiTasksPage').then((m) => ({ default: m.AiTasksPage })),
+);
+
 export const LazyAgentCenterPage = lazy(() =>
   import('@/features/agent/AgentCenterPage').then((m) => ({ default: m.AgentCenterPage })),
 );
@@ -79,8 +83,16 @@ export const LazyPortalContentOpsPage = lazy(() =>
   import('@/features/ops/PortalContentOpsPage').then((m) => ({ default: m.PortalContentOpsPage })),
 );
 
+export const LazyModelCatalogOpsPage = lazy(() =>
+  import('@/features/ops/ModelCatalogOpsPage').then((m) => ({ default: m.ModelCatalogOpsPage })),
+);
+
 export const LazyExecutionHistoryPage = lazy(() =>
   import('@/features/ops/ExecutionHistoryPage').then((m) => ({ default: m.ExecutionHistoryPage })),
+);
+
+export const LazyApprovalCenterPage = lazy(() =>
+  import('@/features/ops/ApprovalCenterPage').then((m) => ({ default: m.ApprovalCenterPage })),
 );
 
 export const LazyCommandPalette = lazy(() =>
@@ -99,6 +111,7 @@ export const LazyExportModal = lazy(() =>
 export const ROUTE_PREFETCH: Partial<Record<AppView, () => void>> = {
   task: () => void import('@/features/task/TaskCenterPage'),
   messages: () => void import('@/features/messages/MyMessagesPage'),
+  'ai-tasks': () => void import('@/features/ai-tasks/AiTasksPage'),
   'ai-brief': () => void import('@/features/ai-brief/AiBriefPage'),
   agents: () => void import('@/features/agent/AgentCenterPage'),
   'agent-studio': () => void import('@/features/agent/AgentCenterPage'),
@@ -119,5 +132,7 @@ export const ROUTE_PREFETCH: Partial<Record<AppView, () => void>> = {
   presentation: () => void import('@/features/presentation/PresentationConfigPage'),
   'workspace-config': () => void import('@/features/workspace/WorkspaceConfigPage'),
   'portal-ops': () => void import('@/features/ops/PortalContentOpsPage'),
+  'model-ops': () => void import('@/features/ops/ModelCatalogOpsPage'),
   executions: () => void import('@/features/ops/ExecutionHistoryPage'),
+  approvals: () => void import('@/features/ops/ApprovalCenterPage'),
 };

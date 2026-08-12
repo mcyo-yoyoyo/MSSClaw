@@ -38,6 +38,14 @@ export const SKILL_OWNERSHIP: Record<
   'skill-retail-coach': { ownerDeptIds: ['retail'], ownerRegionId: 'apac' },
   'skill-complaint-sop': { ownerDeptIds: ['service'], ownerRegionId: 'eurasia' },
   'skill-wecom': { ownerDeptIds: ['service'], ownerRegionId: null },
+  'skill-l10n-localize': { ownerDeptIds: ['mkt'], ownerRegionId: 'mea' },
+  'skill-sales-copy': { ownerDeptIds: ['mkt'], ownerRegionId: null },
+  'skill-frontline-script': { ownerDeptIds: ['service'], ownerRegionId: null },
+  'skill-knowledge-digest': { ownerDeptIds: ['service'], ownerRegionId: null },
+  'skill-weekly-report': { ownerDeptIds: ['gtm'], ownerRegionId: 'apac' },
+  'skill-comp-brief': { ownerDeptIds: ['gtm'], ownerRegionId: 'apac' },
+  'skill-channel-brief': { ownerDeptIds: ['channel'], ownerRegionId: 'china' },
+  'skill-email-draft': { ownerDeptIds: ['mkt'], ownerRegionId: null },
 };
 
 /** 所属职能只保留一个（取首项） */

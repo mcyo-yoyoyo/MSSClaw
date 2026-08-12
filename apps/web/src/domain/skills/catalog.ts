@@ -3,12 +3,14 @@ import { OFFICE_SKILL_PACKS } from '@/domain/skills/packs/office';
 import { MANAGE_SKILL_PACKS } from '@/domain/skills/packs/manage';
 import { PROCESS_SKILL_PACKS } from '@/domain/skills/packs/process';
 import { EXPERIENCE_SKILL_PACKS } from '@/domain/skills/packs/experience';
+import { HUB_EXTRA_SKILL_PACKS } from '@/domain/skills/packs/hubExtra';
 
 const ALL_PACKS: RunnableSkillPack[] = [
   ...OFFICE_SKILL_PACKS,
   ...MANAGE_SKILL_PACKS,
   ...PROCESS_SKILL_PACKS,
   ...EXPERIENCE_SKILL_PACKS,
+  ...HUB_EXTRA_SKILL_PACKS,
 ];
 
 const PACK_BY_ID = new Map(ALL_PACKS.map((p) => [p.id, p]));

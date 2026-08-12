@@ -24,6 +24,7 @@ export const BUSINESS_SHELL_SLOT_IDS: readonly NavSlotId[] = [
   'market-internal',
   'market-projects',
   'ai-brief',
+  'ai-tasks',
   'market-tool',
   'task',
   'warroom',
@@ -57,9 +58,17 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   {
     id: 'home',
     label: '首页',
-    subtitle: '入口总览 · 最近使用（最近任务见标准/完整）',
+    subtitle: '入口总览 · 工具货架与场景入口',
     icon: 'fa-house',
     section: 'workspace',
+  },
+  {
+    id: 'ai-tasks',
+    label: 'AI任务',
+    subtitle: '按 Agent / Skill 归档的历史执行 · 完整产品顶栏入口',
+    icon: 'fa-robot',
+    section: 'workspace',
+    hiddenFromSidebar: true,
   },
   {
     id: 'market-external',
@@ -126,6 +135,13 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
     /** 项目详情进阶；配置入口在系统设置 · 门户运营 */
     hiddenFromSidebar: true,
   },
+  {
+    id: 'approvals',
+    label: '审批中心',
+    subtitle: '上架 · 更新 · 下架全流程单据',
+    icon: 'fa-clipboard-check',
+    section: 'platform',
+  },
   { id: 'skills', label: '配置Skill', subtitle: '上架 · 挂载 · 导出（运营）', icon: 'fa-cube', section: 'platform' },
   { id: 'agents', label: '配置Agent', subtitle: '上架 · 发布 · 编排（运营）', icon: 'fa-robot', section: 'platform' },
   {
@@ -161,6 +177,15 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
     label: '门户运营',
     subtitle: '场景方案包 · 工具 How to',
     icon: 'fa-newspaper',
+    section: 'system',
+    locked: true,
+    adminOnly: true,
+  },
+  {
+    id: 'model-ops',
+    label: '模型配置',
+    subtitle: '平台模型目录 · 组织默认 · API 凭证',
+    icon: 'fa-microchip',
     section: 'system',
     locked: true,
     adminOnly: true,
@@ -208,21 +233,21 @@ export const NAV_PRESET_LABELS: Record<NavPresetId, { title: string; description
   customer: {
     title: 'MVP演示',
     description:
-      '业务=三货架（无任务记录/最近任务）；能力开发=配置技能+轻量执行面；超管=+专家/工具/组织/展示/门户与执行',
+      '适合内网演示与学习：业务逛三货架、下载 Skill/Agent；不开放在线打样、任务记录与 AI 任务。能力开发只配「技能」。',
   },
   standard: {
     title: '标准能力',
     description:
-      '业务加回任务记录与货架打样执行；能力开发仍仅「配置技能」；超管另开知识·自动化等',
+      '在 MVP 上加「能跑」：业务可打样执行并查看任务记录；仍无协作空间与 AI 任务顶栏。超管加开知识库、自动化与租户配置。',
   },
   full: {
     title: '完整产品',
     description:
-      '业务可开协作空间；能力开发开放配置专家/工具/知识/记忆/工作流等完整能力配置（提示词仍默认关）',
+      '全量开放：业务可用协作空间与 AI 任务；能力开发开放专家/工具/知识/记忆/工作流等完整配置（提示词默认仍关）。',
   },
   custom: {
     title: '自定义',
-    description: '按角色勾选：业务/访客只配工作平台；运营/超管配能力配置与系统设置',
+    description: '不套用三档模板，按角色逐项勾选侧栏与入口；适合特殊试点或灰度。',
   },
 };
 
@@ -277,6 +302,7 @@ function mvpForRole(role: PlatformRole): Record<NavSlotId, boolean> {
         tools: false,
         kb: false,
         executions: true,
+        approvals: true,
       }),
       role,
     );
@@ -295,6 +321,7 @@ function mvpForRole(role: PlatformRole): Record<NavSlotId, boolean> {
         skills: true,
         tools: true,
         executions: true,
+        approvals: true,
       }),
       role,
     );
@@ -351,8 +378,11 @@ export function clampBusinessShellSlots(matrix: RoleNavMatrix): RoleNavMatrix {
 /** MVP/标准方案：业务侧额外关闭协作空间 */
 export function clampBusinessMvpSlots(matrix: RoleNavMatrix): RoleNavMatrix {
   const next = clampBusinessShellSlots(matrix);
-  next.business_user = { ...next.business_user, warroom: false };
-  next.viewer = { ...next.viewer, warroom: false, task: false };
+  next.business_user = { ...next.business_user, warroom: false, 'ai-tasks': false };
+  next.viewer = { ...next.viewer, warroom: false, task: false, 'ai-tasks': false };
+  // MVP / 标准：全角色关闭 AI任务顶栏（仅完整产品开放）
+  next.capability_ops = { ...next.capability_ops, 'ai-tasks': false };
+  next.super_admin = { ...next.super_admin, 'ai-tasks': false };
   return next;
 }
 
@@ -384,13 +414,14 @@ export function isSlotConfiguredOn(
 }
 
 function fullForRole(role: PlatformRole): Record<NavSlotId, boolean> {
-  // 业务壳完整版：工作平台可开协作空间，绝不塞运营配置项
+  // 业务壳完整版：工作平台可开协作空间 + AI任务顶栏；绝不塞运营配置项
   if (role === 'business_user') {
     return withAdminLocks(
       marketSlotsOn({
         ...allSlots(false),
         home: true,
         task: true,
+        'ai-tasks': true,
         warroom: true,
         messages: true,
         'ai-map': true,
@@ -414,6 +445,7 @@ function fullForRole(role: PlatformRole): Record<NavSlotId, boolean> {
   on['agent-studio'] = false;
   // 提示词中心暂不开放侧栏（代码与路由保留）
   on.prompts = false;
+  on['ai-tasks'] = true;
   return withAdminLocks(on, role);
 }
 
@@ -485,6 +517,8 @@ export const NAV_PRESET_ENABLED: Record<Exclude<NavPresetId, 'custom'>, Record<A
     'ai-map': true,
     skills: true,
     'portal-ops': true,
+    'model-ops': true,
+    approvals: true,
     admin: true,
   }),
   standard: navPresetFlags({
@@ -498,6 +532,8 @@ export const NAV_PRESET_ENABLED: Record<Exclude<NavPresetId, 'custom'>, Record<A
     'ai-map': true,
     skills: true,
     'portal-ops': true,
+    'model-ops': true,
+    approvals: true,
     admin: true,
   }),
 };
@@ -508,6 +544,7 @@ export const NAV_FALLBACK_ORDER: AppView[] = [
   'market-internal',
   'market-projects',
   'ai-brief',
+  'ai-tasks',
   'market-tool',
   'task',
   'messages',
@@ -524,6 +561,8 @@ export const NAV_FALLBACK_ORDER: AppView[] = [
   PRESENTATION_CONFIG_VIEW,
   WORKSPACE_CONFIG_VIEW,
   'portal-ops',
+  'model-ops',
+  'approvals',
   'executions',
 ];
 

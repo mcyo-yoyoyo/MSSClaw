@@ -99,8 +99,54 @@ export function countScenarioEnvSlots(env?: ScenarioEnv | null): {
   };
 }
 
-/** 九大发现场景的环境清单种子（对齐真实连接器 / Skill 口径） */
+/** Agent Hub 发现场景的环境清单种子（对齐真实连接器 / Skill 口径） */
 export const SCENARIO_ENV_BY_ID: Record<DiscoverScenarioId, ScenarioEnv> = {
+  'marketing-intel': {
+    hardware:
+      'GTM/渠道分析岗 16GB+、宽屏；开通 ISRP 取数与代表处权限；便于对照问数结果与周报。',
+    codingTools: [
+      {
+        name: 'Cursor',
+        note: '维护营销 Agent 编排与 /数据分析 /so报表 /经营周报 Prompt',
+        url: 'https://cursor.com',
+      },
+      {
+        name: 'Excel / Sheets',
+        note: '验收导出明细、与 ISRP 结果对照（非 IDE）',
+      },
+    ],
+    cloudModels: [
+      {
+        name: '数据分析大模型',
+        kind: 'cloud',
+        note: '问数归因与报告叙述（agent-marketing · skill-data-analysis / skill-so-report）',
+      },
+    ],
+  },
+  'knowledge-qa': {
+    hardware: '服务/质量/零售知识岗办公本；稳定内网访问知识分区与 LMS；耳机可选（陪练）。',
+    codingTools: [
+      {
+        name: 'Cursor',
+        note: '维护知识 Agent 编排与 /检索 /客诉 /陪练 验收用例',
+        url: 'https://cursor.com',
+      },
+    ],
+    cloudModels: [
+      {
+        name: 'RAG 问答模型 + Milvus',
+        kind: 'cloud',
+        note: '带引用问答与话术（agent-knowledge · skill-rag / skill-complaint-sop）',
+      },
+    ],
+    localModels: [
+      {
+        name: '可选：部门私有 Embedding',
+        kind: 'local',
+        note: '敏感 SOP 可私有化向量化',
+      },
+    ],
+  },
   'price-offer-monitor': {
     hardware:
       'GTM/渠道笔记本（建议 16GB+）；双屏便于对照 Amazon 等商城后台与价差告警；需能访问区域站点与 Market Intel 采集出口。',
@@ -160,30 +206,6 @@ export const SCENARIO_ENV_BY_ID: Record<DiscoverScenarioId, ScenarioEnv> = {
       },
     ],
   },
-  'l10n-translation': {
-    hardware: 'MKT/本地化岗双屏：左源语物料、右目标语对照；访问术语表与禁译表共享盘。',
-    codingTools: [
-      {
-        name: 'Cursor',
-        note: '迭代术语抽检规则；复用 /评论翻译 做物料小语种初译',
-        url: 'https://cursor.com',
-      },
-    ],
-    cloudModels: [
-      {
-        name: '企业翻译大模型',
-        kind: 'cloud',
-        note: '阿语/法语等初译与回译抽检（agent-review-translate）',
-      },
-    ],
-    localModels: [
-      {
-        name: '可选：本地术语向量检索',
-        kind: 'local',
-        note: '品牌词/禁译词不出域匹配',
-      },
-    ],
-  },
   'retail-training': {
     hardware:
       '门店平板或培训室笔记本；耳机/麦克风用于陪练录音反馈；可访问 LMS 课件包。',
@@ -204,52 +226,6 @@ export const SCENARIO_ENV_BY_ID: Record<DiscoverScenarioId, ScenarioEnv> = {
         name: '语音合成（可选）',
         kind: 'cloud',
         note: '示范话术播报；非打样必选项',
-      },
-    ],
-  },
-  'customer-service': {
-    hardware: 'CSC 一线工位电脑 + 耳机；稳定内网访问客诉 SOP 知识分区与工单系统。',
-    codingTools: [
-      {
-        name: 'Cursor',
-        note: '维护 SOP 切片标签与 /客诉、/检索 Prompt',
-        url: 'https://cursor.com',
-      },
-    ],
-    cloudModels: [
-      {
-        name: 'RAG 问答模型 + Milvus',
-        kind: 'cloud',
-        note: '带引用话术（skill-rag / skill-complaint-sop）',
-      },
-    ],
-    localModels: [
-      {
-        name: '可选：部门私有 Embedding',
-        kind: 'local',
-        note: '敏感客诉知识可私有化向量化',
-      },
-    ],
-  },
-  'ops-analytics': {
-    hardware:
-      'GTM/渠道分析岗 16GB+、宽屏；需开通 ISRP 取数账号与代表处权限。',
-    codingTools: [
-      {
-        name: 'Cursor',
-        note: '维护 /so报表 IoT 剔除规则与周清字段',
-        url: 'https://cursor.com',
-      },
-      {
-        name: 'Excel / Sheets',
-        note: '验收导出明细、与 ISRP 结果对照（非 IDE）',
-      },
-    ],
-    cloudModels: [
-      {
-        name: '数据分析大模型',
-        kind: 'cloud',
-        note: '归因叙述与异常解读（skill-so-report / skill-data-analysis）',
       },
     ],
   },
@@ -280,34 +256,6 @@ export const SCENARIO_ENV_BY_ID: Record<DiscoverScenarioId, ScenarioEnv> = {
         name: '可选：本地 OCR',
         kind: 'local',
         note: '票证不出域时的版面识别',
-      },
-    ],
-  },
-  'knowledge-deposit': {
-    hardware: '知识管理员办公本；对象存储/网盘用于指南原稿；可访问 Milvus 分区。',
-    codingTools: [
-      {
-        name: 'Cursor',
-        note: '维护切片规范、分区标签与 /检索 /rerank 验收用例',
-        url: 'https://cursor.com',
-      },
-      {
-        name: 'Markdown 编辑器',
-        note: '指南初稿与 CASE 级说明（可选 Obsidian）',
-      },
-    ],
-    cloudModels: [
-      {
-        name: 'Embedding + MilvusRetriever',
-        kind: 'cloud',
-        note: '入库后带引用问答（skill-rag / skill-file-archive）',
-      },
-    ],
-    localModels: [
-      {
-        name: '可选：本地 embedding',
-        kind: 'local',
-        note: '敏感指南私有化向量库',
       },
     ],
   },

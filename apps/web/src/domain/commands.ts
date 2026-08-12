@@ -68,6 +68,14 @@ const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
     run: () => h.goto('ai-brief'),
   },
   {
+    id: 'goto-ai-tasks',
+    label: 'AI任务',
+    icon: 'fa-robot',
+    keywords: 'AI任务 历史执行 agent skill 会话 codex workbuddy',
+    view: 'ai-tasks',
+    run: () => h.goto('ai-tasks'),
+  },
+  {
     id: 'goto-find-cases',
     label: '找案例（外部工具精选）',
     icon: 'fa-compass',
@@ -189,12 +197,28 @@ const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
     run: () => h.goto('portal-ops'),
   },
   {
+    id: 'goto-model-ops',
+    label: '打开模型配置',
+    icon: 'fa-microchip',
+    keywords: 'model llm 模型 配置 API 智谱 DeepSeek',
+    view: 'model-ops',
+    run: () => h.goto('model-ops'),
+  },
+  {
     id: 'goto-executions',
     label: '打开执行历史',
     icon: 'fa-clock-rotate-left',
     keywords: 'execution history 执行 历史 运行记录',
     view: 'executions',
     run: () => h.goto('executions'),
+  },
+  {
+    id: 'goto-approvals',
+    label: '打开审批中心',
+    icon: 'fa-clipboard-check',
+    keywords: '审批 上架 下架 approvals',
+    view: 'approvals',
+    run: () => h.goto('approvals'),
   },
   {
     id: 'goto-warroom',

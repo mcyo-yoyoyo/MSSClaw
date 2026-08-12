@@ -26,6 +26,8 @@ import { useTaskStore } from '@/stores/taskStore';
 import type { AppCommandHandlers } from '@/domain/commands';
 import { useAppRouting } from '@/hooks/useAppRouting';
 import { useTaskRouteSync, navigateToTaskChat } from '@/hooks/useTaskRouteSync';
+import { writeAppRouteToLocation } from '@/domain/appRoute';
+import { isWarRoom } from '@/domain/chat';
 import { usePlatformStoreLoader } from '@/hooks/usePlatformStoreLoader';
 import { loadSessions } from '@/domain/persistence/storage';
 import { AppViewRouter } from '@/features/AppViewRouter';
@@ -103,10 +105,17 @@ export function App() {
 
   const goToTaskWithTransit = useCallback((summary: string, chatId?: string) => {
     const nav = useNavPresentationStore.getState();
-    if (!nav.isViewEnabled('task')) {
+    const targetChat = chatId ? useConversationStore.getState().chats[chatId] : undefined;
+    const targetView =
+      targetChat && isWarRoom(targetChat)
+        ? 'task'
+        : nav.isViewEnabled('ai-tasks')
+          ? 'ai-tasks'
+          : 'task';
+    if (!nav.isViewEnabled(targetView)) {
       const fallback = nav.getFallbackView();
       useConversationStore.setState({
-        pushToast: roleNavDisabledToast(getNavMetaLabel('task'), getNavMetaLabel(fallback)),
+        pushToast: roleNavDisabledToast(getNavMetaLabel(targetView), getNavMetaLabel(fallback)),
       });
       return;
     }
@@ -117,7 +126,10 @@ export function App() {
     enterTaskChatFocusMode();
     transitTimerRef.current = setTimeout(() => {
       if (chatId) navigateToTaskChat(chatId);
-      else setAppView('task');
+      else {
+        writeAppRouteToLocation({ view: targetView });
+        setAppView(targetView);
+      }
       setTransit({ open: false, summary: '' });
       transitTimerRef.current = null;
     }, 720);
@@ -320,6 +332,8 @@ export function App() {
       agentId: boundAgent?.id,
       agentName: boundAgent?.name,
       agentIcon: boundAgent?.icon ?? skill.icon,
+      skillId: skill.id,
+      taskSource: 'skill',
       initialMessage,
       autoSend: Boolean(initialMessage.trim()),
       switchTo: true,
@@ -448,6 +462,13 @@ export function App() {
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [closeSettings]);
+
+  // 窄视口 / 高 DPI 缩放：首次进入时收起侧栏，给主内容更多横向空间
+  useEffect(() => {
+    if (window.innerWidth <= 1280) {
+      useAppViewStore.setState({ sidebarCollapsed: true });
+    }
+  }, []);
 
   if (!sessionBootstrapped) {
     return (

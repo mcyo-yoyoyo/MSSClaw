@@ -1,4 +1,4 @@
-import { getActiveLlmConfig, isLlmConfigured } from '@/api/llmClient';
+import { getActiveLlmRuntime, isLlmConfigured } from '@/api/llmClient';
 import { normalizeLlmModelId } from '@/domain/llmConfig';
 import type { AnalysisBoardData, ReportInsight, ReportMetric } from '@/domain/htmlReportAnalysis';
 
@@ -18,15 +18,15 @@ async function chatCompletion(
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[],
   options?: { maxTokens?: number; temperature?: number; signal?: AbortSignal },
 ): Promise<string> {
-  const config = getActiveLlmConfig();
-  const res = await fetch(`${normalizeBaseUrl(config.baseUrl)}/chat/completions`, {
+  const runtime = getActiveLlmRuntime();
+  const res = await fetch(`${normalizeBaseUrl(runtime.baseUrl)}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.apiKey.trim()}`,
+      Authorization: `Bearer ${runtime.apiKey.trim()}`,
     },
     body: JSON.stringify({
-      model: normalizeLlmModelId(config.model),
+      model: normalizeLlmModelId(runtime.model),
       messages,
       max_tokens: options?.maxTokens ?? 3200,
       temperature: options?.temperature ?? 0.4,

@@ -38,6 +38,8 @@ interface NavigationIntentState {
   pendingAiNewsFocusId: string | null;
   /** 用 · 做任务 / 学 · 找案例：预选业务场景筛选 */
   pendingBusinessScenario: BusinessScenarioId | 'all' | null;
+  /** 打开 AI 任务并进入页内「新建对话」壳 */
+  pendingAiTaskCompose: boolean;
   returnTarget: NavReturnTarget | null;
   focusTool: (id: string, opts?: { tab?: MarketToolDetailTab }) => void;
   focusKbDoc: (id: string) => void;
@@ -49,6 +51,7 @@ interface NavigationIntentState {
   focusMessageFilter: (filter: MessageFilterIntent) => void;
   focusAiNewsOverview: (focusId?: string) => void;
   focusBusinessScenario: (id: BusinessScenarioId | 'all') => void;
+  requestAiTaskCompose: () => void;
   setReturnTarget: (target: NavReturnTarget | null) => void;
   peekToolId: () => string | null;
   peekToolDetailTab: () => MarketToolDetailTab | null;
@@ -74,6 +77,7 @@ interface NavigationIntentState {
   consumeMessageFilter: () => MessageFilterIntent | null;
   consumeAiNewsOverview: () => { open: boolean; focusId: string | null };
   consumeBusinessScenario: () => BusinessScenarioId | 'all' | null;
+  consumeAiTaskCompose: () => boolean;
   consumeReturnTarget: () => NavReturnTarget | null;
   clearAll: () => void;
   clearTool: () => void;
@@ -99,6 +103,7 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
   pendingAiNewsOverview: false,
   pendingAiNewsFocusId: null,
   pendingBusinessScenario: null,
+  pendingAiTaskCompose: false,
   returnTarget: null,
 
   focusTool: (id, opts) =>
@@ -119,6 +124,7 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
       pendingAiNewsFocusId: focusId ?? null,
     }),
   focusBusinessScenario: (id) => set({ pendingBusinessScenario: id }),
+  requestAiTaskCompose: () => set({ pendingAiTaskCompose: true }),
   setReturnTarget: (target) => set({ returnTarget: target }),
 
   peekToolId: () => get().pendingToolId,
@@ -193,6 +199,11 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
     if (id) set({ pendingBusinessScenario: null });
     return id;
   },
+  consumeAiTaskCompose: () => {
+    const pending = get().pendingAiTaskCompose;
+    if (pending) set({ pendingAiTaskCompose: false });
+    return pending;
+  },
   consumeReturnTarget: () => {
     const t = get().returnTarget;
     if (t) set({ returnTarget: null });
@@ -213,6 +224,7 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
       pendingAiNewsOverview: false,
       pendingAiNewsFocusId: null,
       pendingBusinessScenario: null,
+      pendingAiTaskCompose: false,
       returnTarget: null,
     }),
   clearTool: () => set({ pendingToolId: null, pendingToolDetailTab: null }),

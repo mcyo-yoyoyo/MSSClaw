@@ -29,6 +29,14 @@ export const SKILL_NAME_ZH_BY_ID: Record<string, string> = {
   'skill-retail-coach': '零售 AI 陪练',
   'skill-complaint-sop': '客诉 SOP 匹配',
   'skill-wecom': '企微消息推送',
+  'skill-l10n-localize': '小语种本地化翻译',
+  'skill-sales-copy': '卖点文案写作',
+  'skill-frontline-script': '一线统一话术',
+  'skill-knowledge-digest': '组织知识沉淀',
+  'skill-weekly-report': '经营分析周报',
+  'skill-comp-brief': '竞品简报',
+  'skill-channel-brief': '渠道作战简报',
+  'skill-email-draft': '商务邮件草稿',
 };
 
 function hasCjk(text?: string | null): boolean {

@@ -28,20 +28,44 @@ export function nestLlmConfigFromEnv(): NestLlmRuntimeConfig | null {
   };
 }
 
-/** 工作区平台文档 llm-config（与前端共享配置对齐） */
+function pickModelCreds(
+  payload: Record<string, unknown>,
+  modelId: string,
+): { baseUrl: string; apiKey: string } {
+  const legacyKey = typeof payload.apiKey === 'string' ? payload.apiKey.trim() : '';
+  const legacyBase = normalizeBaseUrl(typeof payload.baseUrl === 'string' ? payload.baseUrl : '');
+  const lists = [payload.platformModels, payload.customModels];
+  for (const list of lists) {
+    if (!Array.isArray(list)) continue;
+    for (const item of list) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      const m = item as Record<string, unknown>;
+      const id = typeof m.id === 'string' ? m.id.trim() : '';
+      if (id !== modelId) continue;
+      return {
+        baseUrl: normalizeBaseUrl(typeof m.baseUrl === 'string' ? m.baseUrl : '') || legacyBase,
+        apiKey:
+          (typeof m.apiKey === 'string' && m.apiKey.trim()) || legacyKey,
+      };
+    }
+  }
+  return { baseUrl: legacyBase, apiKey: legacyKey };
+}
+
+/** 工作区平台文档 llm-config（与前端对齐：按模型 Key，兼容旧顶层 apiKey） */
 export function nestLlmConfigFromDoc(payload: unknown): NestLlmRuntimeConfig | null {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
   const p = payload as Record<string, unknown>;
-  const baseUrl = normalizeBaseUrl(typeof p.baseUrl === 'string' ? p.baseUrl : '');
-  const apiKey = typeof p.apiKey === 'string' ? p.apiKey.trim() : '';
-  if (!baseUrl || !apiKey) return null;
   const model =
     (typeof p.model === 'string' && p.model.trim()) ||
+    (typeof p.defaultModelId === 'string' && p.defaultModelId.trim()) ||
     (process.env.LLM_MODEL ?? 'gpt-4o-mini').trim() ||
     'gpt-4o-mini';
+  const creds = pickModelCreds(p, model);
+  if (!creds.baseUrl || !creds.apiKey) return null;
   return {
-    baseUrl,
-    apiKey,
+    baseUrl: creds.baseUrl,
+    apiKey: creds.apiKey,
     model,
     maxTokens: Number(process.env.LLM_MAX_TOKENS || 1200) || 1200,
     source: 'workspace-doc',

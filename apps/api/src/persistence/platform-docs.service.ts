@@ -26,6 +26,7 @@ export const PLATFORM_DOC_KINDS = [
   'audit-log',
   'ai-news-prefs',
   'asset-approvals',
+  'skill-reviews',
   'llm-config',
   'inbox',
   'warroom-webhook',
@@ -331,7 +332,56 @@ export class PlatformDocsService {
     } else if (kind === 'ai-news-prefs') {
       payload = { byUser: {} };
     } else if (kind === 'asset-approvals') {
-      payload = { items: [] };
+      payload = { items: [], watchedByUserId: {} };
+    } else if (kind === 'skill-reviews') {
+      payload = { bySkillId: {} };
+    } else if (kind === 'llm-config') {
+      // 与前端 DEFAULT_LLM_CONFIG / seedPlatformModels 对齐，权威在 DB
+      payload = {
+        model: 'glm-5.1',
+        baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+        apiKey: '',
+        defaultModelId: 'glm-5.1',
+        platformModels: [
+          {
+            id: 'glm-5.1',
+            label: 'GLM 5.1',
+            baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+            providerName: '智谱',
+            apiKey: '',
+            enabled: true,
+            source: 'preset',
+          },
+          {
+            id: 'deepseek-v4-flash',
+            label: 'DeepSeek V4 Flash',
+            baseUrl: 'https://api.deepseek.com/v1',
+            providerName: 'DeepSeek',
+            apiKey: '',
+            enabled: true,
+            source: 'preset',
+          },
+          {
+            id: 'deepseek-v4-pro',
+            label: 'DeepSeek V4 Pro',
+            baseUrl: 'https://api.deepseek.com/v1',
+            providerName: 'DeepSeek',
+            apiKey: '',
+            enabled: true,
+            source: 'preset',
+          },
+          {
+            id: 'qwen3.7-plus',
+            label: 'Qwen 3.7 Plus',
+            baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+            providerName: '通义',
+            apiKey: '',
+            enabled: true,
+            source: 'preset',
+          },
+        ],
+        customModels: [],
+      };
     } else if (kind === 'auth-sessions') {
       payload = { sessions: {} };
     } else if (kind === 'demo-content') {

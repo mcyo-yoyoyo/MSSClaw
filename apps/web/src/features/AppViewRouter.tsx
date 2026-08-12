@@ -17,7 +17,9 @@ import {
   LazyMemoryCenterPage,
   LazyPresentationConfigPage,
   LazyPortalContentOpsPage,
+  LazyModelCatalogOpsPage,
   LazyExecutionHistoryPage,
+  LazyApprovalCenterPage,
   LazyWorkspaceConfigPage,
   LazyPromptCenterPage,
   LazySettingsPage,
@@ -27,6 +29,7 @@ import {
   LazyToolCenterPage,
   LazyWorkflowStudioPage,
   LazyAiBriefPage,
+  LazyAiTasksPage,
 } from '@/features/lazyPages';
 
 export interface AppViewRouterHandlers {
@@ -50,6 +53,7 @@ const VIEW_LABELS: Partial<Record<AppView, string>> = {
   'market-external': '外部工具精选',
   'market-internal': '公司工具推荐',
   'market-projects': 'MSS工具集市',
+  'ai-tasks': 'AI任务',
   'ai-brief': 'AI快讯',
   task: '任务记录',
   messages: '我的消息',
@@ -68,7 +72,9 @@ const VIEW_LABELS: Partial<Record<AppView, string>> = {
   presentation: '展示配置',
   'workspace-config': '租户配置',
   'portal-ops': '门户运营',
+  'model-ops': '模型配置',
   executions: '执行历史',
+  approvals: '审批中心',
 };
 
 function LazyView({ label, children }: { label: string; children: ReactNode }) {
@@ -115,6 +121,12 @@ export function AppViewRouter({ appView, handlers }: AppViewRouterProps) {
             onInvokeSkill={handlers.onInvokeSkill}
             onStartExpertTeam={handlers.onStartExpertTeam}
           />
+        </LazyView>
+      );
+    case 'ai-tasks':
+      return (
+        <LazyView label={label}>
+          <LazyAiTasksPage />
         </LazyView>
       );
     case 'ai-brief':
@@ -243,10 +255,22 @@ export function AppViewRouter({ appView, handlers }: AppViewRouterProps) {
           <LazyPortalContentOpsPage />
         </LazyView>
       );
+    case 'model-ops':
+      return (
+        <LazyView label={label}>
+          <LazyModelCatalogOpsPage />
+        </LazyView>
+      );
     case 'executions':
       return (
         <LazyView label={label}>
           <LazyExecutionHistoryPage />
+        </LazyView>
+      );
+    case 'approvals':
+      return (
+        <LazyView label={label}>
+          <LazyApprovalCenterPage />
         </LazyView>
       );
     default:

@@ -1,113 +1,82 @@
 import { useEffect, useState } from 'react';
-
 import type { ChatMessage } from '@/domain/chat';
-
+import type { PrototypeAgentSeed } from '@/domain/prototype/types';
+import { AgentPortrait } from '@/components/brand/AgentPortrait';
 import { cn } from '@/lib/utils';
 
-
-
 interface PlanMessageCardProps {
-
   message: ChatMessage;
-
   iconBg?: string;
-
   iconClass?: string;
-
+  agent?: Pick<
+    PrototypeAgentSeed,
+    'id' | 'name' | 'icon' | 'avatarUrl' | 'avatarPresetId'
+  > | null;
   onApprove: (planId: string, steps: string[]) => void;
-
   onSavePlan: (planId: string, steps: string[]) => void;
-
 }
 
-
-
 export function PlanMessageCard({
-
   message,
-
   iconBg = 'bg-gradient-to-br from-[#18181b] to-[#18181b]',
-
   iconClass = 'fa-robot',
-
+  agent,
   onApprove,
-
   onSavePlan,
-
 }: PlanMessageCardProps) {
-
   const [steps, setSteps] = useState(message.steps ?? []);
-
   const [checked, setChecked] = useState<Set<number>>(() => new Set((message.steps ?? []).map((_, i) => i)));
-
   const [editing, setEditing] = useState(false);
-
   const editable = message.awaitingApproval ?? false;
-
   const planId = message.planId ?? '';
 
-
-
   useEffect(() => {
-
     setSteps(message.steps ?? []);
-
     setChecked(new Set((message.steps ?? []).map((_, i) => i)));
-
   }, [message.planId, message.steps]);
-
-
 
   const selectedSteps = steps.filter((_, i) => checked.has(i)).map((s) => s.trim()).filter(Boolean);
 
-
-
   const toggleChecked = (index: number) => {
-
     setChecked((prev) => {
-
       const next = new Set(prev);
-
       if (next.has(index)) next.delete(index);
-
       else next.add(index);
-
       return next;
-
     });
-
   };
-
-
 
   const handleSave = () => {
-
     if (!selectedSteps.length) return;
-
     onSavePlan(planId, selectedSteps);
-
     setEditing(false);
-
   };
 
-
-
   return (
-
     <div className="mb-3 flex max-w-[95%] gap-2.5">
-
-      <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs text-white shadow-sm', iconBg)}>
-
-        <i className={cn('fa-solid', iconClass)} />
-
-      </div>
-
+      {agent?.id ? (
+        <AgentPortrait
+          agentId={agent.id}
+          name={agent.name}
+          icon={agent.icon || iconClass}
+          avatarUrl={agent.avatarUrl}
+          avatarPresetId={agent.avatarPresetId}
+          size={32}
+          className="shrink-0 shadow-sm ring-1 ring-black/5"
+        />
+      ) : (
+        <div
+          className={cn(
+            'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs text-white shadow-sm',
+            iconBg,
+          )}
+        >
+          <i className={cn('fa-solid', iconClass)} />
+        </div>
+      )}
       <div className="flex min-w-0 flex-1 flex-col">
-
         <span className="mb-1 ml-0.5 text-[10px] font-semibold text-[#86868b]">
-
-          {message.name} · 执行计划
-
+          {message.name || agent?.name || 'Agent'} · 执行计划
         </span>
 
         <div className="plan-card rounded-2xl px-4 py-3">

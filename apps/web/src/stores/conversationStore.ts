@@ -972,6 +972,9 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     initialMessage,
     autoSend = true,
     switchTo = true,
+    taskSource,
+    businessScenarioId,
+    skillId,
   }) => {
     if (!canExecuteChat()) {
       set({ pushToast: READONLY_EXECUTE_HINT });
@@ -987,6 +990,8 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     const resolvedTitle = hasExplicitTitle
       ? clampTitle(titleTrim, 22)
       : deriveTaskTitle(sourceText, { agentName });
+    const ownerUserId = getCurrentUserId().trim() || undefined;
+    const ownerEmail = useSessionStore.getState().user?.email?.trim() || undefined;
     const newChat: ChatConfig = {
       id,
       title: resolvedTitle,
@@ -997,6 +1002,12 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       badge: agentName?.replace(/\s*Agent\s*/i, '') ?? '新任务',
       sessionGroup: 'agents',
       agentId: agentId ?? agent?.id,
+      skillId: skillId || undefined,
+      taskSource: taskSource || (skillId ? 'skill' : agentId ? 'expert' : 'other'),
+      businessScenarioId:
+        businessScenarioId && businessScenarioId !== 'all' ? businessScenarioId : undefined,
+      ownerUserId,
+      ownerEmail,
       actionType: inferActionType(agentId ?? agent?.id),
       status: agentName ? `已绑定 ${agentName}` : '待分配 Agent · 输入 @ 或 / 调用',
       createdAt: Date.now(),
@@ -1291,13 +1302,20 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   },
 
   findOrCreateAgentSession: (agentId, agentName, agentIcon) => {
-    const existing = Object.values(get().chats).find((c) => c.agentId === agentId);
+    const uid = getCurrentUserId().trim();
+    const existing = Object.values(get().chats).find(
+      (c) =>
+        c.agentId === agentId &&
+        !isWarRoom(c) &&
+        (!uid || c.ownerUserId === uid),
+    );
     if (existing) return existing.id;
     return get().createAgentTaskSession({
       title: agentName,
       agentName,
       agentIcon,
       agentId,
+      taskSource: 'expert',
       switchTo: false,
     });
   },

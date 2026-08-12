@@ -51,6 +51,13 @@ export interface PrototypeAgentSeed {
   chatId: string;
   icon: string;
   color: string;
+  /**
+   * 数字员工形象：系统预设头像 id（见 agentAvatars）
+   * 与 avatarUrl 二选一优先；有自定义上传时以 avatarUrl 为准
+   */
+  avatarPresetId?: string;
+  /** 自定义上传头像（data URL 或 https） */
+  avatarUrl?: string;
   systemPrompt?: string;
   /** 调用时优先挂载的主 Skill */
   primarySkillId?: string;
@@ -121,6 +128,47 @@ export interface PrototypeSkillSeed extends AssetOwnershipFields {
   instructions?: string;
   /** 挂载该 Skill 时的默认执行计划步骤 */
   planSteps?: string[];
+  /** 使用须知（前置条件 / 权限 / 注意 / 限制，运营录入） */
+  usageNotes?: string;
+  /** 落地案例（标题、输入、输出，运营录入） */
+  cases?: SkillCaseItem[];
+  /** 环境与适配信息 */
+  envInfo?: SkillEnvInfo;
+  /** 版本清单（完整产品；当前版本仍以 version 字段为准） */
+  versions?: SkillVersionRecord[];
+  /** 安全扫描结果（对接 IT 后写入；缺省视为未上线） */
+  securityScan?: {
+    status: 'not_connected' | 'pending' | 'passed' | 'failed';
+    reportNote?: string;
+    scannedAt?: string;
+  };
+  /** 审计时间戳（ISO 日期或 YYYY-MM-DD） */
+  createdAt?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+/** Skill 历史版本行 */
+export interface SkillVersionRecord {
+  version: string;
+  notes?: string;
+  publishedAt?: string;
+  status?: 'active' | 'retired';
+}
+
+/** Skill 案例条目 */
+export interface SkillCaseItem {
+  title: string;
+  input?: string;
+  output?: string;
+}
+
+/** Skill 环境适配 */
+export interface SkillEnvInfo {
+  dependencies?: string;
+  framework?: string;
+  runtimeVersion?: string;
+  hardwareNetwork?: string;
 }
 
 /**

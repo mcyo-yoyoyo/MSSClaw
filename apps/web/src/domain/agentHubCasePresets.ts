@@ -8,10 +8,11 @@ import { FEATURED_SCENARIOS } from '@/domain/portalMap';
 
 /** Agent Hub 默认精选三场景（无运营置顶时优先露出） */
 export const AGENT_HUB_FEATURED_SCENARIO_IDS = [
+  'marketing-intel',
+  'knowledge-qa',
   'price-offer-monitor',
-  'ecommerce-review',
-  'l10n-translation',
 ] as const;
+
 
 type PresetDeck = {
   scenarioId: string;
@@ -78,29 +79,54 @@ const DECKS: PresetDeck[] = [
     ],
   },
   {
-    scenarioId: 'l10n-translation',
+    scenarioId: 'marketing-intel',
     slides: [
       {
-        title: '小语种本地化翻译',
-        subtitle: '金案例材料 · 质检与术语一致性',
+        title: '营销 Agent',
+        subtitle: '金案例材料 · AI 问数 / 问报告 / 智能分析',
         bullets: [
-          '阿语 / 法语等卖点卡批量本地化',
-          '术语库约束 + 中英对照质检清单',
-          '输出可直接进设计的本地化文案包',
+          '自然语言问数：销量、SO、渠道与代表处指标',
+          '一键生成经营周报与异动归因摘要',
+          '编排多 Skill：数据分析 · SO 报表 · 周报输出',
         ],
-        metric: '本地化返工率明显下降 · 交付周期缩短',
+        metric: '问数响应分钟级 · 周报工时显著下降',
         footer: '案例材料预览 · MSS Agent Hub',
       },
       {
-        title: '质检清单示例',
-        subtitle: '上线前必过的 4 道关',
+        title: '专家编排路径',
+        subtitle: '门面专家 = 多 Skill 协同',
         bullets: [
-          '品牌词 / 规格数字不可翻译错误',
-          '禁译清单与敏感词自动高亮',
-          '对照原文抽检 10% + 人工终审签字',
-          '导出双语对照表归档至知识库',
+          '① 打开「营销 Agent」并描述分析意图',
+          '② 自动挂载数据分析 / SO 报表等 Skill',
+          '③ 输出洞察要点、图表建议与 NBA 行动',
         ],
-        footer: '配置技能页可查看完整正文与计划',
+        footer: '适合 GTM / 渠道 / 零售联合复盘',
+      },
+    ],
+  },
+  {
+    scenarioId: 'knowledge-qa',
+    slides: [
+      {
+        title: '知识 Agent',
+        subtitle: '金案例材料 · 知识问答与陪练',
+        bullets: [
+          '制度 / SOP / 案例向量检索问答',
+          '一线话术与客诉 SOP 口径对齐',
+          '可衔接培训陪练，沉淀可复用知识包',
+        ],
+        metric: '一线口径一致性提升 · 检索命中率更高',
+        footer: '案例材料预览 · MSS Agent Hub',
+      },
+      {
+        title: '专家编排路径',
+        subtitle: '问答 → 话术 → 陪练',
+        bullets: [
+          '① 用自然语言提问业务制度或 SOP',
+          '② 需要时切换客诉话术 / 陪练 Skill',
+          '③ 将优质问答沉淀回知识库',
+        ],
+        footer: '适合服务 / 质量 / 零售条线',
       },
     ],
   },
@@ -118,36 +144,36 @@ function buildSlideSvg(slide: PresetDeck['slides'][number], index: number, total
   const bullets = slide.bullets
     .map(
       (b, i) => `
-      <g transform="translate(64 ${292 + i * 48})">
+      <g transform="translate(80 ${300 + i * 56})">
         <circle cx="10" cy="10" r="5" fill="#0EA5E9"/>
-        <text x="28" y="15" font-family="Segoe UI, PingFang SC, Microsoft YaHei, sans-serif" font-size="20" fill="#3F3F46">${escapeXml(b)}</text>
+        <text x="28" y="15" font-family="Segoe UI, PingFang SC, Microsoft YaHei, sans-serif" font-size="22" fill="#3F3F46">${escapeXml(b)}</text>
       </g>`,
     )
     .join('');
   const metricBlock = slide.metric
     ? `
-    <rect x="64" y="520" width="832" height="56" rx="14" fill="#F0F9FF" stroke="#BAE6FD"/>
-    <text x="88" y="555" font-family="Segoe UI, PingFang SC, Microsoft YaHei, sans-serif" font-size="20" font-weight="600" fill="#0369A1">${escapeXml(slide.metric)}</text>`
+    <rect x="80" y="580" width="1120" height="64" rx="16" fill="#F0F9FF" stroke="#BAE6FD"/>
+    <text x="108" y="620" font-family="Segoe UI, PingFang SC, Microsoft YaHei, sans-serif" font-size="22" font-weight="600" fill="#0369A1">${escapeXml(slide.metric)}</text>`
     : '';
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640">
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#F8FAFC"/>
       <stop offset="100%" stop-color="#EFF6FF"/>
     </linearGradient>
   </defs>
-  <rect width="960" height="640" fill="url(#bg)"/>
-  <rect x="0" y="0" width="12" height="640" fill="#0284C7"/>
-  <text x="64" y="72" font-family="Segoe UI, PingFang SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" letter-spacing="2" fill="#0284C7">AGENT HUB · CASE PREVIEW</text>
-  <text x="64" y="128" font-family="Segoe UI, PingFang SC, Microsoft YaHei, sans-serif" font-size="36" font-weight="700" fill="#0F172A">${escapeXml(slide.title)}</text>
-  <text x="64" y="172" font-family="Segoe UI, PingFang SC, Microsoft YaHei, sans-serif" font-size="18" fill="#64748B">${escapeXml(slide.subtitle)}</text>
-  <line x1="64" y1="204" x2="320" y2="204" stroke="#7DD3FC" stroke-width="3"/>
+  <rect width="1280" height="720" fill="url(#bg)"/>
+  <rect x="0" y="0" width="14" height="720" fill="#0284C7"/>
+  <text x="80" y="78" font-family="Segoe UI, PingFang SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" letter-spacing="2" fill="#0284C7">AGENT HUB · CASE PREVIEW · 16:9</text>
+  <text x="80" y="148" font-family="Segoe UI, PingFang SC, Microsoft YaHei, sans-serif" font-size="42" font-weight="700" fill="#0F172A">${escapeXml(slide.title)}</text>
+  <text x="80" y="198" font-family="Segoe UI, PingFang SC, Microsoft YaHei, sans-serif" font-size="20" fill="#64748B">${escapeXml(slide.subtitle)}</text>
+  <line x1="80" y1="232" x2="360" y2="232" stroke="#7DD3FC" stroke-width="3"/>
   ${bullets}
   ${metricBlock}
-  <text x="64" y="610" font-family="Segoe UI, PingFang SC, Microsoft YaHei, sans-serif" font-size="14" fill="#94A3B8">${escapeXml(slide.footer || 'MSS 工具集市')}</text>
-  <text x="880" y="610" text-anchor="end" font-family="Segoe UI, PingFang SC, Microsoft YaHei, sans-serif" font-size="14" fill="#94A3B8">${index + 1} / ${total}</text>
+  <text x="80" y="688" font-family="Segoe UI, PingFang SC, Microsoft YaHei, sans-serif" font-size="15" fill="#94A3B8">${escapeXml(slide.footer || 'MSS 工具集市')}</text>
+  <text x="1200" y="688" text-anchor="end" font-family="Segoe UI, PingFang SC, Microsoft YaHei, sans-serif" font-size="15" fill="#94A3B8">${index + 1} / ${total}</text>
 </svg>`;
 }
 

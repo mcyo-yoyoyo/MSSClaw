@@ -4,6 +4,7 @@ export const APP_VIEWS = [
   'market-internal',
   'market-projects',
   'ai-brief',
+  'ai-tasks',
   'market-tool',
   'ai-map',
   'task',
@@ -22,7 +23,9 @@ export const APP_VIEWS = [
   'presentation',
   'workspace-config',
   'portal-ops',
+  'model-ops',
   'executions',
+  'approvals',
 ] as const;
 export type AppView = (typeof APP_VIEWS)[number];
 
@@ -49,16 +52,24 @@ export const APP_VIEW_NAV: AppViewNavItem[] = [
   {
     id: 'home',
     label: '首页',
-    subtitle: '入口总览 · 最近使用（最近任务见标准/完整）',
+    subtitle: '入口总览 · 工具货架与场景入口',
     icon: 'fa-house',
     section: 'workspace',
   },
   { id: 'task', label: '任务记录', subtitle: '进度 · 结果 · 历史会话（标准/完整）', icon: 'fa-list-check', section: 'workspace' },
   {
-    id: 'ai-map',
-    label: '场景案例',
-    subtitle: '样板间进阶 · 内容由门户运营上架',
-    icon: 'fa-map',
+    id: 'ai-tasks',
+    label: 'AI任务',
+    subtitle: '按 Agent 归档的历史执行会话',
+    icon: 'fa-robot',
+    section: 'workspace',
+  },
+  { id: 'ai-map', label: '场景案例', subtitle: '样板间进阶 · 内容由门户运营上架', icon: 'fa-map', section: 'platform' },
+  {
+    id: 'approvals',
+    label: '审批中心',
+    subtitle: '上架 · 更新 · 下架单据',
+    icon: 'fa-clipboard-check',
     section: 'platform',
   },
   { id: 'skills', label: '配置Skill', subtitle: '上架 · 挂载 · 导出（运营）', icon: 'fa-cube', section: 'platform' },
@@ -77,6 +88,8 @@ export const APP_VIEW_NAV: AppViewNavItem[] = [
  */
 export const ADMIN_MENU_VIEWS = [
   'portal-ops',
+  'model-ops',
+  'approvals',
   'executions',
   'skills',
   'agents',

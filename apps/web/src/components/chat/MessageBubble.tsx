@@ -1,10 +1,18 @@
 import type { ChatMessage } from '@/domain/chat';
+import type { PrototypeAgentSeed } from '@/domain/prototype/types';
+import { AgentPortrait } from '@/components/brand/AgentPortrait';
+import { cn } from '@/lib/utils';
 
 interface MessageBubbleProps {
   message: ChatMessage;
   accentColor?: string;
   iconClass?: string;
   iconBg?: string;
+  /** 绑定 Agent 时展示数字员工头像 */
+  agent?: Pick<
+    PrototypeAgentSeed,
+    'id' | 'name' | 'icon' | 'avatarUrl' | 'avatarPresetId'
+  > | null;
 }
 
 export function MessageBubble({
@@ -12,6 +20,7 @@ export function MessageBubble({
   accentColor = 'claw',
   iconClass = 'fa-robot',
   iconBg,
+  agent,
 }: MessageBubbleProps) {
   if (message.role === 'system') {
     return (
@@ -39,7 +48,12 @@ export function MessageBubble({
   if (message.role === 'typing') {
     return (
       <div className="mb-4 flex max-w-[85%] gap-2">
-        <Avatar color={accentColor} iconClass={iconClass} iconBg={iconBg} />
+        <AgentMsgAvatar
+          agent={agent}
+          accentColor={accentColor}
+          iconClass={iconClass}
+          iconBg={iconBg}
+        />
         <div className="bubble-agent flex items-center justify-center px-3.5 py-3">
           <div className="typing-indicator">
             <span />
@@ -55,7 +69,7 @@ export function MessageBubble({
     return (
       <div className="mb-4 flex max-w-[85%] gap-2">
         <div
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white shadow-sm ${message.avatar ?? 'bg-[#fafafa]0'}`}
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white shadow-sm ${message.avatar ?? 'bg-zinc-400'}`}
         >
           {message.name?.charAt(0)}
         </div>
@@ -71,54 +85,77 @@ export function MessageBubble({
 
   return (
     <div className="mb-4 flex max-w-[90%] gap-2">
-      <Avatar color={accentColor} iconClass={iconClass} />
+      <AgentMsgAvatar
+        agent={agent}
+        accentColor={accentColor}
+        iconClass={iconClass}
+        iconBg={iconBg}
+      />
       <div className="flex flex-col">
-          <span className="mb-1 ml-0.5 text-[10px] font-semibold text-[#86868b]">
-            {message.name}{' '}
-            <span className="rounded border border-zinc-200 bg-claw-50 px-1.5 py-0.5 text-[8px] font-bold text-zinc-700">
-              Agent
-            </span>
+        <span className="mb-1 ml-0.5 text-[10px] font-semibold text-[#86868b]">
+          {message.name || agent?.name || 'Agent'}{' '}
+          <span className="rounded border border-zinc-200 bg-claw-50 px-1.5 py-0.5 text-[8px] font-bold text-zinc-700">
+            Agent
           </span>
-          <div
-            className="bubble-agent rounded-2xl px-4 py-2.5 text-[13px] leading-relaxed text-[#424245]"
-            dangerouslySetInnerHTML={{
-              __html:
-                (message.text ?? '')
-                  .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                  .replace(/\*(.*?)\*/g, '<em>$1</em>') +
-                (message.streaming
-                  ? '<span class="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse rounded-sm bg-claw-500 align-middle"></span>'
-                  : ''),
-            }}
-          />
+        </span>
+        <div
+          className="bubble-agent rounded-2xl px-4 py-2.5 text-[13px] leading-relaxed text-[#424245]"
+          dangerouslySetInnerHTML={{
+            __html:
+              (message.text ?? '')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>') +
+              (message.streaming
+                ? '<span class="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse rounded-sm bg-claw-500 align-middle"></span>'
+                : ''),
+          }}
+        />
       </div>
     </div>
   );
 }
 
-function Avatar({
-  color,
+function AgentMsgAvatar({
+  agent,
+  accentColor,
   iconClass,
   iconBg,
 }: {
-  color: string;
+  agent?: MessageBubbleProps['agent'];
+  accentColor: string;
   iconClass: string;
   iconBg?: string;
 }) {
+  if (agent?.id) {
+    return (
+      <AgentPortrait
+        agentId={agent.id}
+        name={agent.name}
+        icon={agent.icon || iconClass}
+        avatarUrl={agent.avatarUrl}
+        avatarPresetId={agent.avatarPresetId}
+        size={32}
+        className="shrink-0 shadow-sm ring-1 ring-black/5"
+      />
+    );
+  }
   if (iconBg) {
     return (
-      <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs text-white shadow-sm', iconBg)}>
+      <div
+        className={cn(
+          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs text-white shadow-sm',
+          iconBg,
+        )}
+      >
         <i className={cn('fa-solid', iconClass)} />
       </div>
     );
   }
   return (
-    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-${color}-600 text-xs text-white shadow-sm`}>
+    <div
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-${accentColor}-600 text-xs text-white shadow-sm`}
+    >
       <i className={`fa-solid ${iconClass}`} />
     </div>
   );
-}
-
-function cn(...parts: (string | false | undefined)[]) {
-  return parts.filter(Boolean).join(' ');
 }

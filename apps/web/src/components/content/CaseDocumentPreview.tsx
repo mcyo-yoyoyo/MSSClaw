@@ -155,15 +155,21 @@ function PreviewBody({
   }
 
   if (file.kind === 'pdf') {
-    return <iframe title={file.name} src={src} className={frame} />;
+    return (
+      <iframe
+        title={file.name}
+        src={src}
+        className={cn(frame, immersive && 'h-full min-h-0 border-0 bg-white')}
+      />
+    );
   }
 
   if (file.kind === 'image') {
     return (
       <div
         className={cn(
-          'flex items-center justify-center overflow-auto rounded-xl border border-zinc-200 bg-[#0f0f10]',
-          immersive ? 'min-h-0 flex-1' : 'max-h-[42vh] p-3',
+          'flex items-center justify-center overflow-hidden rounded-xl border border-zinc-200/40 bg-[#0f0f10]',
+          immersive ? 'h-full min-h-0 flex-1' : 'max-h-[42vh] p-3',
         )}
       >
         <img
@@ -171,7 +177,7 @@ function PreviewBody({
           alt={file.name}
           className={cn(
             'object-contain',
-            immersive ? 'max-h-full max-w-full' : 'mx-auto max-h-[38vh]',
+            immersive ? 'h-full w-full' : 'mx-auto max-h-[38vh]',
           )}
         />
       </div>
@@ -183,10 +189,10 @@ function PreviewBody({
       <div
         className={cn(
           'flex items-center justify-center rounded-xl border border-zinc-200 bg-black',
-          immersive ? 'min-h-0 flex-1' : 'h-[42vh] min-h-[280px]',
+          immersive ? 'h-full min-h-0 flex-1' : 'h-[42vh] min-h-[280px]',
         )}
       >
-        <video controls playsInline src={src} className="max-h-full max-w-full">
+        <video controls playsInline src={src} className="h-full max-h-full w-full object-contain">
           <track kind="captions" />
         </video>
       </div>

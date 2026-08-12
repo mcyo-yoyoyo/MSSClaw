@@ -7,7 +7,6 @@ import type {
 } from '@/domain/prototype/types';
 import { canViewAsset } from '@/domain/assetVisibility';
 import { canExecuteChat } from '@/domain/permissions';
-import { allowsTaskExecutionSurfaces } from '@/domain/marketRunCapability';
 import type { BusinessScenarioId } from '@/domain/businessScenarios';
 import { BusinessScenarioFilterBar } from '@/components/home/BusinessScenarioFilterBar';
 import {
@@ -68,16 +67,10 @@ import {
   usePlazaToolGuideStore,
 } from '@/stores/plazaToolGuideStore';
 import { usePortalContentStore } from '@/stores/portalContentStore';
-import { isWarRoom } from '@/domain/chat';
-import { selectSidebarTasks } from '@/domain/taskUiStatus';
-import { useConversationStore } from '@/stores/conversationStore';
-import { useAppViewStore } from '@/stores/appViewStore';
 import { useMarketFilterStore } from '@/stores/marketFilterStore';
 import { useRecentMarketStore } from '@/stores/recentMarketStore';
 import { useMarketFeaturedStore } from '@/stores/marketFeaturedStore';
 import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
-import { AssetAccentMark } from '@/components/brand/AssetAccentMark';
-import { ToolLogo } from '@/components/brand/ToolLogo';
 import { greetingForNow } from '@/domain/timeGreeting';
 
 const DEFAULT_RANK_BY_KIND: Record<MarketShelfKind, RankMode> = {
@@ -116,22 +109,15 @@ export function HomePage({
   const bumpToolInvokes = useMarketplaceStore((s) => s.bumpToolInvokes);
   const user = useSessionStore((s) => s.user);
   const executeAllowed = canExecuteChat(user?.platformRole);
-  const navPreset = useNavPresentationStore((s) => s.preset);
-  const showRecentTasks = executeAllowed && allowsTaskExecutionSurfaces(navPreset);
   const roleEnabled = useNavPresentationStore((s) => s.roleEnabled);
   const engagementOf = useContentEngagementStore((s) => s.get);
   const engagementById = useContentEngagementStore((s) => s.byId);
   const bumpUse = useContentEngagementStore((s) => s.bumpUse);
-  const chats = useConversationStore((s) => s.chats);
-  const currentChatId = useConversationStore((s) => s.currentChatId);
-  const switchChat = useConversationStore((s) => s.switchChat);
-  const setAppView = useAppViewStore((s) => s.setAppView);
   const tools = useMarketplaceStore((s) => s.tools);
   const portalContent = usePortalContentStore((s) => s.items);
   const marketSearch = useMarketFilterStore((s) => s.search);
   const setMarketSearch = useMarketFilterStore((s) => s.setSearch);
   const setMarketBusinessFilter = useMarketFilterStore((s) => s.setBusinessFilter);
-  const recentItems = useRecentMarketStore((s) => s.items);
   const hydrateRecent = useRecentMarketStore((s) => s.hydrate);
   const pushRecent = useRecentMarketStore((s) => s.push);
   const featuredPins = useMarketFeaturedStore((s) => s.pins);
@@ -248,11 +234,6 @@ export function HomePage({
     () => `${orgSelection.dept.join(',')}|${orgSelection.region.join(',')}`,
     [orgSelection],
   );
-
-  const recentTasks = useMemo(() => {
-    const list = Object.values(chats).filter((c) => !isWarRoom(c));
-    return selectSidebarTasks(list, currentChatId, 3).visible;
-  }, [chats, currentChatId]);
 
   const howtoToolIds = useMemo(() => {
     const ids = new Set<string>();
@@ -422,14 +403,6 @@ export function HomePage({
       return;
     }
     showToast(`「${card.title}」暂无 How to，可在门户运营维护`);
-  };
-
-  const openMarketItem = (kind: MarketShelfKind, id: string) => {
-    if (kind === 'projects') {
-      openMarketShelf('projects');
-      return;
-    }
-    openMarketToolDetail(id, kind);
   };
 
   const selectSkill = (skill: PrototypeSkillSeed) => {
@@ -684,77 +657,6 @@ export function HomePage({
               onHowTo={openPortalHowTo}
               searchActive={Boolean(marketSearch.trim())}
             />
-
-            {recentItems.length > 0 ? (
-              <section className="border-t border-zinc-100 pt-4">
-                <h2 className="mb-2.5 text-[13px] font-semibold text-zinc-800">最近使用</h2>
-                <div className="flex flex-wrap gap-3">
-                  {recentItems.slice(0, 8).map((item) => (
-                    <button
-                      key={`${item.kind}-${item.id}-${item.at}`}
-                      type="button"
-                      title={item.title}
-                      onClick={() => openMarketItem(item.kind, item.id)}
-                      className="flex w-[76px] flex-col items-center gap-1.5 rounded-2xl border border-transparent p-2 transition hover:border-zinc-200 hover:bg-white hover:shadow-sm"
-                    >
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-50 ring-1 ring-zinc-100">
-                        {item.kind === 'external' || item.kind === 'internal' ? (
-                          <ToolLogo
-                            name={item.title}
-                            logoUrl={item.logoUrl}
-                            icon={item.icon}
-                            size={36}
-                            className="rounded-xl"
-                          />
-                        ) : (
-                          <AssetAccentMark id={item.id} className="mt-0 h-2.5 w-2.5" />
-                        )}
-                      </div>
-                      <span className="w-full truncate text-center text-[10px] text-zinc-600">
-                        {item.title}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            ) : null}
-
-            {showRecentTasks && recentTasks.length > 0 ? (
-              <section className="border-t border-zinc-100 pt-4">
-                <div className="mb-2.5 flex items-center justify-between">
-                  <h2 className="text-[13px] font-semibold text-zinc-800">最近任务</h2>
-                  <button
-                    type="button"
-                    onClick={() => setAppView('task')}
-                    className="text-[12px] font-medium text-zinc-500 transition hover:text-zinc-800"
-                  >
-                    查看全部
-                  </button>
-                </div>
-                <ul className="space-y-2">
-                  {recentTasks.map((c) => (
-                    <li key={c.id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          switchChat(c.id);
-                          setAppView('task');
-                        }}
-                        className="flex w-full items-center gap-2.5 rounded-2xl border border-zinc-200/80 bg-white px-3.5 py-3 text-left shadow-sm transition hover:border-zinc-300 hover:shadow-[0_8px_24px_-18px_rgba(24,24,27,0.35)]"
-                      >
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-zinc-50 text-zinc-400 ring-1 ring-zinc-100">
-                          <i className="fa-solid fa-list-check text-[11px]" />
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-zinc-800">
-                          {c.title || c.id}
-                        </span>
-                        <i className="fa-solid fa-chevron-right text-[9px] text-zinc-300" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
           </div>
         )}
       </div>

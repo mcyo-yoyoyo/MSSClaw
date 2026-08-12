@@ -8,73 +8,92 @@ import type { PrototypeSkillSeed } from '@/domain/prototype/types';
 /**
  * Skill → 主业务场景（AI任务推荐 / 广场同词）
  * 与 DISCOVER_TO_BUSINESS_SCENARIO 口径对齐；一 Skill 只挂一个主篮子。
+ *
+ * Skill Hub 精选侧重「可编排原子能力」；与 Agent Hub 案例包重复的监测/评论链路/
+ * 门店陪练/招聘链路默认不进精选（仍 published，配置 Skill / Agent 可调用）。
  */
 export const SKILL_TO_BUSINESS_SCENARIO: Record<string, BusinessScenarioId> = {
-  // S1 市场洞察
-  'skill-price-monitor': 'S1',
+  // S1 市场洞察（轻量洞察；价监/评论链路归 Agent Hub）
+  'skill-comp-brief': 'S1',
   'skill-launch-sentiment': 'S1',
   'skill-survey-insight': 'S1',
+  'skill-retail-insight': 'S1',
+  'skill-price-monitor': 'S1',
   'skill-review-collect': 'S1',
   'skill-review-cluster': 'S1',
-  'skill-retail-insight': 'S1',
 
-  // S2 内容生成
+  // S2 内容生成（承接原 Agent 小语种本地化）
+  'skill-l10n-localize': 'S2',
+  'skill-sales-copy': 'S2',
   'skill-review-translate': 'S2',
   'skill-ppt-gen': 'S2',
   'skill-doc-gen': 'S2',
 
-  // S3 销售赋能
+  // S3 销售赋能（渠道简报；门店陪练/培训归 Agent Hub）
+  'skill-channel-brief': 'S3',
   'skill-retail-coach': 'S3',
   'skill-training-gen': 'S3',
 
   // S4 合规结算
   'skill-doc-compliance': 'S4',
 
-  // S5 客户服务
+  // S5 客户服务（承接原客诉与一线话术）
   'skill-complaint-sop': 'S5',
+  'skill-frontline-script': 'S5',
   'skill-wecom': 'S5',
 
-  // S6 知识问答
+  // S6 知识问答（承接组织/个人知识沉淀）
   'skill-rag': 'S6',
+  'skill-knowledge-digest': 'S6',
+  'skill-file-archive': 'S6',
   'skill-rerank': 'S6',
 
-  // S8 数据分析
+  // S8 数据分析（承接经营分析与 SO 报表）
   'skill-data-analysis': 'S8',
   'skill-so-report': 'S8',
+  'skill-weekly-report': 'S8',
 
   // S7 日常办公
+  'skill-meeting-minutes': 'S7',
+  'skill-work-summary': 'S7',
+  'skill-email-draft': 'S7',
+  'skill-doc-parser': 'S7',
   'skill-jd-parser': 'S7',
   'skill-resume-screen': 'S7',
   'skill-interview-analysis': 'S7',
-  'skill-meeting-minutes': 'S7',
-  'skill-work-summary': 'S7',
-  'skill-file-archive': 'S7',
-  'skill-doc-parser': 'S7',
 };
 
-/** 各业务场景下推荐 Skill 顺序（首页展示） */
+/**
+ * Skill Hub 精选序：迁入的场景能力 + 营销服/通用办公真实 Skill。
+ * 与 Agent Hub 保留案例（价监/评论/陪练/招聘/综履）去重。
+ */
 export const HOME_BUSINESS_SKILLS: Record<BusinessScenarioId, string[]> = {
   S1: [
-    'skill-price-monitor',
-    'skill-review-collect',
-    'skill-review-cluster',
+    'skill-comp-brief',
     'skill-launch-sentiment',
-    'skill-retail-insight',
     'skill-survey-insight',
+    'skill-retail-insight',
   ],
-  S2: ['skill-review-translate', 'skill-ppt-gen', 'skill-doc-gen'],
-  S3: ['skill-retail-coach', 'skill-training-gen'],
+  S2: [
+    'skill-l10n-localize',
+    'skill-sales-copy',
+    'skill-ppt-gen',
+    'skill-doc-gen',
+  ],
+  S3: ['skill-channel-brief'],
   S4: ['skill-doc-compliance'],
-  S5: ['skill-complaint-sop', 'skill-wecom'],
-  S6: ['skill-rag', 'skill-rerank'],
-  S8: ['skill-data-analysis', 'skill-so-report'],
+  S5: ['skill-complaint-sop', 'skill-frontline-script', 'skill-wecom'],
+  S6: [
+    'skill-rag',
+    'skill-knowledge-digest',
+    'skill-file-archive',
+    'skill-rerank',
+  ],
+  S8: ['skill-data-analysis', 'skill-so-report', 'skill-weekly-report'],
   S7: [
-    'skill-resume-screen',
-    'skill-jd-parser',
-    'skill-interview-analysis',
     'skill-meeting-minutes',
     'skill-work-summary',
-    'skill-file-archive',
+    'skill-email-draft',
     'skill-doc-parser',
   ],
 };
@@ -82,28 +101,28 @@ export const HOME_BUSINESS_SKILLS: Record<BusinessScenarioId, string[]> = {
 /** AI任务 ·「今天可以试试」场景卡（点选填入输入框） */
 export const TRY_TODAY_SCENARIOS = [
   {
-    id: 'try-price',
-    businessId: 'S1' as BusinessScenarioId,
-    icon: 'fa-tags',
-    title: '价格监测',
-    subtitle: '本周竞品异动',
-    prompt: '/价格监测 分析本周竞品价格异动',
+    id: 'try-ask-data',
+    businessId: 'S8' as BusinessScenarioId,
+    icon: 'fa-chart-line',
+    title: '经营问数',
+    subtitle: 'SO / 环比洞察',
+    prompt: '/数据分析 请输出近一周代表处 SO 环比与异动归因',
   },
   {
     id: 'try-l10n',
     businessId: 'S2' as BusinessScenarioId,
     icon: 'fa-language',
-    title: '多语言内容',
-    subtitle: '评论/文案本地化',
-    prompt: '/评论翻译 将本周电渠评论统一译为中英对照',
+    title: '小语种本地化',
+    subtitle: '卖点卡翻译质检',
+    prompt: '/本地化翻译 将以下卖点卡译为阿语并输出术语质检清单',
   },
   {
-    id: 'try-training',
-    businessId: 'S3' as BusinessScenarioId,
-    icon: 'fa-chalkboard-user',
-    title: '培训内容',
-    subtitle: '门店话术与陪练',
-    prompt: '/培训内容 生成门店话术并准备陪练',
+    id: 'try-sop',
+    businessId: 'S5' as BusinessScenarioId,
+    icon: 'fa-headset',
+    title: '客诉话术',
+    subtitle: 'SOP + 一线口径',
+    prompt: '/客诉 电池过热客诉请给出 SOP 步骤与一线统一话术',
   },
 ] as const;
 

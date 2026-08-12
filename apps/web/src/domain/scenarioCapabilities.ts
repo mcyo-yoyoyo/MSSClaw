@@ -10,45 +10,43 @@ export const SCENARIO_CAPABILITY_CATEGORIES = [
 
 export type ScenarioCapabilityId = (typeof SCENARIO_CAPABILITY_CATEGORIES)[number]['id'];
 
-/** 发现页 / 场景案例展示的业务场景包 */
+/**
+ * Agent Hub / 发现页展示的场景包。
+ * 可编排型能力（翻译 / 知识沉淀 / 经营报表 / 客服话术）已迁至 Skill Hub；
+ * 此处保留案例型 Agent 场景，并增加营销 / 知识两门面专家。
+ */
 export const DISCOVER_SCENARIO_IDS = [
+  'marketing-intel',
+  'knowledge-qa',
   'price-offer-monitor',
   'ecommerce-review',
   'retail-training',
-  'customer-service',
-  'ops-analytics',
   'hr-interview',
-  'l10n-translation',
   'fulfillment-settlement',
-  'knowledge-deposit',
 ] as const;
 
 export type DiscoverScenarioId = (typeof DISCOVER_SCENARIO_IDS)[number];
 
 /** 场景 → 能力（主归属在前） */
 export const SCENARIO_CAPABILITY_MAP: Record<DiscoverScenarioId, ScenarioCapabilityId[]> = {
+  'marketing-intel': ['insight'],
+  'knowledge-qa': ['knowledge', 'execute'],
   'price-offer-monitor': ['collect', 'insight'],
   'ecommerce-review': ['collect', 'generate', 'insight'],
   'retail-training': ['generate', 'execute'],
-  'customer-service': ['knowledge', 'execute'],
-  'ops-analytics': ['insight'],
   'hr-interview': ['insight', 'execute'],
-  'l10n-translation': ['generate'],
   'fulfillment-settlement': ['execute', 'insight'],
-  'knowledge-deposit': ['knowledge'],
 };
 
 /** 演示用发布日期（用于「最新」排序） */
 export const SCENARIO_PUBLISHED_AT: Record<DiscoverScenarioId, string> = {
+  'marketing-intel': '2026-08-10',
+  'knowledge-qa': '2026-08-10',
   'price-offer-monitor': '2026-07-12',
   'ecommerce-review': '2026-07-11',
   'retail-training': '2026-07-10',
-  'customer-service': '2026-07-14',
-  'ops-analytics': '2026-07-15',
   'hr-interview': '2026-07-09',
-  'l10n-translation': '2026-07-08',
   'fulfillment-settlement': '2026-07-13',
-  'knowledge-deposit': '2026-07-07',
 };
 
 export function isDiscoverScenarioId(id: string): id is DiscoverScenarioId {

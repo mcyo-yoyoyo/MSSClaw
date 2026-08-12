@@ -59,7 +59,11 @@ export function ensureAccountPasswordsReady(): Promise<void> {
 
 void ensureAccountPasswordsReady();
 
-/** 合并种子账号（补齐 test1–10 / 域名迁移后的缺失项） */
+/** 合并种子账号（补齐核心种子；剔除已退役的 test1–10） */
+function isRetiredDemoMemberEmail(email: string): boolean {
+  return /^test([1-9]|10)@huawei\.com$/i.test(email.trim());
+}
+
 function mergeWithSeedMembers(
   workspaceId: string,
   stored: WorkspaceMember[],
@@ -68,11 +72,12 @@ function mergeWithSeedMembers(
   const byEmail = new Map<string, WorkspaceMember>();
   for (const m of stored.map(normalizeStoredMember)) {
     const key = m.email.toLowerCase();
-    if (!key) continue;
+    if (!key || isRetiredDemoMemberEmail(key)) continue;
     byEmail.set(key, m);
   }
   for (const seed of seeds) {
     const key = seed.email.toLowerCase();
+    if (!key || isRetiredDemoMemberEmail(key)) continue;
     if (!byEmail.has(key)) byEmail.set(key, seed);
   }
   return [...byEmail.values()];

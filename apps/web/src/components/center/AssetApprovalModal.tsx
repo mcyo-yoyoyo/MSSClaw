@@ -3,6 +3,8 @@ import {
   ASSET_APPROVAL_KIND_LABELS,
   ASSET_APPROVAL_NODES,
   ASSET_APPROVAL_REASON_LABELS,
+  approvalActionTitle,
+  approvalFinalCta,
   approvalNodeStatuses,
   type ApprovalNodeStatus,
 } from '@/domain/assetApproval';
@@ -21,10 +23,11 @@ function statusMeta(status: ApprovalNodeStatus) {
   return { label: '等待中', chip: 'bg-zinc-50 text-zinc-500 border-zinc-200', ring: 'border-zinc-200' };
 }
 
-/** 上架审批流程示意：提交人 → 业务主管 → MSS 质量与运营 */
+/** 上架 / 更新 / 下架审批：提交人 → 业务主管 → MSS 质量与运营 */
 export function AssetApprovalModal() {
   const current = useAssetApprovalStore((s) => s.current);
   const advance = useAssetApprovalStore((s) => s.advance);
+  const reject = useAssetApprovalStore((s) => s.reject);
   const close = useAssetApprovalStore((s) => s.close);
 
   if (!current) return null;
@@ -32,6 +35,7 @@ export function AssetApprovalModal() {
   const statuses = approvalNodeStatuses(current.stepIndex);
   const kindLabel = ASSET_APPROVAL_KIND_LABELS[current.kind];
   const activeNode = ASSET_APPROVAL_NODES[current.stepIndex];
+  const title = approvalActionTitle(current.reasons);
 
   return (
     <div
@@ -41,7 +45,7 @@ export function AssetApprovalModal() {
       <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-black/5 bg-white shadow-apple-lg">
         <div className="flex items-start justify-between border-b border-black/[0.06] px-5 py-4">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400">上架审批</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400">{title}</p>
             <h3 className="mt-0.5 text-[16px] font-semibold text-zinc-900">
               {kindLabel} · {current.assetName}
             </h3>
@@ -55,6 +59,14 @@ export function AssetApprovalModal() {
                 {current.reasons.map((r) => ASSET_APPROVAL_REASON_LABELS[r]).join(' · ')}
               </p>
             ) : null}
+            {current.targetVersion ? (
+              <p className="mt-1 text-[11px] text-zinc-500">目标版本：v{current.targetVersion}</p>
+            ) : null}
+            {current.note ? (
+              <p className="mt-1.5 rounded-lg bg-zinc-50 px-2.5 py-1.5 text-[11px] leading-relaxed text-zinc-600">
+                {current.note}
+              </p>
+            ) : null}
           </div>
           <button type="button" onClick={close} className="text-zinc-400 hover:text-zinc-800">
             <i className="fa-solid fa-xmark" />
@@ -62,7 +74,6 @@ export function AssetApprovalModal() {
         </div>
 
         <div className="space-y-4 p-5">
-          {/* 流程轨道 */}
           <div className="flex items-center gap-1 px-1">
             {ASSET_APPROVAL_NODES.map((node, i) => {
               const st = statuses[i];
@@ -96,7 +107,6 @@ export function AssetApprovalModal() {
             })}
           </div>
 
-          {/* 节点卡片 */}
           <div className="grid gap-2 sm:grid-cols-3">
             {ASSET_APPROVAL_NODES.map((node, i) => {
               const st = statuses[i];
@@ -131,24 +141,37 @@ export function AssetApprovalModal() {
 
           <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-3 py-2.5 text-[11px] leading-relaxed text-zinc-600">
             <strong className="font-semibold text-zinc-800">流程说明：</strong>
-            资产保存为待审草稿后进入本流程。业务主管通过后进入 MSS 质量与运营终审；终审通过后自动上架到对应能力中心。演示环境可点击「模拟通过」推进节点。
+            上线、更新、下架共用同一审批链路。全部节点通过后系统自动变更集市状态；驳回可不填意见。演示环境可点击「模拟通过」推进节点。
           </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-black/[0.06] bg-[#fafafa]/60 px-5 py-4">
-          <button
-            type="button"
-            onClick={close}
-            className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium text-zinc-600 hover:bg-white"
-          >
-            稍后处理
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={close}
+              className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium text-zinc-600 hover:bg-white"
+            >
+              稍后处理
+            </button>
+            {current.stepIndex >= 1 ? (
+              <button
+                type="button"
+                onClick={() => reject()}
+                className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-[12px] font-semibold text-rose-800 hover:bg-rose-100"
+              >
+                驳回（可不填意见）
+              </button>
+            ) : null}
+          </div>
           <button
             type="button"
             onClick={advance}
             className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white"
           >
-            {current.stepIndex >= 2 ? '终审通过并上架' : `模拟通过「${activeNode?.title ?? ''}」`}
+            {current.stepIndex >= 2
+              ? approvalFinalCta(current.reasons)
+              : `模拟通过「${activeNode?.title ?? ''}」`}
           </button>
         </div>
       </div>

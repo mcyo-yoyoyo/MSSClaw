@@ -1,5 +1,3 @@
-import type { DiscoverScenarioId } from '@/domain/scenarioCapabilities';
-
 export type ArchitectureDocKind = 'design' | 'exec';
 
 /** 能力层 · 架构 / AI 执行方案（md） */
@@ -30,11 +28,79 @@ function doc(
   };
 }
 
-/** 九大场景架构文件：对齐原型 Agent / Skill / Tool 真实 ID 与命令 */
-export const SCENARIO_ARCHITECTURE_BY_ID: Record<
-  DiscoverScenarioId,
-  ScenarioArchitectureDoc[]
-> = {
+/** 场景架构文件：对齐原型 Agent / Skill / Tool；含历史场景归档 + Agent Hub 现网场景 */
+export const SCENARIO_ARCHITECTURE_BY_ID: Record<string, ScenarioArchitectureDoc[]> = {
+  'marketing-intel': [
+    doc(
+      'marketing-intel',
+      'design',
+      '营销 Agent · 架构设计',
+      [
+        '# 营销 Agent · 架构设计',
+        '',
+        '## 业务目标',
+        '以门面专家编排多 Skill，支撑 AI 问数、问报告与经营智能分析。',
+        '',
+        '## 能力映射',
+        '| 层 | ID | 说明 |',
+        '| --- | --- | --- |',
+        '| Agent | `agent-marketing` | 营销门面专家 |',
+        '| Skill | `skill-data-analysis` `/数据分析` | 多源问数与归因 |',
+        '| Skill | `skill-so-report` `/so报表` | 代表处 SO/SI |',
+        '| Skill | `skill-weekly-report` `/经营周报` | 周报成稿 |',
+        '',
+      ].join('\n'),
+    ),
+    doc(
+      'marketing-intel',
+      'exec',
+      '营销 Agent · AI 执行方案',
+      [
+        '# 营销 Agent · AI 执行方案',
+        '',
+        '1. 打开「营销 Agent」，用自然语言描述分析意图',
+        '2. 需要排名表时调用 `/so报表`',
+        '3. 需要成稿时调用 `/经营周报`',
+        '4. 输出洞察要点、图表建议与 NBA',
+        '',
+      ].join('\n'),
+    ),
+  ],
+  'knowledge-qa': [
+    doc(
+      'knowledge-qa',
+      'design',
+      '知识 Agent · 架构设计',
+      [
+        '# 知识 Agent · 架构设计',
+        '',
+        '## 业务目标',
+        '制度 / SOP / 案例检索问答，并可衔接一线话术与陪练。',
+        '',
+        '## 能力映射',
+        '| 层 | ID | 说明 |',
+        '| --- | --- | --- |',
+        '| Agent | `agent-knowledge` | 知识门面专家 |',
+        '| Skill | `skill-rag` `/检索` | 向量检索 |',
+        '| Skill | `skill-complaint-sop` `/客诉` | SOP 与话术 |',
+        '| Skill | `skill-knowledge-digest` `/知识沉淀` | 摘要入库 |',
+        '',
+      ].join('\n'),
+    ),
+    doc(
+      'knowledge-qa',
+      'exec',
+      '知识 Agent · AI 执行方案',
+      [
+        '# 知识 Agent · AI 执行方案',
+        '',
+        '1. 打开「知识 Agent」，提问制度或 SOP',
+        '2. 客诉场景切换 `/客诉` 对齐口径',
+        '3. 优质问答用 `/知识沉淀` 归档',
+        '',
+      ].join('\n'),
+    ),
+  ],
   'price-offer-monitor': [
     doc(
       'price-offer-monitor',
@@ -423,8 +489,5 @@ export const SCENARIO_ARCHITECTURE_BY_ID: Record<
 };
 
 export function getScenarioArchitectureDocs(scenarioId: string): ScenarioArchitectureDoc[] {
-  if (scenarioId in SCENARIO_ARCHITECTURE_BY_ID) {
-    return SCENARIO_ARCHITECTURE_BY_ID[scenarioId as DiscoverScenarioId];
-  }
-  return [];
+  return SCENARIO_ARCHITECTURE_BY_ID[scenarioId] ?? [];
 }

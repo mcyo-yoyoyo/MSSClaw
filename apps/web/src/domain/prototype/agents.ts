@@ -18,6 +18,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     skillIds: [
       'skill-data-analysis',
       'skill-so-report',
+      'skill-weekly-report',
       'skill-retail-insight',
       'skill-price-monitor',
       'skill-work-summary',
@@ -287,14 +288,16 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     skillIds: [
       'skill-rag',
       'skill-rerank',
+      'skill-knowledge-digest',
       'skill-complaint-sop',
+      'skill-frontline-script',
       'skill-retail-coach',
       'skill-training-gen',
     ],
     chatId: 'knowledge',
     icon: 'fa-book-open',
     color: 'from-zinc-600 to-zinc-800',
-    scenarioTags: ['知识', '归档', 'RAG', 'SOP', '检索', '客诉'],
+    scenarioTags: ['知识', 'RAG', 'SOP', '检索', '客诉'],
   },
   {
     id: 'agent-retail-coach',

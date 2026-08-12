@@ -18,7 +18,7 @@ const inputClass =
  */
 export function LoginPage() {
   const login = useSessionStore((s) => s.login);
-  const [email, setEmail] = useState('mcyo@huawei.com');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);

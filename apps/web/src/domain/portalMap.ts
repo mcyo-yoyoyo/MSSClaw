@@ -416,6 +416,20 @@ export interface ScenarioDef {
 /** 领导演示 / 场景案例固定场景包（与业务场景篮对齐；平台本身不作案例） */
 export const FEATURED_SCENARIOS: ScenarioDef[] = [
   {
+    id: 'marketing-intel',
+    label: '营销 Agent',
+    desc: 'AI 问数、问报告与智能分析：销售 / 渠道 / 零售洞察与行动建议（编排多 Skill）',
+    icon: 'fa-chart-line',
+    matchTags: ['问数', '报表', '分析', '营销', 'SO'],
+  },
+  {
+    id: 'knowledge-qa',
+    label: '知识 Agent',
+    desc: '知识问答与陪练：制度 / SOP / 案例检索，并可开展话术与培训陪练（编排多 Skill）',
+    icon: 'fa-book-open',
+    matchTags: ['知识', 'RAG', 'SOP', '检索', '客诉'],
+  },
+  {
     id: 'price-offer-monitor',
     label: '商城价格&offer监测',
     desc: '多渠道商城价格与 offer 异动监测 · 区域工具联动',
@@ -432,7 +446,7 @@ export const FEATURED_SCENARIOS: ScenarioDef[] = [
   {
     id: 'l10n-translation',
     label: '小语种本地化翻译',
-    desc: '小语种内容本地化翻译与质检提效',
+    desc: '小语种内容本地化翻译与质检提效（Skill Hub）',
     icon: 'fa-language',
     matchTags: ['翻译', '本地化', '小语种'],
   },
@@ -446,14 +460,14 @@ export const FEATURED_SCENARIOS: ScenarioDef[] = [
   {
     id: 'customer-service',
     label: '客诉服务与一线话术',
-    desc: '客诉 SOP 检索、话术推荐与满意度运营',
+    desc: '客诉 SOP 检索、话术推荐与满意度运营（Skill Hub）',
     icon: 'fa-headset',
     matchTags: ['客诉', '服务', '工单'],
   },
   {
     id: 'ops-analytics',
     label: '经营分析与 SO 报表',
-    desc: '多源数据分析、代表处 SO/SI 排名与归因',
+    desc: '多源数据分析、代表处 SO/SI 排名与归因（Skill Hub）',
     icon: 'fa-chart-column',
     matchTags: ['数据分析', 'SO', '代表处', '经营'],
   },
@@ -467,8 +481,8 @@ export const FEATURED_SCENARIOS: ScenarioDef[] = [
   {
     id: 'knowledge-deposit',
     label: '组织及个人知识沉淀',
-    desc: '组织与个人知识沉淀 · RAG 检索 · 文档归档',
-    icon: 'fa-book-open',
+    desc: '组织与个人知识沉淀 · RAG 检索 · 文档归档（Skill Hub）',
+    icon: 'fa-box-archive',
     matchTags: ['知识', '归档', '指南', 'RAG'],
   },
   {

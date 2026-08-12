@@ -25,6 +25,8 @@ export interface SharedComposerProps {
   slashPlacement?: 'inside' | 'above';
   /** AI任务着陆：隐藏 @ Agent，突出 Skill */
   hideAgent?: boolean;
+  /** AI任务工作台：隐藏 / Skill，保留 @ Agent 与模型选择 */
+  hideSkill?: boolean;
   /** 压缩高度：对齐 AI广场「场景工具」卡片区 */
   compact?: boolean;
 }
@@ -41,11 +43,14 @@ export function SharedComposer({
   placeholder,
   slashPlacement,
   hideAgent = false,
+  hideSkill = false,
   compact = false,
 }: SharedComposerProps) {
   const landing = variant === 'landing';
   const menuPlacement = slashPlacement ?? (landing ? 'inside' : 'above');
-  const skillOnly = hideAgent || landing;
+  const skillOnly = (hideAgent || landing) && !hideSkill;
+  const showSkillButton = !hideSkill;
+  const showAgentButton = !skillOnly && !hideAgent;
   const compactLanding = landing && compact;
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashMode, setSlashMode] = useState<'/' | '@'>('/');
@@ -63,9 +68,18 @@ export function SharedComposer({
   const selectModel = useLlmConfigStore((s) => s.selectModel);
   const modelOptions = useLlmConfigStore((s) => s.modelOptions);
   const settingsOpen = useLlmConfigStore((s) => s.settingsOpen);
-  const openSettings = useLlmConfigStore((s) => s.openSettings);
   const closeSettings = useLlmConfigStore((s) => s.closeSettings);
+  const hydrateLlm = useLlmConfigStore((s) => s.hydrate);
   const status = useMemo(() => useLlmConfigStore.getState().statusLabel(), [config]);
+
+  useEffect(() => {
+    void hydrateLlm({ fresh: true });
+    const onVis = () => {
+      if (document.visibilityState === 'visible') void hydrateLlm({ fresh: true });
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [hydrateLlm]);
 
   const notify = (msg: string) => {
     useConversationStore.setState({ pushToast: msg });
@@ -93,10 +107,10 @@ export function SharedComposer({
   const handleInput = (next: string, cursor: number) => {
     onChange(next);
     const before = next.slice(0, cursor);
-    if (before.match(/\/[^\s]*$/)) {
+    if (showSkillButton && before.match(/\/[^\s]*$/)) {
       setSlashMode('/');
       setSlashOpen(true);
-    } else if (!skillOnly && before.match(/@[^\s]*$/)) {
+    } else if (showAgentButton && before.match(/@[^\s]*$/)) {
       setSlashMode('@');
       setSlashOpen(true);
     } else {
@@ -175,9 +189,11 @@ export function SharedComposer({
 
   const defaultPlaceholder = !executeAllowed
     ? '只读模式：可浏览结果，不可发送执行'
-    : landing
-      ? '补充你的意图… / 调技能 · Enter 发送'
-      : '继续对话… @ 专家 · / 技能 · Enter 发送';
+    : hideSkill
+      ? '继续对话… @ Agent · Enter 发送'
+      : landing
+        ? '补充你的意图… / 调技能 · Enter 发送'
+        : '继续对话… @ 专家 · / 技能 · Enter 发送';
 
   const slashMenu = slashOpen && executeAllowed ? (
     <HomeSlashMenu
@@ -253,7 +269,7 @@ export function SharedComposer({
             className={cn(
               'flex items-center justify-between gap-2 border-t border-zinc-200/80 bg-zinc-50/80',
               compactLanding
-                ? 'h-[28px] shrink-0 flex-nowrap px-1.5 py-0'
+                ? 'h-auto min-h-[28px] shrink-0 flex-wrap px-1.5 py-0.5'
                 : landing
                   ? 'flex-wrap px-4 py-2'
                   : 'flex-wrap px-3 py-1.5',
@@ -261,30 +277,32 @@ export function SharedComposer({
           >
             <div
               className={cn(
-                'flex items-center',
-                compactLanding ? 'min-w-0 flex-nowrap gap-1 overflow-hidden' : 'flex-wrap gap-1.5',
+                'flex min-w-0 items-center',
+                compactLanding ? 'flex-wrap gap-1' : 'flex-wrap gap-1.5',
               )}
             >
-              <button
-                type="button"
-                onClick={() => setPicker('skill')}
-                disabled={inputDisabled}
-                className={cn(
-                  'rounded-md border border-zinc-200 bg-white font-medium text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-60',
-                  compactLanding
-                    ? 'h-5 shrink-0 px-1.5 text-[9px] leading-none'
-                    : 'rounded-lg px-2.5 py-1.5 text-[11px]',
-                )}
-              >
-                <i
+              {showSkillButton ? (
+                <button
+                  type="button"
+                  onClick={() => setPicker('skill')}
+                  disabled={inputDisabled}
                   className={cn(
-                    'fa-solid fa-cube text-zinc-500',
-                    compactLanding ? 'mr-0.5 text-[8px]' : 'mr-1 text-[10px]',
+                    'rounded-md border border-zinc-200 bg-white font-medium text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-60',
+                    compactLanding
+                      ? 'h-5 shrink-0 px-1.5 text-[9px] leading-none'
+                      : 'rounded-lg px-2.5 py-1.5 text-[11px]',
                   )}
-                />
-                / Skill
-              </button>
-              {!skillOnly ? (
+                >
+                  <i
+                    className={cn(
+                      'fa-solid fa-cube text-zinc-500',
+                      compactLanding ? 'mr-0.5 text-[8px]' : 'mr-1 text-[10px]',
+                    )}
+                  />
+                  / Skill
+                </button>
+              ) : null}
+              {showAgentButton ? (
                 <button
                   type="button"
                   onClick={() => setPicker('agent')}
@@ -299,24 +317,25 @@ export function SharedComposer({
                 value={config.model}
                 onChange={(e) => {
                   const v = e.target.value;
-                  if (v === '__configure__') {
-                    openSettings({ focusAdd: true });
-                    return;
-                  }
-                  selectModel(v);
+                  void selectModel(v).catch(() => {
+                    notify(
+                      useLlmConfigStore.getState().lastError ||
+                        '模型选用未能写入数据库，请确认共享 API 已连接',
+                    );
+                  });
                 }}
                 disabled={inputDisabled}
                 className={cn(
                   'border border-zinc-200 bg-white text-zinc-800 disabled:opacity-60',
                   compactLanding
                     ? 'h-5 max-w-[112px] shrink rounded-md px-1 text-[9px] leading-none'
-                    : 'max-w-[168px] rounded-lg px-2.5 py-1.5 text-[11px]',
+                    : 'max-w-[180px] rounded-lg px-2.5 py-1.5 text-[11px]',
                 )}
-                title="选择模型 · 可配置 API"
+                title="选用对话模型"
               >
-                <optgroup label="默认模型">
+                <optgroup label="平台模型">
                   {modelOptions()
-                    .filter((m) => m.group === 'default')
+                    .filter((m) => m.group === 'platform')
                     .map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.label}
@@ -324,7 +343,7 @@ export function SharedComposer({
                     ))}
                 </optgroup>
                 {modelOptions().some((m) => m.group === 'custom') ? (
-                  <optgroup label="自定义">
+                  <optgroup label="我的扩展">
                     {modelOptions()
                       .filter((m) => m.group === 'custom')
                       .map((m) => (
@@ -334,7 +353,6 @@ export function SharedComposer({
                       ))}
                   </optgroup>
                 ) : null}
-                <option value="__configure__">＋ 配置 / 添加模型…</option>
               </select>
             </div>
 
@@ -399,7 +417,13 @@ export function SharedComposer({
             </div>
           ) : compactLanding ? null : (
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 px-4 py-1.5 text-[10px] text-zinc-400">
-              <span>{skillOnly ? 'Enter 发送 · / Skill' : 'Enter 发送 · @ Agent · / Skill'}</span>
+              <span>
+                {hideSkill
+                  ? 'Enter 发送 · @ Agent'
+                  : skillOnly
+                    ? 'Enter 发送 · / Skill'
+                    : 'Enter 发送 · @ Agent · / Skill'}
+              </span>
               <span className={cn(status.configured && 'font-medium text-emerald-600/90')}>{status.text}</span>
             </div>
           )}

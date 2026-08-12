@@ -27,6 +27,7 @@ export type PlatformDocKind =
   | 'audit-log'
   | 'ai-news-prefs'
   | 'asset-approvals'
+  | 'skill-reviews'
   | 'llm-config'
   | 'inbox'
   | 'warroom-webhook'
@@ -69,12 +70,24 @@ export function setPlatformDocMemory(workspaceId: string, kind: PlatformDocKind,
 export async function fetchPlatformDoc<T>(
   workspaceId: string,
   kind: PlatformDocKind,
+  opts?: { fresh?: boolean },
 ): Promise<T | null> {
   if (!canUsePlatformDocsApi()) {
+    // 未连 API：fresh 读拒绝用内存冒充库；普通读仅会话内存兜底（兼容其它模块）
+    if (opts?.fresh) return null;
     return peekPlatformDocMemory<T>(workspaceId, kind);
   }
+  if (!opts?.fresh) {
+    const cached = peekPlatformDocMemory<T>(workspaceId, kind);
+    if (cached != null) return cached;
+  }
   const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/docs/${kind}`), {
-    headers: apiAuthHeaders(),
+    headers: {
+      Accept: 'application/json',
+      ...apiAuthHeaders(),
+      ...(opts?.fresh ? { 'Cache-Control': 'no-cache' } : {}),
+    },
+    cache: opts?.fresh ? 'no-store' : 'default',
   });
   if (!res.ok) throw new Error(`docs_get_${kind}_${res.status}`);
   const body = (await res.json()) as { payload?: T };

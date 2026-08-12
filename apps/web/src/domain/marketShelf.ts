@@ -87,8 +87,15 @@ export type MarketShelfCard = {
   heat: number;
   /** 点赞数（MSS Skill/Agent 展示） */
   likes?: number;
+  /** 点踩数（MSS Skill 展示） */
+  dislikes?: number;
   /** 下载量（MSS Skill/Agent 展示） */
   downloads?: number;
+  /**
+   * Skill 卡右上角权限标识：公开 | 领域（组织/领域受限）
+   * 不传则不展示角标（外部/公司工具卡）
+   */
+  scopeBadge?: 'public' | 'scoped';
   homepageUrl?: string;
   scenarioId?: string;
   ownerDeptIds?: DeptId[];
@@ -161,10 +168,7 @@ function scenarioBadges(
   portalItems: PortalContentItem[] = [],
 ): MarketShelfCard['badges'] {
   const badges: MarketShelfCard['badges'] = [];
-  const biz = DISCOVER_TO_BUSINESS_SCENARIO[def.id as DiscoverScenarioId];
-  if (biz) {
-    badges.push({ label: getBusinessScenarioMeta(biz).label, tone: 'dept' });
-  }
+  // 与 Skill Hub 一致：领域(dept) · 区域(region) · 业务场景(type)
   const dept = portalItems.find((i) => i.ownerDeptIds?.[0])?.ownerDeptIds?.[0];
   if (dept) {
     badges.push({ label: getDeptLabel(dept), tone: 'dept' });
@@ -172,6 +176,10 @@ function scenarioBadges(
   const regionId = portalItems.find((i) => i.ownerRegionId)?.ownerRegionId;
   if (regionId) {
     badges.push({ label: getRegionLabel(regionId), tone: 'region' });
+  }
+  const biz = DISCOVER_TO_BUSINESS_SCENARIO[def.id as DiscoverScenarioId];
+  if (biz) {
+    badges.push({ label: getBusinessScenarioMeta(biz).label, tone: 'type' });
   }
   return badges;
 }

@@ -158,7 +158,10 @@ export function downloadSkillFile(skill: PrototypeSkillSeed) {
 }
 
 /** 运营分析用：单 Skill 调用与上架状态字段 */
-export function skillOpsAnalyticsRow(skill: PrototypeSkillSeed) {
+export function skillOpsAnalyticsRow(
+  skill: PrototypeSkillSeed,
+  engagement?: { likes: number; dislikes: number; downloads: number },
+) {
   const invokeCount = Number(skill.invokes) || 0;
   const published = !!skill.published;
   const hasBody = Boolean(skill.instructions?.trim());
@@ -171,6 +174,9 @@ export function skillOpsAnalyticsRow(skill: PrototypeSkillSeed) {
     version: skill.version || '1.0.0',
     author: skill.author,
     publisher: skill.publisher || skill.author,
+    createdAt: skill.createdAt || '',
+    updatedAt: skill.updatedAt || '',
+    updatedBy: skill.updatedBy || '',
     ownerDeptIds: skill.ownerDeptIds || [],
     ownerRegionId: skill.ownerRegionId ?? null,
     visibility: skill.visibility || 'org',
@@ -179,8 +185,13 @@ export function skillOpsAnalyticsRow(skill: PrototypeSkillSeed) {
     /** 是否精选露出到「MSS · 场景技能」 */
     featuredInDoTask: !!(skill.featuredInMssMarket ?? skill.featuredInDoTask),
     businessScenarioId: skill.businessScenarioId ?? null,
-    /** 累计被调用执行次数（平台内 bump 计数） */
+    /** 演示调用次数（非真实 Token 链路） */
     invokeCount,
+    likes: engagement?.likes ?? 0,
+    dislikes: engagement?.dislikes ?? 0,
+    downloads: engagement?.downloads ?? 0,
+    usageNotes: skill.usageNotes || '',
+    caseCount: skill.cases?.length ?? 0,
     /** 是否具备可注入正文（具备执行内容） */
     hasExecutableBody: hasBody,
     /** 实际上可对话执行：已上架且有正文 */
@@ -193,10 +204,15 @@ export function skillOpsAnalyticsRow(skill: PrototypeSkillSeed) {
 
 /**
  * 导出全部 Skill 运营清单（Excel .xlsx）。
- * 含调用执行次数、上架/可见/精选状态，便于后续运营分析；单技能包请用 downloadSkillFile。
+ * MVP 字段对齐需求；调用总量/Token 列预留为「—」（暂无模型计量）。
  */
-export function downloadAllSkillsFile(skills: PrototypeSkillSeed[]) {
-  const rows = skills.map(skillOpsAnalyticsRow);
+export function downloadAllSkillsFile(
+  skills: PrototypeSkillSeed[],
+  engagementById?: Record<string, { likes: number; dislikes: number; downloads: number }>,
+) {
+  const rows = skills.map((s) =>
+    skillOpsAnalyticsRow(s, engagementById?.[s.id]),
+  );
   const totalInvokes = rows.reduce((n, r) => n + r.invokeCount, 0);
   const executableCount = rows.filter((r) => r.publishedExecutable).length;
   const runnableCount = rows.filter((r) => r.runnableNow).length;
@@ -216,22 +232,35 @@ export function downloadAllSkillsFile(skills: PrototypeSkillSeed[]) {
       ? rows.map((r) => {
           const vis = (r.visibility || 'org') as AssetVisibility;
           return {
-            技能ID: r.id,
-            中文名称: r.nameZh,
+            Skill名称: r.nameZh,
+            SkillID: r.id,
+            创建者: r.author,
+            创建时间: r.createdAt || '—',
+            更新者: r.updatedBy || '—',
+            最近更新日期: r.updatedAt || '—',
+            历史版本更新记录: r.version ? `当前 v${r.version}` : '—',
+            领域信息: (r.ownerDeptIds as DeptId[]).map(getDeptLabel).join('、') || '',
+            区域信息: r.ownerRegionId ? getRegionLabel(r.ownerRegionId as RegionId) : '',
+            业务场景: r.businessScenarioId ?? '',
+            页面访问量: '—',
+            Skill下载总量: r.downloads,
+            近30天下载总量: '—',
+            点赞量: r.likes,
+            点踩量: r.dislikes,
+            点踩用户名工号: '—',
+            调用总次数预留: '—',
+            Token消耗总量预留: '—',
+            Token消耗均量预留: '—',
+            近30天调用量预留: '—',
             英文名称: r.nameEn,
             调用指令: r.command,
-            版本: r.version,
-            创建人: r.author,
-            发布人: r.publisher,
-            所属职能: (r.ownerDeptIds as DeptId[]).map(getDeptLabel).join('、') || '',
-            所属区域: r.ownerRegionId ? getRegionLabel(r.ownerRegionId as RegionId) : '',
             可见范围: ASSET_VISIBILITY_LABELS[vis] ?? String(vis),
             已上架可调用: r.publishedExecutable ? '是' : '否',
             精选MSS场景技能: r.featuredInDoTask ? '是' : '否',
-            业务场景篮子: r.businessScenarioId ?? '',
-            累计调用次数: r.invokeCount,
+            演示调用次数: r.invokeCount,
             具备执行正文: r.hasExecutableBody ? '是' : '否',
-            当前可对话执行: r.runnableNow ? '是' : '否',
+            使用须知摘要: (r.usageNotes || '').slice(0, 80),
+            案例条数: r.caseCount,
             运营标签: (r.tags || []).join('、'),
             搜索关键词: (r.searchKeywords || []).join('、'),
           };
@@ -244,7 +273,8 @@ export function downloadAllSkillsFile(skills: PrototypeSkillSeed[]) {
     { 指标: '已上架可调用数', 值: executableCount },
     { 指标: '当前可对话执行数', 值: runnableCount },
     { 指标: '精选MSS场景技能数', 值: featuredCount },
-    { 指标: '累计调用总次数', 值: totalInvokes },
+    { 指标: '演示调用总次数', 值: totalInvokes },
+    { 指标: '真实调用/Token', 值: '—（预留，待模型计量对接）' },
     { 指标: '可见-全员', 值: byVisibility.public || 0 },
     { 指标: '可见-本组织', 值: byVisibility.org || 0 },
     { 指标: '可见-仅发布方', 值: byVisibility.private || 0 },
@@ -256,7 +286,7 @@ export function downloadAllSkillsFile(skills: PrototypeSkillSeed[]) {
         技能ID: r.id,
         中文名称: r.nameZh,
         调用指令: r.command,
-        累计调用次数: r.invokeCount,
+        演示调用次数: r.invokeCount,
         已上架可调用: r.publishedExecutable ? '是' : '否',
       }))
     : [{ 排名: '', 说明: '暂无调用数据' }];
@@ -274,7 +304,6 @@ export function downloadAllSkillsFile(skills: PrototypeSkillSeed[]) {
   XLSX.utils.book_append_sheet(wb, wsTop, '调用Top10');
 
   const stamp = new Date().toISOString().slice(0, 10);
-  // writeFile 在浏览器内直接触发下载，避免 type:'array' 无 .buffer 导致静默失败
   XLSX.writeFile(wb, `mssclaw-skills-ops-${stamp}.xlsx`);
 }
 

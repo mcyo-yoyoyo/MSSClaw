@@ -7,8 +7,8 @@ interface CenterModalProps {
   onClose: () => void;
   children: ReactNode;
   actions?: ReactNode;
-  /** 弹层宽度：fullscreen 近全屏遮罩，适合文档预览；xl 适合 Skill Hub 详情 */
-  size?: 'md' | 'lg' | 'xl' | 'fullscreen';
+  /** 弹层宽度：fullscreen 近全屏；2xl 适合 Skill 详情；xl 通用大弹层 */
+  size?: 'md' | 'lg' | 'xl' | '2xl' | 'fullscreen';
   /** 叠在其它弹层之上（如详情→编辑） */
   elevate?: boolean;
   /** 覆盖默认标题区（如自定义 Hero） */
@@ -28,13 +28,16 @@ export function CenterModal({
   if (!open) return null;
 
   const fullscreen = size === 'fullscreen';
+  const wide = size === 'xl' || size === '2xl';
   const widthClass = fullscreen
     ? 'h-[min(96vh,calc(100%-1rem))] max-h-none max-w-none'
-    : size === 'xl'
-      ? 'h-[min(92vh,880px)] max-w-5xl'
-      : size === 'lg'
-        ? 'max-h-[85vh] max-w-2xl'
-        : 'max-h-[85vh] max-w-lg';
+    : size === '2xl'
+      ? 'h-[min(94vh,920px)] max-w-6xl'
+      : size === 'xl'
+        ? 'h-[min(92vh,880px)] max-w-5xl'
+        : size === 'lg'
+          ? 'max-h-[85vh] max-w-2xl'
+          : 'max-h-[85vh] max-w-lg';
 
   return (
     <div
@@ -55,7 +58,7 @@ export function CenterModal({
           <div
             className={cn(
               'flex shrink-0 items-center justify-between border-b border-black/[0.06]',
-              fullscreen || size === 'xl' ? 'px-5 py-3' : 'px-5 py-4',
+              fullscreen || wide ? 'px-5 py-3' : 'px-5 py-4',
             )}
           >
             <h3 className="truncate text-[15px] font-semibold text-[#1d1d1f]">{title}</h3>
@@ -68,7 +71,7 @@ export function CenterModal({
           className={cn(
             fullscreen
               ? 'min-h-0 flex-1 overflow-hidden p-3 md:p-4'
-              : size === 'xl'
+              : wide
                 ? 'min-h-0 flex-1 overflow-y-auto p-0'
                 : 'max-h-[60vh] overflow-y-auto p-5',
           )}
@@ -78,8 +81,8 @@ export function CenterModal({
         {actions && (
           <div
             className={cn(
-              'flex shrink-0 justify-end gap-2 border-t border-black/[0.06] bg-[#fafafa]/50',
-              fullscreen || size === 'xl' ? 'px-5 py-3' : 'px-5 py-4',
+              'flex w-full shrink-0 items-center justify-end gap-2 border-t border-black/[0.06] bg-[#fafafa]/50',
+              fullscreen || wide ? 'px-5 py-3' : 'px-5 py-4',
             )}
           >
             {actions}
@@ -179,7 +182,7 @@ export function CenterSearchInput({
   value,
   onChange,
   placeholder,
-  className = 'w-48',
+  className = 'w-full max-w-[12rem] sm:w-48',
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -216,7 +219,7 @@ export function LearningCallout({
 
 export function StatCardGrid({ items }: { items: [string, string | number][] }) {
   return (
-    <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
+    <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
       {items.map(([label, val]) => (
         <div key={label} className="apple-card p-3">
           <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">{label}</p>

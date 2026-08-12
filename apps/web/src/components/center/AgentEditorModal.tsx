@@ -27,9 +27,33 @@ import { useAppViewStore } from '@/stores/appViewStore';
 import { useBusinessScenarioCatalogStore } from '@/stores/businessScenarioCatalogStore';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
 import { shareSyncSaveHint } from '@/domain/shareSync';
+import {
+  AGENT_AVATAR_PRESETS,
+  DEFAULT_AGENT_AVATAR_PRESET_ID,
+} from '@/domain/agentAvatars';
+import { AgentPortrait } from '@/components/brand/AgentPortrait';
 import { cn } from '@/lib/utils';
 
-type EditorTarget = string | 'new' | null;
+export type AgentEditorTarget = string | 'new' | null;
+
+const AVATAR_MAX_BYTES = 512 * 1024;
+
+function readAvatarFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (file.size > AVATAR_MAX_BYTES) {
+      reject(new Error('头像请小于 512KB'));
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      reject(new Error('请选择图片文件'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('读取失败'));
+    reader.readAsDataURL(file);
+  });
+}
 
 function emptyAgent(): PrototypeAgentSeed {
   const name = getCurrentUserName() || 'Mcyo';
@@ -52,6 +76,8 @@ function emptyAgent(): PrototypeAgentSeed {
     chatId: 'marketing',
     icon: 'fa-robot',
     color: 'from-[#18181b] to-[#18181b]',
+    avatarPresetId: DEFAULT_AGENT_AVATAR_PRESET_ID,
+    avatarUrl: undefined,
     systemPrompt: '',
     visibility: 'public',
     businessScenarioId: undefined,
@@ -66,6 +92,10 @@ function normalizeAgent(agent: PrototypeAgentSeed): PrototypeAgentSeed {
     planSteps: Array.isArray(agent.planSteps) ? agent.planSteps : [],
     systemPrompt: agent.systemPrompt ?? '',
     demoPrompt: agent.demoPrompt ?? '',
+    avatarPresetId: agent.avatarUrl
+      ? undefined
+      : agent.avatarPresetId || DEFAULT_AGENT_AVATAR_PRESET_ID,
+    avatarUrl: agent.avatarUrl,
     featuredInDoTask: resolveAgentFeaturedInDoTask(agent),
     visibility:
       agent.visibility === 'org' || agent.visibility === 'private'
@@ -76,7 +106,7 @@ function normalizeAgent(agent: PrototypeAgentSeed): PrototypeAgentSeed {
 }
 
 interface AgentEditorModalProps {
-  target: EditorTarget;
+  target: AgentEditorTarget;
   onClose: () => void;
 }
 
@@ -204,8 +234,12 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
         publisher: form.publisher || getCurrentUserName() || 'Mcyo',
         publisherUserId: form.publisherUserId || getCurrentUserId() || undefined,
         invokes: prev?.invokes ?? 0,
-        icon: prev?.icon ?? 'fa-robot',
-        color: prev?.color ?? 'from-[#18181b] to-[#18181b]',
+        icon: form.icon || prev?.icon || 'fa-robot',
+        color: form.color || prev?.color || 'from-[#18181b] to-[#18181b]',
+        avatarPresetId: form.avatarUrl
+          ? undefined
+          : form.avatarPresetId || DEFAULT_AGENT_AVATAR_PRESET_ID,
+        avatarUrl: form.avatarUrl?.trim() || undefined,
         published: needsApproval ? false : form.published,
         visibility,
       },
@@ -234,6 +268,93 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
       actions={<ModalActions onCancel={onClose} onSave={handleSave} />}
     >
       <div className="space-y-3 text-left">
+        <FormField
+          label="数字员工形象"
+          hint="系统提供 20 套真人卡通数字员工形象；也可上传自定义头像（PNG/JPG/WebP，≤512KB）"
+        >
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <AgentPortrait
+                agentId={form.id || 'new'}
+                name={form.name || 'Agent'}
+                icon={form.icon}
+                avatarUrl={form.avatarUrl}
+                avatarPresetId={form.avatarPresetId}
+                size={52}
+                className="rounded-2xl ring-1 ring-zinc-200"
+              />
+              <div className="min-w-0 flex-1 space-y-2">
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  className="block w-full text-[12px] text-zinc-600 file:mr-2 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-[11px] file:font-semibold file:text-white"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (!file) return;
+                    void readAvatarFile(file)
+                      .then((dataUrl) => {
+                        setForm({
+                          ...form,
+                          avatarUrl: dataUrl,
+                          avatarPresetId: undefined,
+                        });
+                        showToast('自定义头像已上传');
+                      })
+                      .catch((err: Error) => showToast(err.message || '上传失败'));
+                  }}
+                />
+                {form.avatarUrl ? (
+                  <button
+                    type="button"
+                    className="text-[11px] font-medium text-zinc-500 hover:text-zinc-800"
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        avatarUrl: undefined,
+                        avatarPresetId: form.avatarPresetId || DEFAULT_AGENT_AVATAR_PRESET_ID,
+                      })
+                    }
+                  >
+                    清除上传，改用系统预设
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
+              {AGENT_AVATAR_PRESETS.map((p) => {
+                const active = !form.avatarUrl && form.avatarPresetId === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    title={`${p.label} · ${p.hint}`}
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        avatarPresetId: p.id,
+                        avatarUrl: undefined,
+                      })
+                    }
+                    className={cn(
+                      'flex flex-col items-center gap-1 rounded-xl border p-1.5 transition',
+                      active
+                        ? 'border-zinc-900 bg-zinc-50 ring-1 ring-zinc-900'
+                        : 'border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50',
+                    )}
+                  >
+                    <img
+                      src={p.src}
+                      alt={p.label}
+                      className="h-9 w-9 rounded-full object-cover"
+                    />
+                    <span className="truncate text-[9px] font-medium text-zinc-600">{p.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </FormField>
         <FormField label="名称">
           <FormInput value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </FormField>
@@ -503,5 +624,3 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
     </CenterModal>
   );
 }
-
-export type { EditorTarget as AgentEditorTarget };

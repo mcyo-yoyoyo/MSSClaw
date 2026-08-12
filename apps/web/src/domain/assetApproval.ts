@@ -1,4 +1,4 @@
-/** 能力沉淀资产上架审批：提交人 → 业务主管 → MSS 质量与运营 */
+/** 能力沉淀资产审批：提交人 → 业务主管 → MSS 质量与运营 */
 
 export type AssetApprovalKind =
   | 'agent'
@@ -23,7 +23,7 @@ export const ASSET_APPROVAL_NODES: ApprovalNodeDef[] = [
     id: 'submitter',
     title: '提交人',
     roleLabel: '配置提交',
-    desc: '完成资产配置并提交上架申请',
+    desc: '完成资产配置并提交上架 / 更新 / 下架申请',
     icon: 'fa-user-pen',
   },
   {
@@ -51,13 +51,21 @@ export const ASSET_APPROVAL_KIND_LABELS: Record<AssetApprovalKind, string> = {
   portal: 'AI 项目',
 };
 
-/** 审批事由：上架可调用 / 公开可见（可多选） */
-export type AssetApprovalReason = 'publish_executable' | 'visibility_public';
+/** 审批事由 */
+export type AssetApprovalReason =
+  | 'publish_executable'
+  | 'visibility_public'
+  | 'update_version'
+  | 'unpublish_skill';
 
 export const ASSET_APPROVAL_REASON_LABELS: Record<AssetApprovalReason, string> = {
   publish_executable: '上架可调用（可执行模型任务）',
   visibility_public: '公开可见（跨部门/领域）',
+  update_version: '版本更新上架',
+  unpublish_skill: '下架 Skill（全部版本隐藏）',
 };
+
+export type SkillUnpublishMode = 'all' | 'versions';
 
 export interface AssetApprovalRequest {
   kind: AssetApprovalKind;
@@ -69,6 +77,14 @@ export interface AssetApprovalRequest {
   createdAt: number;
   /** 审批事由；缺省视为上架可调用（兼容旧调用） */
   reasons?: AssetApprovalReason[];
+  /** 更新说明 / 下架理由等 */
+  note?: string;
+  /** 目标版本号（更新申请） */
+  targetVersion?: string;
+  /** 下架范围（MVP 以 all 为主；versions 预留） */
+  unpublishMode?: SkillUnpublishMode;
+  /** 指定下架的版本号列表（预留） */
+  unpublishVersions?: string[];
 }
 
 export function approvalNodeStatuses(stepIndex: number): ApprovalNodeStatus[] {
@@ -77,4 +93,16 @@ export function approvalNodeStatuses(stepIndex: number): ApprovalNodeStatus[] {
     if (i === stepIndex) return 'active';
     return 'pending';
   });
+}
+
+export function approvalActionTitle(reasons?: AssetApprovalReason[]): string {
+  if (reasons?.includes('unpublish_skill')) return '下架审批';
+  if (reasons?.includes('update_version')) return '更新上架审批';
+  return '上架审批';
+}
+
+export function approvalFinalCta(reasons?: AssetApprovalReason[]): string {
+  if (reasons?.includes('unpublish_skill')) return '终审通过并下架';
+  if (reasons?.includes('update_version')) return '终审通过并生效更新';
+  return '终审通过并上架';
 }

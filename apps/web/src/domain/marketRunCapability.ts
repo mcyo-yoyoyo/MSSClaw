@@ -15,6 +15,11 @@ export function allowsTaskExecutionSurfaces(preset: NavPresetId): boolean {
   return preset === 'standard' || preset === 'full' || preset === 'custom';
 }
 
+/** 完整产品（及自定义）才开放 AI任务顶栏入口 */
+export function allowsAiTasksSurface(preset: NavPresetId): boolean {
+  return preset === 'full' || preset === 'custom';
+}
+
 /** @deprecated 请用 allowsTaskExecutionSurfaces；语义相同 */
 export function allowsMarketScenarioRun(preset: NavPresetId): boolean {
   return allowsTaskExecutionSurfaces(preset);

@@ -105,15 +105,13 @@ export function listVisibleBusinessScenarioCategories() {
 
 /** 发现场景 → 主业务篮子 */
 export const DISCOVER_TO_BUSINESS_SCENARIO: Record<DiscoverScenarioId, BusinessScenarioId> = {
+  'marketing-intel': 'S8',
+  'knowledge-qa': 'S6',
   'price-offer-monitor': 'S1',
   'ecommerce-review': 'S1',
-  'l10n-translation': 'S2',
   'retail-training': 'S3',
-  'customer-service': 'S5',
-  'ops-analytics': 'S8',
-  'fulfillment-settlement': 'S4',
-  'knowledge-deposit': 'S6',
   'hr-interview': 'S7',
+  'fulfillment-settlement': 'S4',
 };
 
 /** 热门宫格：有内容的篮子优先展示代表场景 */
@@ -121,13 +119,11 @@ export const BUSINESS_SCENARIO_FEATURED_DISCOVER: Partial<
   Record<BusinessScenarioId, DiscoverScenarioId>
 > = {
   S1: 'price-offer-monitor',
-  S2: 'l10n-translation',
   S3: 'retail-training',
   S4: 'fulfillment-settlement',
-  S5: 'customer-service',
-  S6: 'knowledge-deposit',
+  S6: 'knowledge-qa',
   S7: 'hr-interview',
-  S8: 'ops-analytics',
+  S8: 'marketing-intel',
 };
 
 export function isBusinessScenarioId(value: string): value is BusinessScenarioId {

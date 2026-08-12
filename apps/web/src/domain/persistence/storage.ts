@@ -1,4 +1,6 @@
 import type { ChatConfig } from '@/domain/chat';
+import { isWarRoom } from '@/domain/chat';
+import { getCurrentUserId } from '@/domain/currentUser';
 import { PROTOTYPE_AGENTS } from '@/domain/prototype/agents';
 import { PROTOTYPE_SKILLS } from '@/domain/prototype/skills';
 import { PROTOTYPE_TOOLS, pruneRetiredDemoTools } from '@/domain/prototype/tools';
@@ -20,6 +22,7 @@ import {
   saveSessionsApi,
 } from '@/api/persistenceApi';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { useSessionStore } from '@/stores/sessionStore';
 import { demoDefaults } from '@/domain/demoContentPolicy';
 import { reportShareSync } from '@/domain/shareSync';
 
@@ -165,30 +168,106 @@ function writeLocalSessions(workspaceId: string, chats: Record<string, ChatConfi
   memorySessions.set(workspaceId, structuredClone(chats));
 }
 
+/**
+ * 工作区会话对当前登录用户可见的子集：
+ * - 协作空间：全员可见（仍受成员权限约束）
+ * - 个人 AI 任务：仅 ownerUserId === 当前用户
+ * - 无归属的旧个人任务：首次加载时认领给当前用户（迁移）
+ */
+export function filterSessionsForCurrentUser(
+  chats: Record<string, ChatConfig>,
+): Record<string, ChatConfig> {
+  const uid = getCurrentUserId().trim();
+  const email = useSessionStore.getState().user?.email?.trim() || undefined;
+  const out: Record<string, ChatConfig> = {};
+  for (const [id, raw] of Object.entries(chats)) {
+    if (!raw) continue;
+    if (isWarRoom(raw)) {
+      out[id] = raw;
+      continue;
+    }
+    if (!uid) continue;
+    if (raw.ownerUserId && raw.ownerUserId !== uid) continue;
+    if (!raw.ownerUserId) {
+      out[id] = { ...raw, ownerUserId: uid, ownerEmail: email || raw.ownerEmail };
+    } else {
+      out[id] = raw;
+    }
+  }
+  return out;
+}
+
+/** 将本机可见会话写回共享库：保留他人个人任务，替换本人个人任务与协作空间 */
+function mergeSessionsForPersist(
+  remote: Record<string, ChatConfig>,
+  local: Record<string, ChatConfig>,
+): Record<string, ChatConfig> {
+  const uid = getCurrentUserId().trim();
+  const next: Record<string, ChatConfig> = { ...remote };
+
+  for (const id of Object.keys(next)) {
+    const c = next[id];
+    if (!c) continue;
+    if (isWarRoom(c)) {
+      // 协作空间以本地为准：若本地已删除则去掉
+      if (!local[id]) delete next[id];
+      continue;
+    }
+    if (uid && c.ownerUserId === uid) delete next[id];
+  }
+
+  for (const [id, c] of Object.entries(local)) {
+    if (isWarRoom(c)) {
+      next[id] = c;
+      continue;
+    }
+    next[id] = {
+      ...c,
+      ownerUserId: c.ownerUserId || uid || c.ownerUserId,
+      ownerEmail:
+        c.ownerEmail || useSessionStore.getState().user?.email?.trim() || c.ownerEmail,
+    };
+  }
+  return next;
+}
+
 export async function loadSessions(
   workspaceId: string,
 ): Promise<Record<string, ChatConfig> | null> {
+  let raw: Record<string, ChatConfig> | null = null;
   if (useWorkspaceStore.getState().apiConnected) {
     try {
       const remote = await fetchSessionsApi(workspaceId);
-      if (remote && Object.keys(remote).length) return remote;
+      if (remote && Object.keys(remote).length) raw = remote;
     } catch {
       /* fall through */
     }
   }
-  return readLocalSessions(workspaceId);
+  if (!raw) raw = readLocalSessions(workspaceId);
+  if (!raw) return null;
+  const filtered = filterSessionsForCurrentUser(raw);
+  writeLocalSessions(workspaceId, filtered);
+  return filtered;
 }
 
 export async function saveSessions(
   workspaceId: string,
   chats: Record<string, ChatConfig>,
 ): Promise<MarketplaceSaveResult> {
-  writeLocalSessions(workspaceId, chats);
+  const owned = filterSessionsForCurrentUser(chats);
+  writeLocalSessions(workspaceId, owned);
   if (!useWorkspaceStore.getState().apiConnected) {
     return { synced: false, reason: 'offline' };
   }
   try {
-    await saveSessionsApi(workspaceId, chats);
+    let remote: Record<string, ChatConfig> = {};
+    try {
+      remote = (await fetchSessionsApi(workspaceId)) ?? {};
+    } catch {
+      remote = {};
+    }
+    const merged = mergeSessionsForPersist(remote, owned);
+    await saveSessionsApi(workspaceId, merged);
     return { synced: true };
   } catch (err) {
     return {

@@ -1,8 +1,8 @@
 ﻿import { openUseSkills } from '@/domain/openHomeJourney';
 
 /**
- * 新建 Agent 任务：打开「做任务 / 用 · 做任务」，
- * 由 HomeCommandBox 提交后创建任务会话。
+ * 新建 Agent 任务：完整产品落到 AI 任务页内对话壳；
+ * 否则回落「做任务」旧链路。
  */
 export function openAiAssistantForNewTask() {
   openUseSkills({ focusComposer: true });

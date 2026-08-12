@@ -59,7 +59,7 @@ export async function hydrateAllPlatformDocs(workspaceId?: string): Promise<void
   useAiNewsPreferenceStore.getState().hydrate();
   useAiNewsStore.getState().hydrate();
   useAiBriefEmailCopyStore.getState().hydrate();
-  useLlmConfigStore.getState().hydrate();
+  await useLlmConfigStore.getState().hydrate({ fresh: true });
   useAssetApprovalStore.getState().hydrate();
 
   const { hydrateInboxMessages } = await import('@/domain/persistence/inboxStorage');

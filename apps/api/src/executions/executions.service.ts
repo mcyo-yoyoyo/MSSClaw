@@ -159,14 +159,23 @@ export class ExecutionsService {
     yield* this.runScriptedStream(base, params, agentType, agentName, planSteps, signal);
   }
 
-  /** 优先 LLM_* 环境变量，否则回退工作区共享 llm-config 文档 */
+  /** 优先 LLM_* 凭证；模型选用与工作区 llm-config 联动（同一 DB 文档） */
   private async resolveLlmConfig(workspaceId: string): Promise<NestLlmRuntimeConfig | null> {
-    const fromEnv = nestLlmConfigFromEnv();
-    if (fromEnv) return fromEnv;
     const row = await this.prisma.centerRecord.findUnique({
       where: { id: `doc-llm-config-${workspaceId}` },
     });
-    return nestLlmConfigFromDoc(row?.payload);
+    const fromDoc = nestLlmConfigFromDoc(row?.payload);
+    const fromEnv = nestLlmConfigFromEnv();
+    if (fromEnv) {
+      // 凭证用部署环境；model / baseUrl 优先跟工作区目录选用（前后台联动）
+      return {
+        ...fromEnv,
+        model: fromDoc?.model || fromEnv.model,
+        baseUrl: fromDoc?.baseUrl || fromEnv.baseUrl,
+        source: fromDoc ? 'workspace-doc' : 'env',
+      };
+    }
+    return fromDoc;
   }
 
   private async *runLlmStream(

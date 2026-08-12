@@ -54,14 +54,18 @@ export function ProjectDocsGallery({
   items,
   initialItemId,
   className,
+  /** widescreen：16:9 舞台，适合 PDF / PPT / 案例预览 */
+  stageAspect = 'auto',
 }: {
   items: PortalContentItem[];
   initialItemId?: string;
   className?: string;
+  stageAspect?: 'auto' | 'widescreen';
 }) {
   const slides = useMemo(() => buildProjectDocSlides(items), [items]);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
+  const widescreen = stageAspect === 'widescreen';
 
   useEffect(() => {
     if (!slides.length) {
@@ -124,7 +128,8 @@ export function ProjectDocsGallery({
     return (
       <div
         className={cn(
-          'flex h-full min-h-[320px] flex-col items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-4 text-center',
+          'flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-4 text-center',
+          widescreen ? 'aspect-video w-full' : 'h-full min-h-[320px]',
           className,
         )}
       >
@@ -140,7 +145,7 @@ export function ProjectDocsGallery({
   const current = slides[index]!;
 
   return (
-    <div className={cn('flex h-full min-h-0 flex-col gap-3', className)}>
+    <div className={cn('flex min-h-0 flex-col gap-3', !widescreen && 'h-full', className)}>
       <div className="flex shrink-0 items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -151,7 +156,8 @@ export function ProjectDocsGallery({
               <p className="truncate text-[13px] font-semibold text-zinc-900">{current.title}</p>
               <p className="text-[11px] text-zinc-400">
                 {previewKindLabel(current.kind)} · {index + 1}/{slides.length}
-                {slides.length > 1 ? ' · 左右滑动切换' : ''}
+                {widescreen ? ' · 16:9' : ''}
+                {slides.length > 1 ? ' · 左右切换' : ''}
               </p>
             </div>
           </div>
@@ -182,52 +188,66 @@ export function ProjectDocsGallery({
         </div>
       </div>
 
-      <div className="relative min-h-0 flex-1">
-        {slides.length > 1 ? (
-          <>
-            <button
-              type="button"
-              aria-label="上一份"
-              disabled={index <= 0}
-              onClick={() => scrollTo(index - 1)}
-              className="absolute left-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-zinc-200/90 bg-white/95 text-zinc-700 shadow-md transition hover:bg-white disabled:opacity-30"
-            >
-              <i className="fa-solid fa-chevron-left text-[12px]" />
-            </button>
-            <button
-              type="button"
-              aria-label="下一份"
-              disabled={index >= slides.length - 1}
-              onClick={() => scrollTo(index + 1)}
-              className="absolute right-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-zinc-200/90 bg-white/95 text-zinc-700 shadow-md transition hover:bg-white disabled:opacity-30"
-            >
-              <i className="fa-solid fa-chevron-right text-[12px]" />
-            </button>
-          </>
-        ) : null}
-
+      <div
+        className={cn(
+          'relative overflow-hidden rounded-xl border border-zinc-200/90 bg-[#0c0c0d]',
+          widescreen
+            ? 'w-full shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]'
+            : 'min-h-0 flex-1',
+        )}
+      >
         <div
-          ref={scrollerRef}
-          className="flex h-full snap-x snap-mandatory overflow-x-auto scroll-hidden"
+          className={cn(
+            'relative',
+            widescreen ? 'aspect-video w-full' : 'h-full min-h-[280px]',
+          )}
         >
-          {slides.map((slide) => (
-            <div
-              key={slide.id}
-              className="box-border flex h-full w-full min-w-full shrink-0 snap-center flex-col px-1"
-            >
-              {slide.previewFile ? (
-                <CaseDocumentPreview
-                  file={slide.previewFile}
-                  downloadFile={slide.downloadFile}
-                  variant="immersive"
-                  hideChrome
-                  className="h-full"
-                />
-              ) : (
-                <LinkPreviewSlide title={slide.title} url={slide.url!} />
-              )}
-            </div>
-          ))}
+          {slides.length > 1 ? (
+            <>
+              <button
+                type="button"
+                aria-label="上一份"
+                disabled={index <= 0}
+                onClick={() => scrollTo(index - 1)}
+                className="absolute left-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white shadow-md backdrop-blur-sm transition hover:bg-black/75 disabled:opacity-30"
+              >
+                <i className="fa-solid fa-chevron-left text-[12px]" />
+              </button>
+              <button
+                type="button"
+                aria-label="下一份"
+                disabled={index >= slides.length - 1}
+                onClick={() => scrollTo(index + 1)}
+                className="absolute right-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white shadow-md backdrop-blur-sm transition hover:bg-black/75 disabled:opacity-30"
+              >
+                <i className="fa-solid fa-chevron-right text-[12px]" />
+              </button>
+            </>
+          ) : null}
+
+          <div
+            ref={scrollerRef}
+            className="absolute inset-0 flex snap-x snap-mandatory overflow-x-auto scroll-hidden"
+          >
+            {slides.map((slide) => (
+              <div
+                key={slide.id}
+                className="box-border flex h-full w-full min-w-full shrink-0 snap-center flex-col p-1.5 sm:p-2"
+              >
+                {slide.previewFile ? (
+                  <CaseDocumentPreview
+                    file={slide.previewFile}
+                    downloadFile={slide.downloadFile}
+                    variant="immersive"
+                    hideChrome
+                    className="h-full overflow-hidden rounded-lg"
+                  />
+                ) : (
+                  <LinkPreviewSlide title={slide.title} url={slide.url!} />
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
