@@ -148,17 +148,28 @@ export async function loginWithApi(params: {
     },
     8000,
   );
+  const ct = res.headers.get('content-type') || '';
+  const looksLikeApi = ct.includes('application/json');
   if (!res.ok) {
-    // 502/5xx：Vite 反代不到 Nest，视为服务不可达，交给本地种子账号回退
-    if (res.status >= 500) {
+    // 静态站（GitHub Pages）对 POST /api 常回 404/405 HTML，不能当成密码错误
+    if (
+      res.status >= 500 ||
+      res.status === 404 ||
+      res.status === 405 ||
+      res.status === 408 ||
+      !looksLikeApi
+    ) {
       throw new Error(`login_unreachable_${res.status}`);
     }
     try {
       const body = (await res.json()) as { error?: string };
       return { ok: false, error: body.error || `登录失败（HTTP ${res.status}）` };
     } catch {
-      return { ok: false, error: `登录失败（HTTP ${res.status}）` };
+      throw new Error(`login_unreachable_${res.status}`);
     }
+  }
+  if (!looksLikeApi) {
+    throw new Error('login_unreachable_not_json');
   }
   return (await res.json()) as
     | {

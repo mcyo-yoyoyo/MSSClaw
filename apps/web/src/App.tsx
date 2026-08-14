@@ -159,7 +159,18 @@ export function App() {
   useEffect(() => {
     void (async () => {
       const health = await fetchApiHealthInfo();
-      if (!health.ok) return;
+      if (!health.ok) {
+        const loopback =
+          typeof location !== 'undefined' &&
+          (location.hostname === 'localhost' ||
+            location.hostname === '127.0.0.1' ||
+            location.hostname === '[::1]');
+        useWorkspaceStore.setState({
+          apiConnected: false,
+          apiStatus: loopback ? 'local-demo' : 'unreachable',
+        });
+        return;
+      }
       useWorkspaceStore.setState({
         apiConnected: true,
         apiStatus: 'connected',

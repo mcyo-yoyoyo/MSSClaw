@@ -148,8 +148,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const ws = useWorkspaceStore.getState().workspaceId || 'ws-mss-ai';
     sessionEpoch += 1;
 
-    // 不依赖 apiConnected：探活在登录之后，否则永远走不进 Nest
-    if (isApiEnabled()) {
+    // 已确认无 Nest（Pages 静态站 / 探活失败）时不要 POST，避免 405
+    const apiStatus = useWorkspaceStore.getState().apiStatus;
+    const tryRemote =
+      isApiEnabled() && apiStatus !== 'unreachable' && apiStatus !== 'local-demo';
+    if (tryRemote) {
       try {
         const remote = await loginWithApi({ email, password, workspaceId: ws });
         if (remote.ok && remote.token) {
