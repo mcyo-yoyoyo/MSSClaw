@@ -78,6 +78,15 @@ export type MarketShelfCard = {
   description: string;
   /** 外部工具：厂商名（弱化展示在产品名下） */
   productName?: string;
+  /**
+   * 「能帮我做什么」结果导向短句（优先于 description 作副文案）
+   * 来自 bestFor / cardSummary 首句
+   */
+  outcomeHint?: string;
+  /** 安全分级：外链 / 公司内 / MSS 自研 */
+  securityLevel?: 'external' | 'internal' | 'mss';
+  /** 适用场景短标签（最多展示 3 个） */
+  sceneTags?: string[];
   icon: string;
   /** 外精选 / 公司推荐：品牌 Logo（可上传或由官网初始化） */
   logoUrl?: string;
@@ -112,11 +121,22 @@ export type MarketShelfCard = {
   toolTypeId?: string;
 };
 
+export const MARKET_SECURITY_LABEL: Record<
+  NonNullable<MarketShelfCard['securityLevel']>,
+  string
+> = {
+  external: '外部工具',
+  internal: '公司工具',
+  mss: 'MSS能力',
+};
+
 /** 外部工具卡：产品名为标题，卡片核心作用为描述（对齐 Demo） */
 function externalToolPresentation(tool: PrototypeToolSeed): {
   title: string;
   productName?: string;
   description: string;
+  outcomeHint?: string;
+  sceneTags?: string[];
 } {
   const configured = tool.marketTitle?.trim();
   const summary =
@@ -127,17 +147,27 @@ function externalToolPresentation(tool: PrototypeToolSeed): {
       .trim() ||
     tool.desc ||
     '';
+  const outcomeHint = tool.bestFor?.trim() || summary || undefined;
+  const sceneTags = (tool.bestFor ?? '')
+    .split(/[、,，/｜|]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 3);
   if (configured) {
     return {
       title: configured,
       productName: tool.company || tool.name,
       description: summary,
+      outcomeHint,
+      sceneTags: sceneTags.length ? sceneTags : undefined,
     };
   }
   return {
     title: tool.name,
     productName: tool.company || undefined,
     description: summary,
+    outcomeHint,
+    sceneTags: sceneTags.length ? sceneTags : undefined,
   };
 }
 
@@ -239,13 +269,28 @@ export function listMarketToolCards(
       const presentation =
         kind === 'external'
           ? externalToolPresentation(t)
-          : { title: t.name, productName: undefined as string | undefined, description: t.desc };
+          : {
+              title: t.name,
+              productName: undefined as string | undefined,
+              description: t.desc,
+              outcomeHint: t.bestFor?.trim() || t.cardSummary?.trim() || undefined,
+              sceneTags: (t.bestFor ?? '')
+                .split(/[、,，/｜|]/)
+                .map((s) => s.trim())
+                .filter(Boolean)
+                .slice(0, 3),
+            };
       return {
         id: t.id,
         kind,
         title: presentation.title,
         description: presentation.description,
         productName: presentation.productName,
+        outcomeHint: presentation.outcomeHint,
+        sceneTags: presentation.sceneTags?.length ? presentation.sceneTags : undefined,
+        securityLevel: (kind === 'external' ? 'external' : 'internal') as
+          | 'external'
+          | 'internal',
         icon: t.icon || 'fa-plug',
         logoUrl: resolveToolLogoUrl(t),
         badges: toolBadges(t),
@@ -286,6 +331,13 @@ export function listInternalOfficeMarketCards(
       kind: 'internal' as const,
       title: resolved.name,
       description: (t?.desc || st.blurb).trim(),
+      outcomeHint: t?.bestFor?.trim() || st.blurb || undefined,
+      sceneTags: (t?.bestFor ?? '')
+        .split(/[、,，/｜|]/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, 3),
+      securityLevel: 'internal' as const,
       icon: t?.icon || 'fa-cube',
       logoUrl: resolveToolLogoUrl(
         t ?? {
@@ -332,6 +384,12 @@ export function listMarketProjectCards(
         kind: 'projects' as const,
         title: d.label,
         description: d.desc || d.label,
+        outcomeHint: d.desc || d.label,
+        sceneTags: scenarioBadges(d, items)
+          .filter((b) => b.tone === 'type')
+          .map((b) => b.label)
+          .slice(0, 3),
+        securityLevel: 'mss' as const,
         icon: d.icon || 'fa-map',
         badges: scenarioBadges(d, items),
         featured: false,

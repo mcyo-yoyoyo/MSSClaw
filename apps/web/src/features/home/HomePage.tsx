@@ -65,6 +65,10 @@ import { HomeMarketChannels } from '@/components/home/HomeMarketChannels';
 import { HomeIntentFinder } from '@/components/home/HomeIntentFinder';
 import { HomeMyWorkbench } from '@/components/home/HomeMyWorkbench';
 import {
+  MarketCompareDock,
+  MarketCompareDrawer,
+} from '@/components/market/MarketCompareDrawer';
+import {
   ensurePlazaToolGuidesBootstrapped,
   usePlazaToolGuideStore,
 } from '@/stores/plazaToolGuideStore';
@@ -265,6 +269,8 @@ export function HomePage({
       !q ||
       c.title.toLowerCase().includes(q) ||
       c.description.toLowerCase().includes(q) ||
+      (c.outcomeHint?.toLowerCase().includes(q) ?? false) ||
+      (c.sceneTags?.some((t) => t.toLowerCase().includes(q)) ?? false) ||
       c.badges.some((b) => b.label.toLowerCase().includes(q));
 
     const byPinsThenClicks = (list: MarketShelfCardModel[]) =>
@@ -677,6 +683,8 @@ export function HomePage({
           </div>
         )}
       </div>
+      <MarketCompareDock />
+      <MarketCompareDrawer onOpenCard={openPortalCard} />
     </div>
   );
 }

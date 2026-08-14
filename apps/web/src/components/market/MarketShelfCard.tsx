@@ -1,7 +1,11 @@
 import { cn } from '@/lib/utils';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
-import type { MarketShelfCard as MarketShelfCardModel } from '@/domain/marketShelf';
+import {
+  MARKET_SECURITY_LABEL,
+  type MarketShelfCard as MarketShelfCardModel,
+} from '@/domain/marketShelf';
+import { useMarketCompareStore } from '@/stores/marketCompareStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 
@@ -15,6 +19,7 @@ export function MarketShelfCard({
   onHowTo,
   primaryLabel: primaryLabelOverride,
   howToLabel = '快速上手',
+  enableCompare = true,
 }: {
   card: MarketShelfCardModel;
   variant?: 'grid' | 'featured' | 'compact';
@@ -26,6 +31,8 @@ export function MarketShelfCard({
   onHowTo?: () => void;
   primaryLabel?: string;
   howToLabel?: string;
+  /** 轻量对比勾选（同货架 2–3 项） */
+  enableCompare?: boolean;
 }) {
   const featured = variant === 'featured';
   const compact = variant === 'compact';
@@ -48,7 +55,16 @@ export function MarketShelfCard({
 
   const favorited = useMarketFavoriteStore((s) => s.isFavorite(card.id, card.kind));
   const toggleFavorite = useMarketFavoriteStore((s) => s.toggle);
+  const compareSelected = useMarketCompareStore((s) => s.isSelected(card.id, card.kind));
+  const toggleCompare = useMarketCompareStore((s) => s.toggle);
   const showToast = useMarketplaceStore((s) => s.showToast);
+
+  const outcomeLine = card.outcomeHint?.trim() || card.description;
+  const security = card.securityLevel;
+  const sceneTags = (card.sceneTags?.length
+    ? card.sceneTags
+    : card.badges.filter((b) => b.tone === 'type').map((b) => b.label)
+  ).slice(0, 3);
 
   const onToggleFavorite = (e: { stopPropagation: () => void }) => {
     e.stopPropagation();
@@ -60,6 +76,12 @@ export function MarketShelfCard({
       logoUrl: card.logoUrl,
     });
     showToast(on ? `已收藏：${card.title}` : `已取消收藏：${card.title}`);
+  };
+
+  const onToggleCompare = (e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    const res = toggleCompare(card);
+    if (!res.ok && res.message) showToast(res.message);
   };
 
   return (
@@ -154,13 +176,13 @@ export function MarketShelfCard({
                 compact
                   ? 'line-clamp-2 text-[11px]'
                   : card.kind === 'external' || (card.productName && !card.scopeBadge)
-                    ? 'line-clamp-1 text-[12px]'
+                    ? 'line-clamp-2 text-[12px]'
                     : featured
                       ? 'line-clamp-3 text-[13px]'
                       : 'line-clamp-2 text-[12px]',
               )}
             >
-              {card.description}
+              {outcomeLine}
             </p>
             {!compact && featured && card.hasHowto ? (
               <p className="mt-2 text-[11px] leading-snug text-[#86868b]">
@@ -176,22 +198,44 @@ export function MarketShelfCard({
               homeDense ? 'mt-2.5' : 'mt-3.5',
             )}
           >
-            {card.badges.slice(0, featured ? 4 : 3).map((b) => (
+            {security ? (
               <span
-                key={`${b.tone}-${b.label}`}
                 className={cn(
-                  'rounded-md bg-zinc-100/90 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600',
-                  b.label === '海外' && 'market-badge-overseas',
-                  b.label === '国内' && 'market-badge-domestic',
-                  // 与 Skill Hub 一致：领域 / 区域 / 场景
-                  b.tone === 'dept' && 'bg-violet-50 text-violet-800',
-                  b.tone === 'region' && 'bg-teal-50 text-teal-800',
-                  b.tone === 'type' && 'bg-amber-50 text-amber-800',
+                  'rounded-md px-1.5 py-0.5 text-[10px] font-semibold',
+                  security === 'external' && 'bg-amber-50 text-amber-800',
+                  security === 'internal' && 'bg-teal-50 text-teal-800',
+                  security === 'mss' && 'bg-violet-50 text-violet-800',
                 )}
               >
-                {b.label}
+                {MARKET_SECURITY_LABEL[security]}
+              </span>
+            ) : null}
+            {sceneTags.map((tag) => (
+              <span
+                key={`scene-${tag}`}
+                className="rounded-md bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-800"
+              >
+                {tag}
               </span>
             ))}
+            {card.badges
+              .filter((b) => !(b.tone === 'type' && sceneTags.includes(b.label)))
+              .slice(0, featured ? 3 : 2)
+              .map((b) => (
+                <span
+                  key={`${b.tone}-${b.label}`}
+                  className={cn(
+                    'rounded-md bg-zinc-100/90 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600',
+                    b.label === '海外' && 'market-badge-overseas',
+                    b.label === '国内' && 'market-badge-domestic',
+                    b.tone === 'dept' && 'bg-violet-50 text-violet-800',
+                    b.tone === 'region' && 'bg-teal-50 text-teal-800',
+                    b.tone === 'type' && 'bg-amber-50 text-amber-800',
+                  )}
+                >
+                  {b.label}
+                </span>
+              ))}
           </div>
         ) : null}
       </button>
@@ -224,6 +268,30 @@ export function MarketShelfCard({
         ) : (
           <span className="mr-auto" />
         )}
+        {enableCompare ? (
+          <button
+            type="button"
+            onClick={onToggleCompare}
+            title={compareSelected ? '取消对比' : '加入对比'}
+            aria-label={compareSelected ? '取消对比' : '加入对比'}
+            aria-pressed={compareSelected}
+            className={cn(
+              'inline-flex shrink-0 items-center justify-center rounded-lg transition',
+              compact ? 'h-7 w-7' : 'h-8 w-8',
+              compareSelected
+                ? 'bg-sky-50 text-sky-700 hover:bg-sky-100'
+                : 'bg-black/[0.04] text-zinc-400 hover:bg-black/[0.07] hover:text-zinc-600',
+            )}
+          >
+            <i
+              className={cn(
+                compact ? 'text-[11px]' : 'text-[12px]',
+                'fa-solid fa-code-compare',
+                !compareSelected && 'opacity-70',
+              )}
+            />
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={onToggleFavorite}
@@ -231,13 +299,19 @@ export function MarketShelfCard({
           aria-label={favorited ? '取消收藏' : '加入收藏'}
           aria-pressed={favorited}
           className={cn(
-            'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition',
+            'inline-flex shrink-0 items-center justify-center rounded-lg transition',
+            compact ? 'h-7 w-7' : 'h-8 w-8',
             favorited
               ? 'bg-amber-50 text-amber-600 hover:bg-amber-100'
               : 'bg-black/[0.04] text-zinc-400 hover:bg-black/[0.07] hover:text-zinc-600',
           )}
         >
-          <i className={cn('text-[12px]', favorited ? 'fa-solid fa-star' : 'fa-regular fa-star')} />
+          <i
+            className={cn(
+              compact ? 'text-[11px]' : 'text-[12px]',
+              favorited ? 'fa-solid fa-star' : 'fa-regular fa-star',
+            )}
+          />
         </button>
         {onHowTo ? (
           <button

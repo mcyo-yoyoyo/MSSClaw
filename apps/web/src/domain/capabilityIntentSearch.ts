@@ -44,10 +44,13 @@ function haystackOf(card: MarketShelfCard): string {
   return [
     card.title,
     card.description,
+    card.outcomeHint ?? '',
     card.productName ?? '',
+    ...(card.sceneTags ?? []),
     ...card.badges.map((b) => b.label),
     card.kind,
     MARKET_SHELF_META[card.kind].label,
+    card.securityLevel ?? '',
   ]
     .join(' ')
     .toLowerCase();

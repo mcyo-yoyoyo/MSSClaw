@@ -46,6 +46,11 @@ import {
 import { useExternalTaxonomyCatalogStore } from '@/stores/externalTaxonomyCatalogStore';
 import { openMarketToolDetail } from '@/domain/openHomeJourney';
 import { MarketShelfCard } from '@/components/market/MarketShelfCard';
+import {
+  MarketCompareDock,
+  MarketCompareDrawer,
+} from '@/components/market/MarketCompareDrawer';
+import { ExternalComplianceBanner } from '@/components/market/ExternalComplianceBanner';
 import { PageCanvas } from '@/components/layout/PageCanvas';
 import { PageStageHero } from '@/components/layout/PageStageHero';
 import { ExternalMarketFilters } from '@/components/market/ExternalMarketFilters';
@@ -467,6 +472,9 @@ export function MarketShelfPage({
         kind: 'projects',
         title: skillDisplayName(s),
         description: (s.desc || '').replace(/^【[^】]+】/, '').trim(),
+        outcomeHint: (s.desc || '').replace(/^【[^】]+】/, '').trim() || skillDisplayName(s),
+        sceneTags: bizLabel ? [bizLabel] : undefined,
+        securityLevel: 'mss' as const,
         icon: s.icon || 'fa-cube',
         badges,
         featured: true,
@@ -867,6 +875,10 @@ export function MarketShelfPage({
         </PageStageHero>
 
         {kind === 'external' ? (
+          <ExternalComplianceBanner className="mb-3" />
+        ) : null}
+
+        {kind === 'external' ? (
           <ExternalMarketFilters
             mode={externalFilterMode}
             scene={externalScene}
@@ -1250,6 +1262,8 @@ export function MarketShelfPage({
         open={submitOpen && (kind === 'external' || kind === 'internal')}
         onClose={() => setSubmitOpen(false)}
       />
+      <MarketCompareDock />
+      <MarketCompareDrawer onOpenCard={openCard} />
       <CaseEditorModal
         target={
           submitOpen && kind === 'projects' && mssSurface === 'projects'

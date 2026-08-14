@@ -11,8 +11,10 @@ import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
 import { resolveToolBusinessScenarios } from '@/domain/toolBusinessScenarios';
 import { getBusinessScenarioMeta } from '@/domain/businessScenarios';
 import { resolveExternalToolTypeMeta } from '@/domain/externalTaxonomyCatalog';
+import { ExternalComplianceBanner } from '@/components/market/ExternalComplianceBanner';
 import { openMarketShelf } from '@/domain/openHomeJourney';
 import type { MarketShelfKind } from '@/domain/marketShelf';
+import { MARKET_SECURITY_LABEL } from '@/domain/marketShelf';
 import { useExternalTaxonomyCatalogStore } from '@/stores/externalTaxonomyCatalogStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAppViewStore } from '@/stores/appViewStore';
@@ -199,6 +201,8 @@ export function MarketToolDetailPage() {
           返回货架
         </button>
 
+        {kind === 'external' ? <ExternalComplianceBanner className="mb-4" dense /> : null}
+
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div>
             <div className="rounded-3xl border border-zinc-200/80 bg-gradient-to-b from-white to-zinc-50/50 p-5 shadow-[0_12px_36px_-28px_rgba(24,24,27,0.4)] md:p-6">
@@ -220,8 +224,20 @@ export function MarketToolDetailPage() {
                     <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600">
                       {kind === 'internal' ? '内部工具' : '外部工具'}
                     </span>
+                    <span
+                      className={cn(
+                        'rounded-md px-1.5 py-0.5 text-[10px] font-semibold',
+                        kind === 'external'
+                          ? 'bg-amber-50 text-amber-800'
+                          : 'bg-teal-50 text-teal-800',
+                      )}
+                    >
+                      {MARKET_SECURITY_LABEL[kind === 'internal' ? 'internal' : 'external']}
+                    </span>
                   </div>
-                  <p className="mt-1.5 text-[13px] leading-relaxed text-zinc-500">{heroBlurb}</p>
+                  <p className="mt-1.5 text-[13px] leading-relaxed text-zinc-500">
+                    {tool.bestFor?.trim() || heroBlurb}
+                  </p>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <button
                       type="button"
