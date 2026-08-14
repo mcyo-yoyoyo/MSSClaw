@@ -33,6 +33,7 @@ jobs:
       - name: Build React web (same as npm run build / npm run dev)
         env:
           GITHUB_PAGES: 'true'
+          VITE_FORCE_LOCAL_DEMO: 'true'
         run: npm run build --workspace @mss-claw/web
 
       - name: Verify React entry

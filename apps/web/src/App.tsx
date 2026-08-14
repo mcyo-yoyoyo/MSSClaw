@@ -50,6 +50,7 @@ import { openAiAssistantForNewTask } from '@/domain/openNewTask';
 import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
 import { AccessDeniedPanel } from '@/components/shell/AccessDeniedPanel';
 import { AppErrorBoundary } from '@/components/common/AppErrorBoundary';
+import { isApiEnabled } from '@/api/client';
 import { fetchApiHealthInfo } from '@/api/persistenceApi';
 import { cn } from '@/lib/utils';
 
@@ -158,6 +159,13 @@ export function App() {
 
   useEffect(() => {
     void (async () => {
+      if (!isApiEnabled()) {
+        useWorkspaceStore.setState({
+          apiConnected: false,
+          apiStatus: 'local-demo',
+        });
+        return;
+      }
       const health = await fetchApiHealthInfo();
       if (!health.ok) {
         const loopback =

@@ -47,9 +47,17 @@ export function getApiBase(): string {
   return (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? '';
 }
 
-/** 是否应探活 / 启用共享持久化（默认同源探活；可被 FORCE_LOCAL_DEMO 关闭） */
+/** GitHub Pages 等静态托管：没有 Nest，POST /api 会 405 */
+export function isStaticFrontendHost(): boolean {
+  if (typeof location === 'undefined') return false;
+  const host = location.hostname;
+  return host.endsWith('.github.io') || host === 'github.io';
+}
+
+/** 是否应探活 / 启用共享持久化（默认同源探活；静态站与 FORCE_LOCAL_DEMO 关闭） */
 export function isApiEnabled(): boolean {
   if (isForceLocalDemo()) return false;
+  if (isStaticFrontendHost()) return false;
   return true;
 }
 

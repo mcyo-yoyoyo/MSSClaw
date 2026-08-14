@@ -168,7 +168,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           return { ok: true };
         }
         if (remote.ok === false) {
-          return { ok: false, error: remote.error || '登录失败' };
+          const msg = remote.error || '登录失败';
+          // 仅账号/密码类错误硬失败；HTTP 405/不可达必须回退本地演示登录
+          if (/密码|账号|不存在|停用|尚未|未激活/.test(msg) && !/\b40[45]\b/.test(msg)) {
+            return { ok: false, error: msg };
+          }
         }
       } catch {
         useWorkspaceStore.setState({ apiConnected: false, apiStatus: 'unreachable' });
