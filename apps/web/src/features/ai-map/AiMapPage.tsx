@@ -40,7 +40,6 @@ import type { DeptFilter, EfficiencyFilter, RegionFilter } from '@/domain/assetF
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { usePortalContentStore } from '@/stores/portalContentStore';
 import { useAppViewStore } from '@/stores/appViewStore';
-import { useHomeStore } from '@/stores/homeStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { returnFromResource } from '@/domain/openResourceNav';
 import { canExecuteChat } from '@/domain/permissions';
@@ -562,7 +561,6 @@ export function AiMapPage({
               <button
                 type="button"
                 onClick={() => {
-                  useHomeStore.getState().setHomeMode('portal');
                   useNavigationIntentStore.getState().clearReturnTarget();
                   setAppView('home');
                 }}

@@ -3,7 +3,7 @@
  * 对应 Nest：GET/PUT /api/v1/workspaces/:id/docs/:kind
  */
 
-import { apiUrl, isApiEnabled, apiAuthHeaders } from '@/api/client';
+import { apiAuthHeaders, apiUrl, fetchWithTimeout, isApiEnabled } from '@/api/client';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 export type PlatformDocKind =
@@ -23,6 +23,7 @@ export type PlatformDocKind =
   | 'market-featured'
   | 'market-favorites'
   | 'market-recent'
+  | 'market-hidden'
   | 'content-engagement'
   | 'audit-log'
   | 'ai-news-prefs'
@@ -138,13 +139,26 @@ export async function loginWithApi(params: {
   if (!isApiEnabled()) {
     return { ok: false, error: '共享服务未启用' };
   }
-  const res = await fetch(apiUrl('/api/v1/auth/login'), {
-    method: 'POST',
-    headers: jsonHeaders(),
-    body: JSON.stringify(params),
-  });
+  const res = await fetchWithTimeout(
+    apiUrl('/api/v1/auth/login'),
+    {
+      method: 'POST',
+      headers: jsonHeaders(),
+      body: JSON.stringify(params),
+    },
+    8000,
+  );
   if (!res.ok) {
-    return { ok: false, error: `登录服务异常（HTTP ${res.status}）` };
+    // 502/5xx：Vite 反代不到 Nest，视为服务不可达，交给本地种子账号回退
+    if (res.status >= 500) {
+      throw new Error(`login_unreachable_${res.status}`);
+    }
+    try {
+      const body = (await res.json()) as { error?: string };
+      return { ok: false, error: body.error || `登录失败（HTTP ${res.status}）` };
+    } catch {
+      return { ok: false, error: `登录失败（HTTP ${res.status}）` };
+    }
   }
   return (await res.json()) as
     | {
@@ -183,9 +197,13 @@ export async function fetchSessionMeApi(workspaceId?: string): Promise<
 > {
   if (!isApiEnabled()) return { ok: false, error: '共享服务未启用' };
   const qs = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
-  const res = await fetch(apiUrl(`/api/v1/auth/me${qs}`), {
-    headers: { Accept: 'application/json', ...apiAuthHeaders() },
-  });
+  const res = await fetchWithTimeout(
+    apiUrl(`/api/v1/auth/me${qs}`),
+    {
+      headers: { Accept: 'application/json', ...apiAuthHeaders() },
+    },
+    8000,
+  );
   if (!res.ok) return { ok: false, error: `会话校验失败（HTTP ${res.status}）` };
   return (await res.json()) as
     | {

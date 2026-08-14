@@ -239,24 +239,24 @@ export function CatalogAgentDetailModal({
                 编辑
               </button>
             ) : null}
-            {canRun ? (
-              <button
-                type="button"
-                onClick={() => onRun(agent)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-[12px] font-semibold text-zinc-800 transition hover:bg-zinc-50"
-              >
-                <i className="fa-solid fa-play text-[10px]" />
-                执行
-              </button>
-            ) : null}
             <button
               type="button"
               onClick={handleDownload}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-800"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-[12px] font-medium text-zinc-700 transition hover:bg-zinc-50"
             >
               <i className="fa-solid fa-download text-[10px]" />
               下载
             </button>
+            {canRun ? (
+              <button
+                type="button"
+                onClick={() => onRun(agent)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-800"
+              >
+                <i className="fa-solid fa-play text-[10px]" />
+                在线试用
+              </button>
+            ) : null}
           </div>
         </div>
       }

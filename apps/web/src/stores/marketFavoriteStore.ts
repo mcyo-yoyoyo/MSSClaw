@@ -12,7 +12,7 @@ import {
 
 const MAX = 40;
 const DOC_KIND = 'market-favorites' as const;
-const LS_KEY = 'mssclaw:market-favorites-v1';
+const LEGACY_LS_KEY = 'mssclaw:market-favorites-v1';
 
 export type MarketFavoriteItem = {
   id: string;
@@ -21,6 +21,8 @@ export type MarketFavoriteItem = {
   icon?: string;
   logoUrl?: string;
   at: number;
+  /** 用户给收藏工具写的备注 */
+  note?: string;
 };
 
 type FavoritesDoc = {
@@ -36,41 +38,23 @@ function userBucket(): string {
 function readUserItems(doc: FavoritesDoc | null | undefined, uid: string): MarketFavoriteItem[] {
   const fromUser = doc?.byUserId?.[uid];
   if (Array.isArray(fromUser)) return fromUser.slice(0, MAX);
-  // 兼容旧文档：仅迁移到当前用户桶，避免多人共用一份收藏
   if (Array.isArray(doc?.items)) return doc.items.slice(0, MAX);
   return [];
 }
 
-function readLocal(): MarketFavoriteItem[] {
+/** 一次性迁出旧 localStorage，之后不再读写浏览器缓存 */
+function takeLegacyLocal(): MarketFavoriteItem[] {
   try {
-    const raw = localStorage.getItem(LS_KEY);
+    const raw = localStorage.getItem(LEGACY_LS_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as FavoritesDoc;
-    return readUserItems(parsed, userBucket());
+    localStorage.removeItem(LEGACY_LS_KEY);
+    return readUserItems(JSON.parse(raw) as FavoritesDoc, userBucket());
   } catch {
     return [];
   }
 }
 
-function writeLocal(items: MarketFavoriteItem[]) {
-  try {
-    const uid = userBucket();
-    const prev = (() => {
-      try {
-        return JSON.parse(localStorage.getItem(LS_KEY) || '{}') as FavoritesDoc;
-      } catch {
-        return {} as FavoritesDoc;
-      }
-    })();
-    const byUserId = { ...(prev.byUserId ?? {}), [uid]: items.slice(0, MAX) };
-    localStorage.setItem(LS_KEY, JSON.stringify({ byUserId } satisfies FavoritesDoc));
-  } catch {
-    /* ignore quota */
-  }
-}
-
 function persistForUser(items: MarketFavoriteItem[]) {
-  writeLocal(items);
   if (!canUsePlatformDocsApi()) return;
   const ws = currentWorkspaceId();
   const uid = userBucket();
@@ -87,6 +71,7 @@ interface MarketFavoriteState {
   hydrate: () => void;
   isFavorite: (id: string, kind: MarketShelfKind) => boolean;
   toggle: (item: Omit<MarketFavoriteItem, 'at'>) => boolean;
+  setNote: (id: string, kind: MarketShelfKind, note: string) => void;
 }
 
 export const useMarketFavoriteStore = create<MarketFavoriteState>((set, get) => ({
@@ -94,30 +79,28 @@ export const useMarketFavoriteStore = create<MarketFavoriteState>((set, get) => 
 
   hydrate: () => {
     void (async () => {
+      const leftover = takeLegacyLocal();
       if (!canUsePlatformDocsApi()) {
-        set({ items: readLocal() });
+        set({ items: leftover });
         return;
       }
       try {
         const remote = await fetchPlatformDoc<FavoritesDoc>(currentWorkspaceId(), DOC_KIND);
         const uid = userBucket();
         const list = readUserItems(remote, uid);
+        if (remote) setPlatformDocMemory(currentWorkspaceId(), DOC_KIND, remote);
         if (list.length) {
-          if (remote) setPlatformDocMemory(currentWorkspaceId(), DOC_KIND, remote);
-          writeLocal(list);
           set({ items: list });
           return;
         }
-        const local = readLocal();
-        if (local.length) {
-          persistForUser(local);
-          set({ items: local });
+        if (leftover.length) {
+          persistForUser(leftover);
+          set({ items: leftover });
           return;
         }
-        if (remote) setPlatformDocMemory(currentWorkspaceId(), DOC_KIND, remote);
         set({ items: [] });
       } catch {
-        set({ items: readLocal() });
+        set({ items: leftover });
       }
     })();
   },
@@ -133,5 +116,13 @@ export const useMarketFavoriteStore = create<MarketFavoriteState>((set, get) => 
     persistForUser(next);
     set({ items: next });
     return !exists;
+  },
+
+  setNote: (id, kind, note) => {
+    const next = get().items.map((x) =>
+      x.id === id && x.kind === kind ? { ...x, note: note.trim() || undefined } : x,
+    );
+    persistForUser(next);
+    set({ items: next });
   },
 }));

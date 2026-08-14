@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { publicAssetUrl } from '@/domain/publicAssetUrl';
 
 export { faviconUrl, resolveToolLogoUrl } from '@/domain/toolLogo';
 
@@ -30,7 +31,7 @@ export function ToolLogo({ name, logoUrl, icon, size = 32, className }: ToolLogo
   if (logoUrl && !failed) {
     return (
       <img
-        src={logoUrl}
+        src={publicAssetUrl(logoUrl)}
         alt={name}
         width={size}
         height={size}

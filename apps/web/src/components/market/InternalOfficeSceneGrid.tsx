@@ -104,13 +104,12 @@ export function InternalOfficeSceneGrid({
 
   return (
     <>
-      <section className="flex flex-col pb-4">
+      <section className="flex flex-col gap-8 pb-4">
         <button
           type="button"
-          className="internal-assistant-chat mb-5 shrink-0 lg:mb-6"
+          className="internal-assistant-chat shrink-0"
           onClick={() => onExperience(assistantTool)}
-          aria-label="员工助手待上线，点击前往员工助手下载页"
-          title="点击前往员工助手下载页"
+          aria-label="员工助手"
         >
           <div className="internal-assistant-chat__head">
             {assistantTool.logoUrl ? (
@@ -127,7 +126,6 @@ export function InternalOfficeSceneGrid({
             )}
             <div className="internal-assistant-chat__copy">
               <p className="internal-assistant-chat__name">{assistantTool.name || '员工助手'}</p>
-              <p className="internal-assistant-chat__headline">今天，你想让 AI 帮你做什么？</p>
             </div>
             <span className="internal-assistant-chat__badge">待上线</span>
           </div>
@@ -137,18 +135,17 @@ export function InternalOfficeSceneGrid({
               <i className="fa-solid fa-arrow-up text-[10px]" />
             </span>
           </div>
-          <p className="internal-assistant-chat__hint">点击前往员工助手下载页</p>
         </button>
 
         {scenes.length ? (
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4 lg:gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {scenes.map((scene) => {
               const hasTools = scene.tools.length > 0;
               return (
                 <article
                   key={scene.id}
                   className={cn(
-                    'flex h-full min-h-[176px] flex-col rounded-xl border border-zinc-200/90 bg-white px-3.5 py-4 transition',
+                    'flex h-full min-h-[168px] flex-col rounded-2xl border border-zinc-200/90 bg-white px-4 py-4 transition',
                     hasTools
                       ? 'hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-[0_10px_24px_-16px_rgba(24,24,27,0.35)]'
                       : 'opacity-80',
@@ -159,9 +156,9 @@ export function InternalOfficeSceneGrid({
                     onClick={() => runWithTool(scene, 'detail')}
                     className="flex min-h-0 flex-1 flex-col text-left"
                   >
-                    <div className="flex shrink-0 items-center justify-between gap-2">
+                    <div className="flex shrink-0 items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <h3 className="truncate text-[18px] font-semibold tracking-tight text-zinc-900">
+                        <h3 className="text-[20px] font-semibold leading-snug tracking-tight text-zinc-900">
                           {scene.label}
                         </h3>
                       </div>
@@ -172,7 +169,7 @@ export function InternalOfficeSceneGrid({
                               key={`${scene.id}-${t.id}`}
                               src={t.logoUrl}
                               alt={`${t.name} Logo`}
-                              className="h-6 w-6 rounded-full bg-zinc-50 object-cover ring-2 ring-white"
+                              className="h-7 w-7 rounded-full bg-zinc-50 object-cover ring-2 ring-white"
                               loading="lazy"
                             />
                           ))
@@ -192,32 +189,19 @@ export function InternalOfficeSceneGrid({
                       </p>
                     ) : null}
                   </button>
-                  <div className="mt-3 flex shrink-0 items-center gap-1.5 border-t border-zinc-100 pt-2.5">
+                  <div className="mt-3 flex shrink-0 items-center justify-end border-t border-zinc-100 pt-2.5">
                     <button
                       type="button"
                       disabled={!hasTools}
-                      onClick={() => runWithTool(scene, 'howto')}
+                      onClick={() => runWithTool(scene, 'detail')}
                       className={cn(
-                        'rounded-md border px-2 py-1 text-[11px] font-medium transition',
+                        'rounded-lg bg-zinc-100 px-3 py-1.5 text-[11px] font-medium text-zinc-500 transition',
                         hasTools
-                          ? 'border-zinc-200 text-zinc-600 hover:bg-zinc-50'
-                          : 'cursor-not-allowed border-zinc-100 text-zinc-300',
+                          ? 'hover:bg-zinc-200/80 hover:text-zinc-600'
+                          : 'cursor-not-allowed text-zinc-300',
                       )}
                     >
-                      快速上手
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!hasTools}
-                      onClick={() => runWithTool(scene, 'experience')}
-                      className={cn(
-                        'ml-auto rounded-md border px-2.5 py-1 text-[11px] font-medium transition',
-                        hasTools
-                          ? 'border-zinc-200 text-zinc-600 hover:bg-zinc-50'
-                          : 'cursor-not-allowed border-zinc-100 text-zinc-300',
-                      )}
-                    >
-                      立即体验
+                      详情
                     </button>
                   </div>
                 </article>
@@ -244,11 +228,7 @@ export function InternalOfficeSceneGrid({
               <div>
                 <h3 className="text-[16px] font-semibold text-zinc-900">{picker.scene.label}</h3>
                 <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">
-                  {picker.mode === 'experience'
-                    ? '这项工作可由多个内部产品完成，请选择要打开的工具。'
-                    : picker.mode === 'howto'
-                      ? '这项工作可由多个内部产品完成，请选择要查看快速上手的工具。'
-                      : '这项工作可由多个内部产品完成，请选择要查看详情的工具。'}
+                  这项工作可由多个内部产品完成，请选择要查看的工具。
                 </p>
               </div>
               <button
@@ -277,19 +257,8 @@ export function InternalOfficeSceneGrid({
                       <p className="truncate text-[13px] font-semibold text-zinc-900">{t.name}</p>
                       <p className="truncate text-[11px] text-zinc-500">{t.blurb}</p>
                     </div>
-                    <span
-                      className={cn(
-                        'shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold',
-                        picker.mode === 'experience'
-                          ? 'bg-zinc-900 text-white'
-                          : 'border border-zinc-200 text-zinc-600',
-                      )}
-                    >
-                      {picker.mode === 'experience'
-                        ? '立即体验'
-                        : picker.mode === 'howto'
-                          ? '快速上手'
-                          : '查看详情'}
+                    <span className="shrink-0 rounded-lg bg-zinc-100 px-2.5 py-1.5 text-[11px] font-medium text-zinc-500">
+                      详情
                     </span>
                   </button>
                 </li>

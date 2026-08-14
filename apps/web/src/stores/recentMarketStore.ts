@@ -13,7 +13,7 @@ import {
 
 const MAX = 12;
 const DOC_KIND = 'market-recent' as const;
-const LS_KEY = 'mssclaw:market-recent-v1';
+const LEGACY_LS_KEY = 'mssclaw:market-recent-v1';
 const RETIRED = new Set<string>(RETIRED_DEMO_TOOL_IDS);
 
 export type RecentMarketItem = {
@@ -46,38 +46,21 @@ function readUserItems(doc: RecentDoc | null | undefined, uid: string): RecentMa
   return [];
 }
 
-function readLocal(): RecentMarketItem[] {
+/** 一次性迁出旧 localStorage，之后不再读写浏览器缓存 */
+function takeLegacyLocal(): RecentMarketItem[] {
   try {
-    const raw = localStorage.getItem(LS_KEY);
+    const raw = localStorage.getItem(LEGACY_LS_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as RecentDoc;
-    return readUserItems(parsed, userBucket());
+    localStorage.removeItem(LEGACY_LS_KEY);
+    return readUserItems(JSON.parse(raw) as RecentDoc, userBucket());
   } catch {
     return [];
   }
 }
 
-function writeLocal(items: RecentMarketItem[]) {
-  try {
-    const uid = userBucket();
-    const prev = (() => {
-      try {
-        return JSON.parse(localStorage.getItem(LS_KEY) || '{}') as RecentDoc;
-      } catch {
-        return {} as RecentDoc;
-      }
-    })();
-    const byUserId = { ...(prev.byUserId ?? {}), [uid]: pruneItems(items) };
-    localStorage.setItem(LS_KEY, JSON.stringify({ byUserId } satisfies RecentDoc));
-  } catch {
-    /* ignore */
-  }
-}
-
 function persistForUser(items: RecentMarketItem[]) {
   const next = pruneItems(items);
-  writeLocal(next);
-  if (!canUsePlatformDocsApi()) return;
+  if (!canUsePlatformDocsApi()) return next;
   const ws = currentWorkspaceId();
   const uid = userBucket();
   const mem = peekPlatformDocMemory<RecentDoc>(ws, DOC_KIND) ?? {};
@@ -86,6 +69,7 @@ function persistForUser(items: RecentMarketItem[]) {
   const payload: RecentDoc = { byUserId };
   setPlatformDocMemory(ws, DOC_KIND, payload);
   void scheduleSavePlatformDoc(ws, DOC_KIND, payload);
+  return next;
 }
 
 interface RecentMarketState {
@@ -99,41 +83,38 @@ export const useRecentMarketStore = create<RecentMarketState>((set, get) => ({
 
   hydrate: () => {
     void (async () => {
+      const leftover = takeLegacyLocal();
       if (!canUsePlatformDocsApi()) {
-        set({ items: readLocal() });
+        set({ items: leftover });
         return;
       }
       try {
         const remote = await fetchPlatformDoc<RecentDoc>(currentWorkspaceId(), DOC_KIND);
         const uid = userBucket();
         const items = readUserItems(remote, uid);
+        if (remote) setPlatformDocMemory(currentWorkspaceId(), DOC_KIND, remote);
         if (items.length) {
-          if (remote) setPlatformDocMemory(currentWorkspaceId(), DOC_KIND, remote);
-          writeLocal(items);
           set({ items });
           return;
         }
-        const local = readLocal();
-        if (local.length) {
-          persistForUser(local);
-          set({ items: local });
+        if (leftover.length) {
+          persistForUser(leftover);
+          set({ items: leftover });
           return;
         }
-        if (remote) setPlatformDocMemory(currentWorkspaceId(), DOC_KIND, remote);
         set({ items: [] });
       } catch {
-        set({ items: readLocal() });
+        set({ items: leftover });
       }
     })();
   },
 
   push: (item) => {
     if (RETIRED.has(item.id)) return;
-    const next = pruneItems([
+    const next = persistForUser([
       { ...item, at: Date.now() },
       ...get().items.filter((x) => !(x.id === item.id && x.kind === item.kind)),
     ]);
-    persistForUser(next);
     set({ items: next });
   },
 }));

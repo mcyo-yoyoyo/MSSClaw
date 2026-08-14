@@ -20,6 +20,7 @@ export type NavSlotId = AppView | 'warroom';
  */
 export const BUSINESS_SHELL_SLOT_IDS: readonly NavSlotId[] = [
   'home',
+  'me',
   'market-external',
   'market-internal',
   'market-projects',
@@ -61,6 +62,14 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
     subtitle: '入口总览 · 工具货架与场景入口',
     icon: 'fa-house',
     section: 'workspace',
+  },
+  {
+    id: 'me',
+    label: '个人中心',
+    subtitle: '收藏 · 最近 · 任务回收（标准/完整）',
+    icon: 'fa-user',
+    section: 'workspace',
+    hiddenFromSidebar: true,
   },
   {
     id: 'ai-tasks',
@@ -277,6 +286,7 @@ function withAdminLocks(base: Record<NavSlotId, boolean>, role: PlatformRole): R
 function marketSlotsOn(base: Record<NavSlotId, boolean>): Record<NavSlotId, boolean> {
   return {
     ...base,
+    me: true,
     'market-external': true,
     'market-internal': true,
     'market-projects': true,
@@ -508,6 +518,7 @@ export const NAV_PRESET_ENABLED: Record<Exclude<NavPresetId, 'custom'>, Record<A
   ),
   customer: navPresetFlags({
     home: true,
+    me: true,
     'market-external': true,
     'market-internal': true,
     'market-projects': true,
@@ -523,6 +534,7 @@ export const NAV_PRESET_ENABLED: Record<Exclude<NavPresetId, 'custom'>, Record<A
   }),
   standard: navPresetFlags({
     home: true,
+    me: true,
     'market-external': true,
     'market-internal': true,
     'market-projects': true,
@@ -540,6 +552,7 @@ export const NAV_PRESET_ENABLED: Record<Exclude<NavPresetId, 'custom'>, Record<A
 
 export const NAV_FALLBACK_ORDER: AppView[] = [
   'home',
+  'me',
   'market-external',
   'market-internal',
   'market-projects',

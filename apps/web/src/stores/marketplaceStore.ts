@@ -149,7 +149,11 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
 
   bootstrap: async (workspaceId) => {
     const snapshot = await loadMarketplace(workspaceId);
-    set({ ...snapshot, ready: true });
+    set({
+      ...snapshot,
+      tools: pruneRetiredDemoTools(snapshot.tools ?? []),
+      ready: true,
+    });
   },
 
   persist: () => {

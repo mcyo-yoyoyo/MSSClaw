@@ -12,7 +12,6 @@ import { useMarketplaceStore } from '@/stores/marketplaceStore';
 export type ExpertBrowseAxis = 'agent' | 'dept' | 'region';
 
 interface HomeState {
-  homeMode: 'assistant' | 'portal';
   expertAxis: ExpertBrowseAxis;
   agentRoleId: AgentRoleId;
   category: HomeCategory;
@@ -20,7 +19,6 @@ interface HomeState {
   draftText: string;
   /** ???????????????????? */
   composerFocusKey: number;
-  setHomeMode: (mode: 'assistant' | 'portal') => void;
   setExpertAxis: (axis: ExpertBrowseAxis) => void;
   setAgentRoleId: (id: AgentRoleId) => void;
   setCategory: (cat: HomeCategory) => void;
@@ -34,7 +32,6 @@ interface HomeState {
 }
 
 export const useHomeStore = create<HomeState>((set, get) => ({
-  homeMode: 'portal',
   expertAxis: 'agent',
   agentRoleId: 'scout',
   category: 'ecommerce',
@@ -42,7 +39,6 @@ export const useHomeStore = create<HomeState>((set, get) => ({
   draftText: '',
   composerFocusKey: 0,
 
-  setHomeMode: (homeMode) => set({ homeMode }),
   setExpertAxis: (expertAxis) => set({ expertAxis }),
   setAgentRoleId: (agentRoleId) => set({ expertAxis: 'agent', agentRoleId }),
   setCategory: (cat) => set({ expertAxis: 'dept', category: cat }),

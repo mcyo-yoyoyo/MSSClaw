@@ -118,6 +118,8 @@ export interface PrototypeSkillSeed extends AssetOwnershipFields {
   businessScenarioId?: BusinessScenarioId;
   invokes: number;
   icon: string;
+  /** 自定义头像（data URL 或站点相对路径）；GitHub Pages 下相对路径需带仓库前缀 */
+  iconUrl?: string;
   /** 列表左边线统一黑色；不再使用多色标识 */
   accentColor?: string;
   /** 业务/运营手打标签 */

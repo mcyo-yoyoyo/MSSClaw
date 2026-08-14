@@ -78,17 +78,59 @@ export const EXTERNAL_FILTER_MODES: { id: ExternalFilterMode; label: string }[] 
   { id: 'type', label: '按工具类型' },
 ];
 
-/** Demo 首屏 Editor's Picks：海外 6 + 国内 6 */
+/** 货架去重后保留的 Top 80（近重复 / 弱替代不进前台） */
+export const EXTERNAL_TOOL_SHELF_EXCLUDE_IDS = [
+  'tool-ext-google-ai-mode',
+  'tool-ext-you-com',
+  'tool-ext-writer',
+  'tool-ext-beautiful-ai',
+  'tool-ext-udio',
+  'tool-ext-plus-ai',
+  'tool-ext-pitch',
+  'tool-saas-chatgpt-2',
+  'tool-ext-nano-banana-2',
+  'tool-saas-jasper',
+  'tool-saas-copyai',
+  'tool-ext-wordtune',
+  'tool-ext-mem',
+  'tool-ext-tl-dv',
+  'tool-ext-make-ai-agents',
+  'tool-ext-consensus',
+  'tool-saas-luma',
+  'tool-saas-pika',
+  'tool-ext-hermes-agent',
+  'tool-ext-genspark',
+] as const;
+
+const EXTERNAL_TOOL_SHELF_EXCLUDE = new Set<string>(EXTERNAL_TOOL_SHELF_EXCLUDE_IDS);
+
+export function isExternalToolOnShelf(id: string): boolean {
+  return !EXTERNAL_TOOL_SHELF_EXCLUDE.has(id);
+}
+
+/** 首屏精选：海外 4 + 国内 4（一排 2 个、共两排） */
 export const DEFAULT_EXTERNAL_FEATURED_OVERSEAS = [
+  'tool-saas-chatgpt',
+  'tool-saas-claude',
+  'tool-saas-gemini',
+  'tool-saas-perplexity',
+] as const;
+
+export const DEFAULT_EXTERNAL_FEATURED_DOMESTIC = [
+  'tool-saas-doubao',
+  'tool-saas-deepseek',
+  'tool-saas-kimi',
+  'tool-saas-tongyi',
+] as const;
+
+/** 旧默认 12 钉，hydrate 时迁到新 8 钉 */
+export const LEGACY_EXTERNAL_FEATURED_PINS = [
   'tool-saas-chatgpt',
   'tool-saas-gemini',
   'tool-ext-codex',
   'tool-saas-claude',
   'tool-saas-perplexity',
   'tool-saas-gamma',
-] as const;
-
-export const DEFAULT_EXTERNAL_FEATURED_DOMESTIC = [
   'tool-saas-workbuddy',
   'tool-saas-doubao',
   'tool-saas-deepseek',

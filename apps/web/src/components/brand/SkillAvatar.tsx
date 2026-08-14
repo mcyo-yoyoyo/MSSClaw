@@ -1,8 +1,10 @@
 import { cn } from '@/lib/utils';
+import { publicAssetUrl } from '@/domain/publicAssetUrl';
 
 interface SkillAvatarProps {
   skillId: string;
   icon: string;
+  iconUrl?: string | null;
   size?: number;
   className?: string;
   title?: string;
@@ -55,7 +57,21 @@ function colorForSkill(skillId: string) {
   return FALLBACK_PALETTE[hash % FALLBACK_PALETTE.length];
 }
 
-export function SkillAvatar({ skillId, icon, size = 36, className, title }: SkillAvatarProps) {
+export function SkillAvatar({ skillId, icon, iconUrl, size = 36, className, title }: SkillAvatarProps) {
+  const custom = iconUrl?.trim() ? publicAssetUrl(iconUrl) : '';
+  if (custom) {
+    return (
+      <img
+        src={custom}
+        alt={title || skillId}
+        width={size}
+        height={size}
+        className={cn('shrink-0 rounded-[10px] bg-white object-cover', className)}
+        style={{ width: size, height: size }}
+        title={title}
+      />
+    );
+  }
   const { from, to } = colorForSkill(skillId);
   return (
     <div

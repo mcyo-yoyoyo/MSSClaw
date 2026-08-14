@@ -5,14 +5,10 @@ import { ADMIN_MENU_VIEWS, type AppView } from '@/domain/appView';
 import { writeAppRouteToLocation } from '@/domain/appRoute';
 import { MARKET_SHELF_META } from '@/domain/marketShelf';
 import { NAV_PRESENTATION_META } from '@/domain/navPresentation';
-import { canExecuteChat } from '@/domain/permissions';
-import { ROLE_LABELS } from '@/domain/rbac';
-import { formatRolePerspective } from '@/domain/rolePerspective';
 import { defaultShellPerspective, isOpsOnlyView } from '@/domain/shellPerspective';
 import { ROUTE_PREFETCH } from '@/features/lazyPages';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useCommandPaletteStore } from '@/stores/commandPaletteStore';
-import { useHomeStore } from '@/stores/homeStore';
 import { useInboxStore } from '@/stores/inboxStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
@@ -25,7 +21,7 @@ const TOP_SHELF_NAV: { view: AppView; label: string }[] = [
   { view: MARKET_SHELF_META.internal.view, label: MARKET_SHELF_META.internal.label },
   { view: MARKET_SHELF_META.projects.view, label: MARKET_SHELF_META.projects.label },
   { view: 'ai-brief', label: 'AI快讯' },
-  { view: 'ai-tasks', label: 'AI任务' },
+  { view: 'me', label: '个人中心' },
 ];
 
 const ADMIN_MENU_ITEMS: { view: AppView; label: string }[] = ADMIN_MENU_VIEWS.map((view) => ({
@@ -42,7 +38,6 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
   void _apiConnected;
   void _onWorkspaceSwitch;
   const appView = useAppViewStore((s) => s.appView);
-  const openSettings = useAppViewStore((s) => s.openSettings);
   const setAppView = useAppViewStore((s) => s.setAppView);
   const openPalette = useCommandPaletteStore((s) => s.openPalette);
   const isViewEnabled = useNavPresentationStore((s) => s.isViewEnabled);
@@ -65,10 +60,7 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
       : 'market-external';
   }, [appView, returnTarget, tools, pendingToolId]);
   const user = useSessionStore((s) => s.user);
-  const logout = useSessionStore((s) => s.logout);
   const isOpsShell = defaultShellPerspective(user?.platformRole) === 'ops';
-  const executeAllowed = canExecuteChat(user?.platformRole);
-  const showTaskEntry = executeAllowed && isViewEnabled('task');
   const adminItems = useMemo(
     () => ADMIN_MENU_ITEMS.filter((i) => isViewEnabled(i.view)),
     [isViewEnabled],
@@ -80,30 +72,14 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
     void inboxMessages;
     return useInboxStore.getState().unreadCount(user?.id);
   }, [inboxMessages, user?.id]);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
-  const userMenuRef = useRef<HTMLDivElement>(null);
   const adminRef = useRef<HTMLDivElement>(null);
   const adminBtnRef = useRef<HTMLButtonElement>(null);
   const [adminMenuPos, setAdminMenuPos] = useState<{ top: number; left: number } | null>(null);
 
-  const perspectiveLabel = useMemo(() => {
-    if (!user) return '未登录';
-    return formatRolePerspective({
-      platformRole: user.platformRole,
-      deptIds: user.deptIds,
-      regionId: user.regionId,
-    });
-  }, [user]);
-
-  const initial = (user?.name?.trim()?.[0] ?? 'U').toUpperCase();
-
   useEffect(() => {
     const onDocDown = (e: MouseEvent) => {
       const target = e.target as Node;
-      if (userMenuRef.current && !userMenuRef.current.contains(target)) {
-        setUserMenuOpen(false);
-      }
       if (
         adminRef.current &&
         !adminRef.current.contains(target) &&
@@ -140,9 +116,6 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
   }, [adminOpen]);
 
   const goView = (view: AppView) => {
-    if (view === 'home') {
-      useHomeStore.getState().setHomeMode('portal');
-    }
     writeAppRouteToLocation({ view });
     setAppView(view);
   };
@@ -178,7 +151,11 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
                 type="button"
                 onClick={() => goView(item.view)}
                 onMouseEnter={() => ROUTE_PREFETCH[item.view]?.()}
-                className={navBtn(appView === item.view || marketToolShelfHighlight === item.view)}
+                className={navBtn(
+                  appView === item.view ||
+                    marketToolShelfHighlight === item.view ||
+                    (item.view === 'me' && appView === 'ai-tasks'),
+                )}
               >
                 {item.label}
               </button>
@@ -198,7 +175,6 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  setUserMenuOpen(false);
                   setAdminOpen((v) => {
                     const next = !v;
                     if (next && adminBtnRef.current) {
@@ -289,71 +265,6 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
             </span>
           ) : null}
         </button>
-        <div className="relative" ref={userMenuRef}>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setAdminOpen(false);
-              setUserMenuOpen((v) => !v);
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-            className={cn(
-              'flex h-9 w-9 items-center justify-center rounded-lg text-[11px] font-semibold text-white transition hover:opacity-90',
-              user?.avatar || 'bg-zinc-900',
-            )}
-            title={user?.name ?? '用户'}
-          >
-            {initial}
-          </button>
-          {userMenuOpen && user && (
-            <div className="absolute right-0 top-full z-[60] mt-2 w-64 rounded-xl border border-zinc-200/80 bg-white py-1.5 shadow-apple-lg">
-              <div className="border-b border-zinc-100 px-4 py-2.5">
-                <p className="truncate text-[13px] font-semibold text-zinc-900">{user.name}</p>
-                <p className="truncate text-[11px] text-zinc-500">{user.email}</p>
-                <p className="mt-1.5 text-[11px] font-medium leading-snug text-zinc-700">
-                  {perspectiveLabel}
-                </p>
-                <p className="mt-0.5 text-[10px] text-zinc-400">{ROLE_LABELS[user.platformRole]}</p>
-              </div>
-              {showTaskEntry ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUserMenuOpen(false);
-                    goView('task');
-                  }}
-                  className="flex w-full items-center gap-2 px-4 py-2 text-left text-[13px] text-zinc-700 hover:bg-zinc-50"
-                >
-                  <i className="fa-solid fa-list-check w-4 text-center text-[11px] text-zinc-400" />
-                  任务记录
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => {
-                  setUserMenuOpen(false);
-                  openSettings();
-                }}
-                className="flex w-full items-center gap-2 px-4 py-2 text-left text-[13px] text-zinc-700 hover:bg-zinc-50"
-              >
-                <i className="fa-solid fa-gear w-4 text-center text-[11px] text-zinc-400" />
-                偏好设置
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setUserMenuOpen(false);
-                  logout();
-                }}
-                className="flex w-full items-center gap-2 px-4 py-2 text-left text-[13px] text-red-600 hover:bg-red-50"
-              >
-                <i className="fa-solid fa-right-from-bracket w-4 text-center text-[11px]" />
-                退出登录
-              </button>
-            </div>
-          )}
-        </div>
       </div>
     </header>
   );

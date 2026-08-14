@@ -522,7 +522,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     const prev = get();
     const pending = prev.pendingTaskSubmit;
     const catalog = useWorkspaceStore.getState().getCatalog(workspaceId);
-    const baseChats = structuredClone(catalog.chats);
+    const baseChats = structuredClone(catalog.chats ?? {});
     const merged = persistedChats ? { ...baseChats, ...persistedChats } : baseChats;
     // 移除已下线 WarRoom、Smoke/营销/知识等历史默认会话
     const { group_q3: _removedDefaultWarroom, ...withoutLegacy } = merged;

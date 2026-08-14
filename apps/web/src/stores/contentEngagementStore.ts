@@ -3,6 +3,7 @@ import {
   emptyEngagement,
   mergeEngagement,
   needsOptimization,
+  normalizeEngagement,
   resolveEngagement,
   seedEngagement,
   type ContentEngagement,
@@ -38,6 +39,7 @@ interface ContentEngagementState {
   userVote: (id: string) => UserVote;
   bumpUse: (id: string) => void;
   bumpDownload: (id: string) => void;
+  bumpFavorite: (id: string, delta: 1 | -1) => void;
   toggleLike: (id: string) => void;
   toggleDislike: (id: string) => void;
   optimizationQueue: () => ContentEngagement[];
@@ -63,8 +65,11 @@ export const useContentEngagementStore = create<ContentEngagementState>((set, ge
           currentWorkspaceId(),
           'content-engagement',
         );
-        const byId =
+        const raw =
           remote?.byId && typeof remote.byId === 'object' ? remote.byId : {};
+        const byId = Object.fromEntries(
+          Object.entries(raw).map(([id, e]) => [id, normalizeEngagement({ ...e, id })]),
+        );
         const userVotes =
           remote?.userVotes && typeof remote.userVotes === 'object'
             ? remote.userVotes
@@ -91,6 +96,15 @@ export const useContentEngagementStore = create<ContentEngagementState>((set, ge
   bumpDownload: (id) => {
     const prev = ensure(get().byId, id);
     const next = mergeEngagement(prev, { downloads: prev.downloads + 1 });
+    const byId = { ...get().byId, [id]: next };
+    set({ byId });
+    persist(byId, get().userVotes);
+  },
+
+  bumpFavorite: (id, delta) => {
+    const prev = ensure(get().byId, id);
+    const favorites = Math.max(0, (prev.favorites ?? 0) + delta);
+    const next = mergeEngagement(prev, { favorites });
     const byId = { ...get().byId, [id]: next };
     set({ byId });
     persist(byId, get().userVotes);
@@ -194,6 +208,7 @@ export function forceQueueDemoSeeds(ids: string[]) {
       dislikes: 12 + i * 2,
       downloads: 5,
       uses: 30,
+      favorites: 4,
       updatedAt: new Date().toISOString().slice(0, 10),
     };
   });

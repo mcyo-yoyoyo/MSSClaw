@@ -15,6 +15,16 @@ export type IntentMatch = {
   reason: string;
 };
 
+export type IntentSearchScope = 'home' | 'external' | 'internal' | 'projects';
+
+export type IntentSearchContext = {
+  favoriteKeys?: ReadonlySet<string>;
+};
+
+export function capabilityKey(card: Pick<MarketShelfCard, 'kind' | 'id'>): string {
+  return `${card.kind}:${card.id}`;
+}
+
 /** 常见作业意图 → 关键词（运营后续可配置化） */
 const INTENT_LEXICON: { intent: string; keywords: string[] }[] = [
   { intent: '做PPT/汇报材料', keywords: ['ppt', '幻灯', '演示', '汇报', '路演', 'gamma', '美化稿'] },
@@ -56,6 +66,10 @@ function haystackOf(card: MarketShelfCard): string {
     .toLowerCase();
 }
 
+function nameHaystack(card: MarketShelfCard): string {
+  return [card.title, card.productName ?? ''].join(' ').toLowerCase();
+}
+
 function matchedIntents(tokens: string[], raw: string): string[] {
   const hits: string[] = [];
   for (const row of INTENT_LEXICON) {
@@ -66,22 +80,54 @@ function matchedIntents(tokens: string[], raw: string): string[] {
   return hits;
 }
 
+function rankBoost(
+  card: MarketShelfCard,
+  ctx?: IntentSearchContext,
+): { score: number; hints: string[] } {
+  let score = 0;
+  const hints: string[] = [];
+  if (card.featured) {
+    score += 4;
+    hints.push('精选');
+  }
+  if (card.heat > 40) {
+    score += 3;
+    hints.push('热度高');
+  } else if (card.heat > 20) {
+    score += 2;
+  }
+  if (ctx?.favoriteKeys?.has(capabilityKey(card))) {
+    score += 6;
+    hints.push('已收藏');
+  }
+  if (card.hasHowto) score += 1;
+  if (card.runnable) score += 2;
+  return { score, hints };
+}
+
 function scoreCard(
   card: MarketShelfCard,
   tokens: string[],
-  _raw: string,
+  raw: string,
   intents: string[],
+  ctx?: IntentSearchContext,
 ): { score: number; reason: string } | null {
   const hay = haystackOf(card);
+  const names = nameHaystack(card);
   let score = 0;
   const hits: string[] = [];
 
+  if (raw && names.includes(raw)) {
+    score += raw === card.title.toLowerCase() ? 28 : 20;
+    hits.push(`名称含「${raw}」`);
+  }
+
   for (const t of tokens) {
-    if (t.length < 2) continue;
-    if (card.title.toLowerCase().includes(t)) {
-      score += 12;
-      hits.push(`标题含「${t}」`);
-    } else if (hay.includes(t)) {
+    if (!t) continue;
+    if (names.includes(t)) {
+      score += t.length >= 2 ? 16 : 10;
+      hits.push(`名称含「${t}」`);
+    } else if (t.length >= 2 && hay.includes(t)) {
       score += 5;
       hits.push(`简介/标签含「${t}」`);
     }
@@ -97,10 +143,11 @@ function scoreCard(
     }
   }
 
-  if (card.featured) score += 3;
-  if (card.heat > 20) score += 2;
-
   if (score <= 0) return null;
+
+  const boost = rankBoost(card, ctx);
+  score += boost.score;
+  hits.push(...boost.hints);
 
   const kindLabel = MARKET_SHELF_META[card.kind].shortLabel;
   const reason =
@@ -114,6 +161,7 @@ export function searchCapabilitiesByIntent(
   query: string,
   cards: MarketShelfCard[],
   limit = 8,
+  ctx?: IntentSearchContext,
 ): IntentMatch[] {
   const raw = query.trim().toLowerCase();
   if (!raw) return [];
@@ -122,7 +170,7 @@ export function searchCapabilitiesByIntent(
 
   const scored: IntentMatch[] = [];
   for (const card of cards) {
-    const r = scoreCard(card, tokens, raw, intents);
+    const r = scoreCard(card, tokens, raw, intents, ctx);
     if (!r) continue;
     scored.push({ card, score: r.score, reason: r.reason });
   }
@@ -131,14 +179,53 @@ export function searchCapabilitiesByIntent(
   return scored.slice(0, limit);
 }
 
-export function intentSearchHintExamples(): string[] {
-  return [
-    '我要做一份竞品分析',
-    '帮我快速出 PPT',
-    '查一下公司制度',
-    '翻译客户英文邮件',
-    '监控友商价格',
-  ];
+/** 无关键词时：精选 + 热度 + 收藏综合推荐 */
+export function recommendCapabilities(
+  cards: MarketShelfCard[],
+  limit = 4,
+  ctx?: IntentSearchContext,
+): IntentMatch[] {
+  return [...cards]
+    .map((card) => {
+      const boost = rankBoost(card, ctx);
+      return {
+        card,
+        score: boost.score + card.heat / 20,
+        reason: boost.hints.slice(0, 2).join(' · ') || '综合推荐',
+      };
+    })
+    .sort((a, b) => b.score - a.score || b.card.heat - a.card.heat)
+    .slice(0, limit);
+}
+
+export function intentSearchHintExamples(scope: IntentSearchScope = 'home'): string[] {
+  if (scope === 'external') {
+    return [
+      '日常办公写周报',
+      '搜资料做调研',
+      '润色翻译',
+      '做 PPT',
+      '出图、剪视频、配音',
+      '会议转写',
+      '分析表格',
+      '写代码',
+      '自动化 Agent',
+    ];
+  }
+  if (scope === 'internal') {
+    return [
+      '周报、方案、工作总结',
+      '会后自动成稿',
+      '查制度、找内部资料',
+      '日常提问、总结、润色',
+      '读懂文档提炼观点',
+      '专项业务连续追问',
+    ];
+  }
+  if (scope === 'projects') {
+    return ['友商价格监控', '客诉评论分析', '渠道洞察 Skill', '竞品分析 Agent'];
+  }
+  return ['找外部 AI 写方案', '写报告用云笔记', '学一个价格监控 Skill', '查制度用 W3'];
 }
 
 export function shelfKindLabel(kind: MarketShelfKind): string {

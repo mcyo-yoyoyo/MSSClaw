@@ -49,6 +49,8 @@ import { TaskGlobalModals } from '@/components/task/TaskGlobalModals';
 import { openAiAssistantForNewTask } from '@/domain/openNewTask';
 import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
 import { AccessDeniedPanel } from '@/components/shell/AccessDeniedPanel';
+import { AppErrorBoundary } from '@/components/common/AppErrorBoundary';
+import { fetchApiHealthInfo } from '@/api/persistenceApi';
 import { cn } from '@/lib/utils';
 
 export function App() {
@@ -155,6 +157,18 @@ export function App() {
   }, [hydrateFromServer]);
 
   useEffect(() => {
+    void (async () => {
+      const health = await fetchApiHealthInfo();
+      if (!health.ok) return;
+      useWorkspaceStore.setState({
+        apiConnected: true,
+        apiStatus: 'connected',
+        nestLlmEnvConfigured: health.llmEnvConfigured,
+      });
+    })();
+  }, []);
+
+  useEffect(() => {
     if (!isAuthenticated) return;
     void bootstrap();
   }, [bootstrap, isAuthenticated]);
@@ -202,12 +216,14 @@ export function App() {
         }
 
         const persisted = await loadSessions(wsId);
-        const catalogChats = getCatalog(wsId).chats;
+        const catalogChats = getCatalog(wsId).chats ?? {};
         const mergedSessions = persisted
           ? { ...structuredClone(catalogChats), ...persisted }
           : undefined;
 
         loadWorkspace(wsId, defaultChatId, mergedSessions);
+      } catch {
+        /* 目录/货架加载失败仍进入工作台，避免登录后白屏 */
       } finally {
         setSessionsReady(true);
       }
@@ -285,7 +301,6 @@ export function App() {
       switchTo: true,
     });
     useHomeStore.getState().setDraftText('');
-    useHomeStore.getState().setHomeMode('assistant');
     goToTaskWithTransit(trimmed, chatId);
   }, [createAgentTaskSession, goToTaskWithTransit, sessionsReady]);
 
@@ -338,7 +353,6 @@ export function App() {
       autoSend: Boolean(initialMessage.trim()),
       switchTo: true,
     });
-    useHomeStore.getState().setHomeMode('assistant');
     goToTaskWithTransit(skill.name, chatId);
   }, [createAgentTaskSession, goToTaskWithTransit, sessionsReady]);
 
@@ -498,6 +512,7 @@ export function App() {
   }
 
   return (
+    <AppErrorBoundary>
     <div className="flex h-screen flex-col">
       <AppHeader apiConnected={apiConnected} onWorkspaceSwitch={reloadAllStores} />
       <OfflineBanner onRetry={handleApiRetry} />
@@ -554,5 +569,6 @@ export function App() {
       <GlobalToastHost />
       <AssetApprovalModal />
     </div>
+    </AppErrorBoundary>
   );
 }

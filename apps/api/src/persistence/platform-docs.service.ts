@@ -22,6 +22,7 @@ export const PLATFORM_DOC_KINDS = [
   'market-featured',
   'market-favorites',
   'market-recent',
+  'market-hidden',
   'content-engagement',
   'audit-log',
   'ai-news-prefs',
@@ -327,6 +328,8 @@ export class PlatformDocsService {
       payload = { items: [] };
     } else if (kind === 'market-recent') {
       payload = { items: [] };
+    } else if (kind === 'market-hidden') {
+      payload = { byUserId: {} };
     } else if (kind === 'content-engagement') {
       payload = { map: {}, votes: {} };
     } else if (kind === 'ai-news-prefs') {

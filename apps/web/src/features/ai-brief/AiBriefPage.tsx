@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { flattenAiBotNews } from '@/domain/aiBotDailyNews';
+import {
+  AI_BRIEF_CATEGORIES,
+  classifyAiBriefItem,
+  getAiBriefCategoryLabel,
+  type AiBriefCategoryId,
+} from '@/domain/aiBriefClassify';
 import { useAiBotDailyNewsStore } from '@/stores/aiBotDailyNewsStore';
 import { useAiNewsPreferenceStore } from '@/stores/aiNewsPreferenceStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
@@ -30,6 +36,7 @@ export function AiBriefPage() {
   const [activeDate, setActiveDate] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [emailDraft, setEmailDraft] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<AiBriefCategoryId | 'all'>('all');
 
   useEffect(() => {
     void hydrate();
@@ -49,11 +56,35 @@ export function AiBriefPage() {
 
   const flat = useMemo(() => flattenAiBotNews(payload), [payload]);
 
+  const classified = useMemo(
+    () =>
+      flat.map((item) => ({
+        item,
+        ...classifyAiBriefItem(item),
+      })),
+    [flat],
+  );
+
+  const mssBoard = useMemo(
+    () => classified.filter((x) => x.mssFit).slice(0, 6),
+    [classified],
+  );
+
+  const visibleGroups = useMemo(() => {
+    if (categoryFilter === 'all') return payload.groups;
+    return payload.groups
+      .map((g) => ({
+        ...g,
+        items: g.items.filter((item) => classifyAiBriefItem(item).category === categoryFilter),
+      }))
+      .filter((g) => g.items.length > 0);
+  }, [payload.groups, categoryFilter]);
+
   useEffect(() => {
-    if (!payload.groups.length) return;
-    if (activeDate && payload.groups.some((g) => g.dateLabel === activeDate)) return;
-    setActiveDate(payload.groups[0].dateLabel);
-  }, [payload, activeDate]);
+    if (!visibleGroups.length) return;
+    if (activeDate && visibleGroups.some((g) => g.dateLabel === activeDate)) return;
+    setActiveDate(visibleGroups[0].dateLabel);
+  }, [visibleGroups, activeDate]);
 
   useEffect(() => {
     if (!highlightId) return;
@@ -78,13 +109,13 @@ export function AiBriefPage() {
   };
 
   return (
-    <div className="center-surface scroll-hidden flex min-h-0 flex-1 flex-col overflow-hidden">
-      <PageCanvas className="flex min-h-0 flex-1 flex-col py-5 md:py-6">
+    <div className="center-surface scroll-hidden flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <PageCanvas className="flex flex-col py-5 pb-10 md:py-6">
         <PageStageHero
           className="mb-4 shrink-0"
           tone="brief"
           title="AI快讯"
-          subtitle="每日 AI 产业动态 · 精选速读 · 可下载 HTML 人工发送（自动推送待开通）"
+          subtitle="每日 AI 产业动态 · 按类速读 · 单独标出适合 MSS 业务的条目"
         >
           <div className="ai-brief-subscribe">
             <button
@@ -137,6 +168,68 @@ export function AiBriefPage() {
           </div>
         </PageStageHero>
 
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setCategoryFilter('all')}
+            className={cn(
+              'rounded-full px-3 py-1 text-[11px] font-semibold transition',
+              categoryFilter === 'all'
+                ? 'bg-[#1d1d1f] text-white'
+                : 'bg-white text-[#3f3f46] shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:bg-zinc-50',
+            )}
+          >
+            全部
+          </button>
+          {AI_BRIEF_CATEGORIES.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setCategoryFilter(c.id)}
+              className={cn(
+                'rounded-full px-3 py-1 text-[11px] font-semibold transition',
+                categoryFilter === c.id
+                  ? 'bg-[#1d1d1f] text-white'
+                  : 'bg-white text-[#3f3f46] shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:bg-zinc-50',
+              )}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+
+        {mssBoard.length ? (
+          <section className="mb-3 rounded-[18px] border border-[#0071e3]/15 bg-[#f4f8fd] px-4 py-3.5">
+            <div className="mb-2.5 flex items-baseline justify-between gap-2">
+              <h2 className="text-[13px] font-semibold tracking-tight text-[#1d1d1f]">
+                适合 MSS 业务
+              </h2>
+              <p className="text-[11px] text-[#0071e3]/80">营销 · 零售 · 办公提效 · 企业知识</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {mssBoard.map(({ item, category }) => (
+                <a
+                  key={`mss-${item.id}`}
+                  href={item.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-xl border border-white/80 bg-white px-3 py-2.5 transition hover:border-[#0071e3]/25 hover:shadow-sm"
+                >
+                  <span className="inline-flex items-center gap-1 rounded-md bg-[#0071e3]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#0071e3]">
+                    MSS
+                    <span className="font-medium text-[#0071e3]/70">
+                      · {getAiBriefCategoryLabel(category)}
+                    </span>
+                  </span>
+                  <p className="mt-1.5 line-clamp-2 text-[13px] font-semibold leading-snug text-[#1d1d1f]">
+                    {item.title}
+                  </p>
+                </a>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         <div className="flex min-h-0 flex-1 flex-col gap-3 md:flex-row">
           <aside className="flex w-full shrink-0 flex-col overflow-hidden rounded-[18px] border-0 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.03),0_8px_24px_rgba(0,0,0,0.05)] md:w-[220px]">
             <div className="flex items-center gap-2 border-b border-black/[0.04] px-3.5 py-2.5">
@@ -148,10 +241,10 @@ export function AiBriefPage() {
               </span>
             </div>
             <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
-              {payload.groups.length === 0 ? (
+              {visibleGroups.length === 0 ? (
                 <p className="px-2 py-10 text-center text-[11px] text-[#86868b]">暂无快讯</p>
               ) : (
-                payload.groups.map((g, gi) => (
+                visibleGroups.map((g, gi) => (
                   <button
                     key={g.dateLabel}
                     type="button"
@@ -207,7 +300,7 @@ export function AiBriefPage() {
               </div>
             ) : (
               <div>
-                {payload.groups.map((group, gi) => (
+                {visibleGroups.map((group, gi) => (
                   <section key={group.dateLabel} className="scroll-mt-4">
                     <div
                       className={cn(
@@ -231,8 +324,9 @@ export function AiBriefPage() {
                     </div>
                     <div className="divide-y divide-black/[0.04]">
                       {group.items.map((item, index) => {
+                        const meta = classifyAiBriefItem(item);
                         const globalIndex =
-                          payload.groups
+                          visibleGroups
                             .slice(0, gi)
                             .reduce((n, g) => n + g.items.length, 0) +
                           index +
@@ -254,15 +348,20 @@ export function AiBriefPage() {
                               </span>
                               <div className="min-w-0 flex-1 border-l-2 border-transparent pl-0 transition group-hover:border-[#0071e3]/35 sm:pl-3">
                                 <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                                  {gi === 0 && index === 0 ? (
+                                  {gi === 0 && index === 0 && categoryFilter === 'all' ? (
                                     <span className="inline-flex items-center gap-1 rounded-md bg-[#0071e3] px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-white">
                                       <i className="fa-solid fa-bolt text-[8px]" />
                                       最新
                                     </span>
                                   ) : null}
-                                  <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-[#0071e3]/80">
-                                    AI Brief
+                                  <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-600">
+                                    {getAiBriefCategoryLabel(meta.category)}
                                   </span>
+                                  {meta.mssFit ? (
+                                    <span className="rounded-md bg-[#0071e3]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#0071e3]">
+                                      适合 MSS
+                                    </span>
+                                  ) : null}
                                 </div>
                                 <a
                                   href={item.url}

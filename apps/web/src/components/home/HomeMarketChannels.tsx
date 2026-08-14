@@ -11,7 +11,7 @@ import { openMarketShelf } from '@/domain/openHomeJourney';
 const CHANNEL_ORDER: MarketShelfKind[] = ['external', 'internal', 'projects'];
 const CHANNEL_BLURB: Record<MarketShelfKind, string> = {
   external: '海外 / 国内对照 · 场景与类型筛选',
-  internal: '从记读写问等场景进入公司工具',
+  internal: '写报告、查制度、个人问答，对上再打开',
   projects: 'Skill Hub · Agent Hub 分列统计',
 };
 
@@ -21,15 +21,13 @@ const TITLE_COLOR: Record<MarketShelfKind, string> = {
   projects: '#c45b5f',
 };
 
-const TOP_N = 4;
+const TOP_N = 3;
 
 export function HomeMarketChannels({
   cardsByKind,
   rankByKind,
   onRankChange,
   onOpen,
-  onPrimary,
-  onHowTo,
   searchActive,
   projectsBreakdown,
 }: {
@@ -37,8 +35,6 @@ export function HomeMarketChannels({
   rankByKind: Record<MarketShelfKind, RankMode>;
   onRankChange: (kind: MarketShelfKind, mode: RankMode) => void;
   onOpen: (card: MarketShelfCardModel) => void;
-  onPrimary: (card: MarketShelfCardModel) => void;
-  onHowTo: (card: MarketShelfCardModel) => void;
   searchActive?: boolean;
   /** MSS工具集市：Skill / Agent 分列数量 */
   projectsBreakdown?: { skill: number; agent: number };
@@ -133,9 +129,9 @@ export function HomeMarketChannels({
                     key={`${c.kind}-${c.id}`}
                     card={c}
                     className="home-channel-card"
+                    enableCompare={false}
                     onOpen={() => onOpen(c)}
-                    onPrimary={() => onPrimary(c)}
-                    onHowTo={() => onHowTo(c)}
+                    onPrimary={() => onOpen(c)}
                   />
                 ))
               ) : (

@@ -3,6 +3,8 @@
  * —— 真人卡通 / 数字员工形象；企业文化命名仅作标签，与附件人设文案无关。
  */
 
+import { publicAssetUrl } from '@/domain/publicAssetUrl';
+
 export interface AgentAvatarPreset {
   id: string;
   /** 展示名（企业文化意象标签） */
@@ -14,7 +16,7 @@ export interface AgentAvatarPreset {
 }
 
 function avatarSrc(id: string): string {
-  return `/agent-avatars/${id}.png`;
+  return publicAssetUrl(`agent-avatars/${id}.png`);
 }
 
 /** 企业文化取向命名；图片按附件网格 01→20 顺序映射，不取附件人设/职位文案 */
@@ -67,7 +69,7 @@ export function resolveAgentAvatarSrc(agent: {
   avatarPresetId?: string | null;
 }): string | null {
   const uploaded = agent.avatarUrl?.trim();
-  if (uploaded) return uploaded;
+  if (uploaded) return publicAssetUrl(uploaded);
   const explicit = getAgentAvatarPreset(agent.avatarPresetId);
   if (explicit) return explicit.src;
   const fallback = getAgentAvatarPreset(pickFallbackAvatarPresetId(agent.id));

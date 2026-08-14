@@ -45,6 +45,9 @@ interface SessionState {
 
 const TOKEN_KEY = 'mssclaw_auth_token';
 
+/** 防止启动时 /auth/me 晚于登录返回，把刚建好的会话清掉 */
+let sessionEpoch = 0;
+
 function readToken(): string | null {
   try {
     return sessionStorage.getItem(TOKEN_KEY);
@@ -108,16 +111,17 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   bootstrapped: false,
 
   hydrateFromServer: async () => {
+    const epoch = ++sessionEpoch;
     const token = readToken();
     if (!token || !isApiEnabled()) {
-      writeToken(null);
-      useShellPerspectiveStore.getState().hydrate(undefined);
-      set({ user: null, isAuthenticated: false, bootstrapped: true });
+      // 无 token：只结束启动校验，不清掉刚完成的内存登录
+      set({ bootstrapped: true });
       return;
     }
     const ws = useWorkspaceStore.getState().workspaceId || 'ws-mss-ai';
     try {
       const me = await fetchSessionMeApi(ws);
+      if (epoch !== sessionEpoch) return;
       if (me.ok) {
         const user = fromApiUser(me.user);
         useShellPerspectiveStore.getState().hydrate(user.platformRole);
@@ -125,24 +129,34 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         return;
       }
     } catch {
-      /* fallthrough */
+      /* 服务不可达：保留已有内存会话，避免卡在启动页 */
+      if (epoch !== sessionEpoch) return;
+      set({ bootstrapped: true });
+      return;
     }
+    if (epoch !== sessionEpoch) return;
     writeToken(null);
+    if (get().isAuthenticated && get().user) {
+      set({ bootstrapped: true });
+      return;
+    }
     useShellPerspectiveStore.getState().hydrate(undefined);
     set({ user: null, isAuthenticated: false, bootstrapped: true });
   },
 
   login: async (email, password) => {
     const ws = useWorkspaceStore.getState().workspaceId || 'ws-mss-ai';
+    sessionEpoch += 1;
 
-    // Prefer server login + token
-    if (isApiEnabled() && useWorkspaceStore.getState().apiConnected) {
+    // 不依赖 apiConnected：探活在登录之后，否则永远走不进 Nest
+    if (isApiEnabled()) {
       try {
         const remote = await loginWithApi({ email, password, workspaceId: ws });
         if (remote.ok && remote.token) {
           writeToken(remote.token);
           const user = fromApiUser(remote.user);
           useShellPerspectiveStore.getState().hydrate(user.platformRole);
+          useWorkspaceStore.setState({ apiConnected: true, apiStatus: 'connected' });
           set({
             user,
             isAuthenticated: true,
@@ -154,9 +168,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           return { ok: false, error: remote.error || '登录失败' };
         }
       } catch {
-        /* fall through */
+        useWorkspaceStore.setState({ apiConnected: false, apiStatus: 'unreachable' });
       }
-      return { ok: false, error: '登录服务不可用，请检查共享 API' };
     }
 
     // Offline fallback: memory-only session (no browser user profile cache)

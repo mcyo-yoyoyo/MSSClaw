@@ -7,6 +7,7 @@ import type { ScenarioDemoPlan } from '@/domain/scenarioPipeline';
 import { HomePage } from '@/features/home/HomePage';
 import { AppViewPlaceholder } from '@/components/shell/AppViewPlaceholder';
 import { ViewLoadingFallback } from '@/components/common/ViewLoadingFallback';
+import { MarketToolDetailHost } from '@/features/market/MarketToolDetailModal';
 import {
   LazyAgentCenterPage,
   LazyAiMapPage,
@@ -29,7 +30,7 @@ import {
   LazyToolCenterPage,
   LazyWorkflowStudioPage,
   LazyAiBriefPage,
-  LazyAiTasksPage,
+  LazyMePage,
 } from '@/features/lazyPages';
 
 export interface AppViewRouterHandlers {
@@ -50,6 +51,7 @@ interface AppViewRouterProps {
 
 const VIEW_LABELS: Partial<Record<AppView, string>> = {
   home: '首页',
+  me: '个人中心',
   'market-external': '外部工具精选',
   'market-internal': '公司工具推荐',
   'market-projects': 'MSS工具集市',
@@ -82,15 +84,17 @@ function LazyView({ label, children }: { label: string; children: ReactNode }) {
 }
 
 export function AppViewRouter({ appView, handlers }: AppViewRouterProps) {
+  return (
+    <>
+      <AppViewRouterContent appView={appView} handlers={handlers} />
+      <MarketToolDetailHost />
+    </>
+  );
+}
+
+function AppViewRouterContent({ appView, handlers }: AppViewRouterProps) {
   if (appView === 'home') {
-    return (
-      <HomePage
-        onSubmitTask={handlers.onSubmitTask}
-        onInvokeAgent={handlers.onInvokeAgent}
-        onInvokeSkill={handlers.onInvokeSkill}
-        onAskKbDocument={handlers.onAskKbDocument}
-      />
-    );
+    return <HomePage />;
   }
 
   if (isAppViewPlaceholder(appView)) {
@@ -123,10 +127,11 @@ export function AppViewRouter({ appView, handlers }: AppViewRouterProps) {
           />
         </LazyView>
       );
+    case 'me':
     case 'ai-tasks':
       return (
-        <LazyView label={label}>
-          <LazyAiTasksPage />
+        <LazyView label={appView === 'ai-tasks' ? 'AI任务' : label}>
+          <LazyMePage />
         </LazyView>
       );
     case 'ai-brief':
@@ -274,13 +279,6 @@ export function AppViewRouter({ appView, handlers }: AppViewRouterProps) {
         </LazyView>
       );
     default:
-      return (
-        <HomePage
-          onSubmitTask={handlers.onSubmitTask}
-          onInvokeAgent={handlers.onInvokeAgent}
-          onInvokeSkill={handlers.onInvokeSkill}
-          onAskKbDocument={handlers.onAskKbDocument}
-        />
-      );
+      return <HomePage />;
   }
 }

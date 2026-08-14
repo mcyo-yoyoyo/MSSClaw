@@ -21,6 +21,7 @@ function hasAtLeast(level: PermissionLevel, min: PermissionLevel): boolean {
 /** 侧栏视图 → 权限模块与最低级别（home/task/案例对业务始终按 chat 放行） */
 const VIEW_RBAC: Partial<Record<AppView, { module: ResourceModule; min: PermissionLevel }>> = {
   home: { module: 'chat', min: 'read' },
+  me: { module: 'chat', min: 'read' },
   'market-external': { module: 'chat', min: 'read' },
   'market-internal': { module: 'chat', min: 'read' },
   'market-projects': { module: 'chat', min: 'read' },
@@ -54,7 +55,7 @@ export function canRoleAccessView(
   role: PlatformRole | undefined,
   workspaceId: string,
 ): boolean {
-  if (!role) return view === 'home' || view === 'task';
+  if (!role) return view === 'home' || view === 'me' || view === 'task';
   const rule = VIEW_RBAC[view];
   if (!rule) return true;
   const matrix = getRbacMatrix(workspaceId);

@@ -13,10 +13,27 @@ import {
   scheduleSavePlatformDoc,
 } from '@/api/platformDocsApi';
 
+const LEGACY_OFFICE_LABELS = new Set([
+  '记一下',
+  '读一下',
+  '写一下',
+  '问一下',
+  '搜一下',
+  '答一下',
+  '情报官',
+  '知识库',
+  'Agent',
+]);
+
 function mergeWithDefaults(
   saved: InternalOfficeSceneCatalogEntry[] | null,
 ): InternalOfficeSceneCatalogEntry[] {
   const defaults = defaultInternalOfficeSceneCatalog();
+  const isLegacyCopy =
+    Boolean(saved?.length) &&
+    saved!.every((e) => !e.label?.trim() || LEGACY_OFFICE_LABELS.has(e.label.trim()));
+  if (!saved?.length || isLegacyCopy) return defaults;
+
   const byId = new Map(
     (saved ?? [])
       .filter((e) => e?.id && isInternalOfficeSceneId(e.id))

@@ -7,13 +7,13 @@ import {
   type Workspace,
   type WorkspaceCatalog,
 } from '@/domain/workspace';
-import { apiUrl, isApiEnabled } from '@/api/client';
+import { apiUrl, isApiEnabled, fetchWithTimeout } from '@/api/client';
 
 export async function fetchWorkspaceList(): Promise<Workspace[]> {
   if (!isApiEnabled()) return WORKSPACE_LIST;
 
   try {
-    const response = await fetch(apiUrl('/api/v1/workspaces'));
+    const response = await fetchWithTimeout(apiUrl('/api/v1/workspaces'), {}, 8000);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
     return zodParseWorkspaceList(payload.workspaces);
@@ -26,10 +26,23 @@ export async function fetchWorkspaceCatalog(workspaceId: string): Promise<Worksp
   if (!isApiEnabled()) return getWorkspaceCatalog(workspaceId);
 
   try {
-    const response = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/catalog`));
+    const response = await fetchWithTimeout(
+      apiUrl(`/api/v1/workspaces/${workspaceId}/catalog`),
+      {},
+      8000,
+    );
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
-    return WorkspaceCatalogSchema.parse(payload);
+    const parsed = WorkspaceCatalogSchema.parse(payload);
+    const local = getWorkspaceCatalog(workspaceId);
+    const remoteEmpty =
+      Object.keys(parsed.chats ?? {}).length === 0 &&
+      (parsed.resources?.length ?? 0) === 0;
+    const localRicher =
+      Object.keys(local.chats ?? {}).length > 0 || (local.resources?.length ?? 0) > 0;
+    // 自动建租户的空 catalog 不能覆盖前端种子，否则登录后会话水合会把工作台打崩
+    if (remoteEmpty && localRicher) return local;
+    return parsed;
   } catch {
     return getWorkspaceCatalog(workspaceId);
   }

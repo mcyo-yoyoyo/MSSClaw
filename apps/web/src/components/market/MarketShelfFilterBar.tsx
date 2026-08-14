@@ -40,7 +40,7 @@ export function MarketShelfFilterBar({
         )}
       >
         <i className={cn('text-[11px]', favoritesOnly ? 'fa-solid fa-star' : 'fa-regular fa-star')} />
-        我的收藏
+        只看已收藏
         {favCount > 0 ? (
           <span className="tabular-nums text-[11px] opacity-70">{favCount}</span>
         ) : null}

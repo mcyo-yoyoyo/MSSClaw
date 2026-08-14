@@ -2,7 +2,16 @@
 
 import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
 
-export type RankMode = 'trending' | 'newest' | 'top_rated' | 'most_used' | 'most_downloaded';
+export type RankMode =
+  | 'trending'
+  | 'newest'
+  | 'top_rated'
+  | 'most_used'
+  | 'most_downloaded'
+  | 'most_viewed'
+  | 'most_favorited'
+  | 'most_liked'
+  | 'most_disliked';
 
 export const RANK_MODE_OPTIONS: { id: RankMode; label: string }[] = [
   { id: 'trending', label: '热门推荐' },
@@ -10,6 +19,14 @@ export const RANK_MODE_OPTIONS: { id: RankMode; label: string }[] = [
   { id: 'most_downloaded', label: '最多下载' },
   { id: 'top_rated', label: '最高评分' },
   { id: 'most_used', label: '最多使用' },
+];
+
+/** 外部 / 内部 / MSS 货架：按互动指标排序 */
+export const SHELF_RANK_TABS: { id: RankMode; label: string }[] = [
+  { id: 'most_viewed', label: '查看' },
+  { id: 'most_favorited', label: '收藏' },
+  { id: 'most_liked', label: '点赞' },
+  { id: 'most_disliked', label: '点踩' },
 ];
 
 /** 首页 MSS 工具集市排行 Tab（去掉最高评分；不含「最多使用」以免与热门重叠） */
@@ -26,6 +43,8 @@ export interface ContentEngagement {
   downloads: number;
   /** 打开 / 调用次数（近窗累计，演示用） */
   uses: number;
+  /** 收藏人数 */
+  favorites: number;
   updatedAt: string;
 }
 
@@ -65,6 +84,7 @@ export function emptyEngagement(id: string): ContentEngagement {
     dislikes: 0,
     downloads: 0,
     uses: 0,
+    favorites: 0,
     updatedAt: new Date().toISOString().slice(0, 10),
   };
 }
@@ -77,12 +97,14 @@ export function seedEngagement(id: string): ContentEngagement {
   const dislikes = h % 7;
   const downloads = 3 + (h % 25);
   const uses = 20 + (h % 80);
+  const favorites = 2 + (h % 18);
   return {
     id,
     likes,
     dislikes,
     downloads,
     uses,
+    favorites,
     updatedAt: new Date().toISOString().slice(0, 10),
   };
 }
@@ -99,12 +121,39 @@ export function mergeEngagement(
   };
 }
 
+export function normalizeEngagement(e: ContentEngagement): ContentEngagement {
+  return {
+    ...e,
+    likes: e.likes ?? 0,
+    dislikes: e.dislikes ?? 0,
+    downloads: e.downloads ?? 0,
+    uses: e.uses ?? 0,
+    favorites: e.favorites ?? 0,
+  };
+}
+
+const resolvedMissCache = new Map<string, ContentEngagement>();
+
+function ensureNumericFields(e: ContentEngagement): ContentEngagement {
+  if (typeof e.likes !== 'number') e.likes = 0;
+  if (typeof e.dislikes !== 'number') e.dislikes = 0;
+  if (typeof e.downloads !== 'number') e.downloads = 0;
+  if (typeof e.uses !== 'number') e.uses = 0;
+  if (typeof e.favorites !== 'number') e.favorites = 0;
+  return e;
+}
+
 export function resolveEngagement(
   id: string,
   map: Record<string, ContentEngagement>,
 ): ContentEngagement {
-  if (map[id]) return map[id];
-  return isDemoContentEnabled() ? seedEngagement(id) : emptyEngagement(id);
+  const existing = map[id];
+  if (existing) return ensureNumericFields(existing);
+  const cached = resolvedMissCache.get(id);
+  if (cached) return cached;
+  const created = isDemoContentEnabled() ? seedEngagement(id) : emptyEngagement(id);
+  resolvedMissCache.set(id, created);
+  return created;
 }
 
 export function sortByRankMode<T extends RankableContent>(
@@ -134,6 +183,14 @@ export function sortByRankMode<T extends RankableContent>(
         return b.e.uses - a.e.uses;
       case 'most_downloaded':
         return b.e.downloads - a.e.downloads || b.e.uses - a.e.uses;
+      case 'most_viewed':
+        return b.e.uses - a.e.uses;
+      case 'most_favorited':
+        return (b.e.favorites ?? 0) - (a.e.favorites ?? 0) || b.e.uses - a.e.uses;
+      case 'most_liked':
+        return b.e.likes - a.e.likes || b.e.uses - a.e.uses;
+      case 'most_disliked':
+        return b.e.dislikes - a.e.dislikes || b.e.uses - a.e.uses;
       default:
         return 0;
     }

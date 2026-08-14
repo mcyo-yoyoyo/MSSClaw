@@ -10,7 +10,6 @@ import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
 import { openResourceWithReturn } from '@/domain/openResourceNav';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useConversationStore } from '@/stores/conversationStore';
-import { useHomeStore } from '@/stores/homeStore';
 import { useMarketFilterStore } from '@/stores/marketFilterStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
@@ -24,6 +23,11 @@ export type HomeJourneyOpts = {
   /** 找案例别名时默认外部工具货架 */
   shelf?: MarketShelfKind;
 };
+
+/** 打开个人中心（收藏 / 最近 / 任务） */
+export function openMeCenter() {
+  useAppViewStore.getState().setAppView('me');
+}
 
 /** 打开货架（外部 / 内部 / MSS工具集市） */
 export function openMarketShelf(kind: MarketShelfKind = 'external', opts?: HomeJourneyOpts) {
@@ -53,7 +57,6 @@ export function openMssMarketHub(opts?: {
     if (opts?.regionId) next.region = [opts.regionId];
     store.setOrgSelection(next);
   }
-  useHomeStore.getState().setHomeMode('portal');
   useAppViewStore.getState().setAppView(MARKET_SHELF_META.projects.view);
 }
 
@@ -62,7 +65,7 @@ export function openFindCases(opts?: HomeJourneyOpts) {
   openMarketShelf(opts?.shelf ?? 'external', opts);
 }
 
-/** 做任务 → Tab「用 · 做任务」场景技能页；只读用户回落找案例；MVP 业务引导货架下载 */
+/** 做任务 → 个人中心 AI 任务；只读用户回落找案例；MVP 业务引导货架下载 */
 export function openUseSkills(opts?: HomeJourneyOpts) {
   if (opts?.businessId) {
     useNavigationIntentStore.getState().focusBusinessScenario(opts.businessId);
@@ -91,18 +94,14 @@ export function openUseSkills(opts?: HomeJourneyOpts) {
 
   useTaskStore.getState().closeCreateDialog();
 
-  // 完整产品已开放 AI 任务：落到页内新建对话壳，不再进首页旧 assistant
+  // 完整产品已开放 AI 任务：落到个人中心内嵌的 AI 任务 Tab
   if (useNavPresentationStore.getState().isViewEnabled('ai-tasks')) {
     useAppViewStore.getState().setAppView('ai-tasks');
     useNavigationIntentStore.getState().requestAiTaskCompose();
     return;
   }
 
-  useHomeStore.getState().setHomeMode('assistant');
-  if (opts?.focusComposer !== false) {
-    useHomeStore.getState().requestComposerFocus();
-  }
-  useAppViewStore.getState().setAppView('home');
+  useAppViewStore.getState().setAppView('me');
 }
 
 /** 案例地图（样板间）— 找案例的「更多」二级入口 */
@@ -110,7 +109,7 @@ export function openCaseMap() {
   openResourceWithReturn('ai-map');
 }
 
-/** 打开货架工具详情（深链 #/market-tool?id=） */
+/** 打开货架工具详情弹窗（停留当前页；深链 #/market-tool?id= 仍兼容） */
 export function openMarketToolDetail(
   toolId: string,
   returnShelf?: MarketShelfKind,
@@ -121,5 +120,9 @@ export function openMarketToolDetail(
   if (returnShelf) {
     intent.setReturnTarget({ view: MARKET_SHELF_META[returnShelf].view });
   }
-  useAppViewStore.getState().setAppView('market-tool');
+}
+
+/** 关闭工具详情弹窗 */
+export function closeMarketToolDetail() {
+  useNavigationIntentStore.getState().clearTool();
 }

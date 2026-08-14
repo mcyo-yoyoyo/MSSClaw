@@ -169,6 +169,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
           sceneTags: bizLabel ? [bizLabel] : undefined,
           securityLevel: 'mss',
           icon: s.icon || 'fa-cube',
+          logoUrl: s.iconUrl,
           badges,
           featured: Boolean(s.published),
           heat: s.invokes ?? 0,

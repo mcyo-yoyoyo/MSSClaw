@@ -14,6 +14,7 @@ import {
   type BusinessScenarioId,
 } from '@/domain/businessScenarios';
 import type { ToolRegion } from '@/domain/externalToolTaxonomy';
+import type { ExecutionTrustTier } from '@/domain/executionTrust';
 import {
   anyItemMatchesOrgPerspective,
   emptyOrgPerspectiveSelection,
@@ -112,6 +113,11 @@ export type MarketShelfCard = {
   hasHowto: boolean;
   /** AI 项目：是否已挂载可站内执行的 Skill/Agent */
   runnable?: boolean;
+  /**
+   * 2.0 执行可信度：演示 / 平台模型 / 自配 / 仅下载
+   * 仅 MSS Skill·Agent 卡使用
+   */
+  executionTrust?: ExecutionTrustTier;
   /** 展示用更新时间（YYYY-MM-DD） */
   updatedAt?: string;
   primaryAction: MarketPrimaryAction;
@@ -426,9 +432,21 @@ export function applyMarketFeaturedPins(
     });
 }
 
-/** 精选条与全部列表去重：全部中排除已在精选展示的 id */
+/** 精选门禁：必须能回答「能帮我做什么」，且有上手或可用入口 */
+export function qualifiesAsFeaturedContent(card: MarketShelfCard): boolean {
+  const outcome = (card.outcomeHint || card.description || '').trim();
+  if (outcome.length < 8) return false;
+  if (card.kind === 'external' || card.kind === 'internal') {
+    return Boolean(card.hasHowto || (card.homepageUrl && card.homepageUrl !== '#'));
+  }
+  return Boolean(card.hasHowto || card.runnable);
+}
+
+/** 精选条与全部列表去重：全部中排除已在精选展示的 id；空卡降到「更多」 */
 export function splitFeaturedAndRest(cards: MarketShelfCard[], featuredLimit = 8) {
-  const featured = cards.filter((c) => c.featured).slice(0, featuredLimit);
+  const featured = cards
+    .filter((c) => c.featured && qualifiesAsFeaturedContent(c))
+    .slice(0, featuredLimit);
   const featuredIds = new Set(featured.map((c) => c.id));
   const rest = cards.filter((c) => !featuredIds.has(c.id));
   return { featured, rest };

@@ -1,5 +1,6 @@
 export const APP_VIEWS = [
   'home',
+  'me',
   'market-external',
   'market-internal',
   'market-projects',
@@ -54,6 +55,13 @@ export const APP_VIEW_NAV: AppViewNavItem[] = [
     label: '首页',
     subtitle: '入口总览 · 工具货架与场景入口',
     icon: 'fa-house',
+    section: 'workspace',
+  },
+  {
+    id: 'me',
+    label: '个人中心',
+    subtitle: '收藏 · 最近 · 基于市场内容的个人层',
+    icon: 'fa-user',
     section: 'workspace',
   },
   { id: 'task', label: '任务记录', subtitle: '进度 · 结果 · 历史会话（标准/完整）', icon: 'fa-list-check', section: 'workspace' },

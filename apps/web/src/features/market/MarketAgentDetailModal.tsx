@@ -17,6 +17,11 @@ import {
 import type { ScenarioDemoPlan } from '@/domain/scenarioPipeline';
 import { ARCHITECTURE_DOC_KIND_LABELS } from '@/domain/scenarioArchitecture';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
+import {
+  EXECUTION_TRUST_META,
+  executionTrustBlockedMessage,
+  resolveAgentExecutionTrust,
+} from '@/domain/executionTrust';
 
 type DetailTab = 'overview' | 'materials' | 'env' | 'reviews';
 
@@ -166,6 +171,12 @@ export function MarketAgentDetailModal({
   );
 
   const runnable = canRun && Boolean(demoPlan);
+  const trust = resolveAgentExecutionTrust({
+    canRun: runnable,
+    hasDemoPlan: Boolean(demoPlan),
+    envFilled,
+  });
+  const trustMeta = EXECUTION_TRUST_META[trust];
   const agentCount = bundle?.agents.length ?? 0;
   const skillCount = bundle?.skills.length ?? 0;
   const toolCount = bundle?.tools.length ?? 0;
@@ -191,7 +202,7 @@ export function MarketAgentDetailModal({
 
   const handleRun = () => {
     if (!runnable) {
-      onToast('当前暂不可执行，请先下载学习');
+      onToast(executionTrustBlockedMessage(trust, '当前暂不可在线试用，请先下载学习'));
       return;
     }
     onRun();
@@ -218,13 +229,22 @@ export function MarketAgentDetailModal({
                     </h3>
                     {runnable ? (
                       <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">
-                        可执行
+                        可试用
                       </span>
                     ) : (
                       <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">
                         学习包
                       </span>
                     )}
+                    <span
+                      className={cn(
+                        'rounded-md px-1.5 py-0.5 text-[10px] font-semibold',
+                        trustMeta.badgeClass,
+                      )}
+                      title={trustMeta.hint}
+                    >
+                      {trustMeta.label}
+                    </span>
                   </div>
                 </div>
                 <button
@@ -317,24 +337,24 @@ export function MarketAgentDetailModal({
             >
               关闭
             </button>
-            {runnable ? (
-              <button
-                type="button"
-                onClick={handleRun}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-[12px] font-semibold text-zinc-800 transition hover:bg-zinc-50"
-              >
-                <i className="fa-solid fa-play text-[10px]" />
-                执行
-              </button>
-            ) : null}
             <button
               type="button"
               onClick={handleDownload}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-800"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-[12px] font-medium text-zinc-700 transition hover:bg-zinc-50"
             >
               <i className="fa-solid fa-download text-[11px]" />
               下载
             </button>
+            {runnable ? (
+              <button
+                type="button"
+                onClick={handleRun}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-800"
+              >
+                <i className="fa-solid fa-play text-[10px]" />
+                在线试用
+              </button>
+            ) : null}
           </div>
         </div>
       }
@@ -627,13 +647,14 @@ export function MarketAgentDetailModal({
               <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-3">
                 <p className="mb-2 text-[11px] font-semibold text-zinc-500">运行摘要</p>
                 <dl className="divide-y divide-zinc-50">
+                  <MetaRow label="可信度" value={trustMeta.label} />
                   <MetaRow
-                    label="执行"
+                    label="试用"
                     value={
                       runnable
                         ? demoPlan?.mode === 'team'
-                          ? '专家团打样'
-                          : '单点打样'
+                          ? '专家团打样 → AI 任务'
+                          : '单点打样 → AI 任务'
                         : '仅下载学习'
                     }
                   />
@@ -643,6 +664,7 @@ export function MarketAgentDetailModal({
                     <MetaRow label="齐套" value={`${bundle.completeness}/3 层`} />
                   ) : null}
                 </dl>
+                <p className="mt-2 text-[10px] leading-snug text-zinc-400">{trustMeta.hint}</p>
               </div>
             ) : null}
 
@@ -653,7 +675,7 @@ export function MarketAgentDetailModal({
               ) : null}
               {!runnable ? (
                 <div className="py-2 text-[11px] leading-relaxed text-zinc-400">
-                  当前方案仅支持下载学习；有打样链路后可在底部「执行」。
+                  {trustMeta.hint} 有打样链路后可在底部「在线试用」。
                 </div>
               ) : null}
             </dl>

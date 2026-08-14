@@ -36,6 +36,14 @@ const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
     run: () => h.goto('home'),
   },
   {
+    id: 'goto-me',
+    label: '个人中心',
+    icon: 'fa-user',
+    keywords: '个人中心 我的 收藏 最近 浏览',
+    view: 'me',
+    run: () => h.goto('me'),
+  },
+  {
     id: 'goto-market-external',
     label: '外部工具精选',
     icon: 'fa-globe',

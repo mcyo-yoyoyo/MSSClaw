@@ -1,5 +1,8 @@
 import { EXTERNAL_TOOLS_CATALOG } from '@/domain/externalToolsCatalog';
-import type { ExternalToolCatalogEntry } from '@/domain/externalToolTaxonomy';
+import {
+  isExternalToolOnShelf,
+  type ExternalToolCatalogEntry,
+} from '@/domain/externalToolTaxonomy';
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
 
 export function catalogEntryToToolSeed(entry: ExternalToolCatalogEntry): PrototypeToolSeed {
@@ -34,5 +37,7 @@ export function catalogEntryToToolSeed(entry: ExternalToolCatalogEntry): Prototy
 }
 
 export function buildExternalToolSeedsFromCatalog(): PrototypeToolSeed[] {
-  return EXTERNAL_TOOLS_CATALOG.map(catalogEntryToToolSeed);
+  return EXTERNAL_TOOLS_CATALOG.filter((e) => isExternalToolOnShelf(e.id)).map(
+    catalogEntryToToolSeed,
+  );
 }

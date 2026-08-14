@@ -33,9 +33,10 @@ export function LoginPage() {
     setError('');
     setSubmitting(true);
     try {
-      await ensureAccountPasswordsReady();
       const result = await login(email, password);
       if (!result.ok) setError(result.error);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '登录失败，请重试');
     } finally {
       setSubmitting(false);
     }

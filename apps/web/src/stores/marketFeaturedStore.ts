@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import {
   DEFAULT_EXTERNAL_FEATURED_PINS,
+  LEGACY_EXTERNAL_FEATURED_PINS,
 } from '@/domain/externalToolTaxonomy';
 import type { MarketShelfKind } from '@/domain/marketShelf';
 import {
@@ -29,13 +30,21 @@ function defaultPins(): MarketFeaturedPins {
   };
 }
 
+function sameIdList(a: string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((id, i) => id === b[i]);
+}
+
 function normalizePins(parsed: Partial<MarketFeaturedPins> | null | undefined): MarketFeaturedPins {
   if (!parsed) return defaultPins();
-  const external = Array.isArray(parsed.external)
+  const rawExternal = Array.isArray(parsed.external)
     ? parsed.external.slice(0, MAX_PER_KIND)
     : [];
+  const external =
+    !rawExternal.length || sameIdList(rawExternal, LEGACY_EXTERNAL_FEATURED_PINS)
+      ? [...DEFAULT_EXTERNAL_FEATURED_PINS]
+      : rawExternal;
   return {
-    external: external.length ? external : [...DEFAULT_EXTERNAL_FEATURED_PINS],
+    external,
     internal: Array.isArray(parsed.internal) ? parsed.internal.slice(0, MAX_PER_KIND) : [],
     projects: Array.isArray(parsed.projects) ? parsed.projects.slice(0, MAX_PER_KIND) : [],
   };

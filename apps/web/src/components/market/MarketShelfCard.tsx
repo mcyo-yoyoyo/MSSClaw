@@ -1,12 +1,17 @@
 import { cn } from '@/lib/utils';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
+import { downloadAgentFile } from '@/domain/agentExport';
 import {
   MARKET_SECURITY_LABEL,
   type MarketShelfCard as MarketShelfCardModel,
 } from '@/domain/marketShelf';
+import { EXECUTION_TRUST_META } from '@/domain/executionTrust';
+import { downloadSkillFile } from '@/domain/skillExport';
+import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useMarketCompareStore } from '@/stores/marketCompareStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
+import { useMarketHiddenStore } from '@/stores/marketHiddenStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 
 export function MarketShelfCard({
@@ -16,9 +21,9 @@ export function MarketShelfCard({
   className,
   onOpen,
   onPrimary,
-  onHowTo,
+  onHowTo: _onHowTo,
   primaryLabel: primaryLabelOverride,
-  howToLabel = '快速上手',
+  howToLabel: _howToLabel,
   enableCompare = true,
 }: {
   card: MarketShelfCardModel;
@@ -28,23 +33,19 @@ export function MarketShelfCard({
   className?: string;
   onOpen: () => void;
   onPrimary?: () => void;
+  /** @deprecated 卡片只保留「详情」，上手材料在弹窗内 */
   onHowTo?: () => void;
   primaryLabel?: string;
   howToLabel?: string;
-  /** 轻量对比勾选（同货架 2–3 项） */
+  /** 轻量对比勾选（同货架 2–3 项）；首页关闭 */
   enableCompare?: boolean;
 }) {
+  void _onHowTo;
+  void _howToLabel;
   const featured = variant === 'featured';
   const compact = variant === 'compact';
   const homeDense = Boolean(className?.includes('home-channel-card'));
-  const isSkillMetrics = card.likes != null || card.downloads != null || card.dislikes != null;
-  const primaryLabel =
-    primaryLabelOverride ??
-    (card.kind === 'projects'
-      ? '详情'
-      : card.primaryAction === 'howto'
-        ? '快速上手'
-        : '立即体验');
+  const primaryLabel = primaryLabelOverride ?? '详情';
 
   const regionTone =
     card.kind === 'external' && card.region === 'overseas'
@@ -58,12 +59,23 @@ export function MarketShelfCard({
   const compareSelected = useMarketCompareStore((s) => s.isSelected(card.id, card.kind));
   const toggleCompare = useMarketCompareStore((s) => s.toggle);
   const showToast = useMarketplaceStore((s) => s.showToast);
+  const skills = useMarketplaceStore((s) => s.skills);
+  const agents = useMarketplaceStore((s) => s.agents);
+  const engagement = useContentEngagementStore((s) => s.byId[card.id]);
+  const userVote = useContentEngagementStore((s) => s.userVotes[card.id] ?? null);
+  const toggleLike = useContentEngagementStore((s) => s.toggleLike);
+  const toggleDislike = useContentEngagementStore((s) => s.toggleDislike);
+  const bumpDownload = useContentEngagementStore((s) => s.bumpDownload);
+  const bumpFavorite = useContentEngagementStore((s) => s.bumpFavorite);
+  const hideCard = useMarketHiddenStore((s) => s.hide);
+  const canDownload = card.kind === 'projects';
 
   const outcomeLine = card.outcomeHint?.trim() || card.description;
   const security = card.securityLevel;
+  const badges = card.badges ?? [];
   const sceneTags = (card.sceneTags?.length
     ? card.sceneTags
-    : card.badges.filter((b) => b.tone === 'type').map((b) => b.label)
+    : badges.filter((b) => b.tone === 'type').map((b) => b.label)
   ).slice(0, 3);
 
   const onToggleFavorite = (e: { stopPropagation: () => void }) => {
@@ -75,7 +87,33 @@ export function MarketShelfCard({
       icon: card.icon,
       logoUrl: card.logoUrl,
     });
+    bumpFavorite(card.id, on ? 1 : -1);
     showToast(on ? `已收藏：${card.title}` : `已取消收藏：${card.title}`);
+  };
+
+  const onDownload = (e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    const skill = skills.find((s) => s.id === card.id);
+    if (skill) {
+      bumpDownload(card.id);
+      downloadSkillFile(skill);
+      showToast(`已下载技能包：${skill.name}`);
+      return;
+    }
+    const agent = agents.find((a) => a.id === card.id);
+    if (agent) {
+      bumpDownload(card.id);
+      downloadAgentFile(agent);
+      showToast(`已下载 Agent 包：${agent.name}`);
+      return;
+    }
+    showToast('请打开详情后下载');
+  };
+
+  const onDismiss = (e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    hideCard(card.id, card.kind);
+    showToast(`已关闭：${card.title}`);
   };
 
   const onToggleCompare = (e: { stopPropagation: () => void }) => {
@@ -161,7 +199,18 @@ export function MarketShelfCard({
               ) : null}
               {!compact && card.runnable ? (
                 <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-800">
-                  可执行
+                  可试用
+                </span>
+              ) : null}
+              {!compact && card.executionTrust && card.executionTrust !== 'download_only' ? (
+                <span
+                  className={cn(
+                    'rounded-md px-1.5 py-0.5 text-[9px] font-semibold',
+                    EXECUTION_TRUST_META[card.executionTrust].badgeClass,
+                  )}
+                  title={EXECUTION_TRUST_META[card.executionTrust].hint}
+                >
+                  {EXECUTION_TRUST_META[card.executionTrust].label}
                 </span>
               ) : null}
             </div>
@@ -184,11 +233,6 @@ export function MarketShelfCard({
             >
               {outcomeLine}
             </p>
-            {!compact && featured && card.hasHowto ? (
-              <p className="mt-2 text-[11px] leading-snug text-[#86868b]">
-                快速上手 · 含上手材料，可先预览再使用
-              </p>
-            ) : null}
           </div>
         </div>
         {!compact ? (
@@ -198,13 +242,12 @@ export function MarketShelfCard({
               homeDense ? 'mt-2.5' : 'mt-3.5',
             )}
           >
-            {security ? (
+            {security && !homeDense && security !== 'mss' && card.kind !== 'projects' ? (
               <span
                 className={cn(
                   'rounded-md px-1.5 py-0.5 text-[10px] font-semibold',
                   security === 'external' && 'bg-amber-50 text-amber-800',
                   security === 'internal' && 'bg-teal-50 text-teal-800',
-                  security === 'mss' && 'bg-violet-50 text-violet-800',
                 )}
               >
                 {MARKET_SECURITY_LABEL[security]}
@@ -218,7 +261,7 @@ export function MarketShelfCard({
                 {tag}
               </span>
             ))}
-            {card.badges
+            {badges
               .filter((b) => !(b.tone === 'type' && sceneTags.includes(b.label)))
               .slice(0, featured ? 3 : 2)
               .map((b) => (
@@ -245,29 +288,71 @@ export function MarketShelfCard({
           compact ? 'mt-2.5 pt-2.5' : homeDense ? 'mt-2.5 pt-2.5' : 'mt-3.5 pt-3',
         )}
       >
-        {isSkillMetrics ? (
-          <span className="mr-auto inline-flex items-center gap-2.5 text-[10px] tabular-nums text-[#86868b]">
-            <span className="inline-flex items-center gap-1" title="下载量">
-              <i className="fa-solid fa-download text-[9px] text-[#86868b]" />
-              {formatToolInvokes(card.downloads ?? 0)}
-            </span>
-            <span className="inline-flex items-center gap-1" title="点赞">
-              <i className="fa-solid fa-thumbs-up text-[9px] text-sky-500/80" />
-              {formatToolInvokes(card.likes ?? 0)}
-            </span>
-            <span className="inline-flex items-center gap-1" title="点踩">
-              <i className="fa-solid fa-thumbs-down text-[9px] text-zinc-400" />
-              {formatToolInvokes(card.dislikes ?? 0)}
-            </span>
+        <div className="mr-auto inline-flex flex-wrap items-center gap-0.5 text-[10px] tabular-nums">
+          <span
+            className="inline-flex items-center gap-0.5 px-1 py-0.5 text-[#86868b]"
+            title="查看"
+          >
+            <i className="fa-regular fa-eye text-[9px] text-zinc-400" />
+            {formatToolInvokes(engagement?.uses || card.heat)}
           </span>
-        ) : card.heat > 0 && !compact ? (
-          <span className="mr-auto inline-flex items-center gap-1 text-[10px] tabular-nums text-[#86868b]">
-            <i className="fa-solid fa-fire text-[9px] text-amber-500/80" />
-            {formatToolInvokes(card.heat)}
-          </span>
-        ) : (
-          <span className="mr-auto" />
-        )}
+          <button
+            type="button"
+            onClick={onToggleFavorite}
+            title={favorited ? '取消收藏' : '收藏'}
+            aria-pressed={favorited}
+            className={cn(
+              'inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition',
+              favorited ? 'text-amber-600' : 'text-[#86868b] hover:text-zinc-700',
+            )}
+          >
+            <i className={cn('text-[9px]', favorited ? 'fa-solid fa-star' : 'fa-regular fa-star')} />
+            {formatToolInvokes(engagement?.favorites ?? 0)}
+          </button>
+          <button
+            type="button"
+            onClick={(ev) => {
+              ev.stopPropagation();
+              toggleLike(card.id);
+            }}
+            title="点赞"
+            aria-pressed={userVote === 'like'}
+            className={cn(
+              'inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition',
+              userVote === 'like' ? 'text-sky-600' : 'text-[#86868b] hover:text-zinc-700',
+            )}
+          >
+            <i className="fa-solid fa-thumbs-up text-[9px]" />
+            {formatToolInvokes(engagement?.likes ?? 0)}
+          </button>
+          <button
+            type="button"
+            onClick={(ev) => {
+              ev.stopPropagation();
+              toggleDislike(card.id);
+            }}
+            title="点踩"
+            aria-pressed={userVote === 'dislike'}
+            className={cn(
+              'inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition',
+              userVote === 'dislike' ? 'text-zinc-800' : 'text-[#86868b] hover:text-zinc-700',
+            )}
+          >
+            <i className="fa-solid fa-thumbs-down text-[9px]" />
+            {formatToolInvokes(engagement?.dislikes ?? 0)}
+          </button>
+          {canDownload ? (
+            <button
+              type="button"
+              onClick={onDownload}
+              title="下载"
+              className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[#86868b] transition hover:text-zinc-700"
+            >
+              <i className="fa-solid fa-download text-[9px]" />
+              {formatToolInvokes(engagement?.downloads ?? 0)}
+            </button>
+          ) : null}
+        </div>
         {enableCompare ? (
           <button
             type="button"
@@ -294,45 +379,25 @@ export function MarketShelfCard({
         ) : null}
         <button
           type="button"
-          onClick={onToggleFavorite}
-          title={favorited ? '取消收藏' : '加入收藏'}
-          aria-label={favorited ? '取消收藏' : '加入收藏'}
-          aria-pressed={favorited}
-          className={cn(
-            'inline-flex shrink-0 items-center justify-center rounded-lg transition',
-            compact ? 'h-7 w-7' : 'h-8 w-8',
-            favorited
-              ? 'bg-amber-50 text-amber-600 hover:bg-amber-100'
-              : 'bg-black/[0.04] text-zinc-400 hover:bg-black/[0.07] hover:text-zinc-600',
-          )}
-        >
-          <i
-            className={cn(
-              compact ? 'text-[11px]' : 'text-[12px]',
-              favorited ? 'fa-solid fa-star' : 'fa-regular fa-star',
-            )}
-          />
-        </button>
-        {onHowTo ? (
-          <button
-            type="button"
-            onClick={onHowTo}
-            className="shrink-0 rounded-lg border-0 bg-black/[0.04] px-2.5 py-1.5 text-[11px] font-medium text-[#3f3f46] transition hover:bg-black/[0.07]"
-          >
-            {howToLabel}
-          </button>
-        ) : null}
-        <button
-          type="button"
           onClick={onPrimary ?? onOpen}
           className={cn(
-            'shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition',
-            card.kind === 'projects'
-              ? 'bg-[#1d1d1f] text-white hover:bg-[#2c2c2e]'
-              : 'border-0 bg-black/[0.04] text-[#3f3f46] hover:bg-black/[0.07]',
+            'ml-0.5 shrink-0 rounded-lg bg-zinc-100 px-3 py-1.5 text-[11px] font-medium text-zinc-500 transition',
+            'hover:bg-zinc-200/80 hover:text-zinc-600',
+            compact ? 'px-2.5 py-1 text-[10px]' : null,
           )}
         >
           {primaryLabel}
+        </button>
+        <button
+          type="button"
+          onClick={onDismiss}
+          title="关闭此卡片"
+          className={cn(
+            'shrink-0 rounded-lg px-2 py-1.5 text-[11px] font-medium text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600',
+            compact ? 'px-1.5 py-1 text-[10px]' : null,
+          )}
+        >
+          关闭
         </button>
       </div>
     </article>

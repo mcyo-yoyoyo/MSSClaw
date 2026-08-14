@@ -34,6 +34,26 @@ import { assertSkillScanAllowsApproval } from '@/domain/skillSecurityScan';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 import { shareSyncSaveHint } from '@/domain/shareSync';
+import { SkillAvatar } from '@/components/brand/SkillAvatar';
+
+const ICON_MAX_BYTES = 512 * 1024;
+
+function readSkillIconFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (file.size > ICON_MAX_BYTES) {
+      reject(new Error('头像请小于 512KB'));
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      reject(new Error('请选择图片文件'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('读取图片失败'));
+    reader.readAsDataURL(file);
+  });
+}
 
 type EditorTarget = string | 'new' | null;
 type WizardStep = 0 | 1 | 2 | 3;
@@ -115,6 +135,7 @@ function normalizeSkillForm(skill: PrototypeSkillSeed): PrototypeSkillSeed {
     featuredInDoTask: resolveSkillFeaturedInDoTask(skill),
     businessScenarioId: resolveSkillBusinessScenario(skill) ?? undefined,
     accentColor: skill.accentColor || DEFAULT_SKILL_ACCENT,
+    iconUrl: skill.iconUrl,
   };
 }
 
@@ -346,6 +367,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       publisherUserId: form.publisherUserId || userId || undefined,
       invokes: prev?.invokes ?? 0,
       icon: prev?.icon ?? form.icon ?? 'fa-cube',
+      iconUrl: form.iconUrl?.trim() || undefined,
       accentColor: form.accentColor || DEFAULT_SKILL_ACCENT,
       sourceType: 'internal',
       visibility,
@@ -545,6 +567,49 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                 来自包解析：{packName} · 可继续改写字段
               </p>
             ) : null}
+            <FormField
+              label="自定义头像"
+              hint="上传 PNG/JPG/WebP（≤512KB）。以 data URL 保存，GitHub Pages 静态站也可预览。"
+            >
+              <div className="flex items-center gap-3">
+                <SkillAvatar
+                  skillId={form.id || 'new'}
+                  icon={form.icon || 'fa-cube'}
+                  iconUrl={form.iconUrl}
+                  size={48}
+                  title={form.nameZh || form.name || 'Skill'}
+                />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="block w-full text-[12px] text-zinc-600 file:mr-2 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-[11px] file:font-semibold file:text-white"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (!file) return;
+                      void readSkillIconFile(file)
+                        .then((dataUrl) => {
+                          setForm({ ...form, iconUrl: dataUrl });
+                          useMarketplaceStore.getState().showToast('自定义头像已上传');
+                        })
+                        .catch((err: Error) =>
+                          useMarketplaceStore.getState().showToast(err.message || '上传失败'),
+                        );
+                    }}
+                  />
+                  {form.iconUrl ? (
+                    <button
+                      type="button"
+                      className="text-[11px] font-medium text-zinc-500 hover:text-zinc-800"
+                      onClick={() => setForm({ ...form, iconUrl: undefined })}
+                    >
+                      清除上传，改用默认图标
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </FormField>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <FormField label="中文名称（默认展示）">
                 <FormInput

@@ -9,12 +9,12 @@ export const LazyMyMessagesPage = lazy(() =>
   import('@/features/messages/MyMessagesPage').then((m) => ({ default: m.MyMessagesPage })),
 );
 
-export const LazyAiBriefPage = lazy(() =>
-  import('@/features/ai-brief/AiBriefPage').then((m) => ({ default: m.AiBriefPage })),
+export const LazyMePage = lazy(() =>
+  import('@/features/me/MePage').then((m) => ({ default: m.MePage })),
 );
 
-export const LazyAiTasksPage = lazy(() =>
-  import('@/features/ai-tasks/AiTasksPage').then((m) => ({ default: m.AiTasksPage })),
+export const LazyAiBriefPage = lazy(() =>
+  import('@/features/ai-brief/AiBriefPage').then((m) => ({ default: m.AiBriefPage })),
 );
 
 export const LazyAgentCenterPage = lazy(() =>
@@ -111,7 +111,8 @@ export const LazyExportModal = lazy(() =>
 export const ROUTE_PREFETCH: Partial<Record<AppView, () => void>> = {
   task: () => void import('@/features/task/TaskCenterPage'),
   messages: () => void import('@/features/messages/MyMessagesPage'),
-  'ai-tasks': () => void import('@/features/ai-tasks/AiTasksPage'),
+  'ai-tasks': () => void import('@/features/me/MePage'),
+  me: () => void import('@/features/me/MePage'),
   'ai-brief': () => void import('@/features/ai-brief/AiBriefPage'),
   agents: () => void import('@/features/agent/AgentCenterPage'),
   'agent-studio': () => void import('@/features/agent/AgentCenterPage'),

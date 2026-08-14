@@ -23,8 +23,9 @@ import { useWorkspaceStore } from '@/stores/workspaceStore';
 /**
  * AI 任务：按 Agent / Skill 归类的历史执行会话（Codex 式左右分栏）。
  * 无任务 / 新建：页内展示对话输入壳（待上线），不再跳转首页旧链路。
+ * embedded：嵌在个人中心 Tab 内，收起独立页头。
  */
-export function AiTasksPage() {
+export function AiTasksPage({ embedded = false }: { embedded?: boolean } = {}) {
   const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const platformRole = useSessionStore((s) => s.user?.platformRole);
   const executeAllowed = canExecuteChat(platformRole);
@@ -155,8 +156,20 @@ export function AiTasksPage() {
   const listVisibleClass = viewingChat || (composeFocus && showChat) ? 'max-xl:hidden' : '';
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[linear-gradient(180deg,#fafafa_0%,#f4f4f5_48%,#fafafa_100%)]">
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-200/80 bg-white/90 px-4 py-3 backdrop-blur md:px-6">
+    <div
+      className={cn(
+        'flex h-full min-h-0 flex-col',
+        embedded
+          ? 'overflow-hidden rounded-2xl border border-black/[0.04] bg-white'
+          : 'bg-[linear-gradient(180deg,#fafafa_0%,#f4f4f5_48%,#fafafa_100%)]',
+      )}
+    >
+      <div
+        className={cn(
+          'flex shrink-0 items-center justify-between gap-3 border-b border-zinc-200/80',
+          embedded ? 'bg-white px-3 py-2' : 'bg-white/90 px-4 py-3 backdrop-blur md:px-6',
+        )}
+      >
         <div className="flex min-w-0 items-center gap-2">
           {viewingChat || (composeFocus && showChat) ? (
             <button
@@ -173,10 +186,18 @@ export function AiTasksPage() {
             </button>
           ) : null}
           <div className="min-w-0">
-            <h1 className="text-[16px] font-semibold tracking-tight text-zinc-900">AI 任务</h1>
-            <p className="mt-0.5 truncate text-[12px] text-zinc-500">
-              {currentAiTaskOwnerLabel()} 的个人执行历史 · {allSessions.length} 条（仅本人可见）
-            </p>
+            {embedded ? (
+              <p className="truncate text-[12px] text-zinc-500">
+                {currentAiTaskOwnerLabel()} · {allSessions.length} 条（仅本人可见）
+              </p>
+            ) : (
+              <>
+                <h1 className="text-[16px] font-semibold tracking-tight text-zinc-900">AI 任务</h1>
+                <p className="mt-0.5 truncate text-[12px] text-zinc-500">
+                  {currentAiTaskOwnerLabel()} 的个人执行历史 · {allSessions.length} 条（仅本人可见）
+                </p>
+              </>
+            )}
           </div>
         </div>
         {executeAllowed ? (

@@ -121,3 +121,18 @@ export function apiUrl(path: string) {
   const normalized = path.startsWith('/') ? path : `/${path}`;
   return base ? `${base}${normalized}` : normalized;
 }
+
+/** 带超时的 fetch，避免 Vite 反代挂起把登录/会话卡死 */
+export async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  ms = 8000,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}

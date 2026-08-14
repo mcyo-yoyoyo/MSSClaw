@@ -9,6 +9,7 @@ import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useShellPerspectiveStore } from '@/stores/shellPerspectiveStore';
+import { useMarketFilterStore } from '@/stores/marketFilterStore';
 
 function loadNavSections(): Record<NavSection, boolean> {
   return Object.fromEntries(NAV_SECTIONS.map((s) => [s, s === 'system'])) as Record<
@@ -41,6 +42,9 @@ export const useAppViewStore = create<AppViewState>((set, get) => ({
   settingsOpen: false,
 
   setAppView: (view) => {
+    if (get().appView !== view) {
+      useMarketFilterStore.getState().setSearch('');
+    }
     if (view === 'messages') {
       set({ appView: view, blockedOpsView: null });
       return;

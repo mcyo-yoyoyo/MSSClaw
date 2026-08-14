@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, type ReactNode } from 'react';
+﻿import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   APP_VIEW_NAV,
   NAV_SECTION_LABELS,
@@ -7,8 +7,10 @@ import {
   type AppView,
   type NavSection,
 } from '@/domain/appView';
+import { writeAppRouteToLocation } from '@/domain/appRoute';
 import { isAppViewSlot, NAV_PRESENTATION_META } from '@/domain/navPresentation';
 import { ROLE_LABELS } from '@/domain/rbac';
+import { formatRolePerspective } from '@/domain/rolePerspective';
 import { isOpsOnlyView } from '@/domain/shellPerspective';
 import { SidebarMarketFilters } from '@/components/shell/SidebarMarketFilters';
 import { ROUTE_PREFETCH } from '@/features/lazyPages';
@@ -30,6 +32,7 @@ export function AppShellSidebar() {
   } = useAppViewStore();
   const isViewEnabled = useNavPresentationStore((s) => s.isViewEnabled);
   const user = useSessionStore((s) => s.user);
+  const logout = useSessionStore((s) => s.logout);
   const perspective = useShellPerspectiveStore((s) => s.perspective);
   const hydrate = useShellPerspectiveStore((s) => s.hydrate);
 
@@ -110,6 +113,32 @@ export function AppShellSidebar() {
 
   const initial = (user?.name?.trim()?.[0] ?? 'U').toUpperCase();
   const roleLabel = user ? ROLE_LABELS[user.platformRole] : '';
+  const perspectiveLabel = user
+    ? formatRolePerspective({
+        platformRole: user.platformRole,
+        deptIds: user.deptIds,
+        regionId: user.regionId,
+      })
+    : '未登录';
+  const [accountOpen, setAccountOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!accountOpen) return;
+    const onDocDown = (e: MouseEvent) => {
+      if (accountRef.current && !accountRef.current.contains(e.target as Node)) {
+        setAccountOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocDown);
+    return () => document.removeEventListener('mousedown', onDocDown);
+  }, [accountOpen]);
+
+  const goView = (view: AppView) => {
+    writeAppRouteToLocation({ view });
+    setAppView(view);
+  };
+
   const isBusiness = perspective === 'business';
   const hasCapabilityBody = capabilityItems.length > 0;
   const hasSystemBody = systemNavNodes.length > 0;
@@ -187,12 +216,77 @@ export function AppShellSidebar() {
         )}
       </nav>
 
-      <div className="border-t border-black/[0.06] p-1.5">
+      <div className="relative border-t border-black/[0.06] p-1.5" ref={accountRef}>
+        {accountOpen ? (
+          <div
+            className={cn(
+              'absolute z-[70] overflow-hidden rounded-xl border border-zinc-200/80 bg-white py-1.5 shadow-apple-lg',
+              sidebarCollapsed
+                ? 'bottom-full left-full mb-1 ml-1 w-64'
+                : 'bottom-full left-1.5 right-1.5 mb-1',
+            )}
+          >
+            <div className="border-b border-zinc-100 px-3.5 py-2.5">
+              <p className="truncate text-[13px] font-semibold text-zinc-900">
+                {user?.name ?? '未登录'}
+              </p>
+              {user?.email ? (
+                <p className="truncate text-[11px] text-zinc-500">{user.email}</p>
+              ) : null}
+              <p className="mt-1.5 text-[11px] font-medium leading-snug text-zinc-700">
+                {perspectiveLabel}
+              </p>
+              {roleLabel ? (
+                <p className="mt-0.5 text-[10px] text-zinc-400">{roleLabel}</p>
+              ) : null}
+            </div>
+            {isViewEnabled('me') ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setAccountOpen(false);
+                  goView('me');
+                }}
+                className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] text-zinc-700 hover:bg-zinc-50"
+              >
+                <i className="fa-solid fa-user w-4 text-center text-[11px] text-zinc-400" />
+                个人中心
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                setAccountOpen(false);
+                openSettings();
+              }}
+              className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] text-zinc-700 hover:bg-zinc-50"
+            >
+              <i className="fa-solid fa-gear w-4 text-center text-[11px] text-zinc-400" />
+              偏好设置
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAccountOpen(false);
+                logout();
+              }}
+              className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] text-red-600 hover:bg-red-50"
+            >
+              <i className="fa-solid fa-right-from-bracket w-4 text-center text-[11px]" />
+              退出登录
+            </button>
+          </div>
+        ) : null}
         <button
           type="button"
-          onClick={openSettings}
-          className="sidebar-footer-user flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left transition hover:bg-black/[0.04]"
-          title="偏好设置"
+          onClick={() => setAccountOpen((v) => !v)}
+          className={cn(
+            'sidebar-footer-user flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left transition hover:bg-black/[0.04]',
+            accountOpen && 'bg-black/[0.04]',
+          )}
+          title={user?.name ?? '账号'}
+          aria-expanded={accountOpen}
+          aria-haspopup="menu"
         >
           <div
             className={cn(
@@ -204,8 +298,11 @@ export function AppShellSidebar() {
           </div>
           <div className="sidebar-footer-user-text min-w-0 flex-1">
             <p className="truncate text-[12px] font-semibold leading-snug">{user?.name ?? '未登录'}</p>
-            <p className="truncate text-[10px] leading-snug text-zinc-500">{roleLabel}</p>
+            <p className="truncate text-[10px] leading-snug text-zinc-500">{roleLabel || '账号与设置'}</p>
           </div>
+          {!sidebarCollapsed ? (
+            <i className="fa-solid fa-chevron-up text-[9px] text-zinc-400" />
+          ) : null}
         </button>
       </div>
     </aside>

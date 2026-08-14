@@ -1,5 +1,6 @@
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import { buildExternalToolSeedsFromCatalog } from '@/domain/buildExternalToolSeeds';
+import { EXTERNAL_TOOL_SHELF_EXCLUDE_IDS } from '@/domain/externalToolTaxonomy';
 import { internalToolAssetUrl } from '@/domain/toolLogo';
 
 /**
@@ -16,6 +17,7 @@ export const RETIRED_DEMO_TOOL_IDS = [
   'tool-ext-eu-compliance',
   'tool-ext-apac-review',
   'tool-ext-latam-private-playbook',
+  ...EXTERNAL_TOOL_SHELF_EXCLUDE_IDS,
 ] as const;
 
 /** 门户 Tool 种子：公司内部 AI（外部 SaaS 见 CSV catalog） */

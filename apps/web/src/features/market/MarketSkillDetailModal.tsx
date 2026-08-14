@@ -19,6 +19,10 @@ import {
   getRegionLabel,
 } from '@/domain/orgTaxonomy';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
+import {
+  EXECUTION_TRUST_META,
+  resolveSkillExecutionTrust,
+} from '@/domain/executionTrust';
 
 type DetailTab = 'overview' | 'notes' | 'guide' | 'cases' | 'versions' | 'reviews' | 'security';
 
@@ -88,6 +92,8 @@ export function MarketSkillDetailModal({
   const usageNotes = skill.usageNotes?.trim() || '';
   const cases = skill.cases?.filter((c) => c.title?.trim()) ?? [];
   const env = skill.envInfo;
+  const trust = resolveSkillExecutionTrust(canRun);
+  const trustMeta = EXECUTION_TRUST_META[trust];
 
   const handleDownload = () => {
     bumpDownload(skill.id);
@@ -133,6 +139,7 @@ export function MarketSkillDetailModal({
             <SkillAvatar
               skillId={skill.id}
               icon={skill.icon || 'fa-cube'}
+              iconUrl={skill.iconUrl}
               size={48}
               className="shrink-0 rounded-xl"
               title={name}
@@ -163,6 +170,15 @@ export function MarketSkillDetailModal({
                         未上架
                       </span>
                     )}
+                    <span
+                      className={cn(
+                        'rounded-md px-1.5 py-0.5 text-[10px] font-semibold',
+                        trustMeta.badgeClass,
+                      )}
+                      title={trustMeta.hint}
+                    >
+                      {trustMeta.label}
+                    </span>
                   </div>
                   {nameEn ? (
                     <p className="mt-0.5 truncate text-[12px] text-zinc-400">{nameEn}</p>
@@ -260,24 +276,24 @@ export function MarketSkillDetailModal({
             >
               关闭
             </button>
-            {canRun ? (
-              <button
-                type="button"
-                onClick={() => onRun(skill)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-[12px] font-semibold text-zinc-800 transition hover:bg-zinc-50"
-              >
-                <i className="fa-solid fa-play text-[10px]" />
-                执行
-              </button>
-            ) : null}
             <button
               type="button"
               onClick={handleDownload}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-800"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-[12px] font-medium text-zinc-700 transition hover:bg-zinc-50"
             >
               <i className="fa-solid fa-download text-[11px]" />
               下载
             </button>
+            {canRun ? (
+              <button
+                type="button"
+                onClick={() => onRun(skill)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-800"
+              >
+                <i className="fa-solid fa-play text-[10px]" />
+                在线试用
+              </button>
+            ) : null}
           </div>
         </div>
       }
@@ -673,9 +689,13 @@ export function MarketSkillDetailModal({
 
           {!canRun ? (
             <p className="rounded-xl border border-dashed border-zinc-200 bg-white px-3 py-2 text-center text-[11px] text-zinc-400">
-              当前方案仅支持下载学习
+              {trustMeta.hint}
             </p>
-          ) : null}
+          ) : (
+            <p className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-[11px] leading-snug text-emerald-900/80">
+              {trustMeta.hint}
+            </p>
+          )}
         </aside>
       </div>
     </CenterModal>

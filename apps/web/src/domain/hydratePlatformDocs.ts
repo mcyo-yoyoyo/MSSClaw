@@ -34,6 +34,7 @@ export async function hydrateAllPlatformDocs(workspaceId?: string): Promise<void
   const { useMarketFeaturedStore } = await import('@/stores/marketFeaturedStore');
   const { useMarketFavoriteStore } = await import('@/stores/marketFavoriteStore');
   const { useRecentMarketStore } = await import('@/stores/recentMarketStore');
+  const { useMarketHiddenStore } = await import('@/stores/marketHiddenStore');
   const { useContentEngagementStore } = await import('@/stores/contentEngagementStore');
   const { useAuditStore } = await import('@/stores/auditStore');
   const { useAiNewsPreferenceStore } = await import('@/stores/aiNewsPreferenceStore');
@@ -54,6 +55,7 @@ export async function hydrateAllPlatformDocs(workspaceId?: string): Promise<void
   useMarketFeaturedStore.getState().hydrate();
   useMarketFavoriteStore.getState().hydrate();
   useRecentMarketStore.getState().hydrate();
+  useMarketHiddenStore.getState().hydrate();
   useContentEngagementStore.getState().hydrate();
   useAuditStore.getState().hydrate();
   useAiNewsPreferenceStore.getState().hydrate();

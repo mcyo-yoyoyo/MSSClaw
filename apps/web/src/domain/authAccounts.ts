@@ -149,48 +149,7 @@ export async function authenticate(
   if (!email) return { ok: false, error: '请输入邮箱账号' };
   if (!password) return { ok: false, error: '请输入密码' };
 
-  // 优先走 Nest 鉴权（成员与密码均在服务端）
-  try {
-    const { isApiEnabled } = await import('@/api/client');
-    const { loginWithApi } = await import('@/api/platformDocsApi');
-    const { useWorkspaceStore } = await import('@/stores/workspaceStore');
-    if (isApiEnabled()) {
-      // 尽量先探活；失败则仍尝试 login（健康检查可能超时）
-      const ws = useWorkspaceStore.getState().workspaceId || 'ws-mss-ai';
-      const remote = await loginWithApi({ email, password, workspaceId: ws });
-      if (remote.ok) {
-        const u = remote.user;
-        if ('token' in remote && typeof remote.token === 'string' && remote.token) {
-          try {
-            sessionStorage.setItem('mssclaw_auth_token', remote.token);
-          } catch {
-            /* ignore */
-          }
-        }
-        return {
-          ok: true,
-          account: {
-            id: u.id,
-            name: u.name,
-            email: u.email,
-            platformRole: normalizePlatformRole(u.platformRole),
-            avatar: u.avatar,
-            status: 'active',
-            workspaceIds: [u.workspaceId || ws],
-            deptIds: (u.deptIds ?? []) as never[],
-            regionId: (u.regionId as never) ?? null,
-          },
-        };
-      }
-      // 服务明确拒绝时直接返回，避免被本地缓存账号绕过
-      if (useWorkspaceStore.getState().apiConnected) {
-        return { ok: false, error: remote.error || '登录失败' };
-      }
-    }
-  } catch {
-    /* fall through to local seed auth when API unreachable */
-  }
-
+  // Nest 鉴权由 sessionStore.login 负责；此处仅本地种子回退
   const account = buildLoginAccounts().find((a) => a.email.toLowerCase() === email);
   if (!account) {
     return { ok: false, error: '账号不存在，请使用组织权限中的邮箱登录' };

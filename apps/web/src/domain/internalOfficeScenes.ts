@@ -19,11 +19,11 @@ export type InternalOfficeSceneId =
   | 'agent';
 
 export const INTERNAL_OFFICE_SCENE_IDS: InternalOfficeSceneId[] = [
-  'capture',
-  'read',
   'write',
-  'ask',
+  'capture',
   'search',
+  'ask',
+  'read',
   'specialist',
   'intel',
   'knowledge',
@@ -69,7 +69,7 @@ export interface InternalOfficeSceneCatalogEntry {
 const EMPLOYEE_ASSISTANT: InternalOfficeSceneTool = {
   id: 'tool-hw-assistant',
   name: '员工助手',
-  blurb: '综合知识问答',
+  blurb: '个人日常 Skill',
   homepageUrl:
     'https://his.huawei.com/csop/index.html#/ToolInfo?samType=his&toolId=1706591788617216002',
   logoUrl: internalToolAssetUrl('employee-assistant.png'),
@@ -78,7 +78,7 @@ const EMPLOYEE_ASSISTANT: InternalOfficeSceneTool = {
 const CLOUD_NOTE: InternalOfficeSceneTool = {
   id: 'tool-hw-cloudnote',
   name: '云笔记',
-  blurb: '会议与笔记沉淀',
+  blurb: '写报告与会议纪要',
   homepageUrl: 'https://wenote.huawei.com/wenoteapp',
   logoUrl: internalToolAssetUrl('cloud-note.png'),
 };
@@ -86,7 +86,7 @@ const CLOUD_NOTE: InternalOfficeSceneTool = {
 const W3_SEARCH: InternalOfficeSceneTool = {
   id: 'tool-hw-w3-qa',
   name: 'W3智能搜索',
-  blurb: '内部信息检索',
+  blurb: '查制度与内部入口',
   homepageUrl: 'https://ai.huawei.com/w3Copilot/index.html#/home?lang=zh',
   logoUrl: internalToolAssetUrl('w3-search.png'),
 };
@@ -94,83 +94,83 @@ const W3_SEARCH: InternalOfficeSceneTool = {
 const XIAOLUBAN: InternalOfficeSceneTool = {
   id: 'tool-hw-xiaoluban',
   name: '小鲁班',
-  blurb: '专项知识服务',
+  blurb: '专项业务答疑',
   homepageUrl:
     'https://openx.huawei.com/%E5%B0%8F%E9%B2%81%E7%8F%ADwelink%E6%9C%BA%E5%99%A8%E4%BA%BA/overview',
   logoUrl: internalToolAssetUrl('xiaoluban.jpg'),
 };
 
-/** Demo：7 场景 · 4 内部工具（默认字典） */
+/** 按工作场景推荐：要做什么 → 用哪个工具 */
 export const INTERNAL_OFFICE_SCENES: InternalOfficeScene[] = [
   {
+    id: 'write',
+    label: '写报告用云笔记',
+    english: 'WRITE',
+    description: '周报、方案、工作总结边写边沉淀，首选云笔记',
+    tools: [CLOUD_NOTE],
+    icon: 'fa-file-lines',
+  },
+  {
     id: 'capture',
-    label: '记一下',
+    label: '开会纪要用云笔记',
     english: 'CAPTURE',
-    description: '把会议内容自动变成可回看、可执行、可沉淀的工作记录',
+    description: '会后自动成稿，可回看、可执行、可继续改',
     tools: [CLOUD_NOTE],
     icon: 'fa-pen-to-square',
   },
   {
-    id: 'read',
-    label: '读一下',
-    english: 'READ',
-    description: '快速读懂文档与报告，提炼观点、数据、风险和可行动信息',
-    tools: [EMPLOYEE_ASSISTANT],
-    icon: 'fa-book-open',
-  },
-  {
-    id: 'write',
-    label: '写一下',
-    english: 'WRITE',
-    description: '基于已有信息生成日报、周报、月报与工作总结，并持续润色',
-    tools: [EMPLOYEE_ASSISTANT],
-    icon: 'fa-file-lines',
-  },
-  {
-    id: 'ask',
-    label: '问一下',
-    english: 'ASK',
-    description: '面向组织知识与业务资料提问，快速获得可追溯的回答',
-    tools: [EMPLOYEE_ASSISTANT],
-    icon: 'fa-comments',
-  },
-  {
     id: 'search',
-    label: '搜一下',
+    label: '查制度用W3智能搜索',
     english: 'SEARCH',
-    description: '在内部信息与知识网络中检索，定位制度、资料与关键入口',
+    description: '制度、入口、内部资料一搜即达，不必在群里问人',
     tools: [W3_SEARCH],
     icon: 'fa-magnifying-glass',
   },
   {
+    id: 'ask',
+    label: '个人Skill用员工助手',
+    english: 'ASK',
+    description: '日常提问、总结、润色，当个人助手用就对了',
+    tools: [EMPLOYEE_ASSISTANT],
+    icon: 'fa-comments',
+  },
+  {
+    id: 'read',
+    label: '读材料用员工助手',
+    english: 'READ',
+    description: '快速读懂文档与报告，提炼观点、数据和风险',
+    tools: [EMPLOYEE_ASSISTANT],
+    icon: 'fa-book-open',
+  },
+  {
     id: 'specialist',
-    label: '答一下',
+    label: '专项答疑用小鲁班',
     english: 'SPECIALIST',
-    description: '面向专项业务知识答疑，适合深入某一领域的连续追问',
+    description: '深入某一业务领域连续追问，比通用问答更贴场景',
     tools: [XIAOLUBAN],
     icon: 'fa-screwdriver-wrench',
   },
   {
     id: 'intel',
-    label: '情报官',
+    label: '情报监测用员工助手',
     english: 'INTELLIGENCE',
-    description: '围绕关注主题自动监测、筛选和研判，让信息从“人找”变成“主动送”',
+    description: '围绕关注主题筛选研判，让信息从人找变成主动送',
     tools: [EMPLOYEE_ASSISTANT],
     icon: 'fa-binoculars',
   },
   {
     id: 'knowledge',
-    label: '知识库',
+    label: '建知识库用员工助手',
     english: 'KNOWLEDGE',
-    description: '建设个人、团队与组织知识库，通过 AI 问答让沉淀的资料真正被使用',
+    description: '把沉淀资料变成可问答的知识，团队里真正被用起来',
     tools: [EMPLOYEE_ASSISTANT],
     icon: 'fa-database',
   },
   {
     id: 'agent',
-    label: 'Agent',
+    label: '拆任务用员工助手',
     english: 'EXECUTE',
-    description: '给出目标后，由 AI 拆解任务、调用工具、推进过程并交付完整成果',
+    description: '给出目标后拆解任务、调用工具并推进交付',
     tools: [EMPLOYEE_ASSISTANT],
     icon: 'fa-robot',
   },
@@ -193,8 +193,8 @@ export function defaultInternalOfficeSceneCatalog(): InternalOfficeSceneCatalogE
     english: s.english,
     description: s.description,
     icon: s.icon,
-    /** Agent 入口改为页顶员工助手对话框预告，默认不展示场景卡 */
-    visible: s.id !== 'agent',
+    /** 首屏只留高频工作场景；情报 / 知识库 / Agent 默认收起 */
+    visible: s.id !== 'agent' && s.id !== 'intel' && s.id !== 'knowledge',
     toolIds: s.tools.map((t) => t.id),
     toolBlurbs: Object.fromEntries(s.tools.map((t) => [t.id, t.blurb])),
   }));

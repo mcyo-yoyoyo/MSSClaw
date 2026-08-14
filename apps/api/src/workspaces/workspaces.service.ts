@@ -36,7 +36,37 @@ export class WorkspacesService {
     if (!row) {
       throw new NotFoundException(`Workspace ${workspaceId} not found`);
     }
-    return row.catalogJson;
+    const json = row.catalogJson as {
+      workspace?: unknown;
+      chats?: Record<string, unknown>;
+      resources?: unknown[];
+    } | null;
+    const empty =
+      !json ||
+      typeof json !== 'object' ||
+      !json.workspace ||
+      !json.chats ||
+      (Object.keys(json.chats).length === 0 && (json.resources?.length ?? 0) === 0);
+    if (empty) {
+      const catalog = WORKSPACE_CATALOGS.find((c) => c.workspace.id === workspaceId);
+      if (catalog) return buildCatalogPayload(catalog);
+    }
+    return empty && json?.workspace
+      ? json
+      : empty
+        ? {
+            workspace: {
+              id: row.id,
+              name: row.name,
+              namespace: row.namespace,
+              description: row.description,
+              memberCount: row.memberCount,
+            },
+            chats: {},
+            resources: [],
+            defaultChatId: row.defaultChatId || 'default',
+          }
+        : row.catalogJson;
   }
 
   private async ensureWorkspaceRow(workspaceId: string) {
