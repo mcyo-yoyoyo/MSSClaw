@@ -33,11 +33,11 @@ export function PageStageHero({
       <div className="page-stage__grid" aria-hidden />
       <div
         className={cn(
-          'relative z-[1] flex flex-col gap-4',
-          children && 'lg:flex-row lg:items-center lg:justify-between lg:gap-6',
+          'relative z-[1] flex flex-col gap-3',
+          children && 'lg:flex-row lg:items-start lg:justify-between lg:gap-5',
         )}
       >
-        <div className={cn('min-w-0', children ? 'lg:max-w-[48%] lg:flex-1' : 'flex-1')}>
+        <div className={cn('min-w-0', children ? 'lg:max-w-[32%] lg:shrink-0' : 'flex-1')}>
           {eyebrow ? <p className="page-stage__eyebrow">{eyebrow}</p> : null}
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
             <h1 className="page-stage__title">{title}</h1>
@@ -48,7 +48,7 @@ export function PageStageHero({
           {actions ? <div className="page-stage__actions">{actions}</div> : null}
         </div>
         {children ? (
-          <div className="relative z-[1] min-w-0 lg:w-[min(100%,520px)] lg:max-w-[50%] lg:shrink-0">
+          <div className="relative z-[1] min-w-0 w-full lg:min-w-0 lg:flex-1">
             {children}
           </div>
         ) : null}

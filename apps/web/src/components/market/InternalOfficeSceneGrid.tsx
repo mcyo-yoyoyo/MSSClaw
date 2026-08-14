@@ -211,10 +211,10 @@ export function InternalOfficeSceneGrid({
                       disabled={!hasTools}
                       onClick={() => runWithTool(scene, 'experience')}
                       className={cn(
-                        'ml-auto rounded-md px-2.5 py-1 text-[11px] font-semibold transition',
+                        'ml-auto rounded-md border px-2.5 py-1 text-[11px] font-medium transition',
                         hasTools
-                          ? 'bg-zinc-900 text-white hover:bg-zinc-800'
-                          : 'cursor-not-allowed bg-zinc-200 text-zinc-400',
+                          ? 'border-zinc-200 text-zinc-600 hover:bg-zinc-50'
+                          : 'cursor-not-allowed border-zinc-100 text-zinc-300',
                       )}
                     >
                       立即体验

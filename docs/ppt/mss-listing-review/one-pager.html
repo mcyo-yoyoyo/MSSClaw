@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MSS 工具集市上架评审 · 两页汇报（16:9）</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #f7f8fa;
+    --surface: #ffffff;
+    --ink: #111827;
+    --muted: #4b5563;
+    --soft: #6b7280;
+    --line: #e5e7eb;
+    --line-strong: #d1d5db;
+    --accent: #0f766e;
+    --slide-w: 1920px;
+    --slide-h: 1080px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: #111827;
+    font-family: 'Noto Sans SC', system-ui, sans-serif;
+    color: var(--ink);
+    overflow: hidden;
+  }
+
+  .stage {
+    width: 100vw; height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  .frame {
+    width: min(100vw - 16px, calc((100vh - 16px) * 16 / 9));
+    aspect-ratio: 16 / 9;
+    max-height: calc(100vh - 16px);
+    position: relative;
+    overflow: hidden;
+    border-radius: 8px;
+    box-shadow: 0 20px 50px rgba(0,0,0,.35);
+    background: var(--bg);
+  }
+  .slide-wrap {
+    position: absolute; left: 0; top: 0;
+    width: var(--slide-w); height: var(--slide-h);
+    transform-origin: top left;
+  }
+  .slide {
+    position: absolute; inset: 0;
+    width: var(--slide-w); height: var(--slide-h);
+    display: none;
+    padding: 40px 44px 32px;
+    background: var(--bg);
+    overflow: hidden;
+  }
+  .slide.is-active { display: grid; }
+
+  .slide-1 {
+    grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 1.25fr) auto;
+    gap: 20px;
+  }
+  .slide-2 {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 20px;
+  }
+
+  .head {
+    display: flex; justify-content: space-between; align-items: flex-end; gap: 32px;
+  }
+  .brand {
+    margin: 0 0 8px;
+    font-size: 16px; font-weight: 600; color: var(--accent);
+    letter-spacing: .04em;
+  }
+  h1 {
+    margin: 0;
+    font-size: 40px; line-height: 1.2; font-weight: 700;
+    letter-spacing: -.02em;
+  }
+  .head-right {
+    text-align: right;
+    font-size: 18px; line-height: 1.55; color: var(--muted);
+    white-space: nowrap;
+  }
+  .head-right b { color: var(--ink); font-weight: 600; }
+
+  .one-liner {
+    margin: 0;
+    font-size: 20px; line-height: 1.55; color: #1f2937;
+    padding: 16px 20px;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+  }
+  .one-liner b { color: var(--ink); font-weight: 700; }
+
+  /* 流程 */
+  .flow {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 12px;
+    min-height: 0;
+  }
+  .node {
+    min-width: 0; min-height: 0;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    padding: 16px 14px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .node .id {
+    font-size: 15px; font-weight: 700; color: var(--accent);
+  }
+  .node .name {
+    font-size: 22px; font-weight: 700; line-height: 1.25;
+  }
+  .node .who {
+    font-size: 15px; color: var(--soft); line-height: 1.4;
+  }
+  .node .out {
+    margin-top: auto;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+    font-size: 16px; color: #1f2937; line-height: 1.4;
+  }
+
+  /* 三栏说明 */
+  .band {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    min-height: 0;
+  }
+  .card {
+    min-width: 0; min-height: 0;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    padding: 18px 18px 16px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .card h3 {
+    margin: 0;
+    font-size: 20px; font-weight: 700;
+    display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  }
+  .card h3 span {
+    font-size: 15px; font-weight: 500; color: var(--soft);
+  }
+  .path + .path {
+    margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+  .path {
+    display: grid;
+    grid-template-columns: 96px 1fr;
+    gap: 12px;
+    align-items: start;
+  }
+  .tag {
+    font-size: 14px; font-weight: 700; line-height: 1.35;
+    text-align: center;
+    padding: 10px 8px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: #f3f4f6;
+    color: var(--ink);
+  }
+  .path .txt {
+    font-size: 17px; line-height: 1.5; color: var(--muted);
+  }
+  .path .txt b {
+    display: block; margin-bottom: 4px;
+    font-size: 18px; color: var(--ink); font-weight: 700;
+  }
+  .card p {
+    margin: 0;
+    font-size: 17px; line-height: 1.55; color: #1f2937;
+  }
+  .card ul {
+    margin: 0; padding: 0; list-style: none;
+    display: grid; gap: 10px;
+  }
+  .card li {
+    position: relative;
+    padding-left: 18px;
+    font-size: 17px; line-height: 1.5; color: #1f2937;
+  }
+  .card li::before {
+    content: '';
+    position: absolute; left: 0; top: 9px;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .foot-bar {
+    display: flex; justify-content: space-between; align-items: center; gap: 16px;
+    font-size: 16px; color: var(--soft);
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+  }
+  .foot-bar strong { color: var(--ink); font-weight: 600; }
+
+  /* 第2页 */
+  .body2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    min-height: 0;
+  }
+  .col {
+    min-width: 0; min-height: 0;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    padding: 18px 16px 14px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .col h2 {
+    margin: 0;
+    font-size: 20px; font-weight: 700;
+    display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  }
+  .col h2 span {
+    font-size: 15px; font-weight: 500; color: var(--soft);
+  }
+  .col h2.sub {
+    margin-top: 4px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+
+  .score-row {
+    display: grid;
+    grid-template-columns: 24px 1fr auto;
+    gap: 10px;
+    align-items: start;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 17px;
+  }
+  .score-row:last-of-type { border-bottom: 0; }
+  .score-row > b { color: var(--accent); font-size: 17px; }
+  .score-row .label { line-height: 1.45; min-width: 0; }
+  .score-row .label b {
+    display: block; margin-bottom: 2px;
+    font-weight: 700; color: var(--ink);
+  }
+  .score-row .dim { color: var(--muted); font-size: 16px; }
+  .score-row .pts {
+    font-size: 20px; font-weight: 700; color: var(--ink);
+  }
+
+  .decisions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: auto;
+  }
+  .dec {
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    padding: 12px 12px;
+    background: #f9fafb;
+    font-size: 16px; line-height: 1.4;
+  }
+  .dec b {
+    display: block; margin-bottom: 3px;
+    font-size: 17px; font-weight: 700;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 16px;
+  }
+  th, td {
+    padding: 9px 8px;
+    text-align: left; vertical-align: top;
+    border-bottom: 1px solid var(--line);
+    line-height: 1.45;
+  }
+  th {
+    font-size: 14px; font-weight: 600;
+    color: var(--soft);
+    background: #f9fafb;
+  }
+  tr:last-child td { border-bottom: 0; }
+  td.k {
+    font-weight: 700; white-space: nowrap; width: 78px;
+    color: var(--ink);
+  }
+  .dim { color: var(--muted); }
+
+  .gates {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .pill {
+    display: flex; align-items: center;
+    padding: 10px 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: #f9fafb;
+    font-size: 16px; font-weight: 600; color: #1f2937;
+  }
+
+  .note {
+    margin-top: auto;
+    padding: 12px 14px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: #f9fafb;
+    font-size: 16px; line-height: 1.5; color: #1f2937;
+  }
+  .note b {
+    display: block; margin-bottom: 4px;
+    font-size: 17px; color: var(--ink);
+  }
+
+  .hint {
+    position: fixed; left: 18px; bottom: 22px; z-index: 20;
+    font-size: 13px; color: rgba(255,255,255,.45);
+  }
+  .nav {
+    position: fixed; right: 18px; bottom: 18px; z-index: 20;
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; border-radius: 999px;
+    background: rgba(17,24,39,.88); color: #fff;
+    font-size: 14px;
+  }
+  .nav button {
+    border: 0; width: 34px; height: 34px; border-radius: 999px;
+    background: rgba(255,255,255,.12); color: #fff;
+    cursor: pointer; font-size: 16px; font-weight: 700;
+  }
+  .nav button:hover { background: rgba(255,255,255,.22); }
+  .nav .dots { display: flex; gap: 6px; align-items: center; }
+  .nav .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: rgba(255,255,255,.3); border: 0; padding: 0; cursor: pointer;
+  }
+  .nav .dot.is-on {
+    width: 20px; border-radius: 999px; background: #fff;
+  }
+
+  @media print {
+    @page { size: 338.67mm 190.5mm; margin: 0; }
+    html, body { background: #fff; overflow: visible; height: auto; }
+    .stage, .frame {
+      display: block; width: 100%; max-height: none;
+      box-shadow: none; border-radius: 0; overflow: visible;
+    }
+    .slide-wrap { position: static; transform: none !important; width: 100%; height: auto; }
+    .slide {
+      position: relative !important; display: grid !important;
+      width: 100%; aspect-ratio: 16 / 9; height: auto;
+      page-break-after: always; page-break-inside: avoid;
+    }
+    .slide:last-child { page-break-after: auto; }
+    .nav, .hint { display: none !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="frame" id="frame">
+      <div class="slide-wrap" id="slideWrap">
+
+        <!-- 第1页 -->
+        <article class="slide slide-1 is-active" data-slide="0">
+          <header class="head">
+            <div>
+              <p class="brand">MSS AI 提效作战平台 · 业务汇报 · 1 / 2</p>
+              <h1>工具集市上架怎么评？——流程与关口</h1>
+            </div>
+            <div class="head-right">
+              <b>目标：</b>能学会 · 能推广 · 能复制<br>
+              <b>原则：</b>不安全不上 · 没价值不推 · 无试点不上 · 能用≠推荐
+            </div>
+          </header>
+
+          <p class="one-liner">
+            <b>一句话：</b>来源可以不同（样板间打样，或业务自建），上架标准同一套。
+            第3步用 <b>ROI</b> 判断值不值得组织推广、消耗模型资源；
+            第5步 <b>小范围试点是正式上架的前提</b>——要么先试点再上架，要么提交时必须有试点验收记录。
+          </p>
+
+          <section class="flow">
+            <div class="node">
+              <div class="id">第1步</div>
+              <div class="name">从哪来</div>
+              <div class="who">两条入口汇入同一评审</div>
+              <div class="out">值得做 / 并已有 / 已做完待评</div>
+            </div>
+            <div class="node">
+              <div class="id">第2步</div>
+              <div class="name">材料齐不齐</div>
+              <div class="who">提交人准备</div>
+              <div class="out">说明、样例、测试齐套再送审</div>
+            </div>
+            <div class="node">
+              <div class="id">第3步</div>
+              <div class="name">值不值得推</div>
+              <div class="who">业务主管 · 看 ROI</div>
+              <div class="out">收益是否盖过模型与推广成本</div>
+            </div>
+            <div class="node">
+              <div class="id">第4步</div>
+              <div class="name">好不好、安不安全</div>
+              <div class="who">MSS 质量与运营 + CBG IT</div>
+              <div class="out">红线过关 + 打分达标</div>
+            </div>
+            <div class="node">
+              <div class="id">第5步</div>
+              <div class="name">试点验收（上架前提）</div>
+              <div class="who">提交人 · 运营 · 业务使用人员</div>
+              <div class="out">无试点验收记录 → 不上架</div>
+            </div>
+            <div class="node">
+              <div class="id">第6步</div>
+              <div class="name">正式上架并复盘</div>
+              <div class="who">MSS 运营 · AI金种子 · AI培训学院</div>
+              <div class="out">试点过关后才放开；30/90天复盘</div>
+            </div>
+          </section>
+
+          <section class="band">
+            <div class="card">
+              <h3>第1步 · 两条入口<span>来源不同，关口同一</span></h3>
+              <div>
+                <div class="path">
+                  <span class="tag">入口A<br>先评再做</span>
+                  <div class="txt">
+                    <b>需求评审 → 样板间打样 → 试点 → 再上架</b>
+                    先确认值得做、不重复；打样后必须完成试点验收，过关才正式上架。
+                  </div>
+                </div>
+                <div class="path">
+                  <span class="tag">入口B<br>先做再评</span>
+                  <div class="txt">
+                    <b>业务已做成（通常已试点）→ 核验验收记录</b>
+                    不再重复问要不要立项；但上架评审必须查清：有无试点、谁验收、结论如何。
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>第3步 · ROI<span>上架 = 持续耗模型</span></h3>
+              <p>
+                Skill / Agent 上架后会反复调用模型、消耗 token。业务主管要问：
+                <b>组织推广后，产出是否盖过投入？</b>
+              </p>
+              <ul>
+                <li><b>产出：</b>省工时、缩短周期、少差错、口径统一，能否衡量</li>
+                <li><b>投入：</b>调用频次 × token 成本 + 推广运维</li>
+                <li><b>结论：</b>ROI 不够 → 不推广或只试点；够了再进质量安全关</li>
+              </ul>
+            </div>
+
+            <div class="card">
+              <h3>第5步 · 试点是上架前提<span>两条入口都要过</span></h3>
+              <p>
+                <b>正式上架前必须有小范围试点。</b>评审重点不是再跑一遍试点，而是核验
+                <b>试点验收记录</b>是否齐全、结论是否过关——须有
+                <b>业务使用人员</b>参与验收。
+              </p>
+              <ul>
+                <li><b>入口A：</b>打样后先试点，验收通过才允许上架</li>
+                <li><b>入口B：</b>通常已试点，申请时必须提交验收记录备查</li>
+                <li><b>缺记录 / 未过关：</b>驳回或退回补试点，不得直接进集市</li>
+              </ul>
+            </div>
+          </section>
+
+          <footer class="foot-bar">
+            <span><strong>下一页：</strong>怎么打分、业务主管看什么、安全红线与必须留下的材料</span>
+            <span>← → 翻页 · 16:9</span>
+          </footer>
+        </article>
+
+        <!-- 第2页 -->
+        <article class="slide slide-2" data-slide="1">
+          <header class="head">
+            <div>
+              <p class="brand">MSS AI 提效作战平台 · 业务汇报 · 2 / 2</p>
+              <h1>怎么打分、怎么拍板、留下什么</h1>
+            </div>
+            <div class="head-right">
+              <b>记住：</b>能用 ≠ 首页推荐<br>
+              <b>硬门槛：</b>安全红线 · 试点验收 · ROI 说得清
+            </div>
+          </header>
+
+          <div class="body2">
+            <section class="col">
+              <h2>怎么打分（满分100）<span>统一尺子</span></h2>
+              <div>
+                <div class="score-row">
+                  <b>①</b>
+                  <div class="label">
+                    <b>业务价值 / ROI（25）</b>
+                    <span class="dim">通用、收益、频次、可复制；收益是否盖过 token 与推广成本</span>
+                  </div>
+                  <span class="pts">25</span>
+                </div>
+                <div class="score-row">
+                  <b>②</b>
+                  <div class="label">
+                    <b>功能是否完整（25）</b>
+                    <span class="dim">主流程跑通、说明样例齐、依赖清楚</span>
+                  </div>
+                  <span class="pts">25</span>
+                </div>
+                <div class="score-row">
+                  <b>③</b>
+                  <div class="label">
+                    <b>质量稳不稳（20）</b>
+                    <span class="dim">严重问题清零；改版要重新验</span>
+                  </div>
+                  <span class="pts">20</span>
+                </div>
+                <div class="score-row">
+                  <b>④</b>
+                  <div class="label">
+                    <b>安全合不合规（20）</b>
+                    <span class="dim">无恶意指令、不泄密越权、权限能小则小</span>
+                  </div>
+                  <span class="pts">20</span>
+                </div>
+                <div class="score-row">
+                  <b>⑤</b>
+                  <div class="label">
+                    <b>好不好学好管（10）</b>
+                    <span class="dim">名字清楚、须知明白、约15分钟上手</span>
+                  </div>
+                  <span class="pts">10</span>
+                </div>
+              </div>
+              <div class="decisions">
+                <div class="dec"><b>≥75：正式上架</b>可全员用；够好可申请推荐</div>
+                <div class="dec"><b>65–74：带条件</b>能用，默认不推荐，先整改</div>
+                <div class="dec"><b>无试点验收：不上架</b>先补试点记录，再评推广</div>
+                <div class="dec"><b>&lt;65 / 安全不过</b>驳回，写清原因再来</div>
+              </div>
+            </section>
+
+            <section class="col">
+              <h2>业务主管重点看<span>第3步</span></h2>
+              <table>
+                <tbody>
+                  <tr><td class="k">场景</td><td class="dim">给谁用？解决什么日常问题？（一句话说清）</td></tr>
+                  <tr><td class="k">通用</td><td class="dim">至少两个代表处，或两个职能条线能复用</td></tr>
+                  <tr><td class="k">收益</td><td class="dim">省工时 / 缩短周期 / 少差错 / 口径统一 —— 至少一项可衡量</td></tr>
+                  <tr><td class="k">频次</td><td class="dim">用得越频，模型消耗越大，越要算清账</td></tr>
+                  <tr><td class="k">ROI</td><td class="dim">产出是否明显大于：token 成本 + 推广运维成本</td></tr>
+                  <tr><td class="k">可复制</td><td class="dim">换组织主要只换数据与权限，方法不变</td></tr>
+                </tbody>
+              </table>
+              <h2 class="sub">两类东西怎么评<span>积木 ≠ 岗位专家</span></h2>
+              <table>
+                <thead><tr><th>对象</th><th>通俗理解</th><th>直接否决</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td class="k">能力组件</td>
+                    <td class="dim">干净可复用的「积木」</td>
+                    <td class="dim">安全风险、乱要权限、高度重复</td>
+                  </tr>
+                  <tr>
+                    <td class="k">业务助手</td>
+                    <td class="dim">能办完一类事的「岗位专家」</td>
+                    <td class="dim">空壳、无案例、主流程不通</td>
+                  </tr>
+                </tbody>
+              </table>
+            </section>
+
+            <section class="col">
+              <h2>安全红线 · 审完留下什么<span>必备材料</span></h2>
+              <div class="gates">
+                <span class="pill">不能藏恶意指令</span>
+                <span class="pill">不能泄密</span>
+                <span class="pill">数据分级合规</span>
+                <span class="pill">权限能小则小</span>
+                <span class="pill">来源可追溯</span>
+                <span class="pill">关键操作留痕</span>
+              </div>
+              <table>
+                <thead><tr><th>留下什么</th><th>干什么用</th></tr></thead>
+                <tbody>
+                  <tr><td class="k">申请单</td><td class="dim">为什么做、范围、自检</td></tr>
+                  <tr><td class="k">评分卡</td><td class="dim">五项分数 + 依据 + 结论</td></tr>
+                  <tr><td class="k">安全结论</td><td class="dim">红线是否过关</td></tr>
+                  <tr><td class="k">试点验收</td><td class="dim">须有业务使用人员参与；范围、结论、问题；上架必备</td></tr>
+                  <tr><td class="k">30/90复盘</td><td class="dim">运营 + AI金种子 + AI培训学院；用得怎样，推荐留不留</td></tr>
+                </tbody>
+              </table>
+              <div class="note">
+                <b>首期最小落地（5件）</b>
+                ① 审批单带评分卡（含 ROI）　② 「能用」≠「首页推荐」　③ 和已有太像须说明　④ 安全不过关不能终审　⑤ 无试点验收记录不上架
+              </div>
+            </section>
+          </div>
+
+          <footer class="foot-bar">
+            <span><strong>驳回原因示例：</strong>无试点验收 · ROI不足 · 价值不足 · 高度重复 · 材料不全 · 质量不稳 · 安全不合规 · 说明不清 · 其他</span>
+            <span>打印 Ctrl+P · 16:9 横向</span>
+          </footer>
+        </article>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="hint">← → / 空格翻页 · F11 全屏</div>
+  <nav class="nav" aria-label="翻页">
+    <button type="button" id="prev" title="上一页">‹</button>
+    <div class="dots">
+      <button type="button" class="dot is-on" data-go="0" aria-label="第1页"></button>
+      <button type="button" class="dot" data-go="1" aria-label="第2页"></button>
+    </div>
+    <button type="button" id="next" title="下一页">›</button>
+    <span id="pageLabel">1 / 2</span>
+  </nav>
+
+  <script>
+    (function () {
+      var frame = document.getElementById('frame');
+      var wrap = document.getElementById('slideWrap');
+      var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+      var dots = Array.prototype.slice.call(document.querySelectorAll('.nav .dot'));
+      var label = document.getElementById('pageLabel');
+      var idx = 0;
+      var W = 1920, H = 1080;
+
+      function fit() {
+        var fw = frame.clientWidth, fh = frame.clientHeight;
+        if (!fw || !fh) return;
+        wrap.style.transform = 'scale(' + Math.min(fw / W, fh / H) + ')';
+      }
+      function show(n) {
+        idx = (n + slides.length) % slides.length;
+        slides.forEach(function (s, i) { s.classList.toggle('is-active', i === idx); });
+        dots.forEach(function (d, i) { d.classList.toggle('is-on', i === idx); });
+        label.textContent = (idx + 1) + ' / ' + slides.length;
+      }
+
+      document.getElementById('prev').onclick = function () { show(idx - 1); };
+      document.getElementById('next').onclick = function () { show(idx + 1); };
+      dots.forEach(function (d) {
+        d.onclick = function () { show(+d.getAttribute('data-go')); };
+      });
+      window.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+          e.preventDefault(); show(idx + 1);
+        } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+          e.preventDefault(); show(idx - 1);
+        }
+      });
+      fit();
+      window.addEventListener('resize', fit);
+      if (window.ResizeObserver) new ResizeObserver(fit).observe(frame);
+      show(0);
+    })();
+  </script>
+</body>
+</html>

@@ -12,12 +12,14 @@ import {
 
 const MAX = 40;
 const DOC_KIND = 'market-favorites' as const;
+const LS_KEY = 'mssclaw:market-favorites-v1';
 
 export type MarketFavoriteItem = {
   id: string;
   kind: MarketShelfKind;
   title: string;
   icon?: string;
+  logoUrl?: string;
   at: number;
 };
 
@@ -39,7 +41,36 @@ function readUserItems(doc: FavoritesDoc | null | undefined, uid: string): Marke
   return [];
 }
 
+function readLocal(): MarketFavoriteItem[] {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as FavoritesDoc;
+    return readUserItems(parsed, userBucket());
+  } catch {
+    return [];
+  }
+}
+
+function writeLocal(items: MarketFavoriteItem[]) {
+  try {
+    const uid = userBucket();
+    const prev = (() => {
+      try {
+        return JSON.parse(localStorage.getItem(LS_KEY) || '{}') as FavoritesDoc;
+      } catch {
+        return {} as FavoritesDoc;
+      }
+    })();
+    const byUserId = { ...(prev.byUserId ?? {}), [uid]: items.slice(0, MAX) };
+    localStorage.setItem(LS_KEY, JSON.stringify({ byUserId } satisfies FavoritesDoc));
+  } catch {
+    /* ignore quota */
+  }
+}
+
 function persistForUser(items: MarketFavoriteItem[]) {
+  writeLocal(items);
   if (!canUsePlatformDocsApi()) return;
   const ws = currentWorkspaceId();
   const uid = userBucket();
@@ -64,17 +95,29 @@ export const useMarketFavoriteStore = create<MarketFavoriteState>((set, get) => 
   hydrate: () => {
     void (async () => {
       if (!canUsePlatformDocsApi()) {
-        set({ items: [] });
+        set({ items: readLocal() });
         return;
       }
       try {
         const remote = await fetchPlatformDoc<FavoritesDoc>(currentWorkspaceId(), DOC_KIND);
         const uid = userBucket();
         const list = readUserItems(remote, uid);
+        if (list.length) {
+          if (remote) setPlatformDocMemory(currentWorkspaceId(), DOC_KIND, remote);
+          writeLocal(list);
+          set({ items: list });
+          return;
+        }
+        const local = readLocal();
+        if (local.length) {
+          persistForUser(local);
+          set({ items: local });
+          return;
+        }
         if (remote) setPlatformDocMemory(currentWorkspaceId(), DOC_KIND, remote);
-        set({ items: list });
-      } catch {
         set({ items: [] });
+      } catch {
+        set({ items: readLocal() });
       }
     })();
   },

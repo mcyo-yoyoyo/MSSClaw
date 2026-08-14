@@ -62,6 +62,8 @@ import {
 import { openMarketShelf, openMarketToolDetail } from '@/domain/openHomeJourney';
 import { resolveCaseItemsForScenarioId } from '@/domain/portalCase';
 import { HomeMarketChannels } from '@/components/home/HomeMarketChannels';
+import { HomeIntentFinder } from '@/components/home/HomeIntentFinder';
+import { HomeMyWorkbench } from '@/components/home/HomeMyWorkbench';
 import {
   ensurePlazaToolGuidesBootstrapped,
   usePlazaToolGuideStore,
@@ -69,6 +71,7 @@ import {
 import { usePortalContentStore } from '@/stores/portalContentStore';
 import { useMarketFilterStore } from '@/stores/marketFilterStore';
 import { useRecentMarketStore } from '@/stores/recentMarketStore';
+import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useMarketFeaturedStore } from '@/stores/marketFeaturedStore';
 import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
 import { greetingForNow } from '@/domain/timeGreeting';
@@ -116,10 +119,12 @@ export function HomePage({
   const tools = useMarketplaceStore((s) => s.tools);
   const portalContent = usePortalContentStore((s) => s.items);
   const marketSearch = useMarketFilterStore((s) => s.search);
-  const setMarketSearch = useMarketFilterStore((s) => s.setSearch);
   const setMarketBusinessFilter = useMarketFilterStore((s) => s.setBusinessFilter);
   const hydrateRecent = useRecentMarketStore((s) => s.hydrate);
+  const recentItems = useRecentMarketStore((s) => s.items);
   const pushRecent = useRecentMarketStore((s) => s.push);
+  const hydrateFavorites = useMarketFavoriteStore((s) => s.hydrate);
+  const favoriteItems = useMarketFavoriteStore((s) => s.items);
   const featuredPins = useMarketFeaturedStore((s) => s.pins);
   const hydrateFeaturedPins = useMarketFeaturedStore((s) => s.hydrate);
   const officeSceneEntries = useInternalOfficeSceneCatalogStore((s) => s.entries);
@@ -146,9 +151,10 @@ export function HomePage({
 
   useEffect(() => {
     hydrateRecent();
+    hydrateFavorites();
     hydrateFeaturedPins();
     ensurePlazaToolGuidesBootstrapped();
-  }, [hydrateRecent, hydrateFeaturedPins]);
+  }, [hydrateRecent, hydrateFavorites, hydrateFeaturedPins]);
 
   useEffect(() => {
     if (!user) return;
@@ -337,14 +343,15 @@ export function HomePage({
     };
   }, [skills, viewer, marketSearch, channelCards.projects]);
 
+  const intentCatalog = useMemo(
+    () => [...channelCards.external, ...channelCards.internal, ...channelCards.projects],
+    [channelCards],
+  );
+
   useEffect(() => {
-    const ids = [
-      ...channelCards.external,
-      ...channelCards.internal,
-      ...channelCards.projects,
-    ].map((c) => c.id);
+    const ids = intentCatalog.map((c) => c.id);
     if (ids.length) ensureEngagementSeeds(ids);
-  }, [channelCards]);
+  }, [intentCatalog]);
 
   const rememberCard = (card: MarketShelfCardModel) => {
     pushRecent({
@@ -377,6 +384,31 @@ export function HomePage({
     }
     bumpUse(card.id);
     openMarketToolDetail(card.id, card.kind);
+  };
+
+  const openWorkbenchItem = (item: {
+    id: string;
+    kind: MarketShelfKind;
+    title: string;
+    icon?: string;
+    logoUrl?: string;
+  }) => {
+    const card =
+      channelCards[item.kind].find((c) => c.id === item.id) ??
+      ({
+        id: item.id,
+        kind: item.kind,
+        title: item.title,
+        description: '',
+        icon: item.icon ?? 'fa-solid fa-star',
+        logoUrl: item.logoUrl,
+        badges: [],
+        featured: false,
+        heat: 0,
+        hasHowto: false,
+        primaryAction: 'detail' as const,
+      } satisfies MarketShelfCardModel);
+    openPortalCard(card);
   };
 
   const openPortalPrimary = (card: MarketShelfCardModel) => {
@@ -589,9 +621,10 @@ export function HomePage({
             ) : null}
           </div>
         ) : (
-          <div className="flex w-full flex-col gap-4 pb-6 md:gap-5">
+          <div className="flex w-full flex-col gap-3 pb-6 md:gap-3.5">
             <PageStageHero
               tone="home"
+              className="home-portal-hero"
               eyebrow={
                 <>
                   {greetingForNow()}
@@ -614,36 +647,20 @@ export function HomePage({
                   </span>
                 </span>
               }
-              actions={
-                <form
-                  className="flex w-full max-w-md gap-2"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    openMarketShelf('external');
-                  }}
-                >
-                  <label className="relative min-w-0 flex-1">
-                    <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[12px] text-[#86868b]" />
-                    <input
-                      value={marketSearch}
-                      onChange={(e) => setMarketSearch(e.target.value)}
-                      placeholder="搜索工具或项目（权限范围内）…"
-                      className="w-full rounded-xl border-0 bg-white py-2.5 pl-10 pr-3 text-[14px] text-[#1d1d1f] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] outline-none transition placeholder:text-[#86868b] focus:shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12),0_0_0_3px_rgba(0,0,0,0.04)]"
-                    />
-                  </label>
-                  <button
-                    type="submit"
-                    className="shrink-0 rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-[12px] font-semibold text-white transition hover:bg-[#2c2c2e]"
-                  >
-                    搜索
-                  </button>
-                </form>
-              }
             >
-              <HomeAiBriefTeaser />
+              <HomeIntentFinder catalog={intentCatalog} onOpen={openPortalCard} />
             </PageStageHero>
 
             <StationAnnounceBanner className="rounded-xl border-0 bg-white/90 px-3.5 py-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_8px_24px_rgba(0,0,0,0.05)]" />
+
+            <div className="grid gap-3 lg:grid-cols-2 lg:items-stretch lg:gap-3.5">
+              <HomeMyWorkbench
+                favorites={favoriteItems}
+                recent={recentItems}
+                onOpen={openWorkbenchItem}
+              />
+              <HomeAiBriefTeaser />
+            </div>
 
             <HomeMarketChannels
               cardsByKind={channelCards}

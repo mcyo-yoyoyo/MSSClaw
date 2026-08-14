@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"> <head> <meta charset="UTF-8"> <meta name="viewport" content="width=device-width, initial-scale=1.0"> <title>MSS AI提效作战平台用户体验预调研综合分析报告</title> <style> * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+        font-family: 'Microsoft YaHei', 'Segoe UI', Arial, sans-serif;
+        background: #f0f0f0;
+        min-height: 100vh;
+        padding: 20px;
+    }
+
+    .slide {
+        max-width: 1400px;
+        margin: 0 auto 30px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+        overflow: hidden;
+        display: none;
+    }
+
+    .slide.active {
+        display: block;
+    }
+
+    .slide-header {
+        background: #505050;
+        color: white;
+        padding: 32px 40px;
+        position: relative;
+    }
+
+    .slide-header h1 {
+        font-size: 26px;
+        margin-bottom: 8px;
+        font-weight: 700;
+    }
+
+    .slide-header .subtitle {
+        font-size: 14px;
+        opacity: 0.75;
+    }
+
+    .slide-header .page-num {
+        position: absolute;
+        right: 40px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 48px;
+        font-weight: 700;
+        opacity: 0.2;
+    }
+
+    .slide-content {
+        padding: 32px 40px;
+    }
+
+    .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 18px;
+        margin-bottom: 28px;
+    }
+
+    .metric-card {
+        background: #fafafa;
+        border: 1px solid #e5e5e5;
+        color: #333;
+        padding: 18px;
+        border-radius: 10px;
+        text-align: center;
+    }
+
+    .metric-card .value {
+        font-size: 34px;
+        font-weight: 700;
+        margin-bottom: 5px;
+        color: #333;
+    }
+
+    .metric-card .label {
+        font-size: 12px;
+        color: #888;
+    }
+
+    .section-title {
+        font-size: 17px;
+        color: #333;
+        margin: 22px 0 14px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #7BA3C4;
+        font-weight: 700;
+    }
+
+    .two-column {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 22px;
+    }
+
+    .card {
+        background: #fafafa;
+        border-radius: 10px;
+        padding: 18px;
+        border: 1px solid #e5e5e5;
+    }
+
+    .card h3 {
+        color: #444;
+        margin-bottom: 12px;
+        font-size: 14px;
+        font-weight: 600;
+    }
+
+    .feedback-item {
+        background: white;
+        border-left: 3px solid #7BA3C4;
+        padding: 11px 14px;
+        margin-bottom: 9px;
+        border-radius: 0 6px 6px 0;
+        font-size: 12px;
+        line-height: 1.6;
+        color: #555;
+    }
+
+    .feedback-item strong {
+        color: #7BA3C4;
+    }
+
+    .quote-card {
+        background: white;
+        border-radius: 8px;
+        padding: 14px 16px;
+        margin-bottom: 11px;
+        border-left: 3px solid #7BA3C4;
+        border-top: 1px solid #e5e5e5;
+        border-right: 1px solid #e5e5e5;
+        border-bottom: 1px solid #e5e5e5;
+    }
+
+    .quote-meta {
+        display: flex;
+        gap: 9px;
+        margin-bottom: 8px;
+        align-items: center;
+    }
+
+    .quote-tag {
+        background: #f0f0f0;
+        color: #555;
+        padding: 2px 9px;
+        border-radius: 10px;
+        font-size: 10px;
+        font-weight: 600;
+    }
+
+    .quote-score {
+        background: #C8756B;
+        color: white;
+        padding: 2px 9px;
+        border-radius: 10px;
+        font-size: 10px;
+        font-weight: 600;
+    }
+
+    .quote-content {
+        color: #555;
+        font-size: 12px;
+        line-height: 1.6;
+    }
+
+    .priority-section {
+        margin: 18px 0;
+    }
+
+    .priority-card {
+        background: #fafafa;
+        border-radius: 10px;
+        padding: 18px;
+        margin-bottom: 14px;
+        border-left: 4px solid #bbbbbb;
+        border-top: 1px solid #e5e5e5;
+        border-right: 1px solid #e5e5e5;
+        border-bottom: 1px solid #e5e5e5;
+    }
+
+    .priority-card.high {
+        border-left-color: #7BA3C4;
+    }
+
+    .priority-card.medium {
+        border-left-color: #C8756B;
+    }
+
+    .priority-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 11px;
+    }
+
+    .priority-badge {
+        padding: 3px 11px;
+        border-radius: 12px;
+        font-size: 10px;
+        font-weight: 600;
+        color: white;
+        background: #7BA3C4;
+    }
+
+    .priority-card.medium .priority-badge {
+        background: #C8756B;
+    }
+
+    .priority-title {
+        font-size: 14px;
+        color: #333;
+        font-weight: 600;
+        margin: 0;
+    }
+
+    .priority-content {
+        color: #666;
+        line-height: 1.7;
+        font-size: 12px;
+    }
+
+    .insight-box {
+        background: #f5f5f5;
+        border-left: 4px solid #7BA3C4;
+        padding: 14px 16px;
+        border-radius: 6px;
+        margin: 16px 0;
+    }
+
+    .insight-box h4 {
+        color: #444;
+        margin-bottom: 7px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .insight-box p {
+        color: #666;
+        line-height: 1.6;
+        font-size: 12px;
+    }
+
+    .theme-chart {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+        margin: 14px 0;
+    }
+
+    .theme-item {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        background: white;
+        padding: 7px 12px;
+        border-radius: 18px;
+        border: 1px solid #e5e5e5;
+    }
+
+    .theme-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: #7BA3C4;
+    }
+
+    .theme-name {
+        font-size: 11px;
+        color: #555;
+        font-weight: 500;
+    }
+
+    .theme-count {
+        background: #eeeeee;
+        color: #666;
+        padding: 2px 7px;
+        border-radius: 9px;
+        font-size: 10px;
+        font-weight: 600;
+    }
+
+    .category-bar {
+        display: flex;
+        height: 42px;
+        border-radius: 6px;
+        overflow: hidden;
+        margin: 14px 0;
+    }
+
+    .category-segment {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 10px;
+        font-weight: 600;
+        flex-direction: column;
+        padding: 4px;
+    }
+
+    .question-header {
+        background: #505050;
+        color: white;
+        padding: 14px 18px;
+        border-radius: 8px;
+        margin-bottom: 18px;
+    }
+
+    .question-header h2 {
+        font-size: 16px;
+        margin-bottom: 4px;
+    }
+
+    .question-header p {
+        font-size: 12px;
+        opacity: 0.75;
+    }
+
+    .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 11px;
+        margin-top: 22px;
+    }
+
+    .page-dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.5);
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .page-dot.active {
+        background: #7BA3C4;
+        transform: scale(1.15);
+    }
+
+    .footer {
+        text-align: center;
+        color: #aaaaaa;
+        padding: 14px;
+        font-size: 12px;
+    }
+
+    .bar-chart {
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+        margin: 14px 0;
+    }
+
+    .bar-item {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+    }
+
+    .bar-label {
+        width: 85px;
+        font-size: 11px;
+        color: #666;
+        font-weight: 500;
+    }
+
+    .bar-track {
+        flex: 1;
+        height: 22px;
+        background: #eeeeee;
+        border-radius: 11px;
+        overflow: hidden;
+    }
+
+    .bar-fill {
+        height: 100%;
+        background: #7BA3C4;
+        border-radius: 11px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding-right: 7px;
+        color: white;
+        font-size: 10px;
+        font-weight: 600;
+    }
+
+    .issue-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 14px;
+        margin: 14px 0;
+    }
+
+    .issue-card {
+        background: #fafafa;
+        border-radius: 9px;
+        padding: 14px;
+        border: 1px solid #e5e5e5;
+    }
+
+    .issue-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 9px;
+    }
+
+    .issue-title {
+        font-size: 13px;
+        color: #444;
+        font-weight: 600;
+    }
+
+    .issue-count {
+        background: #eeeeee;
+        color: #666;
+        padding: 2px 9px;
+        border-radius: 11px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    .issue-example {
+        background: white;
+        padding: 7px 11px;
+        margin-bottom: 5px;
+        border-radius: 5px;
+        font-size: 11px;
+        line-height: 1.5;
+        color: #666;
+        border-left: 2px solid #7BA3C4;
+    }
+</style>
+
+</head> <body> <!-- 第一页：调研概况 --> <div class="slide active" id="slide1"> <div class="slide-header"> <h1>MSS AI提效作战平台用户体验预调研综合分析报告</h1> <div class="subtitle">整合两份报告 | 保留多元视角 | 按调研题目组织高价值优化建议</div> <div class="page-num">01</div> </div>
+
+    <div class="slide-content">
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="value">45</div>
+                <div class="label">有效问卷数</div>
+            </div>
+            <div class="metric-card">
+                <div class="value">225</div>
+                <div class="label">反馈建议总数</div>
+            </div>
+            <div class="metric-card">
+                <div class="value">21<span style="font-size: 18px;">分钟</span></div>
+                <div class="label">平均作答时长</div>
+            </div>
+            <div class="metric-card">
+                <div class="value">62</div>
+                <div class="label">高价值反馈(≥7分)</div>
+            </div>
+        </div>
+
+        <div class="two-column">
+            <div class="card">
+                <h3>📊 反馈分类统计（定量分析视角）</h3>
+                <div class="category-bar">
+                    <div class="category-segment" style="width: 31.6%; background: #7BA3C4;">
+                        <div>功能增强建议</div>
+                        <div style="font-size: 11px;">127条 (31.6%)</div>
+                    </div>
+                    <div class="category-segment" style="width: 29.1%; background: #95B3C7;">
+                        <div>内容丰富度</div>
+                        <div style="font-size: 11px;">117条 (29.1%)</div>
+                    </div>
+                    <div class="category-segment" style="width: 15.2%; background: #aaaaaa;">
+                        <div>其他建议</div>
+                        <div style="font-size: 11px;">61条 (15.2%)</div>
+                    </div>
+                    <div class="category-segment" style="width: 11.7%; background: #C8756B;">
+                        <div>操作便捷性</div>
+                        <div style="font-size: 11px;">47条 (11.7%)</div>
+                    </div>
+                    <div class="category-segment" style="width: 7.7%; background: #D49385;">
+                        <div>体验问题</div>
+                        <div style="font-size: 11px;">31条 (7.7%)</div>
+                    </div>
+                    <div class="category-segment" style="width: 4.7%; background: #bbbbbb;">
+                        <div>UI优化</div>
+                        <div style="font-size: 11px;">19条 (4.7%)</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>💬 VOC高频主题分布（定性分析视角）</h3>
+                <div class="theme-chart">
+                    <div class="theme-item"><div class="theme-dot"></div><div class="theme-name">在线体验</div><div class="theme-count">29次</div></div>
+                    <div class="theme-item"><div class="theme-dot"></div><div class="theme-name">智能推荐</div><div class="theme-count">27次</div></div>
+                    <div class="theme-item"><div class="theme-dot"></div><div class="theme-name">智能搜索</div><div class="theme-count">14次</div></div>
+                    <div class="theme-item"><div class="theme-dot"></div><div class="theme-name">视频教程</div><div class="theme-count">10次</div></div>
+                    <div class="theme-item"><div class="theme-dot"></div><div class="theme-name">案例分享</div><div class="theme-count">9次</div></div>
+                    <div class="theme-item"><div class="theme-dot"></div><div class="theme-name">消息推送</div><div class="theme-count">9次</div></div>
+                    <div class="theme-item"><div class="theme-dot"></div><div class="theme-name">PPT制作</div><div class="theme-count">7次</div></div>
+                    <div class="theme-item"><div class="theme-dot"></div><div class="theme-name">信息安全</div><div class="theme-count">6次</div></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="insight-box">
+            <h4>💡 综合洞察</h4>
+            <p><strong>定量视角：</strong>功能增强建议占比最高(31.6%)，内容丰富度次之(29.1%)，说明用户对平台功能有更高期待，同时希望内容更丰富<br>
+            <strong>定性视角：</strong>"在线体验"和"智能推荐"是用户最高频诉求（共56次提及），说明用户对工具使用便捷性和智能化决策支持有强烈需求</p>
+        </div>
+
+        <h2 class="section-title">📋 各调研题目反馈分布</h2>
+        <div class="bar-chart">
+            <div class="bar-item">
+                <div class="bar-label">Q1 外部工具</div>
+                <div class="bar-track"><div class="bar-fill" style="width: 100%;">45条反馈</div></div>
+            </div>
+            <div class="bar-item">
+                <div class="bar-label">Q2 公司工具</div>
+                <div class="bar-track"><div class="bar-fill" style="width: 100%;">45条反馈</div></div>
+            </div>
+            <div class="bar-item">
+                <div class="bar-label">Q3 MSS集市</div>
+                <div class="bar-track"><div class="bar-fill" style="width: 100%;">45条反馈</div></div>
+            </div>
+            <div class="bar-item">
+                <div class="bar-label">Q4 AI快讯</div>
+                <div class="bar-track"><div class="bar-fill" style="width: 100%;">45条反馈</div></div>
+            </div>
+            <div class="bar-item">
+                <div class="bar-label">Q5 其他建议</div>
+                <div class="bar-track"><div class="bar-fill" style="width: 60%;">27条反馈</div></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 第二页：Q1 外部工具精选 -->
+<div class="slide" id="slide2">
+    <div class="slide-header">
+        <h1>Q1 外部工具精选板块</h1>
+        <div class="subtitle">汇聚优质外部AI工具，按场景筛选，即查即用，降低信息差</div>
+        <div class="page-num">02</div>
+    </div>
+
+    <div class="slide-content">
+        <div class="question-header">
+            <h2>「 外部工具精选 」板块优化建议</h2>
+            <p>155款外部AI工具的筛选、使用体验与信息呈现</p>
+        </div>
+
+        <div class="two-column">
+            <div>
+                <h2 class="section-title">⚡ 高价值优化建议（定量分析）</h2>
+
+                <div class="priority-card high">
+                    <div class="priority-header">
+                        <h3 class="priority-title">多维度筛选与智能推荐</h3>
+                        <span class="priority-badge">高频需求</span>
+                    </div>
+                    <div class="priority-content">
+                        <strong>现状问题：</strong>155款工具仅支持按「工作场景」和「工具类型」筛选，缺少价格、语言支持、是否需注册等实用维度<br>
+                        <strong>优化方向：</strong>
+                        <ul style="margin-top: 8px; margin-left: 18px;">
+                            <li>增加多维度筛选面板（价格、语言、权限、是否需VPN等）</li>
+                            <li>实现自然语言搜索："用户描述诉求→系统推荐工具"</li>
+                            <li>增加个性化推荐，根据用户角色、历史行为推荐工具</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="priority-card high">
+                    <div class="priority-header">
+                        <h3 class="priority-title">工具对比与决策支持</h3>
+                        <span class="priority-badge">高频需求</span>
+                    </div>
+                    <div class="priority-content">
+                        <strong>现状问题：</strong>用户看到多款相似工具无法选择，如Gamma、WPS AI、Beautiful.ai做PPT时需来回翻页对比<br>
+                        <strong>优化方向：</strong>
+                        <ul style="margin-top: 8px; margin-left: 18px;">
+                            <li>开发工具对比功能，支持2-4款工具一键对比</li>
+                            <li>展示价格、功能、语言支持、适用场景等维度对比矩阵</li>
+                            <li>增加"场景推荐"：如"写报告用云笔记"、"查制度用W3智能搜索"</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="priority-card medium">
+                    <div class="priority-header">
+                        <h3 class="priority-title">信息安全与合规提示</h3>
+                        <span class="priority-badge">安全相关</span>
+                    </div>
+                    <div class="priority-content">
+                        <strong>现状问题：</strong>用户可能无意中将公司内部信息输入海外AI工具，造成合规风险<br>
+                        <strong>优化方向：</strong>
+                        <ul style="margin-top: 8px; margin-left: 18px;">
+                            <li>在海外工具详情页增加信息安全合规提醒横幅</li>
+                            <li>界面增加"公司信息不可输入外部AI"提示</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h2 class="section-title">💬 高价值原声反馈（定性分析）</h2>
+
+                <div class="quote-card">
+                    <div class="quote-meta">
+                        <span class="quote-tag">Q1-外部工具</span>
+                        <span class="quote-score">评分: 9分</span>
+                    </div>
+                    <div class="quote-content">
+                        1、缺少工具对比和推荐逻辑，用户不知道"我应该用哪个"，例如给出每个AI工具的适用场景，优劣势等。<br>
+                        2、当前公司信息安全要求，是不能把公司内部信息输入给外部AI，建议在界面也增加提示，以免造成无意违规。<br>
+                        3、建议增加一个需求，用户写一句他的诉求，然后推荐出合适使用的AI工具。
+                    </div>
+                </div>
+
+                <div class="quote-card">
+                    <div class="quote-meta">
+                        <span class="quote-tag">Q1-外部工具</span>
+                        <span class="quote-score">评分: 8分</span>
+                    </div>
+                    <div class="quote-content">
+                        1. 筛选方式不够便捷：建议增加多维度筛选面板，支持组合筛选。<br>
+                        2. 缺少工具对比：建议勾选2-4款工具后一键对比。<br>
+                        3. 个人收藏功能：建议增加收藏按钮，并在筛选栏增加「我的收藏」Tab。<br>
+                        4. 标签体系建议：统一为官方推荐/热门/新上线/已收藏，用不同颜色区分。<br>
+                        5. 海外工具缺少合规提示：建议增加信息安全合规提醒横幅。
+                    </div>
+                </div>
+
+                <div class="quote-card">
+                    <div class="quote-meta">
+                        <span class="quote-tag">Q1-外部工具</span>
+                        <span class="quote-score">评分: 7分</span>
+                    </div>
+                    <div class="quote-content">
+                        1、工具比较擅长哪类分析，可否给工具也打上标签；<br>
+                        2、外部工具很多人都没有配置响应的账号权限，点击立即体验，并不能直接打开；<br>
+                        3、能否增加一个评分机制，或者下载量调用量的一个情况，让业务对改工具有一个初步判断。
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="insight-box">
+            <h4>💡 Q1板块核心优化方向</h4>
+            <p><strong>用户最关心：</strong>① 如何从155款工具中快速找到适合自己的（智能筛选+推荐）；② 如何了解工具间的差异（对比功能）；③ 如何安全使用外部工具（合规提示）</p>
+        </div>
+    </div>
+</div>
+
+<!-- 第三页：Q2 公司工具推荐 -->
+<div class="slide" id="slide3">
+    <div class="slide-header">
+        <h1>Q2 公司工具推荐板块</h1>
+        <div class="subtitle">公司内部工具统一入口，按「记、读、写、问」等日常办公场景组织</div>
+        <div class="page-num">03</div>
+    </div>
+
+    <div class="slide-content">
+        <div class="question-header">
+            <h2>「 公司工具推荐 」板块优化建议</h2>
+            <p>内部工具的覆盖度、使用体验与场景化呈现</p>
+        </div>
+
+        <div class="two-column">
+            <div>
+                <h2 class="section-title">⚡ 高价值优化建议（定量分析）</h2>
+
+                <div class="priority-card high">
+                    <div class="priority-header">
+                        <h3 class="priority-title">工具可用性与跳转体验</h3>
+                        <span class="priority-badge">高频需求</span>
+                    </div>
+                    <div class="priority-content">
+                        <strong>现状问题：</strong>当前点击"答一下"跳转到小鲁班下载界面，造成用户体验中断，无法直接使用<br>
+                        <strong>优化方向：</strong>
+                        <ul style="margin-top: 8px; margin-left: 18px;">
+                            <li>打通员工助手，实现工具直接调用而非跳转下载</li>
+                            <li>增加工具效果预览（Input/Output示例）</li>
+                            <li>修复"立即体验"跳转下载页、工具无法访问等基础体验问题</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="priority-card high">
+                    <div class="priority-header">
+                        <h3 class="priority-title">场景化推荐与对比</h3>
+                        <span class="priority-badge">高频需求</span>
+                    </div>
+                    <div class="priority-content">
+                        <strong>现状问题：</strong>用户不知道"记、读、写、问"分类下具体有哪些工具，缺乏场景化推荐<br>
+                        <strong>优化方向：</strong>
+                        <ul style="margin-top: 8px; margin-left: 18px;">
+                            <li>增加"场景推荐"：如"写报告用云笔记"、"查制度用W3智能搜索"</li>
+                            <li>增加工具之间的对比矩阵</li>
+                            <li>每个工具连接使用技巧或用户总结分享</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="priority-card medium">
+                    <div class="priority-header">
+                        <h3 class="priority-title">内容丰富与工具扩展</h3>
+                        <span class="priority-badge">中等需求</span>
+                    </div>
+                    <div class="priority-content">
+                        <strong>现状问题：</strong>当前公司工具基本局限于员工助手，种类单一<br>
+                        <strong>优化方向：</strong>
+                        <ul style="margin-top: 8px; margin-left: 18px;">
+                            <li>集成更多内部工具（AI表格、SkillHub等）</li>
+                            <li>增加更多业务场景的工具覆盖</li>
+                            <li>明确工具分类逻辑（是分类还是唯一链接）</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h2 class="section-title">💬 高价值原声反馈（定性分析）</h2>
+
+                <div class="quote-card">
+                    <div class="quote-meta">
+                        <span class="quote-tag">Q2-公司工具</span>
+                        <span class="quote-score">评分: 9分</span>
+                    </div>
+                    <div class="quote-content">
+                        1、当前记、读、写、问这几个是分类？还是唯一链接？例如说，记一下，是只等于WeLink云笔记，还是作为工具分类？<br>
+                        2、当前公司工具这块基本还是链接形式，无法直接使用工具，例如点答一下，调到小鲁班下载界面，造成用户体验的中断。<br>
+                        3、公司工具这块，建议增加一个功能，每个工具或者应用，连接一些使用技巧或者用户的总结分享。<br>
+                        4、缺少工具对比和推荐逻辑，建议增加"场景推荐"：如"写报告用云笔记"、"查制度用W3智能搜索"。
+                    </div>
+                </div>
+
+                <div class="quote-card">
+                    <div class="quote-meta">
+                        <span class="quote-tag">Q2-公司工具</span>
+                        <span class="quote-score">评分: 7分</span>
+                    </div>
+                    <div class="quote-content">
+                        1、工具布局是按照什么排序，可否增加排序功能；<br>
+                        2、工具比较擅长哪类分析，可否给工具也打上标签；<br>
+                        3、工具使用：点击立即体验，并不能直接打开（一直显示正在安全验证，或者报错的情况），对新用户来说并不是很友好。
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="insight-box">
+            <h4>💡 Q2板块核心优化方向</h4>
+            <p><strong>用户最关心：</strong>① 能否直接使用工具而非跳转到下载（52%用户反馈）；② 场景化推荐帮助选择；③ 工具分类逻辑是否清晰</p>
+        </div>
+    </div>
+</div>
+
+<!-- 第四页：Q3 MSS工具集市 -->
+<div class="slide" id="slide4">
+    <div class="slide-header">
+        <h1>Q3 MSS工具集市板块</h1>
+        <div class="subtitle">公司自研Skill/Agent/案例的能力货架，按业务场景组织</div>
+        <div class="page-num">04</div>
+    </div>
+
+    <div class="slide-content">
+        <div class="question-header">
+            <h2>「 MSS 工具集市 」板块优化建议</h2>
+            <p>Skill/Agent的在线体验、说明文档与业务场景覆盖</p>
+        </div>
+
+        <div class="two-column">
+            <div>
+                <h2 class="section-title">⚡ 高价值优化建议（定量分析）</h2>
+
+                <div class="priority-card high">
+                    <div class="priority-header">
+                        <h3 class="priority-title">在线试用与快速体验</h3>
+                        <span class="priority-badge">核心痛点</span>
+                    </div>
+                    <div class="priority-content">
+                        <strong>现状问题：</strong>当前MVP只能下载压缩包，解压配置后才能试用，大部分用户在下载环节就流失了<br>
+                        <strong>优化方向：</strong>
+                        <ul style="margin-top: 8px; margin-left: 18px;">
+                            <li>优先建设Skill在线试用/打样功能，不用下载即可看到效果</li>
+                            <li>增加"立即体验"功能跳转，让业务先感受工具能出什么</li>
+                            <li>增加工具效果预览（Input/Output示例）</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="priority-card high">
+                    <div class="priority-header">
+                        <h3 class="priority-title">评分评价与质量筛选</h3>
+                        <span class="priority-badge">高频需求</span>
+                    </div>
+                    <div class="priority-content">
+                        <strong>现状问题：</strong>25个Skill无法判断质量好坏，用户难以筛选<br>
+                        <strong>优化方向：</strong>
+                        <ul style="margin-top: 8px; margin-left: 18px;">
+                            <li>增加五星评分+简短评价系统</li>
+                            <li>增加下载量、使用量等数据展示</li>
+                            <li>类似PU/UV的统计，用于判断工具价值</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="priority-card medium">
+                    <div class="priority-header">
+                        <h3 class="priority-title">技能关联与场景覆盖</h3>
+                        <span class="priority-badge">中等需求</span>
+                    </div>
+                    <div class="priority-content">
+                        <strong>现状问题：</strong>技能之间缺少关联推荐，如"评论采集+评论翻译+评论分析"是完整链路但没有提示<br>
+                        <strong>优化方向：</strong>
+                        <ul style="margin-top: 8px; margin-left: 18px;">
+                            <li>每个Skill下方增加「推荐搭配」区域</li>
+                            <li>改为可视化场景覆盖雷达图</li>
+                            <li>增加版本管理概念，让用户知道功能迭代</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h2 class="section-title">💬 高价值原声反馈（定性分析）</h2>
+
+                <div class="quote-card">
+                    <div class="quote-meta">
+                        <span class="quote-tag">Q3-MSS集市</span>
+                        <span class="quote-score">评分: 8分</span>
+                    </div>
+                    <div class="quote-content">
+                        1. 只能下载，无法在线试用：当前MVP只能下载压缩包，解压配置后才能试用，大部分用户在下载环节就流失了。建议优先建设在线试用/打样功能。<br>
+                        2. 缺少评分评价系统：25个Skill无法判断质量好坏。建议增加五星评分+简短评价。<br>
+                        3. 技能之间缺少关联推荐：如「评论采集」+「评论翻译」+「评论分析」是一个完整链路但没有提示。建议增加「推荐搭配」区域。<br>
+                        4. 建设概况信息不够直观：「8/8场景有内容」不够清晰。建议改为可视化场景覆盖雷达图。
+                    </div>
+                </div>
+
+                <div class="quote-card">
+                    <div class="quote-meta">
+                        <span class="quote-tag">Q3-MSS集市</span>
+                        <span class="quote-score">评分: 7分</span>
+                    </div>
+                    <div class="quote-content">
+                        1、能否增加一个立即体验的功能跳转，让业务先感受一下该工具能出什么样的东西；<br>
+                        2、可增加类似PU/UV的统计，用于判断改工具的价值；<br>
+                        3、能否增加版本管理的概念？让用户知道他的功能迭代。
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="insight-box">
+            <h4>💡 Q3板块核心优化方向</h4>
+            <p><strong>用户最关心：</strong>① 能否在线试用而非下载（这是平台差异化核心价值）；② 如何判断Skill质量（评分系统）；③ 技能间的关联推荐</p>
+        </div>
+    </div>
+</div>
+
+<!-- 第五页：Q4 AI快讯 + Q5 其他 -->
+<div class="slide" id="slide5">
+    <div class="slide-header">
+        <h1>Q4 AI快讯 & Q5 其他建议</h1>
+        <div class="subtitle">每日AI产业动态精选 + 整体平台优化建议</div>
+        <div class="page-num">05</div>
+    </div>
+
+    <div class="slide-content">
+        <div class="two-column">
+            <div>
+                <div class="question-header">
+                    <h2>「 AI快讯 」板块优化建议</h2>
+                    <p>每日AI产业动态精选速读，信息整合，保持团队趋势敏感度</p>
+                </div>
+
+                <h2 class="section-title">⚡ 高价值优化建议（定量分析）</h2>
+
+                <div class="priority-card high">
+                    <div class="priority-header">
+                        <h3 class="priority-title">WeLink自动推送</h3>
+                        <span class="priority-badge">核心诉求</span>
+                    </div>
+                    <div class="priority-content">
+                        <strong>现状问题：</strong>WeLink自动推送功能已待上线数月，用户无法及时获取快讯<br>
+                        <strong>优化方向：</strong>
+                        <ul style="margin-top: 8px; margin-left: 18px;">
+                            <li>尽快实现每日定时自动推送到WeLink</li>
+                            <li>实现个性化订阅，推送用户关注主题的快讯</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="priority-card high">
+                    <div class="priority-header">
+                        <h3 class="priority-title">分类检索与内容丰富</h3>
+                        <span class="priority-badge">高频需求</span>
+                    </div>
+                    <div class="priority-content">
+                        <strong>现状问题：</strong>快讯无分类标签，查找不便，内容与实际工作关联度不高<br>
+                        <strong>优化方向：</strong>
+                        <ul style="margin-top: 8px; margin-left: 18px;">
+                            <li>增加快讯分类标签（大模型/工具/开源/政策/行业）</li>
+                            <li>增加全文检索和日期范围筛选功能</li>
+                            <li>增加与实际工作相关的应用案例内容</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h2 class="section-title">💬 高价值原声反馈</h2>
+                <div class="quote-card">
+                    <div class="quote-meta">
+                        <span class="quote-tag">Q4-AI快讯</span>
+                        <span class="quote-score">评分: 7分</span>
+                    </div>
+                    <div class="quote-content">
+                        1、希望实现WeLink自动推送功能（已待上线数月）；<br>
+                        2、增加分类标签和全文检索，便于查找历史快讯；<br>
+                        3、增加与实际工作相关的内容和应用案例。
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <div class="question-header">
+                    <h2>「 其他 」整体平台建议</h2>
+                    <p>跨板块的系统性问题与战略建议</p>
+                </div>
+
+                <h2 class="section-title">⚡ 高价值优化建议（跨板块共性问题）</h2>
+
+                <div class="priority-card high">
+                    <div class="priority-header">
+                        <h3 class="priority-title">使用文档优化</h3>
+                        <span class="priority-badge">共性问题</span>
+                    </div>
+                    <div class="priority-content">
+                        <strong>现状问题：</strong>说明文档过于专业，新手小白难以理解，How to描述不清晰<br>
+                        <strong>涉及板块：</strong>Q1、Q2、Q3<br>
+                        <strong>优化方向：</strong>
+                        <ul style="margin-top: 8px; margin-left: 18px;">
+                            <li>提供逐步实操指导，配合PPT演示或视频教程</li>
+                            <li>增加使用案例录屏，结合业务场景举例</li>
+                            <li>优化How to文案，用一句话快速描述工具价值</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="priority-card medium">
+                    <div class="priority-header">
+                        <h3 class="priority-title">差异化定位</h3>
+                        <span class="priority-badge">战略建议</span>
+                    </div>
+                    <div class="priority-content">
+                        <strong>现状问题：</strong>多位用户反馈平台与员工助手、Welink功能重叠<br>
+                        <strong>优化方向：</strong>
+                        <ul style="margin-top: 8px; margin-left: 18px;">
+                            <li>打造"AI工具决策助手"定位，帮助用户"选对工具"</li>
+                            <li>突出"一键体验"优势，解决外部工具需VPN、内部工具需下载的痛点</li>
+                            <li>聚焦MSS业务场景，提供行业化、场景化工具推荐</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="issue-grid">
+                    <div class="issue-card">
+                        <div class="issue-header">
+                            <div class="issue-title">内容单一问题</div>
+                            <div class="issue-count">72条</div>
+                        </div>
+                        <div class="issue-example"><strong>核心反馈：</strong>"工具太少"、"都是员工助手"、"内容不够丰富"</div>
+                    </div>
+                    <div class="issue-card">
+                        <div class="issue-header">
+                            <div class="issue-title">体验中断问题</div>
+                            <div class="issue-count">51条</div>
+                        </div>
+                        <div class="issue-example"><strong>核心反馈：</strong>"跳转下载页面"、"无法直接使用"</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="insight-box">
+            <h4>💡 跨板块核心优化方向</h4>
+            <p><strong>最紧急：</strong>① 上线WeLink自动推送（Q4）；② 修复跳转下载体验问题（Q2、Q3）；③ 建设在线试用功能（Q3核心差异化）<br>
+            <strong>中长期：</strong>① 智能筛选推荐系统（Q1、Q2）；② 文档视频化改造；③ 差异化定位明确</p>
+        </div>
+    </div>
+</div>
+
+<!-- 第六页：总结 -->
+<div class="slide" id="slide6">
+    <div class="slide-header">
+        <h1>各板块高价值优化建议汇总</h1>
+        <div class="subtitle">按调研题目组织 | 保留定量+定性双视角</div>
+        <div class="page-num">06</div>
+    </div>
+
+    <div class="slide-content">
+        <h2 class="section-title">📋 各板块优化建议速览</h2>
+
+        <div class="issue-grid">
+            <div class="issue-card">
+                <div class="issue-header">
+                    <div class="issue-title">Q1 外部工具精选</div>
+                    <div class="issue-count">45条反馈</div>
+                </div>
+                <div class="issue-example"><strong>P0：</strong>多维度筛选面板（价格/语言/权限/VPN）</div>
+                <div class="issue-example"><strong>P0：</strong>工具一键对比功能（2-4款）</div>
+                <div class="issue-example"><strong>P0：</strong>自然语言搜索（需求→工具推荐）</div>
+                <div class="issue-example"><strong>P1：</strong>海外工具合规提示横幅</div>
+                <div class="issue-example"><strong>P1：</strong>个人收藏+我的收藏Tab</div>
+            </div>
+
+            <div class="issue-card">
+                <div class="issue-header">
+                    <div class="issue-title">Q2 公司工具推荐</div>
+                    <div class="issue-count">45条反馈</div>
+                </div>
+                <div class="issue-example"><strong>P0：</strong>打通员工助手，直接调用而非跳转下载</div>
+                <div class="issue-example"><strong>P0：</strong>工具效果预览（Input/Output示例）</div>
+                <div class="issue-example"><strong>P1：</strong>场景化推荐（写报告用XX、查制度用XX）</div>
+                <div class="issue-example"><strong>P1：</strong>增加更多内部工具覆盖</div>
+                <div class="issue-example"><strong>P2：</strong>明确分类逻辑（分类 vs 唯一链接）</div>
+            </div>
+
+            <div class="issue-card">
+                <div class="issue-header">
+                    <div class="issue-title">Q3 MSS工具集市</div>
+                    <div class="issue-count">45条反馈</div>
+                </div>
+                <div class="issue-example"><strong>P0：</strong>Skill在线试用/打样功能（核心差异化）</div>
+                <div class="issue-example"><strong>P0：</strong>五星评分+评价系统</div>
+                <div class="issue-example"><strong>P1：</strong>推荐搭配区域（技能关联推荐）</div>
+                <div class="issue-example"><strong>P1：</strong>下载量/使用量数据展示</div>
+                <div class="issue-example"><strong>P2：</strong>可视化场景覆盖雷达图</div>
+            </div>
+
+            <div class="issue-card">
+                <div class="issue-header">
+                    <div class="issue-title">Q4 AI快讯</div>
+                    <div class="issue-count">45条反馈</div>
+                </div>
+                <div class="issue-example"><strong>P0：</strong>WeLink每日定时自动推送</div>
+                <div class="issue-example"><strong>P1：</strong>快讯分类标签（大模型/工具/开源/政策）</div>
+                <div class="issue-example"><strong>P1：</strong>全文检索+日期范围筛选</div>
+                <div class="issue-example"><strong>P2：</strong>与实际工作相关的应用案例内容</div>
+                <div class="issue-example"><strong>P2：</strong>个性化订阅功能</div>
+            </div>
+        </div>
+
+        <h2 class="section-title">🔑 战略级优化建议（跨板块）</h2>
+
+        <div class="priority-card high">
+            <div class="priority-header">
+                <h3 class="priority-title">打造"AI工具决策助手"差异化定位</h3>
+                <span class="priority-badge">战略级</span>
+            </div>
+            <div class="priority-content">
+                <strong>核心洞察：</strong>多位用户反馈平台与员工助手、Welink功能重叠，建议：<br>
+                <ul style="margin-top: 8px; margin-left: 18px;">
+                    <li><strong>聚焦"帮用户选对工具"</strong>：不仅汇聚工具，更要提供智能决策支持（推荐、对比、评分）</li>
+                    <li><strong>突出"一键体验"优势</strong>：解决外部工具需VPN、内部工具需下载的痛点</li>
+                    <li><strong>聚焦MSS业务场景</strong>：提供行业化、场景化推荐，而非大而全的工具集</li>
+                    <li><strong>建立社区机制</strong>：鼓励用户分享使用心得，形成"工具+案例+经验"闭环</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="insight-box">
+            <h4>💡 整合报告说明</h4>
+            <p><strong>数据来源：</strong>调研反馈分析报告（定量统计视角）+ 调研反馈深度分析报告（定性VOC视角）<br>
+            <strong>组织方式：</strong>按调研题目（Q1-Q5）重新排布，每个板块保留双视角分析<br>
+            <strong>呈现内容：</strong>各板块高价值优化建议，剔除行动建议部分</p>
+        </div>
+    </div>
+</div>
+
+<div class="pagination">
+    <div class="page-dot active" onclick="showSlide(1)"></div>
+    <div class="page-dot" onclick="showSlide(2)"></div>
+    <div class="page-dot" onclick="showSlide(3)"></div>
+    <div class="page-dot" onclick="showSlide(4)"></div>
+    <div class="page-dot" onclick="showSlide(5)"></div>
+    <div class="page-dot" onclick="showSlide(6)"></div>
+</div>
+
+<div class="footer">
+    MSS AI提效作战平台用户体验预调研综合分析报告 | 整合自两份分析报告 | 分析时间：2026年8月12日
+</div>
+
+<script>
+    let currentSlide = 1;
+
+    function showSlide(num) {
+        const slides = document.querySelectorAll('.slide');
+        const dots = document.querySelectorAll('.page-dot');
+
+        slides.forEach((slide, index) => {
+            slide.classList.remove('active');
+            if (index === num - 1) {
+                slide.classList.add('active');
+            }
+        });
+
+        dots.forEach((dot, index) => {
+            dot.classList.remove('active');
+            if (index === num - 1) {
+                dot.classList.add('active');
+            }
+        });
+
+        currentSlide = num;
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' && currentSlide < 6) {
+            currentSlide++;
+            showSlide(currentSlide);
+        } else if (e.key === 'ArrowLeft' && currentSlide > 1) {
+            currentSlide--;
+            showSlide(currentSlide);
+        }
+    });
+</script>
+
+</body> </html>
+
+关闭

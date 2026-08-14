@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MSS 工具集市 · Skill / Agent 上架评审机制</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,500&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #f4f6f8;
+    --surface: #ffffff;
+    --ink: #0f172a;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --accent: #0f766e;
+    --accent-soft: #ccfbf1;
+    --blue: #1d4ed8;
+    --blue-soft: #dbeafe;
+    --warn: #b45309;
+    --warn-soft: #fef3c7;
+    --bad: #b91c1c;
+    --bad-soft: #fee2e2;
+    --good: #047857;
+    --good-soft: #d1fae5;
+    --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    font-family: 'DM Sans', 'Noto Sans SC', system-ui, sans-serif;
+    background: #0b1220; color: var(--ink);
+  }
+
+  .deck {
+    position: relative; width: 100%; height: 100%;
+    overflow: hidden;
+  }
+
+  .slide {
+    position: absolute; inset: 0;
+    display: none; flex-direction: column;
+    padding: 48px 56px 56px;
+    background:
+      radial-gradient(900px 420px at 100% 0%, rgba(15, 118, 110, 0.08), transparent 55%),
+      radial-gradient(700px 360px at 0% 100%, rgba(29, 78, 216, 0.06), transparent 50%),
+      var(--bg);
+  }
+  .slide.is-active { display: flex; animation: in .35s ease; }
+  @keyframes in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  .kicker {
+    margin: 0 0 10px; font-size: 12px; font-weight: 700;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent);
+  }
+  h1 {
+    margin: 0; font-size: clamp(34px, 4.2vw, 48px); line-height: 1.15;
+    letter-spacing: -0.03em; font-weight: 700;
+  }
+  h2 {
+    margin: 0; font-size: clamp(26px, 3vw, 34px); line-height: 1.2;
+    letter-spacing: -0.02em; font-weight: 700;
+  }
+  h3 { margin: 0 0 8px; font-size: 16px; font-weight: 700; }
+  .lede {
+    margin: 14px 0 0; max-width: 42em;
+    font-size: 17px; line-height: 1.55; color: var(--muted);
+  }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; color: var(--muted); }
+
+  .footer {
+    margin-top: auto; padding-top: 18px;
+    display: flex; justify-content: space-between; align-items: center;
+    border-top: 1px solid var(--line); font-size: 12px; color: var(--muted);
+  }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+  .chip {
+    display: inline-flex; align-items: center;
+    padding: 6px 11px; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--line);
+    font-size: 12px; font-weight: 600;
+  }
+  .chip.teal { background: var(--accent-soft); border-color: #99f6e4; color: #115e59; }
+  .chip.blue { background: var(--blue-soft); border-color: #bfdbfe; color: #1e40af; }
+  .chip.warn { background: var(--warn-soft); border-color: #fde68a; color: #92400e; }
+  .chip.bad { background: var(--bad-soft); border-color: #fecaca; color: #991b1b; }
+  .chip.good { background: var(--good-soft); border-color: #a7f3d0; color: #065f46; }
+
+  .grid { display: grid; gap: 14px; margin-top: 22px; }
+  .g2 { grid-template-columns: 1fr 1fr; }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  .g4 { grid-template-columns: repeat(4, 1fr); }
+  .g5 { grid-template-columns: repeat(5, 1fr); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 14px; padding: 16px 18px; box-shadow: var(--shadow);
+  }
+  .card p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+  .card .t { margin: 0 0 6px; font-size: 15px; font-weight: 700; color: var(--ink); }
+  .stat .v { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; }
+  .stat .l { margin-top: 4px; font-size: 12px; color: var(--muted); font-weight: 600; }
+
+  table {
+    width: 100%; border-collapse: collapse; margin-top: 16px;
+    background: var(--surface); border-radius: 12px; overflow: hidden;
+    border: 1px solid var(--line); font-size: 13px;
+  }
+  th, td {
+    padding: 10px 12px; text-align: left; vertical-align: top;
+    border-bottom: 1px solid var(--line); line-height: 1.45;
+  }
+  th {
+    background: #eef2f6; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.04em; color: var(--muted); text-transform: uppercase;
+  }
+  tr:last-child td { border-bottom: 0; }
+  td.strong { font-weight: 700; color: var(--ink); white-space: nowrap; }
+
+  /* Flowchart */
+  .flow-wrap { margin-top: 20px; }
+  .flow {
+    display: flex; align-items: stretch; gap: 8px; flex-wrap: nowrap;
+  }
+  .flow-node {
+    flex: 1; min-width: 0;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 14px; padding: 14px 12px; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .flow-node .id {
+    font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: var(--accent);
+  }
+  .flow-node .name { font-size: 14px; font-weight: 700; line-height: 1.25; }
+  .flow-node .who { font-size: 11px; color: var(--muted); }
+  .flow-node .out {
+    margin-top: auto; padding-top: 8px; border-top: 1px dashed var(--line);
+    font-size: 11px; color: #334155; line-height: 1.35;
+  }
+  .flow-node.gate { border-color: #99f6e4; background: linear-gradient(180deg, #f0fdfa, #fff); }
+  .flow-node.biz { border-color: #bfdbfe; background: linear-gradient(180deg, #eff6ff, #fff); }
+  .flow-node.qo { border-color: #fde68a; background: linear-gradient(180deg, #fffbeb, #fff); }
+  .flow-node.live { border-color: #a7f3d0; background: linear-gradient(180deg, #ecfdf5, #fff); }
+  .arrow {
+    flex: 0 0 18px; display: flex; align-items: center; justify-content: center;
+    color: #94a3b8; font-size: 18px; font-weight: 700;
+  }
+
+  .vflow {
+    display: flex; flex-direction: column; gap: 0; margin-top: 12px;
+  }
+  .vstep {
+    display: grid; grid-template-columns: 56px 1fr; gap: 14px; align-items: stretch;
+  }
+  .vline {
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .vdot {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 800; color: #fff; background: var(--accent);
+  }
+  .vbar { flex: 1; width: 2px; background: var(--line); min-height: 12px; }
+  .vbody {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; box-shadow: var(--shadow);
+  }
+  .vbody .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+  .vbody .ttl { font-size: 14px; font-weight: 700; }
+  .vbody .meta { font-size: 12px; color: var(--muted); }
+  .vbody .desc { margin-top: 6px; font-size: 13px; color: #334155; line-height: 1.45; }
+
+  .callout {
+    margin-top: 16px; padding: 14px 16px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--surface);
+    font-size: 14px; line-height: 1.55; color: #334155;
+  }
+  .callout.accent { border-color: #99f6e4; background: #f0fdfa; }
+  .callout.warn { border-color: #fde68a; background: #fffbeb; }
+  .callout b { color: var(--ink); }
+
+  .cover-brand {
+    font-size: 13px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  .cover-meta { margin-top: 28px; font-size: 14px; color: var(--muted); line-height: 1.6; }
+
+  .help {
+    position: fixed; right: 16px; bottom: 14px; z-index: 20;
+    padding: 6px 10px; border-radius: 8px; background: rgba(15,23,42,.78);
+    color: #e2e8f0; font-size: 11px; backdrop-filter: blur(6px);
+  }
+
+  .progress {
+    position: fixed; left: 0; top: 0; height: 3px; background: var(--accent);
+    z-index: 30; transition: width .25s ease;
+  }
+
+  @media (max-width: 980px) {
+    .slide { padding: 28px 22px 40px; }
+    .g3, .g4, .g5, .g2 { grid-template-columns: 1fr; }
+    .flow { flex-wrap: wrap; }
+    .flow-node { flex: 1 1 42%; }
+    .arrow { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<div class="deck" id="deck">
+
+  <!-- 1 Cover -->
+  <section class="slide is-active" data-title="封面">
+    <p class="cover-brand">MSS AI 提效作战平台 · 治理机制汇报</p>
+    <h1 style="margin-top:28px">MSS 工具集市<br>Skill / Agent 上架评审机制</h1>
+    <p class="lede">以评审流程图为主线：从立项到复盘，建立「可学习 · 可推广 · 可复制」的企业内货架治理标准。</p>
+    <div class="chips">
+      <span class="chip teal">6 阶段流程</span>
+      <span class="chip blue">5 维评分</span>
+      <span class="chip warn">硬门禁优先</span>
+      <span class="chip good">对齐现网审批三节点</span>
+    </div>
+    <div class="cover-meta">
+      汇报对象：业务主管 / 能力开发 / MSS 质量与运营<br>
+      文档版本：Listing-Review v1 · 用于机制宣贯与落地对齐
+    </div>
+    <div class="footer"><span>← → 翻页 · F 全屏 · O 总览</span><span>01 / 14</span></div>
+  </section>
+
+  <!-- 2 Agenda -->
+  <section class="slide" data-title="目录">
+    <p class="kicker">Agenda</p>
+    <h2>汇报路线图</h2>
+    <div class="grid g2" style="margin-top:24px">
+      <div class="card"><p class="t">01 · 为何需要机制</p><p>集市目标不是「能跑就上」，而是值得复制推广。</p></div>
+      <div class="card"><p class="t">02 · 评审主流程</p><p>S0–S5 流程图 + 与现网审批映射。</p></div>
+      <div class="card"><p class="t">03 · 规则与要点</p><p>五维评分、硬门禁、Skill/Agent 分层清单。</p></div>
+      <div class="card"><p class="t">04 · 输出与落地</p><p>评审产出物、首期最小集、RACI。</p></div>
+    </div>
+    <div class="callout accent"><b>一句话目标：</b>上架后的 Skill / Agent，要让其他代表处、其他职能「能学会、能复用、能推广」。</div>
+    <div class="footer"><span>MSS Listing Review</span><span>02 / 14</span></div>
+  </section>
+
+  <!-- 3 Why -->
+  <section class="slide" data-title="目标与原则">
+    <p class="kicker">Principles</p>
+    <h2>设计原则：门禁 + 评分，推广复制优先</h2>
+    <div class="grid g4" style="margin-top:20px">
+      <div class="card stat"><div class="v" style="color:var(--accent)">学</div><div class="l">材料齐套，15 分钟可上手</div></div>
+      <div class="card stat"><div class="v" style="color:var(--blue)">推</div><div class="l">跨职能/代表处可宣贯</div></div>
+      <div class="card stat"><div class="v" style="color:var(--warn)">复</div><div class="l">换组织只换数据与权限</div></div>
+      <div class="card stat"><div class="v" style="color:var(--bad)">控</div><div class="l">安全涉密一票否决</div></div>
+    </div>
+    <div class="grid g2" style="margin-top:14px">
+      <div class="card">
+        <p class="t">Skill 评什么</p>
+        <p>原子能力是否干净可编排：契约清晰、可单测、可挂载、可组合。</p>
+      </div>
+      <div class="card">
+        <p class="t">Agent 评什么</p>
+        <p>门面专家是否能稳定编排多 Skill，解决一类可复制业务问题。</p>
+      </div>
+    </div>
+    <div class="callout warn"><b>与「能跑就上」的区别：</b>可调用 ≠ 精选露出。先保证安全与质量，再决定是否进入 Hub 精选推荐。</div>
+    <div class="footer"><span>MSS Listing Review</span><span>03 / 14</span></div>
+  </section>
+
+  <!-- 4 Scope -->
+  <section class="slide" data-title="对象分层">
+    <p class="kicker">Scope</p>
+    <h2>评审对象分层</h2>
+    <table>
+      <thead>
+        <tr><th>对象</th><th>上架含义</th><th>评审侧重</th><th>典型否决点</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="strong">Skill</td>
+          <td>能力上架可调用 + 可选精选到 Skill Hub</td>
+          <td>指令、输入输出契约、样例、可挂载</td>
+          <td>投毒指令、越权工具、高度同质</td>
+        </tr>
+        <tr>
+          <td class="strong">Agent</td>
+          <td>专家可对话执行 + 可选精选到 Agent Hub</td>
+          <td>场景边界、编排路径、交付物可复用</td>
+          <td>空壳专家、无案例、无主路径</td>
+        </tr>
+        <tr>
+          <td class="strong">版本更新</td>
+          <td>变更说明 + 回归证据</td>
+          <td>差分影响、兼容、回滚</td>
+          <td>破坏性变更无迁移说明</td>
+        </tr>
+        <tr>
+          <td class="strong">下架</td>
+          <td>停用可调用 / 隐藏露出</td>
+          <td>替代路径、依赖影响</td>
+          <td>关键依赖无替代方案</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="footer"><span>MSS Listing Review</span><span>04 / 14</span></div>
+  </section>
+
+  <!-- 5 Main Flow hero -->
+  <section class="slide" data-title="主流程图">
+    <p class="kicker">Flow · End to End</p>
+    <h2>评审主流程：S0 → S5</h2>
+    <p class="lede" style="margin-top:8px;font-size:14px">流程图是机制的骨架：前两段偏提交人自检，中段业务价值，后段质量安全与运营闭环。</p>
+    <div class="flow-wrap">
+      <div class="flow">
+        <div class="flow-node gate">
+          <div class="id">S0</div>
+          <div class="name">立项预审</div>
+          <div class="who">提出人 / 能力开发</div>
+          <div class="out">出口：值得做 / 合并已有</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="flow-node gate">
+          <div class="id">S1</div>
+          <div class="name">材料齐套</div>
+          <div class="who">提交人</div>
+          <div class="out">出口：元数据·说明书·样例·测试</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="flow-node biz">
+          <div class="id">S2</div>
+          <div class="name">业务价值</div>
+          <div class="who">业务主管</div>
+          <div class="out">出口：普适·价值·高频达标</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="flow-node qo">
+          <div class="id">S3</div>
+          <div class="name">质量与安全</div>
+          <div class="who">MSS QO + 安全门禁</div>
+          <div class="out">出口：硬门禁通过 + 评分达标</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="flow-node qo">
+          <div class="id">S4</div>
+          <div class="name">灰度试运行</div>
+          <div class="who">提交人 + 运营</div>
+          <div class="out">出口：窗口内无 P0/P1</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="flow-node live">
+          <div class="id">S5</div>
+          <div class="name">上架与复盘</div>
+          <div class="who">MSS 运营</div>
+          <div class="out">出口：Hub 策略 + 30/90 日复盘</div>
+        </div>
+      </div>
+    </div>
+    <div class="chips" style="margin-top:16px">
+      <span class="chip teal">安全扫描可与 S2 并行</span>
+      <span class="chip bad">硬门禁失败 → 驳回</span>
+      <span class="chip warn">价值不足 → 试点/合并</span>
+    </div>
+    <div class="footer"><span>MSS Listing Review</span><span>05 / 14</span></div>
+  </section>
+
+  <!-- 6 Vertical detail flow -->
+  <section class="slide" data-title="流程细节">
+    <p class="kicker">Flow Detail</p>
+    <h2>各阶段进入 / 退出条件</h2>
+    <div class="vflow">
+      <div class="vstep">
+        <div class="vline"><div class="vdot">S0</div><div class="vbar"></div></div>
+        <div class="vbody"><div class="row"><span class="ttl">立项预审</span><span class="meta">≤2 工作日</span></div><div class="desc">进入：有场景假设与目标用户。退出：通过「值得做」清单，或驳回合并已有能力。</div></div>
+      </div>
+      <div class="vstep">
+        <div class="vline"><div class="vdot">S1</div><div class="vbar"></div></div>
+        <div class="vbody"><div class="row"><span class="ttl">材料齐套</span><span class="meta">提交前完成</span></div><div class="desc">进入：草稿可运行。退出：中英命名、标签归属、使用须知、样例/案例、测试记录齐套。</div></div>
+      </div>
+      <div class="vstep">
+        <div class="vline"><div class="vdot">S2</div><div class="vbar"></div></div>
+        <div class="vbody"><div class="row"><span class="ttl">业务价值评审</span><span class="meta">≈业务主管节点 · ≤3 日</span></div><div class="desc">进入：齐套申请已提交。退出：普适/高价值/高频达标，业务归属与使用范围确认。</div></div>
+      </div>
+      <div class="vstep">
+        <div class="vline"><div class="vdot">S3</div><div class="vbar"></div></div>
+        <div class="vbody"><div class="row"><span class="ttl">质量与安全</span><span class="meta">≈MSS 质量与运营 · ≤5 日</span></div><div class="desc">进入：业务主管通过。退出：功能/缺陷/安全硬门禁通过，五维评分达标。</div></div>
+      </div>
+      <div class="vstep">
+        <div class="vline"><div class="vdot">S4</div><div class="vbar"></div></div>
+        <div class="vbody"><div class="row"><span class="ttl">灰度试运行</span><span class="meta">3–10 天按风险档</span></div><div class="desc">进入：终审通过（可带条件）。退出：约定窗口无 P0/P1，反馈可闭环。</div></div>
+      </div>
+      <div class="vstep">
+        <div class="vline"><div class="vdot">S5</div></div>
+        <div class="vbody"><div class="row"><span class="ttl">正式上架与复盘</span><span class="meta">上架当日 + 定期</span></div><div class="desc">进入：灰度达标。退出：Hub 露出策略生效；30/90 日健康度复盘决定是否保留精选。</div></div>
+      </div>
+    </div>
+    <div class="footer"><span>MSS Listing Review</span><span>06 / 14</span></div>
+  </section>
+
+  <!-- 7 Mapping -->
+  <section class="slide" data-title="现网映射">
+    <p class="kicker">Current System</p>
+    <h2>与现网审批三节点对齐</h2>
+    <div class="flow-wrap">
+      <div class="flow">
+        <div class="flow-node gate"><div class="id">现网</div><div class="name">提交人</div><div class="who">配置并提交</div><div class="out">对应 S0–S1</div></div>
+        <div class="arrow">→</div>
+        <div class="flow-node biz"><div class="id">现网</div><div class="name">业务主管</div><div class="who">归属与场景</div><div class="out">对应 S2</div></div>
+        <div class="arrow">→</div>
+        <div class="flow-node qo"><div class="id">现网</div><div class="name">MSS 质量与运营</div><div class="who">合规质量终审</div><div class="out">对应 S3（+S4/S5运营）</div></div>
+      </div>
+    </div>
+    <div class="grid g3" style="margin-top:18px">
+      <div class="card"><p class="t">已有能力</p><p>审批中心单据 · 上架/公开/更新/下架事由 · 安全扫描门禁预留 · 同质化预警</p></div>
+      <div class="card"><p class="t">机制补齐</p><p>五维评分卡 · 硬门禁清单 · 灰度报告 · 精选与可调用解耦</p></div>
+      <div class="card"><p class="t">快速通道</p><p>低风险可加速，但不可跳过 MSS 终审与最小材料包</p></div>
+    </div>
+    <div class="footer"><span>MSS Listing Review</span><span>07 / 14</span></div>
+  </section>
+
+  <!-- 8 Score model -->
+  <section class="slide" data-title="评分模型">
+    <p class="kicker">Scorecard</p>
+    <h2>五维评分模型（满分 100）</h2>
+    <div class="callout warn" style="margin-top:12px"><b>门禁优先于分数：</b>安全合规、涉密外泄、核心路径不可复现 → 一票否决，不论总分。</div>
+    <table>
+      <thead><tr><th>维度</th><th>权重</th><th>核心问题</th><th>Skill</th><th>Agent</th></tr></thead>
+      <tbody>
+        <tr><td class="strong">D1 业务场景价值</td><td>25</td><td>普适 / 高价值 / 高频？可复制？</td><td>命令场景清晰</td><td>覆盖一类业务问题</td></tr>
+        <tr><td class="strong">D2 功能完整性</td><td>25</td><td>主路径端到端？材料齐套？</td><td>契约·步骤·样例</td><td>编排·交付·兜底</td></tr>
+        <tr><td class="strong">D3 质量与缺陷</td><td>20</td><td>Bug / 幻觉 / 不稳定可控？</td><td>边界用例·回归</td><td>多轮稳定·切换正确</td></tr>
+        <tr><td class="strong">D4 安全合规</td><td>20</td><td>数据·权限·供应链·注入？</td><td>投毒·最小权限</td><td>系统提示·外联隔离</td></tr>
+        <tr><td class="strong">D5 可运营可学习</td><td>10</td><td>他人能否自学复用二开？</td><td>命名·须知·标签</td><td>案例·学练·归属</td></tr>
+      </tbody>
+    </table>
+    <div class="footer"><span>MSS Listing Review</span><span>08 / 14</span></div>
+  </section>
+
+  <!-- 9 Decision -->
+  <section class="slide" data-title="裁决阈值">
+    <p class="kicker">Decision Gates</p>
+    <h2>裁决阈值与集市动作</h2>
+    <div class="grid g2" style="margin-top:18px">
+      <div class="card" style="border-color:#a7f3d0;background:#ecfdf5">
+        <p class="t" style="color:var(--good)">正式上架</p>
+        <p>无硬门禁失败，且总分 ≥75，且 D1≥18、D4≥16。<br><b>动作：</b>可调用；可申请精选露出。</p>
+      </div>
+      <div class="card" style="border-color:#fde68a;background:#fffbeb">
+        <p class="t" style="color:var(--warn)">带条件上架</p>
+        <p>总分 65–74，或单项薄弱但可限期整改。<br><b>动作：</b>可调用；默认不进精选；挂整改单。</p>
+      </div>
+      <div class="card" style="border-color:#bfdbfe;background:#eff6ff">
+        <p class="t" style="color:var(--blue)">仅内部试点</p>
+        <p>价值局部成立，普适性不足。<br><b>动作：</b>不上 Hub 精选；限定部门/区域可见。</p>
+      </div>
+      <div class="card" style="border-color:#fecaca;background:#fef2f2">
+        <p class="t" style="color:var(--bad)">驳回</p>
+        <p>硬门禁失败，或总分 &lt;65，或同质化冲突未处理。<br><b>动作：</b>退回修改；记录原因码。</p>
+      </div>
+    </div>
+    <div class="callout accent"><b>原因码：</b>VALUE_LOW / HOMOGENEOUS / INCOMPLETE / QUALITY / SECURITY / META_POOR / OTHER</div>
+    <div class="footer"><span>MSS Listing Review</span><span>09 / 14</span></div>
+  </section>
+
+  <!-- 10 D1 -->
+  <section class="slide" data-title="业务价值">
+    <p class="kicker">D1 · 25 分</p>
+    <h2>业务场景价值：普适 · 高价值 · 高频</h2>
+    <table>
+      <thead><tr><th>检查项</th><th>合格标准</th><th>证据示例</th></tr></thead>
+      <tbody>
+        <tr><td class="strong">场景定义</td><td>一句话说清「谁在什么工作中解决什么问题」</td><td>场景卡 / 业务归属</td></tr>
+        <tr><td class="strong">普适性</td><td>≥2 代表处或 ≥2 职能可复用</td><td>试点名单 / 复用声明</td></tr>
+        <tr><td class="strong">价值量</td><td>可量化：工时、周期、差错、口径一致性等 ≥1 项</td><td>前后对比 / 样板指标</td></tr>
+        <tr><td class="strong">频次</td><td>月均触发可预期（周报/价监/客诉等优先）</td><td>业务确认使用节奏</td></tr>
+        <tr><td class="strong">可复制性</td><td>换组织只换数据与权限，不绑个人技巧</td><td>环境清单 / 准备说明</td></tr>
+        <tr><td class="strong">差异化</td><td>与已上架无明显重复，或差异点明确</td><td>同质化扫描报告</td></tr>
+      </tbody>
+    </table>
+    <div class="footer"><span>MSS Listing Review</span><span>10 / 14</span></div>
+  </section>
+
+  <!-- 11 D2 D3 -->
+  <section class="slide" data-title="功能与质量">
+    <p class="kicker">D2 + D3</p>
+    <h2>功能完整性与质量缺陷</h2>
+    <div class="grid g2">
+      <div>
+        <h3>D2 功能完整性（25）</h3>
+        <table>
+          <thead><tr><th>项</th><th>Skill</th><th>Agent</th></tr></thead>
+          <tbody>
+            <tr><td class="strong">主路径</td><td>单命令完成承诺</td><td>提问到交付可演示</td></tr>
+            <tr><td class="strong">契约</td><td>输入输出失败态</td><td>主 Skill 明确</td></tr>
+            <tr><td class="strong">材料</td><td>说明·计划·样例</td><td>案例/学练 ≥1</td></tr>
+            <tr><td class="strong">依赖</td><td>连接器权限列出</td><td>依赖 Skill 已可调用</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h3>D3 缺陷分级（20）</h3>
+        <table>
+          <thead><tr><th>级别</th><th>定义</th><th>要求</th></tr></thead>
+          <tbody>
+            <tr><td class="strong">P0</td><td>核心不可用 / 严重幻觉</td><td>必须清零</td></tr>
+            <tr><td class="strong">P1</td><td>高频失败 / 结构损坏</td><td>清零或可靠降级</td></tr>
+            <tr><td class="strong">P2</td><td>边缘失败 / 文案瑕疵</td><td>可带条件记录</td></tr>
+            <tr><td class="strong">回归</td><td>更新须附回归结果</td><td>无回归不可更新</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="footer"><span>MSS Listing Review</span><span>11 / 14</span></div>
+  </section>
+
+  <!-- 12 Security -->
+  <section class="slide" data-title="安全门禁">
+    <p class="kicker">D4 · Hard Gates</p>
+    <h2>安全合规硬门禁</h2>
+    <div class="flow-wrap">
+      <div class="flow">
+        <div class="flow-node qo"><div class="id">01</div><div class="name">投毒检测</div><div class="out">恶意指令 / 篡改</div></div>
+        <div class="arrow">→</div>
+        <div class="flow-node qo"><div class="id">02</div><div class="name">KIA / 知识安全</div><div class="out">未授权外发 / 绕权</div></div>
+        <div class="arrow">→</div>
+        <div class="flow-node qo"><div class="id">03</div><div class="name">数据分级</div><div class="out">涉密默认拒绝</div></div>
+        <div class="arrow">→</div>
+        <div class="flow-node qo"><div class="id">04</div><div class="name">最小权限</div><div class="out">禁止万能密钥</div></div>
+        <div class="arrow">→</div>
+        <div class="flow-node qo"><div class="id">05</div><div class="name">供应链</div><div class="out">来源可追溯</div></div>
+        <div class="arrow">→</div>
+        <div class="flow-node live"><div class="id">06</div><div class="name">审计留痕</div><div class="out">关联审批单</div></div>
+      </div>
+    </div>
+    <div class="grid g2" style="margin-top:16px">
+      <div class="card"><p class="t">与现网</p><p>security-policy.skillScanGate · 投毒/KIA 维预留 · 建议正式环境 warn → block</p></div>
+      <div class="card"><p class="t">D5 可学习（10）</p><p>命名可读、标签归属正确、使用须知齐全、新人 15 分钟跑通样例、责任人可追</p></div>
+    </div>
+    <div class="footer"><span>MSS Listing Review</span><span>12 / 14</span></div>
+  </section>
+
+  <!-- 13 Outputs -->
+  <section class="slide" data-title="评审输出">
+    <p class="kicker">Outputs</p>
+    <h2>评审必须产出什么</h2>
+    <table>
+      <thead><tr><th>产出</th><th>内容</th><th>消费者</th></tr></thead>
+      <tbody>
+        <tr><td class="strong">上架申请单</td><td>事由、范围、归属、变更、自检勾选</td><td>审批全员</td></tr>
+        <tr><td class="strong">评分卡</td><td>五维打分 + 评语 + 证据</td><td>业务主管 / MSS QO</td></tr>
+        <tr><td class="strong">安全结论</td><td>门禁结果、残留风险、接受理由</td><td>MSS QO / 安全</td></tr>
+        <tr><td class="strong">已知问题清单</td><td>P 级、复现、规避、修复计划</td><td>运营 / 用户说明</td></tr>
+        <tr><td class="strong">灰度报告</td><td>窗口、用量、失败率、结论</td><td>正式上架闸门</td></tr>
+        <tr><td class="strong">集市卡片终稿</td><td>标题、描述、标签、学习材料</td><td>Skill / Agent Hub</td></tr>
+        <tr><td class="strong">复盘纪要</td><td>30/90 日调用、复制案例、是否保留精选</td><td>运营治理</td></tr>
+      </tbody>
+    </table>
+    <div class="chips">
+      <span class="chip good">已认证可调用</span>
+      <span class="chip blue">精选推荐</span>
+      <span class="chip warn">灰度中</span>
+      <span class="chip">带条件上架</span>
+      <span class="chip bad">安全复核中</span>
+    </div>
+    <div class="footer"><span>MSS Listing Review</span><span>13 / 14</span></div>
+  </section>
+
+  <!-- 14 Close -->
+  <section class="slide" data-title="落地与总结">
+    <p class="kicker">Next Steps</p>
+    <h2>首期落地最小集 + 总结</h2>
+    <div class="grid g2">
+      <div class="card">
+        <p class="t">立刻可做的 4 件事</p>
+        <p>1. 审批单挂五维评分卡与硬门禁勾选<br>2. 「可调用」与「精选露出」解耦决策<br>3. 同质化 ≥60% 提交时强制说明/合并<br>4. 安全门禁与 MSS 终审绑定（warn→block）</p>
+      </div>
+      <div class="card">
+        <p class="t">机制一句话</p>
+        <p><b>先流程图把关，再评分卡量化，硬门禁守底线，灰度与复盘保证集市长期「可学可推可复制」。</b></p>
+      </div>
+    </div>
+    <div class="callout accent" style="margin-top:18px">
+      <b>请决策：</b>是否按 Listing-Review v1 作为 MSS 工具集市正式评审口径？确认后可将评分卡字段落入审批中心产品化。
+    </div>
+    <div class="cover-meta">谢谢 · 欢迎讨论 · 文档与画布同源：Listing-Review v1</div>
+    <div class="footer"><span>MSS Listing Review</span><span>14 / 14</span></div>
+  </section>
+</div>
+
+<div class="help">← → 翻页 · Home/End · F 全屏 · O 总览 · Esc 退出总览</div>
+
+<script>
+(() => {
+  const slides = [...document.querySelectorAll('.slide')];
+  const progress = document.getElementById('progress');
+  let i = 0;
+  let overview = false;
+
+  const go = (n) => {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, idx) => s.classList.toggle('is-active', idx === i && !overview));
+    progress.style.width = ((i + 1) / slides.length * 100) + '%';
+    if (overview) renderOverview();
+  };
+
+  const renderOverview = () => {
+    document.body.classList.toggle('is-overview', overview);
+    slides.forEach((s, idx) => {
+      s.style.display = overview ? 'flex' : '';
+      s.classList.toggle('is-active', overview ? true : idx === i);
+      if (overview) {
+        s.style.position = 'relative';
+        s.style.width = '280px';
+        s.style.height = '158px';
+        s.style.padding = '12px';
+        s.style.margin = '8px';
+        s.style.fontSize = '8px';
+        s.style.overflow = 'hidden';
+        s.style.cursor = 'pointer';
+        s.style.transform = 'scale(1)';
+        s.onclick = () => { overview = false; resetSlideStyles(); go(idx); };
+      }
+    });
+    if (overview) {
+      const deck = document.getElementById('deck');
+      deck.style.display = 'flex';
+      deck.style.flexWrap = 'wrap';
+      deck.style.alignContent = 'flex-start';
+      deck.style.overflow = 'auto';
+      deck.style.padding = '24px';
+      deck.style.background = '#0b1220';
+    }
+  };
+
+  const resetSlideStyles = () => {
+    const deck = document.getElementById('deck');
+    deck.style = '';
+    slides.forEach((s) => {
+      s.style = '';
+      s.onclick = null;
+    });
+  };
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+      e.preventDefault(); go(i + 1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      e.preventDefault(); go(i - 1);
+    } else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(slides.length - 1);
+    else if (e.key === 'f' || e.key === 'F') {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+      else document.exitFullscreen?.();
+    } else if (e.key === 'o' || e.key === 'O') {
+      overview = !overview;
+      if (!overview) resetSlideStyles();
+      go(i);
+    } else if (e.key === 'Escape' && overview) {
+      overview = false; resetSlideStyles(); go(i);
+    }
+  });
+
+  go(0);
+})();
+</script>
+</body>
+</html>

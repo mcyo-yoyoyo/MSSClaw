@@ -2,6 +2,8 @@ import { cn } from '@/lib/utils';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
 import type { MarketShelfCard as MarketShelfCardModel } from '@/domain/marketShelf';
+import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
+import { useMarketplaceStore } from '@/stores/marketplaceStore';
 
 export function MarketShelfCard({
   card,
@@ -43,6 +45,22 @@ export function MarketShelfCard({
       : card.kind === 'external' && card.region === 'domestic'
         ? 'domestic'
         : null;
+
+  const favorited = useMarketFavoriteStore((s) => s.isFavorite(card.id, card.kind));
+  const toggleFavorite = useMarketFavoriteStore((s) => s.toggle);
+  const showToast = useMarketplaceStore((s) => s.showToast);
+
+  const onToggleFavorite = (e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    const on = toggleFavorite({
+      id: card.id,
+      kind: card.kind,
+      title: card.title,
+      icon: card.icon,
+      logoUrl: card.logoUrl,
+    });
+    showToast(on ? `已收藏：${card.title}` : `已取消收藏：${card.title}`);
+  };
 
   return (
     <article
@@ -206,6 +224,21 @@ export function MarketShelfCard({
         ) : (
           <span className="mr-auto" />
         )}
+        <button
+          type="button"
+          onClick={onToggleFavorite}
+          title={favorited ? '取消收藏' : '加入收藏'}
+          aria-label={favorited ? '取消收藏' : '加入收藏'}
+          aria-pressed={favorited}
+          className={cn(
+            'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition',
+            favorited
+              ? 'bg-amber-50 text-amber-600 hover:bg-amber-100'
+              : 'bg-black/[0.04] text-zinc-400 hover:bg-black/[0.07] hover:text-zinc-600',
+          )}
+        >
+          <i className={cn('text-[12px]', favorited ? 'fa-solid fa-star' : 'fa-regular fa-star')} />
+        </button>
         {onHowTo ? (
           <button
             type="button"
@@ -218,7 +251,12 @@ export function MarketShelfCard({
         <button
           type="button"
           onClick={onPrimary ?? onOpen}
-          className="shrink-0 rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-[#2c2c2e]"
+          className={cn(
+            'shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition',
+            card.kind === 'projects'
+              ? 'bg-[#1d1d1f] text-white hover:bg-[#2c2c2e]'
+              : 'border-0 bg-black/[0.04] text-[#3f3f46] hover:bg-black/[0.07]',
+          )}
         >
           {primaryLabel}
         </button>

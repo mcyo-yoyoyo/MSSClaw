@@ -89,6 +89,7 @@ import {
   type ScenarioDemoPlan,
 } from '@/domain/scenarioPipeline';
 import { useRecentMarketStore } from '@/stores/recentMarketStore';
+import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useMarketFeaturedStore } from '@/stores/marketFeaturedStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { allowsMarketScenarioRun } from '@/domain/marketRunCapability';
@@ -118,6 +119,9 @@ export function MarketShelfPage({
   const businessFilter = useMarketFilterStore((s) => s.businessFilter);
   const setBusinessFilter = useMarketFilterStore((s) => s.setBusinessFilter);
   const search = useMarketFilterStore((s) => s.search);
+  const favoritesOnly = useMarketFilterStore((s) => s.favoritesOnly);
+  const favoriteItems = useMarketFavoriteStore((s) => s.items);
+  const hydrateFavorites = useMarketFavoriteStore((s) => s.hydrate);
   const pushRecent = useRecentMarketStore((s) => s.push);
   const getEngagement = useContentEngagementStore((s) => s.get);
   const engagementById = useContentEngagementStore((s) => s.byId);
@@ -158,9 +162,10 @@ export function MarketShelfPage({
   useEffect(() => {
     ensurePlazaToolGuidesBootstrapped();
     hydrateFeaturedPins();
+    hydrateFavorites();
     useBusinessScenarioCatalogStore.getState().hydrate();
     hydrateBuildStatsCopy();
-  }, [hydrateFeaturedPins, hydrateBuildStatsCopy]);
+  }, [hydrateFeaturedPins, hydrateFavorites, hydrateBuildStatsCopy]);
 
   useEffect(() => {
     setExternalFilterMode('scene');
@@ -297,16 +302,27 @@ export function MarketShelfPage({
         : pinned;
 
     const q = search.trim().toLowerCase();
-    if (!q) return ordered;
-    return ordered.filter(
-      (c) =>
-        c.title.toLowerCase().includes(q) ||
-        c.description.toLowerCase().includes(q) ||
-        (c.productName?.toLowerCase().includes(q) ?? false) ||
-        c.badges.some((b) => b.label.toLowerCase().includes(q)),
-    );
+    let filtered = ordered;
+    if (q) {
+      filtered = filtered.filter(
+        (c) =>
+          c.title.toLowerCase().includes(q) ||
+          c.description.toLowerCase().includes(q) ||
+          (c.productName?.toLowerCase().includes(q) ?? false) ||
+          c.badges.some((b) => b.label.toLowerCase().includes(q)),
+      );
+    }
+    if (favoritesOnly) {
+      const favSet = new Set(
+        favoriteItems.filter((f) => f.kind === kind).map((f) => f.id),
+      );
+      filtered = filtered.filter((c) => favSet.has(c.id));
+    }
+    return filtered;
   }, [
     kind,
+    favoritesOnly,
+    favoriteItems,
     featuredPins,
     tools,
     viewer,
@@ -380,6 +396,9 @@ export function MarketShelfPage({
     if (kind !== 'projects') return [] as PrototypeSkillSeed[];
     const ids = listFeaturedDoTaskSkillIds(skills, businessFilter, 64);
     const q = search.trim().toLowerCase();
+    const favSet = favoritesOnly
+      ? new Set(favoriteItems.filter((f) => f.kind === 'projects').map((f) => f.id))
+      : null;
     return ids
       .map((id) => skills.find((s) => s.id === id))
       .filter((s): s is PrototypeSkillSeed => Boolean(s))
@@ -388,8 +407,18 @@ export function MarketShelfPage({
       .filter((s) => {
         if (!q) return true;
         return `${s.name} ${s.desc} ${s.command ?? ''}`.toLowerCase().includes(q);
-      });
-  }, [kind, skills, businessFilter, search, viewer, orgSelection]);
+      })
+      .filter((s) => (favSet ? favSet.has(s.id) : true));
+  }, [
+    kind,
+    skills,
+    businessFilter,
+    search,
+    viewer,
+    orgSelection,
+    favoritesOnly,
+    favoriteItems,
+  ]);
 
   const skillSceneCategories = useMemo(() => {
     if (kind !== 'projects') return [];
