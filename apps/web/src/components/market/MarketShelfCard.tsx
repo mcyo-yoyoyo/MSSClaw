@@ -11,7 +11,6 @@ import { downloadSkillFile } from '@/domain/skillExport';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useMarketCompareStore } from '@/stores/marketCompareStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
-import { useMarketHiddenStore } from '@/stores/marketHiddenStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 
 export function MarketShelfCard({
@@ -67,7 +66,6 @@ export function MarketShelfCard({
   const toggleDislike = useContentEngagementStore((s) => s.toggleDislike);
   const bumpDownload = useContentEngagementStore((s) => s.bumpDownload);
   const bumpFavorite = useContentEngagementStore((s) => s.bumpFavorite);
-  const hideCard = useMarketHiddenStore((s) => s.hide);
   const canDownload = card.kind === 'projects';
 
   const outcomeLine = card.outcomeHint?.trim() || card.description;
@@ -108,12 +106,6 @@ export function MarketShelfCard({
       return;
     }
     showToast('请打开详情后下载');
-  };
-
-  const onDismiss = (e: { stopPropagation: () => void }) => {
-    e.stopPropagation();
-    hideCard(card.id, card.kind);
-    showToast(`已关闭：${card.title}`);
   };
 
   const onToggleCompare = (e: { stopPropagation: () => void }) => {
@@ -387,17 +379,6 @@ export function MarketShelfCard({
           )}
         >
           {primaryLabel}
-        </button>
-        <button
-          type="button"
-          onClick={onDismiss}
-          title="关闭此卡片"
-          className={cn(
-            'shrink-0 rounded-lg px-2 py-1.5 text-[11px] font-medium text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600',
-            compact ? 'px-1.5 py-1 text-[10px]' : null,
-          )}
-        >
-          关闭
         </button>
       </div>
     </article>

@@ -95,16 +95,10 @@
   background: var(--channel-mss);
 }
 
-.market-channel-panel--external .market-channel-head {
-  background: linear-gradient(180deg, rgba(239, 246, 255, 0.75), transparent);
-}
-
-.market-channel-panel--internal .market-channel-head {
-  background: linear-gradient(180deg, rgba(240, 253, 250, 0.75), transparent);
-}
-
+.market-channel-panel--external .market-channel-head,
+.market-channel-panel--internal .market-channel-head,
 .market-channel-panel--projects .market-channel-head {
-  background: linear-gradient(180deg, rgba(250, 242, 242, 0.9), transparent);
+  background: #fff;
 }
 
 .market-rail-stage--overseas {
@@ -353,10 +347,7 @@
 }
 
 .page-stage--home {
-  background:
-    radial-gradient(900px 280px at 88% -10%, rgba(0, 113, 227, 0.11), transparent 58%),
-    radial-gradient(520px 220px at 8% 110%, rgba(29, 29, 31, 0.04), transparent 55%),
-    linear-gradient(165deg, #ffffff 0%, #f7f8fa 100%);
+  background: #fff;
 }
 
 .page-stage--external {

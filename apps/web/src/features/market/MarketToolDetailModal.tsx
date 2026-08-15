@@ -270,6 +270,13 @@ export function MarketToolDetailModal({
               {isFav ? '已收藏' : '收藏'}
             </button>
             <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium text-zinc-600 transition hover:bg-black/[0.03]"
+              >
+                关闭
+              </button>
               {hasDocs ? (
                 <a
                   href={tool.docsUrl}

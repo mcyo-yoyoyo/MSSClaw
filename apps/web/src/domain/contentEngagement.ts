@@ -22,11 +22,11 @@ export const RANK_MODE_OPTIONS: { id: RankMode; label: string }[] = [
 ];
 
 /** 外部 / 内部 / MSS 货架：按互动指标排序 */
-export const SHELF_RANK_TABS: { id: RankMode; label: string }[] = [
-  { id: 'most_viewed', label: '查看' },
-  { id: 'most_favorited', label: '收藏' },
-  { id: 'most_liked', label: '点赞' },
-  { id: 'most_disliked', label: '点踩' },
+export const SHELF_RANK_TABS: { id: RankMode; label: string; icon: string }[] = [
+  { id: 'most_viewed', label: '查看', icon: 'fa-regular fa-eye' },
+  { id: 'most_favorited', label: '收藏', icon: 'fa-regular fa-star' },
+  { id: 'most_liked', label: '点赞', icon: 'fa-solid fa-thumbs-up' },
+  { id: 'most_disliked', label: '点踩', icon: 'fa-solid fa-thumbs-down' },
 ];
 
 /** 首页 MSS 工具集市排行 Tab（去掉最高评分；不含「最多使用」以免与热门重叠） */

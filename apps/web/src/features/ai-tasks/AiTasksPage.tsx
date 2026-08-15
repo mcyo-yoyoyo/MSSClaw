@@ -200,7 +200,7 @@ export function AiTasksPage({ embedded = false }: { embedded?: boolean } = {}) {
             )}
           </div>
         </div>
-        {executeAllowed ? (
+        {executeAllowed && !embedded ? (
           <button
             type="button"
             onClick={handleNewTask}

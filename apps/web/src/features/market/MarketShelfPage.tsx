@@ -61,12 +61,13 @@ import { PageCanvas } from '@/components/layout/PageCanvas';
 import { PageStageHero } from '@/components/layout/PageStageHero';
 import { ExternalMarketFilters } from '@/components/market/ExternalMarketFilters';
 import { InternalOfficeSceneGrid } from '@/components/market/InternalOfficeSceneGrid';
+import { ShelfSectionHead } from '@/components/market/ShelfRankSelect';
 import { buildProjectHowtoGuides } from '@/domain/projectHowto';
 import { downloadScenarioUnifiedPack } from '@/domain/caseExport';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useMarketFilterStore } from '@/stores/marketFilterStore';
 import { useSessionStore } from '@/stores/sessionStore';
-import { SHELF_RANK_TABS, sortByRankMode, type RankMode } from '@/domain/contentEngagement';
+import { sortByRankMode, type RankMode } from '@/domain/contentEngagement';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useMarketHiddenStore } from '@/stores/marketHiddenStore';
 import { resolveCaseItemsForScenarioId } from '@/domain/portalCase';
@@ -855,30 +856,11 @@ export function MarketShelfPage({
                 : kind === 'internal'
                   ? '云笔记、W3、员工助手… 或说写报告 / 查制度'
                   : mssSurface === 'skills'
-                    ? '价格监控、客诉分析… 或输入 Skill 名称'
-                    : '竞品分析、渠道洞察… 或输入 Agent / 案例名'
+                    ? '竞品简报、客诉 SOP、会议纪要… 或输入 Skill / 场景'
+                    : '渠道洞察、价格监测、知识问答… 或输入 Agent / 案例名'
             }
           />
         </PageStageHero>
-
-        <div className="mb-3 flex flex-wrap items-center gap-1">
-          <span className="mr-1 text-[11px] text-[#86868b]">排序</span>
-          {SHELF_RANK_TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setRankMode(t.id)}
-              className={cn(
-                'rounded-md px-2 py-0.5 text-[11px] font-medium transition',
-                rankMode === t.id
-                  ? 'bg-[#1d1d1f] text-white'
-                  : 'bg-black/[0.04] text-[#6e6e73] hover:bg-black/[0.07] hover:text-[#1d1d1f]',
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
 
         {kind === 'external' ? (
           <ExternalMarketFilters
@@ -1025,6 +1007,8 @@ export function MarketShelfPage({
             <InternalOfficeSceneGrid
               search={search}
               catalogTools={tools}
+              rankMode={rankMode}
+              onRankModeChange={setRankMode}
               onOpenDetail={(tool) => openInternalToolDetail(tool)}
               onHowTo={(tool) => openInternalToolDetail(tool, 'howto')}
               onEmptyAction={(scene) =>
@@ -1057,6 +1041,12 @@ export function MarketShelfPage({
           <section className="mb-7">
             {kind === 'external' ? (
               <>
+                <ShelfSectionHead
+                  title="精选推荐"
+                  count={activeFeatured.length}
+                  rankMode={rankMode}
+                  onRankChange={setRankMode}
+                />
                 <div className="grid gap-4 lg:grid-cols-2">
                   {(
                     [
@@ -1114,10 +1104,12 @@ export function MarketShelfPage({
               </>
             ) : (
               <>
-                <div className="mb-3 flex items-baseline justify-between gap-2">
-                  <h2 className="text-[15px] font-semibold tracking-tight text-[#1d1d1f]">精选推荐</h2>
-                  <span className="text-[12px] text-[#86868b]">{activeFeatured.length} 项</span>
-                </div>
+                <ShelfSectionHead
+                  title="精选推荐"
+                  count={activeFeatured.length}
+                  rankMode={rankMode}
+                  onRankChange={setRankMode}
+                />
                 <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                   {activeFeatured.map((c) => {
                     if (kind === 'projects' && mssSurface === 'skills') {
@@ -1150,12 +1142,12 @@ export function MarketShelfPage({
 
         {kind !== 'internal' ? (
         <section>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-[15px] font-semibold tracking-tight text-[#1d1d1f]">
-              {showFeaturedStrip ? '更多' : '全部'}
-              <span className="ml-1.5 font-normal text-[#86868b]">{gridCards.length}</span>
-            </h2>
-          </div>
+          <ShelfSectionHead
+            title={showFeaturedStrip ? '更多' : '全部'}
+            count={gridCards.length}
+            rankMode={rankMode}
+            onRankChange={setRankMode}
+          />
           {kind === 'external' ? (
             gridCards.length ? (
               <div className="grid gap-4 lg:grid-cols-2">

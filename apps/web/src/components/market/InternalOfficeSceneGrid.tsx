@@ -1,21 +1,36 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { formatToolInvokes } from '@/domain/aiToolCategories';
 import {
   resolveOfficeScenesWithCatalog,
   resolveOfficeToolWithCatalog,
   type InternalOfficeScene,
   type InternalOfficeSceneTool,
 } from '@/domain/internalOfficeScenes';
+import { sortByRankMode, type RankMode } from '@/domain/contentEngagement';
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
+import { ShelfSectionHead } from '@/components/market/ShelfRankSelect';
+import {
+  ensureEngagementSeeds,
+  useContentEngagementStore,
+} from '@/stores/contentEngagementStore';
 import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
+import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
+import { useMarketplaceStore } from '@/stores/marketplaceStore';
 
 type PickerMode = 'detail' | 'howto' | 'experience';
 
 const ASSISTANT_TOOL_ID = 'tool-hw-assistant';
 
+function sceneEngagementId(sceneId: string) {
+  return `office-scene-${sceneId}`;
+}
+
 export function InternalOfficeSceneGrid({
   search,
   catalogTools,
+  rankMode = 'most_viewed',
+  onRankModeChange,
   onOpenDetail,
   onHowTo,
   onExperience,
@@ -24,6 +39,8 @@ export function InternalOfficeSceneGrid({
   search: string;
   /** 配置工具主数据：覆盖场景默认链接 / Logo */
   catalogTools: PrototypeToolSeed[];
+  rankMode?: RankMode;
+  onRankModeChange?: (next: RankMode) => void;
   onOpenDetail: (tool: InternalOfficeSceneTool) => void;
   onHowTo: (tool: InternalOfficeSceneTool) => void;
   onExperience: (tool: InternalOfficeSceneTool) => void;
@@ -35,6 +52,9 @@ export function InternalOfficeSceneGrid({
     mode: PickerMode;
   } | null>(null);
   const sceneEntries = useInternalOfficeSceneCatalogStore((s) => s.entries);
+  const bumpUse = useContentEngagementStore((s) => s.bumpUse);
+  const getEngagement = useContentEngagementStore((s) => s.get);
+  const engagementById = useContentEngagementStore((s) => s.byId);
 
   const allScenes = useMemo(
     () => resolveOfficeScenesWithCatalog(catalogTools, sceneEntries),
@@ -61,18 +81,25 @@ export function InternalOfficeSceneGrid({
 
   const scenes = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return allScenes;
-    return allScenes.filter(
-      (s) =>
-        s.label.toLowerCase().includes(q) ||
-        s.description.toLowerCase().includes(q) ||
-        s.english.toLowerCase().includes(q) ||
-        s.tools.some(
-          (t) =>
-            t.name.toLowerCase().includes(q) || t.blurb.toLowerCase().includes(q),
-        ),
-    );
-  }, [allScenes, search]);
+    const filtered = q
+      ? allScenes.filter(
+          (s) =>
+            s.label.toLowerCase().includes(q) ||
+            s.description.toLowerCase().includes(q) ||
+            s.english.toLowerCase().includes(q) ||
+            s.tools.some(
+              (t) =>
+                t.name.toLowerCase().includes(q) || t.blurb.toLowerCase().includes(q),
+            ),
+        )
+      : allScenes;
+    return sortByRankMode(filtered, rankMode, (id) => getEngagement(sceneEngagementId(id)));
+  }, [allScenes, search, rankMode, getEngagement, engagementById]);
+
+  useEffect(() => {
+    const ids = allScenes.map((s) => sceneEngagementId(s.id));
+    if (ids.length) ensureEngagementSeeds(ids);
+  }, [allScenes]);
 
   const runWithTool = (scene: InternalOfficeScene, mode: PickerMode) => {
     if (!scene.tools.length) {
@@ -81,6 +108,7 @@ export function InternalOfficeSceneGrid({
     }
     if (scene.tools.length === 1) {
       const tool = scene.tools[0]!;
+      bumpUse(sceneEngagementId(scene.id));
       if (mode === 'experience') onExperience(tool);
       else if (mode === 'howto') onHowTo(tool);
       else onOpenDetail(tool);
@@ -93,6 +121,7 @@ export function InternalOfficeSceneGrid({
     if (!picker) return;
     const { mode } = picker;
     setPicker(null);
+    bumpUse(sceneEngagementId(picker.scene.id));
     if (mode === 'experience') onExperience(tool);
     else if (mode === 'howto') onHowTo(tool);
     else onOpenDetail(tool);
@@ -104,7 +133,7 @@ export function InternalOfficeSceneGrid({
 
   return (
     <>
-      <section className="flex flex-col gap-8 pb-4">
+      <section className="flex flex-col gap-5 pb-4">
         <button
           type="button"
           className="internal-assistant-chat shrink-0"
@@ -136,6 +165,17 @@ export function InternalOfficeSceneGrid({
             </span>
           </div>
         </button>
+
+        <div className="flex flex-col gap-3">
+        {onRankModeChange ? (
+          <ShelfSectionHead
+            title="办公场景"
+            count={scenes.length}
+            rankMode={rankMode}
+            onRankChange={onRankModeChange}
+            className="mb-0"
+          />
+        ) : null}
 
         {scenes.length ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -189,13 +229,14 @@ export function InternalOfficeSceneGrid({
                       </p>
                     ) : null}
                   </button>
-                  <div className="mt-3 flex shrink-0 items-center justify-end border-t border-zinc-100 pt-2.5">
+                  <div className="mt-3 flex shrink-0 items-center gap-2 border-t border-zinc-100 pt-2.5">
+                    <SceneCardStats scene={scene} />
                     <button
                       type="button"
                       disabled={!hasTools}
                       onClick={() => runWithTool(scene, 'detail')}
                       className={cn(
-                        'rounded-lg bg-zinc-100 px-3 py-1.5 text-[11px] font-medium text-zinc-500 transition',
+                        'ml-auto shrink-0 rounded-lg bg-zinc-100 px-3 py-1.5 text-[11px] font-medium text-zinc-500 transition',
                         hasTools
                           ? 'hover:bg-zinc-200/80 hover:text-zinc-600'
                           : 'cursor-not-allowed text-zinc-300',
@@ -213,6 +254,7 @@ export function InternalOfficeSceneGrid({
             {emptyCopy}
           </div>
         )}
+        </div>
       </section>
 
       {picker ? (
@@ -268,5 +310,90 @@ export function InternalOfficeSceneGrid({
         </div>
       ) : null}
     </>
+  );
+}
+
+function SceneCardStats({ scene }: { scene: InternalOfficeScene }) {
+  const engagementId = sceneEngagementId(scene.id);
+  const primary = scene.tools[0];
+  const engagement = useContentEngagementStore((s) => s.byId[engagementId]);
+  const userVote = useContentEngagementStore((s) => s.userVotes[engagementId] ?? null);
+  const toggleLike = useContentEngagementStore((s) => s.toggleLike);
+  const toggleDislike = useContentEngagementStore((s) => s.toggleDislike);
+  const bumpFavorite = useContentEngagementStore((s) => s.bumpFavorite);
+  const favorited = useMarketFavoriteStore((s) =>
+    primary ? s.isFavorite(primary.id, 'internal') : false,
+  );
+  const toggleFavorite = useMarketFavoriteStore((s) => s.toggle);
+  const showToast = useMarketplaceStore((s) => s.showToast);
+
+  const onToggleFavorite = (e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    if (!primary) return;
+    const on = toggleFavorite({
+      id: primary.id,
+      kind: 'internal',
+      title: primary.name,
+      icon: 'fa-cube',
+      logoUrl: primary.logoUrl,
+    });
+    bumpFavorite(engagementId, on ? 1 : -1);
+    showToast(on ? `已收藏：${primary.name}` : `已取消收藏：${primary.name}`);
+  };
+
+  return (
+    <div className="mr-auto inline-flex flex-wrap items-center gap-0.5 text-[10px] tabular-nums">
+      <span className="inline-flex items-center gap-0.5 px-1 py-0.5 text-[#86868b]" title="查看">
+        <i className="fa-regular fa-eye text-[9px] text-zinc-400" />
+        {formatToolInvokes(engagement?.uses ?? 0)}
+      </span>
+      <button
+        type="button"
+        onClick={onToggleFavorite}
+        disabled={!primary}
+        title={favorited ? '取消收藏' : '收藏'}
+        aria-pressed={favorited}
+        className={cn(
+          'inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition',
+          !primary && 'cursor-not-allowed opacity-40',
+          favorited ? 'text-amber-600' : 'text-[#86868b] hover:text-zinc-700',
+        )}
+      >
+        <i className={cn('text-[9px]', favorited ? 'fa-solid fa-star' : 'fa-regular fa-star')} />
+        {formatToolInvokes(engagement?.favorites ?? 0)}
+      </button>
+      <button
+        type="button"
+        onClick={(ev) => {
+          ev.stopPropagation();
+          toggleLike(engagementId);
+        }}
+        title="点赞"
+        aria-pressed={userVote === 'like'}
+        className={cn(
+          'inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition',
+          userVote === 'like' ? 'text-sky-600' : 'text-[#86868b] hover:text-zinc-700',
+        )}
+      >
+        <i className="fa-solid fa-thumbs-up text-[9px]" />
+        {formatToolInvokes(engagement?.likes ?? 0)}
+      </button>
+      <button
+        type="button"
+        onClick={(ev) => {
+          ev.stopPropagation();
+          toggleDislike(engagementId);
+        }}
+        title="点踩"
+        aria-pressed={userVote === 'dislike'}
+        className={cn(
+          'inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition',
+          userVote === 'dislike' ? 'text-zinc-800' : 'text-[#86868b] hover:text-zinc-700',
+        )}
+      >
+        <i className="fa-solid fa-thumbs-down text-[9px]" />
+        {formatToolInvokes(engagement?.dislikes ?? 0)}
+      </button>
+    </div>
   );
 }

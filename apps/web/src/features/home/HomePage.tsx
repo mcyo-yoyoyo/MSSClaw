@@ -13,7 +13,8 @@ import {
   ensureEngagementSeeds,
   useContentEngagementStore,
 } from '@/stores/contentEngagementStore';
-import { sortByRankMode, type RankMode } from '@/domain/contentEngagement';
+import { type RankMode } from '@/domain/contentEngagement';
+import { HOME_CHANNEL_PINS } from '@/domain/homeChannelPins';
 import {
   applyMarketFeaturedPins,
   listInternalOfficeMarketCards,
@@ -75,7 +76,6 @@ export function HomePage() {
   const favoriteItems = useMarketFavoriteStore((s) => s.items);
   const hiddenKeys = useMarketHiddenStore((s) => s.keys);
   const hydrateHidden = useMarketHiddenStore((s) => s.hydrate);
-  const featuredPins = useMarketFeaturedStore((s) => s.pins);
   const hydrateFeaturedPins = useMarketFeaturedStore((s) => s.hydrate);
   const officeSceneEntries = useInternalOfficeSceneCatalogStore((s) => s.entries);
   const guideRecords = usePlazaToolGuideStore((s) => s.records);
@@ -144,36 +144,17 @@ export function HomePage() {
     const eng = (id: string) => engagementOf(id);
     const org = emptyOrgPerspectiveSelection();
 
-    const byPinsThenClicks = (list: MarketShelfCardModel[]) =>
-      [...list].sort((a, b) => {
-        if (Number(b.featured) !== Number(a.featured)) {
-          return Number(b.featured) - Number(a.featured);
-        }
-        const au = eng(a.id).uses;
-        const bu = eng(b.id).uses;
-        if (bu !== au) return bu - au;
-        return b.heat - a.heat;
-      });
-
-    const external = byPinsThenClicks(
-      applyMarketFeaturedPins(
-        listMarketToolCards(tools, 'external', viewer, org, 'all', eng, howtoToolIds),
-        featuredPins.external,
-      ),
+    const external = applyMarketFeaturedPins(
+      listMarketToolCards(tools, 'external', viewer, org, 'all', eng, howtoToolIds),
+      [...HOME_CHANNEL_PINS.external],
     );
-    const internal = listInternalOfficeMarketCards(
-      tools,
-      eng,
-      howtoToolIds,
-      officeSceneEntries,
+    const internal = applyMarketFeaturedPins(
+      listInternalOfficeMarketCards(tools, eng, howtoToolIds, officeSceneEntries),
+      [...HOME_CHANNEL_PINS.internal],
     );
-    const projects = sortByRankMode(
-      applyMarketFeaturedPins(
-        listMarketProjectCards(org, 'all', eng, portalByScenario),
-        featuredPins.projects,
-      ),
-      rankByKind.projects,
-      eng,
+    const projects = applyMarketFeaturedPins(
+      listMarketProjectCards(org, 'all', eng, portalByScenario),
+      [...HOME_CHANNEL_PINS.projects],
     );
 
     return { external, internal, projects } satisfies Record<
@@ -187,8 +168,6 @@ export function HomePage() {
     engagementById,
     howtoToolIds,
     portalByScenario,
-    featuredPins,
-    rankByKind,
     officeSceneEntries,
   ]);
 

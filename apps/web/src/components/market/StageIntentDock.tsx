@@ -21,9 +21,7 @@ export function StageIntentDock({
   const search = useMarketFilterStore((s) => s.search);
   const setSearch = useMarketFilterStore((s) => s.setSearch);
 
-  const q = search.trim();
   const examples = intentSearchHintExamples(scope);
-  const intentLike = q.length >= 4 || /[\u4e00-\u9fff]{2,}/.test(q);
 
   const run = (next: string) => {
     setSearch(next);
@@ -59,9 +57,6 @@ export function StageIntentDock({
             <i className="fa-solid fa-xmark" />
           </button>
         ) : null}
-        <button type="submit" className="stage-intent-dock__submit">
-          {intentLike && q ? 'AI 搜' : '搜索'}
-        </button>
       </form>
 
       <div className="stage-intent-dock__meta">

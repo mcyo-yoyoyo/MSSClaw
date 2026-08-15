@@ -223,7 +223,16 @@ export function intentSearchHintExamples(scope: IntentSearchScope = 'home'): str
     ];
   }
   if (scope === 'projects') {
-    return ['友商价格监控', '客诉评论分析', '渠道洞察 Skill', '竞品分析 Agent'];
+    return [
+      '竞品简报',
+      '客诉 SOP',
+      '价格监测',
+      '渠道洞察',
+      '会议纪要',
+      '知识问答',
+      '内容生成',
+      '数据分析',
+    ];
   }
   return ['找外部 AI 写方案', '写报告用云笔记', '学一个价格监控 Skill', '查制度用 W3'];
 }
