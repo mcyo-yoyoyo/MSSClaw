@@ -11,6 +11,7 @@ import {
   type MarketShelfKind,
 } from '@/domain/marketShelf';
 import {
+  getBusinessScenarioMeta,
   listVisibleBusinessScenarioCategories,
   type BusinessScenarioId,
 } from '@/domain/businessScenarios';
@@ -20,27 +21,19 @@ import {
   isOrgPerspectiveEmpty,
   skillMatchesOrgPerspectiveSelection,
 } from '@/domain/orgAxisTags';
-import {
-  getSkillBusinessLabel,
-  listFeaturedDoTaskSkillIds,
-  resolveSkillBusinessScenario,
-} from '@/domain/skillBusinessScenarios';
 import { skillDisplayName } from '@/domain/skillDisplay';
 import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
 import { canViewAsset } from '@/domain/assetVisibility';
 import { downloadSkillFile } from '@/domain/skillExport';
 import { MarketSkillDetailModal } from '@/features/market/MarketSkillDetailModal';
+import { CatalogAgentDetailModal } from '@/features/market/CatalogAgentDetailModal';
 import { MarketAgentDetailModal } from '@/features/market/MarketAgentDetailModal';
 import { useMssBuildStatsCopyStore } from '@/stores/mssBuildStatsCopyStore';
 import {
-  type ExternalFilterMode,
   type ExternalToolTypeId,
-  type ExternalWorkSceneId,
 } from '@/domain/externalToolTaxonomy';
 import {
   listVisibleExternalToolTypes,
-  listVisibleExternalWorkScenes,
-  toolMatchesExternalSceneCatalog,
   toolMatchesExternalTypeCatalog,
 } from '@/domain/externalTaxonomyCatalog';
 import { useExternalTaxonomyCatalogStore } from '@/stores/externalTaxonomyCatalogStore';
@@ -145,7 +138,7 @@ export function MarketShelfPage({
   const getEngagement = useContentEngagementStore((s) => s.get);
   const engagementById = useContentEngagementStore((s) => s.byId);
   const bumpDownload = useContentEngagementStore((s) => s.bumpDownload);
-  const bumpUse = useContentEngagementStore((s) => s.bumpUse);
+  const bumpView = useContentEngagementStore((s) => s.bumpView);
   const guideRecords = usePlazaToolGuideStore((s) => s.records);
   const featuredPins = useMarketFeaturedStore((s) => s.pins);
   const externalTaxonomy = useExternalTaxonomyCatalogStore((s) => s.catalog);
@@ -155,13 +148,12 @@ export function MarketShelfPage({
   const [howTo, setHowTo] = useState<{ title: string; guides: PlazaToolGuide[] } | null>(null);
   const [guidePreview, setGuidePreview] = useState<PlazaToolGuide | null>(null);
   const [submitOpen, setSubmitOpen] = useState(false);
-  const [externalFilterMode, setExternalFilterMode] = useState<ExternalFilterMode>('scene');
-  const [externalScene, setExternalScene] = useState<ExternalWorkSceneId | 'all'>('all');
   const [externalType, setExternalType] = useState<ExternalToolTypeId | 'all'>('all');
   /** MSS 集市二级面：Skill Hub | Agent Hub（默认 Skill Hub） */
   const [mssSurface, setMssSurface] = useState<'projects' | 'skills'>('skills');
   const [rankMode, setRankMode] = useState<RankMode>('most_viewed');
   const [skillDetail, setSkillDetail] = useState<PrototypeSkillSeed | null>(null);
+  const [agentDetail, setAgentDetail] = useState<PrototypeAgentSeed | null>(null);
 
   const caseSubmitDefaultBusinessId =
     kind === 'projects' && businessFilter !== 'all' ? businessFilter : undefined;
@@ -189,27 +181,19 @@ export function MarketShelfPage({
   }, [hydrateFeaturedPins, hydrateFavorites, hydrateHidden, hydrateBuildStatsCopy]);
 
   useEffect(() => {
-    setExternalFilterMode('scene');
-    setExternalScene('all');
     setExternalType('all');
     setMssSurface('skills');
+    setRankMode(kind === 'external' ? 'excel_order' : 'most_viewed');
   }, [kind]);
 
-  /** 运营隐藏类型/场景后，清除已失效的筛选态 */
+  /** 运营隐藏类型后，清除已失效的筛选态 */
   useEffect(() => {
     if (kind !== 'external') return;
-    const scenes = listVisibleExternalWorkScenes(externalTaxonomy);
-    if (
-      externalScene !== 'all' &&
-      !scenes.some((s) => s.id === externalScene)
-    ) {
-      setExternalScene('all');
-    }
     const types = listVisibleExternalToolTypes(externalTaxonomy);
     if (externalType !== 'all' && !types.some((t) => t.id === externalType)) {
       setExternalType('all');
     }
-  }, [kind, externalTaxonomy, externalScene, externalType]);
+  }, [kind, externalTaxonomy, externalType]);
 
   const sceneCatalog = useBusinessScenarioCatalogStore((s) => s.categories);
 
@@ -310,19 +294,20 @@ export function MarketShelfPage({
 
     let working = raw;
     if (kind === 'external') {
-      if (externalFilterMode === 'scene') {
-        working = working.filter((c) =>
-          toolMatchesExternalSceneCatalog(
-            { id: c.id, toolTypeId: c.toolTypeId },
-            externalScene === 'all' ? 'all' : externalScene,
-            externalTaxonomy,
-          ),
-        );
-      } else {
-        working = working.filter((c) =>
-          toolMatchesExternalTypeCatalog(c.toolTypeId, externalType),
-        );
-      }
+      working = working.filter((c) =>
+        toolMatchesExternalTypeCatalog(
+          c.toolTypeIds?.length ? c.toolTypeIds : c.toolTypeId,
+          externalType,
+          externalTaxonomy,
+        ),
+      );
+      working = working.map((card) => ({
+        ...card,
+        sourceOrder:
+          externalType === 'all'
+            ? card.externalSortOrder
+            : card.externalCategoryRanks?.[externalType] ?? card.externalSortOrder,
+      }));
     }
 
     const pinned =
@@ -343,8 +328,6 @@ export function MarketShelfPage({
     viewer,
     listOrg,
     listBusiness,
-    externalFilterMode,
-    externalScene,
     externalType,
     externalTaxonomy,
     getEngagement,
@@ -379,63 +362,85 @@ export function MarketShelfPage({
   // 场景分类改为 Chip 筛选，页内始终展示精选 + 列表（不再先进入分类枢纽）
   const showMssSceneChips = kind === 'projects';
 
+  const scopedMssAgents = useMemo(() => {
+    if (kind !== 'projects') return [] as PrototypeAgentSeed[];
+    const q = search.trim().toLowerCase();
+    const favSet = favoritesOnly
+      ? new Set(favoriteItems.filter((item) => item.kind === 'projects').map((item) => item.id))
+      : null;
+    return agents
+      .filter((agent) => agent.published)
+      .filter((agent) => canViewAsset(agent, viewer))
+      .filter((agent) => {
+        const deptOk =
+          !orgSelection.dept.length ||
+          (agent.ownerDeptIds ?? []).some((id) => orgSelection.dept.includes(id));
+        const regionOk =
+          !orgSelection.region.length ||
+          (agent.ownerRegionIds ?? []).some((id) => orgSelection.region.includes(id));
+        return deptOk && regionOk;
+      })
+      .filter((agent) => {
+        if (!q) return true;
+        return `${agent.name} ${agent.desc} ${agent.bizLine} ${(agent.scenarioTags ?? []).join(' ')}`
+          .toLowerCase()
+          .includes(q);
+      })
+      .filter((agent) => (favSet ? favSet.has(agent.id) : true));
+  }, [kind, agents, viewer, orgSelection, search, favoritesOnly, favoriteItems]);
+
+  const mssAgents = useMemo(
+    () =>
+      scopedMssAgents.filter(
+        (agent) =>
+          businessFilter === 'all' || agent.businessScenarioId === businessFilter,
+      ),
+    [scopedMssAgents, businessFilter],
+  );
+
   const sceneCategories = useMemo(() => {
     if (kind !== 'projects') return [];
-    const eng = (id: string) => getEngagement(id);
-    return listVisibleBusinessScenarioCategories().map((cat) => {
-      const projects = listMarketProjectCards(
-        orgSelection,
-        cat.id,
-        eng,
-        portalByScenario,
-      );
-      return {
-        ...cat,
-        count: projects.length,
-      };
-    });
-  }, [kind, orgSelection, getEngagement, portalByScenario, sceneCatalog]);
+    return listVisibleBusinessScenarioCategories().map((category) => ({
+      ...category,
+      count: scopedMssAgents.filter(
+        (agent) => agent.businessScenarioId === category.id,
+      ).length,
+    }));
+  }, [kind, scopedMssAgents, sceneCatalog]);
 
   const hubStats = useMemo(() => {
     if (kind !== 'projects') return null;
-    const eng = (id: string) => getEngagement(id);
-    const all = listMarketProjectCards(
-      orgSelection,
-      businessFilter === 'all' ? 'all' : businessFilter,
-      eng,
-      portalByScenario,
-    );
     const sceneCovered =
       businessFilter === 'all'
         ? sceneCategories.filter((s) => s.count > 0).length
-        : all.length > 0
+        : mssAgents.length > 0
           ? 1
           : 0;
     return {
-      projectCount: all.length,
+      projectCount: mssAgents.length,
       sceneCovered,
       sceneTotal: listVisibleBusinessScenarioCategories().length,
     };
   }, [
     kind,
-    orgSelection,
     businessFilter,
-    getEngagement,
-    portalByScenario,
+    mssAgents,
     sceneCategories,
     sceneCatalog,
   ]);
 
   const mssSkills = useMemo(() => {
     if (kind !== 'projects') return [] as PrototypeSkillSeed[];
-    const ids = listFeaturedDoTaskSkillIds(skills, businessFilter, 64);
     const q = search.trim().toLowerCase();
     const favSet = favoritesOnly
       ? new Set(favoriteItems.filter((f) => f.kind === 'projects').map((f) => f.id))
       : null;
-    return ids
-      .map((id) => skills.find((s) => s.id === id))
-      .filter((s): s is PrototypeSkillSeed => Boolean(s))
+    return skills
+      .filter((skill) => skill.published && skill.featuredInMssMarket !== false)
+      .filter(
+        (skill) =>
+          businessFilter === 'all' || skill.businessScenarioId === businessFilter,
+      )
       .filter((s) => canViewAsset(s, viewer))
       .filter((s) => skillMatchesOrgPerspectiveSelection(s, orgSelection))
       .filter((s) => {
@@ -457,10 +462,9 @@ export function MarketShelfPage({
   const skillSceneCategories = useMemo(() => {
     if (kind !== 'projects') return [];
     return listVisibleBusinessScenarioCategories().map((cat) => {
-      const ids = listFeaturedDoTaskSkillIds(skills, cat.id, 64);
-      const count = ids
-        .map((id) => skills.find((s) => s.id === id))
-        .filter((s): s is PrototypeSkillSeed => Boolean(s))
+      const count = skills
+        .filter((skill) => skill.published && skill.featuredInMssMarket !== false)
+        .filter((skill) => skill.businessScenarioId === cat.id)
         .filter((s) => canViewAsset(s, viewer))
         .filter((s) => skillMatchesOrgPerspectiveSelection(s, orgSelection)).length;
       return { ...cat, count };
@@ -484,8 +488,8 @@ export function MarketShelfPage({
 
   const skillCards = useMemo((): MarketShelfCardModel[] => {
     const mapped = mssSkills.map((s) => {
-      const biz = resolveSkillBusinessScenario(s);
-      const bizLabel = getSkillBusinessLabel(s);
+      const biz = s.businessScenarioId ?? null;
+      const bizLabel = biz ? getBusinessScenarioMeta(biz).label : null;
       const eng = getEngagement(s.id);
       const badges: MarketShelfCardModel['badges'] = [];
       // 平级：领域(dept) · 区域 · 业务场景（需求「职能=领域」）
@@ -531,6 +535,57 @@ export function MarketShelfPage({
     );
   }, [mssSkills, canRunSkills, getEngagement, engagementById, hiddenKeys, rankMode]);
 
+  const agentCards = useMemo((): MarketShelfCardModel[] => {
+    const mapped = mssAgents.map((agent) => {
+      const bizLabel = agent.businessScenarioId
+        ? getBusinessScenarioMeta(agent.businessScenarioId).label
+        : null;
+      const engagement = getEngagement(agent.id);
+      const badges: MarketShelfCardModel['badges'] = [];
+      if (agent.ownerDeptIds?.[0]) {
+        badges.push({ label: getDeptLabel(agent.ownerDeptIds[0]), tone: 'dept' });
+      }
+      if (agent.ownerRegionIds?.[0]) {
+        badges.push({ label: getRegionLabel(agent.ownerRegionIds[0]), tone: 'region' });
+      }
+      if (bizLabel) badges.push({ label: bizLabel, tone: 'type' });
+      const runnable = canRunProjects && Boolean(agent.published && agent.skillIds?.length);
+      return {
+        id: agent.id,
+        kind: 'projects' as const,
+        title: agent.name,
+        description: agent.desc,
+        outcomeHint: agent.desc,
+        sceneTags: bizLabel ? [bizLabel] : agent.scenarioTags?.slice(0, 3),
+        securityLevel: 'mss' as const,
+        icon: agent.icon || 'fa-robot',
+        badges,
+        featured: true,
+        heat: agent.invokes ?? 0,
+        likes: engagement.likes,
+        dislikes: engagement.dislikes,
+        downloads: engagement.downloads,
+        scopeBadge: ((agent.visibility ?? 'public') === 'public' ? 'public' : 'scoped') as
+          | 'public'
+          | 'scoped',
+        hasHowto: Boolean(agent.systemPrompt || agent.skillIds?.length),
+        runnable,
+        executionTrust: resolveAgentExecutionTrust({
+          canRun: runnable,
+          hasDemoPlan: runnable,
+          envFilled: true,
+        }),
+        primaryAction: 'detail' as const,
+        ownerDeptIds: agent.ownerDeptIds,
+      };
+    });
+    return sortByRankMode(
+      mapped.filter((card) => !hiddenKeys.includes(`${card.kind}:${card.id}`)),
+      rankMode,
+      getEngagement,
+    );
+  }, [mssAgents, canRunProjects, getEngagement, engagementById, hiddenKeys, rankMode]);
+
   const orgScopeLabel = useMemo(() => {
     const parts: string[] = [];
     if (orgSelection.dept[0]) parts.push(getDeptLabel(orgSelection.dept[0]));
@@ -541,13 +596,20 @@ export function MarketShelfPage({
   const featuredLimit = 8;
   const { featured, rest } = splitFeaturedAndRest(filteredCards, featuredLimit);
   const { featured: skillFeatured, rest: skillRest } = splitFeaturedAndRest(skillCards, 4);
+  const { featured: agentFeatured, rest: agentRest } = splitFeaturedAndRest(agentCards, 4);
   const showFeaturedStrip =
     kind !== 'internal' &&
-    (kind === 'projects' && mssSurface === 'skills'
-      ? skillFeatured.length > 0
+    (kind === 'projects'
+      ? mssSurface === 'skills'
+        ? skillFeatured.length > 0
+        : agentFeatured.length > 0
       : featured.length > 0);
   const activeFeatured =
-    kind === 'projects' && mssSurface === 'skills' ? skillFeatured : featured;
+    kind === 'projects'
+      ? mssSurface === 'skills'
+        ? skillFeatured
+        : agentFeatured
+      : featured;
 
   const externalFeaturedOverseas = useMemo(
     () =>
@@ -599,7 +661,7 @@ export function MarketShelfPage({
   };
 
   const trackToolClick = (id: string) => {
-    bumpUse(id);
+    bumpView(id);
   };
 
   const executeProject = (bundle?: ScenarioBundle | null) => {
@@ -650,20 +712,30 @@ export function MarketShelfPage({
   };
 
   const openCard = (card: MarketShelfCardModel) => {
+    trackToolClick(card.id);
+    if (card.kind === 'projects') {
+      const agent = agents.find((item) => item.id === card.id);
+      if (agent) {
+        rememberCard(card);
+        setAgentDetail(agent);
+        return;
+      }
+    }
     if (card.kind === 'projects' && card.scenarioId) {
       rememberCard(card);
       setShowcaseId(card.scenarioId);
       return;
     }
-    trackToolClick(card.id);
     rememberCard(card);
     openMarketToolDetail(card.id, kind === 'projects' ? 'external' : kind);
   };
 
   const openAgentDetail = (card: MarketShelfCardModel) => {
-    if (!card.scenarioId) return;
+    const agent = agents.find((item) => item.id === card.id);
+    if (!agent) return;
+    trackToolClick(card.id);
     rememberCard(card);
-    setShowcaseId(card.scenarioId);
+    setAgentDetail(agent);
   };
 
   const openInternalToolDetail = (
@@ -786,10 +858,14 @@ export function MarketShelfPage({
       : '权限范围内暂无上架内容。若预期应可见，请联系运营确认可见性与上架状态。';
 
   const gridCards =
-    kind === 'projects' && mssSurface === 'skills'
-      ? showFeaturedStrip
-        ? skillRest
-        : skillCards
+    kind === 'projects'
+      ? mssSurface === 'skills'
+        ? showFeaturedStrip
+          ? skillRest
+          : skillCards
+        : showFeaturedStrip
+          ? agentRest
+          : agentCards
       : showFeaturedStrip
         ? rest
         : filteredCards;
@@ -818,7 +894,7 @@ export function MarketShelfPage({
           title={meta.label}
           subtitle={
             kind === 'external'
-              ? '海外 / 国内精选对照'
+              ? null
               : kind === 'internal'
                 ? '按场景选公司工具'
                 : allowScenarioRun
@@ -827,13 +903,17 @@ export function MarketShelfPage({
           }
           tip={
             kind === 'external'
-              ? '外部工具为第三方服务，内网请勿输入涉密或未授权数据'
+              ? (
+                  <span className="font-medium text-[#d92d20]">
+                    外部工具为第三方服务，禁止将公司内部信息上传到外部AI网站
+                  </span>
+                )
               : kind === 'internal'
                 ? '经组织统一入口访问，授权范围内使用，勿外传敏感数据'
                 : null
           }
           titleAside={
-            canSubmit ? (
+            canSubmit && kind === 'projects' ? (
               <button
                 type="button"
                 onClick={() => setSubmitOpen(true)}
@@ -864,12 +944,8 @@ export function MarketShelfPage({
 
         {kind === 'external' ? (
           <ExternalMarketFilters
-            mode={externalFilterMode}
-            scene={externalScene}
             type={externalType}
             stats={externalFilterStats}
-            onModeChange={setExternalFilterMode}
-            onSceneChange={setExternalScene}
             onTypeChange={setExternalType}
           />
         ) : null}
@@ -1046,6 +1122,7 @@ export function MarketShelfPage({
                   count={activeFeatured.length}
                   rankMode={rankMode}
                   onRankChange={setRankMode}
+                  showExcelOrder
                 />
                 <div className="grid gap-4 lg:grid-cols-2">
                   {(
@@ -1147,6 +1224,7 @@ export function MarketShelfPage({
             count={gridCards.length}
             rankMode={rankMode}
             onRankChange={setRankMode}
+            showExcelOrder={kind === 'external'}
           />
           {kind === 'external' ? (
             gridCards.length ? (
@@ -1272,6 +1350,19 @@ export function MarketShelfPage({
           onRun={(s) => {
             setSkillDetail(null);
             runSkill(s);
+          }}
+          onToast={showToast}
+        />
+      ) : null}
+
+      {agentDetail ? (
+        <CatalogAgentDetailModal
+          agent={agentDetail}
+          canRun={canRunProjects}
+          onClose={() => setAgentDetail(null)}
+          onRun={(agent) => {
+            setAgentDetail(null);
+            onInvokeAgent?.(agent);
           }}
           onToast={showToast}
         />

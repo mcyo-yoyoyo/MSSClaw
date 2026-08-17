@@ -39,19 +39,28 @@ export const EXTERNAL_TOOL_TYPES: {
   label: string;
   csvLabel: string;
   icon: string;
+  /** 该筛选项覆盖的底层工具类型；用于合并展示分类。 */
+  filterTypeIds?: ExternalToolTypeId[];
+  visible?: boolean;
 }[] = [
-  { id: 'general', label: '通用助手', csvLabel: '通用AI助手', icon: 'fa-comments' },
-  { id: 'search', label: '搜索研究', csvLabel: 'AI搜索与研究', icon: 'fa-magnifying-glass' },
-  { id: 'knowledge', label: '知识学习', csvLabel: '知识管理与学习', icon: 'fa-book' },
-  { id: 'writing', label: '写作翻译', csvLabel: '写作与翻译', icon: 'fa-pen' },
-  { id: 'ppt', label: 'PPT制作', csvLabel: '演示与文档', icon: 'fa-file-powerpoint' },
-  { id: 'image', label: '图像设计', csvLabel: '图像与设计', icon: 'fa-image' },
-  { id: 'video', label: '视频数字人', csvLabel: '视频与数字人', icon: 'fa-video' },
-  { id: 'audio', label: '音频语音', csvLabel: '音频与语音', icon: 'fa-microphone' },
-  { id: 'meeting', label: '会议协作', csvLabel: '会议与协作', icon: 'fa-users' },
-  { id: 'data', label: '数据分析', csvLabel: '数据分析', icon: 'fa-chart-line' },
+  { id: 'general', label: '通用AI助手', csvLabel: '通用AI助手', icon: 'fa-comments' },
+  { id: 'search', label: 'AI搜索与研究', csvLabel: 'AI搜索与研究', icon: 'fa-magnifying-glass' },
+  {
+    id: 'knowledge',
+    label: '知识管理与写作',
+    csvLabel: '知识管理与写作',
+    icon: 'fa-book',
+    filterTypeIds: ['knowledge', 'writing'],
+  },
+  { id: 'ppt', label: '演示与文档', csvLabel: '演示与文档', icon: 'fa-file-powerpoint' },
+  { id: 'image', label: '图像与设计', csvLabel: '图像与设计', icon: 'fa-image' },
+  { id: 'video', label: '视频与数字人', csvLabel: '视频与数字人', icon: 'fa-video' },
+  { id: 'audio', label: '音频与语音', csvLabel: '音频与语音', icon: 'fa-microphone' },
+  { id: 'meeting', label: '会议与协作', csvLabel: '会议与协作', icon: 'fa-users' },
   { id: 'code', label: '编程开发', csvLabel: '编程开发', icon: 'fa-code' },
-  { id: 'agent', label: '自动化智能体', csvLabel: '自动化与智能体', icon: 'fa-robot' },
+  { id: 'agent', label: '智能体', csvLabel: '智能体', icon: 'fa-robot' },
+  { id: 'writing', label: '写作与翻译', csvLabel: '写作与翻译', icon: 'fa-pen', visible: false },
+  { id: 'data', label: '数据分析', csvLabel: '数据分析', icon: 'fa-chart-line', visible: false },
 ];
 
 export const EXTERNAL_WORK_SCENES: {

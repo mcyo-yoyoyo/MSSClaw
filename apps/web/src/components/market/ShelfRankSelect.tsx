@@ -6,14 +6,19 @@ export function ShelfRankSelect({
   value,
   onChange,
   className,
+  showExcelOrder = false,
 }: {
   value: RankMode;
   onChange: (next: RankMode) => void;
   className?: string;
+  showExcelOrder?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const current = SHELF_RANK_TABS.find((t) => t.id === value) ?? SHELF_RANK_TABS[0]!;
+  const tabs = showExcelOrder
+    ? SHELF_RANK_TABS
+    : SHELF_RANK_TABS.filter((tab) => tab.id !== 'excel_order');
+  const current = tabs.find((t) => t.id === value) ?? tabs[0]!;
 
   useEffect(() => {
     if (!open) return;
@@ -52,7 +57,7 @@ export function ShelfRankSelect({
           role="listbox"
           className="absolute right-0 z-20 mt-1 min-w-[7.5rem] overflow-hidden rounded-xl border border-zinc-200/90 bg-white py-1 shadow-[0_10px_28px_-16px_rgba(24,24,27,0.45)]"
         >
-          {SHELF_RANK_TABS.map((t) => {
+          {tabs.map((t) => {
             const active = t.id === value;
             return (
               <li key={t.id} role="option" aria-selected={active}>
@@ -87,12 +92,14 @@ export function ShelfSectionHead({
   rankMode,
   onRankChange,
   className,
+  showExcelOrder = false,
 }: {
   title: string;
   count?: number;
   rankMode: RankMode;
   onRankChange: (next: RankMode) => void;
   className?: string;
+  showExcelOrder?: boolean;
 }) {
   return (
     <div className={cn('mb-3 flex items-center justify-between gap-3', className)}>
@@ -102,7 +109,11 @@ export function ShelfSectionHead({
           <span className="ml-1.5 font-normal text-[#86868b]">{count}</span>
         ) : null}
       </h2>
-      <ShelfRankSelect value={rankMode} onChange={onRankChange} />
+      <ShelfRankSelect
+        value={rankMode}
+        onChange={onRankChange}
+        showExcelOrder={showExcelOrder}
+      />
     </div>
   );
 }

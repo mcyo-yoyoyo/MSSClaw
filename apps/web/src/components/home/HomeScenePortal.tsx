@@ -4,7 +4,6 @@ import type { PrototypeAgentSeed, PrototypeSkillSeed, PrototypeToolSeed } from '
 import {
   buildScenarioBundles,
   FEATURED_SCENARIOS,
-  filterAiMapCards,
 } from '@/domain/portalMap';
 import {
   resolveCaseItemsForScenarioId,
@@ -64,10 +63,7 @@ import { StationAnnounceBanner } from '@/components/home/StationAnnounceBanner';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { usePortalContentStore } from '@/stores/portalContentStore';
 import { useSessionStore } from '@/stores/sessionStore';
-import {
-  ensureEngagementSeeds,
-  useContentEngagementStore,
-} from '@/stores/contentEngagementStore';
+import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { isNewScenario } from '@/domain/contentBadges';
 import { openResourceWithReturn } from '@/domain/openResourceNav';
 import {
@@ -264,7 +260,7 @@ export function HomeScenePortal({
   const focusCase = useNavigationIntentStore((s) => s.focusCase);
   const engagementOf = useContentEngagementStore((s) => s.get);
   const engagementById = useContentEngagementStore((s) => s.byId);
-  const bumpUse = useContentEngagementStore((s) => s.bumpUse);
+  const bumpView = useContentEngagementStore((s) => s.bumpView);
 
   const affiliation = useMemo(
     () => ({
@@ -351,32 +347,6 @@ export function HomeScenePortal({
       .map((s) => s.id);
   }, [rankedScenarios, engagementOf, engagementById]);
 
-  const catalog = useMemo(
-    () =>
-      filterAiMapCards({
-        agents,
-        skills,
-        tools,
-        portalContent,
-        affiliation,
-        userId: user?.id ?? '',
-        userName: user?.name ?? '',
-        role: user?.platformRole,
-        selection: { kind: 'all' },
-        search: '',
-      }),
-    [agents, skills, tools, portalContent, affiliation, user],
-  );
-
-  useEffect(() => {
-    const ids = [
-      ...DISCOVER_SCENARIO_IDS,
-      ...catalog.filter((c) => c.kind === 'news' || c.kind === 'training').map((c) => c.id),
-      ...portalContent.filter((p) => p.type === 'news' || p.type === 'training').map((p) => p.id),
-    ];
-    ensureEngagementSeeds(ids);
-  }, [catalog, portalContent]);
-
   const openTool = (toolId: string) => {
     const tool = tools.find((t) => t.id === toolId);
     if (!tool?.homepageUrl) {
@@ -401,7 +371,7 @@ export function HomeScenePortal({
   };
 
   const openScenario = (scenarioId: string) => {
-    bumpUse(scenarioId);
+    bumpView(scenarioId);
     setShowcaseScenarioId(scenarioId);
   };
 

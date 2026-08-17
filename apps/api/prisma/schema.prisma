@@ -28,3 +28,32 @@ model CenterRecord {
 
   @@index([workspaceId, kind])
 }
+
+/// 市场内容的聚合互动指标。所有计数由后端原子更新，前端只读取结果。
+model MarketEngagement {
+  workspaceId String
+  contentId   String
+  views       Int      @default(0)
+  uses        Int      @default(0)
+  likes       Int      @default(0)
+  dislikes    Int      @default(0)
+  downloads   Int      @default(0)
+  favorites   Int      @default(0)
+  updatedAt   DateTime @updatedAt
+
+  @@id([workspaceId, contentId])
+  @@index([workspaceId, updatedAt])
+}
+
+/// 用户对市场内容的状态，用于保证点赞/点踩/收藏幂等且按用户隔离。
+model MarketUserInteraction {
+  workspaceId String
+  userId      String
+  contentId   String
+  vote        String?
+  favorited   Boolean  @default(false)
+  updatedAt   DateTime @updatedAt
+
+  @@id([workspaceId, userId, contentId])
+  @@index([workspaceId, userId, favorited])
+}

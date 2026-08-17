@@ -15,6 +15,7 @@ export interface ExternalToolTypeCatalogEntry {
   csvLabel: string;
   icon: string;
   visible: boolean;
+  filterTypeIds: ExternalToolTypeId[];
 }
 
 export interface ExternalWorkSceneCatalogEntry {
@@ -26,18 +27,21 @@ export interface ExternalWorkSceneCatalogEntry {
 }
 
 export interface ExternalTaxonomyCatalog {
+  version: number;
   types: ExternalToolTypeCatalogEntry[];
   scenes: ExternalWorkSceneCatalogEntry[];
 }
 
 export function defaultExternalTaxonomyCatalog(): ExternalTaxonomyCatalog {
   return {
+    version: 2,
     types: EXTERNAL_TOOL_TYPES.map((t) => ({
       id: t.id,
       label: t.label,
       csvLabel: t.csvLabel,
       icon: t.icon,
-      visible: true,
+      visible: t.visible !== false,
+      filterTypeIds: [...(t.filterTypeIds ?? [t.id])],
     })),
     scenes: EXTERNAL_WORK_SCENES.map((s) => ({
       id: s.id,
@@ -79,11 +83,15 @@ export function resolveExternalToolTypeMeta(
 }
 
 export function toolMatchesExternalTypeCatalog(
-  toolTypeId: string | undefined,
+  toolTypeId: string | readonly string[] | undefined,
   filter: ExternalToolTypeId | 'all',
+  catalog: ExternalTaxonomyCatalog = getExternalTaxonomyCatalog(),
 ): boolean {
   if (filter === 'all') return true;
-  return toolTypeId === filter;
+  const meta = catalog.types.find((t) => t.id === filter);
+  const values = (Array.isArray(toolTypeId) ? toolTypeId : [toolTypeId]).filter(Boolean);
+  const accepted = meta?.filterTypeIds?.length ? meta.filterTypeIds : [filter];
+  return values.some((value) => accepted.includes(value as ExternalToolTypeId));
 }
 
 export function toolMatchesExternalSceneCatalog(

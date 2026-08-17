@@ -216,6 +216,16 @@ export interface PrototypeToolSeed extends AssetOwnershipFields {
   region?: ToolRegion;
   /** 外部目录：工具类型（Demo 对齐） */
   toolTypeId?: ExternalToolTypeId | string;
+  /** 外部目录：同一产品可属于多个工具类型。 */
+  toolTypeIds?: Array<ExternalToolTypeId | string>;
+  /** 工具类型展示名（与 Excel 清单一致）。 */
+  toolTypeLabels?: string[];
+  /** 各工具类型内的 Excel 排序值。 */
+  externalCategoryRanks?: Record<string, number>;
+  /** Excel 首次出现顺序，用于“全部”视图。 */
+  externalSortOrder?: number;
+  /** Excel 中该产品的最优排序。 */
+  externalSortRank?: number;
   /** 卡片核心作用（优先于 desc 展示） */
   cardSummary?: string;
   /** 厂商 / 公司 */
@@ -232,6 +242,8 @@ export interface PrototypeToolSeed extends AssetOwnershipFields {
   bestFor?: string;
   /** 产品详细介绍 */
   productIntro?: string;
+  /** Excel「核心能力」拆分后的标签。 */
+  coreCapabilities?: string[];
 }
 
 export interface PrototypeKbCollection {

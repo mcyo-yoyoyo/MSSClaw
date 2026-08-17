@@ -50,23 +50,31 @@ export function ModalActions({
   onCancel,
   onSave,
   saveLabel = '保存',
+  cancelFirst = false,
 }: {
   onCancel: () => void;
   onSave: () => void;
   saveLabel?: string;
+  cancelFirst?: boolean;
 }) {
+  const cancelButton = (
+    <button type="button" onClick={onCancel} className="rounded-xl border border-black/8 px-4 py-2 text-[12px]">
+        取消
+    </button>
+  );
+  const saveButton = (
+    <button
+      type="button"
+      onClick={onSave}
+      className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white"
+    >
+      {saveLabel}
+    </button>
+  );
   return (
     <>
-      <button
-        type="button"
-        onClick={onSave}
-        className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white"
-      >
-        {saveLabel}
-      </button>
-      <button type="button" onClick={onCancel} className="rounded-xl border border-black/8 px-4 py-2 text-[12px]">
-        取消
-      </button>
+      {cancelFirst ? cancelButton : saveButton}
+      {cancelFirst ? saveButton : cancelButton}
     </>
   );
 }

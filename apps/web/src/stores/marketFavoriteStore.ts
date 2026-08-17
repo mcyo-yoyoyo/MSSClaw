@@ -12,7 +12,6 @@ import {
 
 const MAX = 40;
 const DOC_KIND = 'market-favorites' as const;
-const LEGACY_LS_KEY = 'mssclaw:market-favorites-v1';
 
 export type MarketFavoriteItem = {
   id: string;
@@ -42,18 +41,6 @@ function readUserItems(doc: FavoritesDoc | null | undefined, uid: string): Marke
   return [];
 }
 
-/** 一次性迁出旧 localStorage，之后不再读写浏览器缓存 */
-function takeLegacyLocal(): MarketFavoriteItem[] {
-  try {
-    const raw = localStorage.getItem(LEGACY_LS_KEY);
-    if (!raw) return [];
-    localStorage.removeItem(LEGACY_LS_KEY);
-    return readUserItems(JSON.parse(raw) as FavoritesDoc, userBucket());
-  } catch {
-    return [];
-  }
-}
-
 function persistForUser(items: MarketFavoriteItem[]) {
   if (!canUsePlatformDocsApi()) return;
   const ws = currentWorkspaceId();
@@ -79,9 +66,8 @@ export const useMarketFavoriteStore = create<MarketFavoriteState>((set, get) => 
 
   hydrate: () => {
     void (async () => {
-      const leftover = takeLegacyLocal();
       if (!canUsePlatformDocsApi()) {
-        set({ items: leftover });
+        set({ items: [] });
         return;
       }
       try {
@@ -89,18 +75,9 @@ export const useMarketFavoriteStore = create<MarketFavoriteState>((set, get) => 
         const uid = userBucket();
         const list = readUserItems(remote, uid);
         if (remote) setPlatformDocMemory(currentWorkspaceId(), DOC_KIND, remote);
-        if (list.length) {
-          set({ items: list });
-          return;
-        }
-        if (leftover.length) {
-          persistForUser(leftover);
-          set({ items: leftover });
-          return;
-        }
-        set({ items: [] });
+        set({ items: list });
       } catch {
-        set({ items: leftover });
+        set({ items: [] });
       }
     })();
   },
@@ -109,6 +86,7 @@ export const useMarketFavoriteStore = create<MarketFavoriteState>((set, get) => 
     get().items.some((x) => x.id === id && x.kind === kind),
 
   toggle: (item) => {
+    if (!canUsePlatformDocsApi()) return false;
     const exists = get().items.some((x) => x.id === item.id && x.kind === item.kind);
     const next = exists
       ? get().items.filter((x) => !(x.id === item.id && x.kind === item.kind))
@@ -119,6 +97,7 @@ export const useMarketFavoriteStore = create<MarketFavoriteState>((set, get) => 
   },
 
   setNote: (id, kind, note) => {
+    if (!canUsePlatformDocsApi()) return;
     const next = get().items.map((x) =>
       x.id === id && x.kind === kind ? { ...x, note: note.trim() || undefined } : x,
     );

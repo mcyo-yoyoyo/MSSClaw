@@ -21,7 +21,6 @@ const TOP_SHELF_NAV: { view: AppView; label: string }[] = [
   { view: MARKET_SHELF_META.internal.view, label: MARKET_SHELF_META.internal.label },
   { view: MARKET_SHELF_META.projects.view, label: MARKET_SHELF_META.projects.label },
   { view: 'ai-brief', label: 'AI快讯' },
-  { view: 'me', label: '个人中心' },
 ];
 
 const ADMIN_MENU_ITEMS: { view: AppView; label: string }[] = ADMIN_MENU_VIEWS.map((view) => ({
@@ -264,6 +263,21 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
               {unreadMessages > 99 ? '99+' : unreadMessages}
             </span>
           ) : null}
+        </button>
+        <button
+          type="button"
+          onClick={() => goView('me')}
+          onMouseEnter={() => ROUTE_PREFETCH.me?.()}
+          className={cn(
+            'flex h-9 w-9 items-center justify-center rounded-lg transition',
+            appView === 'me' || appView === 'ai-tasks'
+              ? 'bg-zinc-100 text-zinc-900'
+              : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900',
+          )}
+          title="个人中心"
+          aria-label="个人中心"
+        >
+          <i className="fa-solid fa-circle-user text-[16px]" />
         </button>
       </div>
     </header>

@@ -30,40 +30,19 @@ const ICON_PRESETS = [
 
 export const BUSINESS_SCENE_ICON_PRESETS = ICON_PRESETS;
 
-function mergeWithDefaults(
+function normalizeCategories(
   saved: BusinessScenarioCategory[] | null,
 ): BusinessScenarioCategory[] {
-  const byId = new Map(
-    (saved ?? [])
-      .filter((c) => c?.id && isBusinessScenarioId(c.id))
-      .map((c) => [c.id, c] as const),
-  );
-  const orderedIds = saved?.length
-    ? [
-        ...saved.map((c) => c.id).filter(isBusinessScenarioId),
-        ...DEFAULT_BUSINESS_SCENARIO_CATEGORIES.map((c) => c.id).filter(
-          (id) => !byId.has(id),
-        ),
-      ]
-    : DEFAULT_BUSINESS_SCENARIO_CATEGORIES.map((c) => c.id);
-
-  const seen = new Set<string>();
-  const result: BusinessScenarioCategory[] = [];
-  for (const id of orderedIds) {
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const base = DEFAULT_BUSINESS_SCENARIO_CATEGORIES.find((c) => c.id === id)!;
-    const override = byId.get(id);
-    result.push({
-      id,
-      label: override?.label?.trim() || base.label,
-      fullLabel: override?.fullLabel?.trim() || base.fullLabel,
-      icon: override?.icon?.trim() || base.icon,
-      blurb: override?.blurb?.trim() || base.blurb,
-      tabVisible: override?.tabVisible ?? base.tabVisible,
-    });
-  }
-  return result;
+  return (saved ?? [])
+    .filter((category) => category?.id && isBusinessScenarioId(category.id))
+    .map((category) => ({
+      id: category.id,
+      label: category.label?.trim() || category.id,
+      fullLabel: category.fullLabel?.trim() || category.label?.trim() || category.id,
+      icon: category.icon?.trim() || 'fa-cube',
+      blurb: category.blurb?.trim() || '',
+      tabVisible: category.tabVisible !== false,
+    }));
 }
 
 function persist(categories: BusinessScenarioCategory[]) {
@@ -87,7 +66,7 @@ interface BusinessScenarioCatalogState {
   dismissToast: () => void;
 }
 
-const initial = mergeWithDefaults(null);
+const initial: BusinessScenarioCategory[] = [];
 setBusinessScenarioCatalog(initial);
 
 export const useBusinessScenarioCatalogStore = create<BusinessScenarioCatalogState>(
@@ -98,7 +77,7 @@ export const useBusinessScenarioCatalogStore = create<BusinessScenarioCatalogSta
     hydrate: () => {
       void (async () => {
         if (!canUsePlatformDocsApi()) {
-          const categories = mergeWithDefaults(null);
+          const categories: BusinessScenarioCategory[] = [];
           setBusinessScenarioCatalog(categories);
           set({ categories });
           return;
@@ -112,11 +91,11 @@ export const useBusinessScenarioCatalogStore = create<BusinessScenarioCatalogSta
             : Array.isArray(remote?.categories)
               ? remote.categories
               : null;
-          const categories = mergeWithDefaults(list);
+          const categories = normalizeCategories(list);
           setBusinessScenarioCatalog(categories);
           set({ categories });
         } catch {
-          const categories = mergeWithDefaults(null);
+          const categories: BusinessScenarioCategory[] = [];
           setBusinessScenarioCatalog(categories);
           set({ categories });
         }
@@ -155,7 +134,7 @@ export const useBusinessScenarioCatalogStore = create<BusinessScenarioCatalogSta
     },
 
     resetToDefaults: () => {
-      const categories = mergeWithDefaults(null);
+      const categories = DEFAULT_BUSINESS_SCENARIO_CATEGORIES.map((item) => ({ ...item }));
       persist(categories);
       set({ categories, toast: '已恢复默认场景分类' });
     },

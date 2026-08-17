@@ -1,4 +1,11 @@
-﻿import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+﻿import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react';
 import {
   APP_VIEW_NAV,
   NAV_SECTION_LABELS,
@@ -147,26 +154,81 @@ export function AppShellSidebar() {
   const showOpsConfigNav =
     !isBusiness && isOpsOnlyView(appView) && (hasCapabilityBody || hasSystemBody);
 
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = Number(window.localStorage.getItem('mss-sidebar-width'));
+    if (Number.isFinite(saved) && saved >= 96 && saved <= 260) return saved;
+    return window.innerWidth <= 1280 ? 120 : 144;
+  });
+  const [sidebarResizing, setSidebarResizing] = useState(false);
+  const resizeRef = useRef({ pointerId: -1, startX: 0, startWidth: 0, lastWidth: sidebarWidth });
+
+  const handleResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: sidebarCollapsed ? 68 : sidebarWidth,
+      lastWidth: sidebarWidth,
+    };
+    setSidebarResizing(true);
+  };
+
+  const handleResizeMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (resizeRef.current.pointerId !== event.pointerId) return;
+    const rawWidth = resizeRef.current.startWidth + event.clientX - resizeRef.current.startX;
+    if (rawWidth <= 84) {
+      useAppViewStore.setState({ sidebarCollapsed: true });
+      return;
+    }
+    const nextWidth = Math.min(260, Math.max(96, rawWidth));
+    resizeRef.current.lastWidth = nextWidth;
+    setSidebarWidth(nextWidth);
+    useAppViewStore.setState({ sidebarCollapsed: false });
+  };
+
+  const handleResizeEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (resizeRef.current.pointerId !== event.pointerId) return;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    resizeRef.current.pointerId = -1;
+    setSidebarResizing(false);
+    window.localStorage.setItem('mss-sidebar-width', String(Math.round(resizeRef.current.lastWidth)));
+  };
+
   return (
     <aside
       className={cn(
-        'app-sidebar z-40 flex shrink-0 flex-col border-r border-zinc-200/80 bg-white/80 backdrop-blur-2xl',
+        'app-sidebar relative z-40 flex shrink-0 flex-col border-r border-zinc-200/80 bg-white/80 backdrop-blur-2xl',
         sidebarCollapsed && 'sidebar-collapsed',
+        sidebarResizing && 'select-none',
         isBusiness ? 'shell-business' : 'shell-ops',
       )}
+      style={sidebarCollapsed ? undefined : { width: sidebarWidth, transition: sidebarResizing ? 'none' : undefined }}
     >
-      <div className="flex items-center justify-end border-b border-black/[0.06] px-2 py-1.5">
+      <div
+        role="separator"
+        aria-label="调整侧栏宽度"
+        aria-orientation="vertical"
+        title="拖动调整侧栏宽度"
+        onPointerDown={handleResizeStart}
+        onPointerMove={handleResizeMove}
+        onPointerUp={handleResizeEnd}
+        onPointerCancel={handleResizeEnd}
+        className="group absolute -right-1 top-0 z-50 h-full w-2 cursor-col-resize touch-none"
+      >
+        <span className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 bg-zinc-300/0 transition-colors group-hover:bg-zinc-300/70" />
         <button
           type="button"
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={toggleSidebar}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900"
+          className="pointer-events-none absolute left-1/2 top-1/2 flex h-9 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-black/[0.08] bg-white/95 text-zinc-400 opacity-0 shadow-[0_3px_12px_rgba(0,0,0,0.1)] backdrop-blur transition-all duration-150 group-hover:pointer-events-auto group-hover:opacity-100 hover:border-black/[0.14] hover:text-zinc-900 focus:pointer-events-auto focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
           title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
           aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
         >
           <i
             className={cn(
-              'fa-solid text-[13px]',
-              sidebarCollapsed ? 'fa-angles-right' : 'fa-angles-left',
+              'fa-solid text-[9px]',
+              sidebarCollapsed ? 'fa-angle-right' : 'fa-angle-left',
             )}
           />
         </button>

@@ -13,64 +13,26 @@ import {
   scheduleSavePlatformDoc,
 } from '@/api/platformDocsApi';
 
-const LEGACY_OFFICE_LABELS = new Set([
-  '记一下',
-  '读一下',
-  '写一下',
-  '问一下',
-  '搜一下',
-  '答一下',
-  '情报官',
-  '知识库',
-  'Agent',
-]);
-
-function mergeWithDefaults(
+function normalizeEntries(
   saved: InternalOfficeSceneCatalogEntry[] | null,
 ): InternalOfficeSceneCatalogEntry[] {
-  const defaults = defaultInternalOfficeSceneCatalog();
-  const isLegacyCopy =
-    Boolean(saved?.length) &&
-    saved!.every((e) => !e.label?.trim() || LEGACY_OFFICE_LABELS.has(e.label.trim()));
-  if (!saved?.length || isLegacyCopy) return defaults;
-
-  const byId = new Map(
-    (saved ?? [])
-      .filter((e) => e?.id && isInternalOfficeSceneId(e.id))
-      .map((e) => [e.id, e] as const),
-  );
-  const orderedIds = saved?.length
-    ? [
-        ...saved.map((e) => e.id).filter(isInternalOfficeSceneId),
-        ...defaults.map((e) => e.id).filter((id) => !byId.has(id)),
-      ]
-    : defaults.map((e) => e.id);
-
-  const seen = new Set<string>();
-  const result: InternalOfficeSceneCatalogEntry[] = [];
-  for (const id of orderedIds) {
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const base = defaults.find((e) => e.id === id)!;
-    const override = byId.get(id);
-    result.push({
-      id,
-      label: override?.label?.trim() || base.label,
-      english: override?.english?.trim() || base.english,
-      description: override?.description?.trim() || base.description,
-      icon: override?.icon?.trim() || base.icon,
-      visible: override?.visible ?? base.visible,
-      // 区分「未配置」与「显式空数组」：空数组表示运营清空绑定
-      toolIds: Array.isArray(override?.toolIds)
-        ? [...new Set(override.toolIds.filter(Boolean))]
-        : [...base.toolIds],
-      toolBlurbs: {
-        ...base.toolBlurbs,
-        ...(override?.toolBlurbs ?? {}),
-      },
-    });
-  }
-  return result;
+  return (saved ?? [])
+    .filter((entry) => entry?.id && isInternalOfficeSceneId(entry.id))
+    .map((entry) => ({
+      id: entry.id,
+      label: entry.label?.trim() || entry.id,
+      english: entry.english?.trim() || '',
+      description: entry.description?.trim() || '',
+      icon: entry.icon?.trim() || 'fa-cube',
+      visible: entry.visible !== false,
+      toolIds: Array.isArray(entry.toolIds)
+        ? [...new Set(entry.toolIds.filter(Boolean))]
+        : [],
+      toolBlurbs:
+        entry.toolBlurbs && typeof entry.toolBlurbs === 'object'
+          ? { ...entry.toolBlurbs }
+          : {},
+    }));
 }
 
 function persist(entries: InternalOfficeSceneCatalogEntry[]) {
@@ -94,7 +56,7 @@ interface InternalOfficeSceneCatalogState {
   dismissToast: () => void;
 }
 
-const initial = mergeWithDefaults(null);
+const initial: InternalOfficeSceneCatalogEntry[] = [];
 setInternalOfficeSceneCatalog(initial);
 
 export const useInternalOfficeSceneCatalogStore =
@@ -105,7 +67,7 @@ export const useInternalOfficeSceneCatalogStore =
     hydrate: () => {
       void (async () => {
         if (!canUsePlatformDocsApi()) {
-          const entries = mergeWithDefaults(null);
+          const entries: InternalOfficeSceneCatalogEntry[] = [];
           setInternalOfficeSceneCatalog(entries);
           set({ entries });
           return;
@@ -119,11 +81,11 @@ export const useInternalOfficeSceneCatalogStore =
             : Array.isArray(remote?.entries)
               ? remote.entries
               : null;
-          const entries = mergeWithDefaults(list);
+          const entries = normalizeEntries(list);
           setInternalOfficeSceneCatalog(entries);
           set({ entries });
         } catch {
-          const entries = mergeWithDefaults(null);
+          const entries: InternalOfficeSceneCatalogEntry[] = [];
           setInternalOfficeSceneCatalog(entries);
           set({ entries });
         }
@@ -175,7 +137,7 @@ export const useInternalOfficeSceneCatalogStore =
     },
 
     resetToDefaults: () => {
-      const entries = mergeWithDefaults(null);
+      const entries = defaultInternalOfficeSceneCatalog();
       persist(entries);
       set({ entries, toast: '已恢复默认办公场景' });
     },

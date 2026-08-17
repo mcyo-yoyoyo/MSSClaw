@@ -33,10 +33,11 @@ export function AiBriefPage() {
   const showToast = useMarketplaceStore((s) => s.showToast);
   const loginEmail = useSessionStore((s) => s.user?.email ?? '');
 
-  const [activeDate, setActiveDate] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [emailDraft, setEmailDraft] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<AiBriefCategoryId | 'all'>('all');
+  const [searchDraft, setSearchDraft] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     // 每次进入快讯页主动同步，避免开发热更新或上游短暂失败后长期停留在兜底内容。
@@ -72,20 +73,26 @@ export function AiBriefPage() {
   );
 
   const visibleGroups = useMemo(() => {
-    if (categoryFilter === 'all') return payload.groups;
+    const query = searchQuery.trim().toLocaleLowerCase();
     return payload.groups
+      .slice(0, 7)
       .map((g) => ({
         ...g,
-        items: g.items.filter((item) => classifyAiBriefItem(item).category === categoryFilter),
+        items: g.items.filter((item) => {
+          if (
+            categoryFilter !== 'all' &&
+            classifyAiBriefItem(item).category !== categoryFilter
+          ) {
+            return false;
+          }
+          if (!query) return true;
+          return [item.title, item.summary, item.source, item.reason]
+            .filter(Boolean)
+            .some((value) => value!.toLocaleLowerCase().includes(query));
+        }),
       }))
       .filter((g) => g.items.length > 0);
-  }, [payload.groups, categoryFilter]);
-
-  useEffect(() => {
-    if (!visibleGroups.length) return;
-    if (activeDate && visibleGroups.some((g) => g.dateLabel === activeDate)) return;
-    setActiveDate(visibleGroups[0].dateLabel);
-  }, [visibleGroups, activeDate]);
+  }, [payload.groups, categoryFilter, searchQuery]);
 
   useEffect(() => {
     if (!highlightId) return;
@@ -169,36 +176,6 @@ export function AiBriefPage() {
           </div>
         </PageStageHero>
 
-        <div className="mb-3 flex flex-wrap items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => setCategoryFilter('all')}
-            className={cn(
-              'rounded-full px-3 py-1 text-[11px] font-semibold transition',
-              categoryFilter === 'all'
-                ? 'bg-[#1d1d1f] text-white'
-                : 'bg-white text-[#3f3f46] shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:bg-zinc-50',
-            )}
-          >
-            全部
-          </button>
-          {AI_BRIEF_CATEGORIES.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => setCategoryFilter(c.id)}
-              className={cn(
-                'rounded-full px-3 py-1 text-[11px] font-semibold transition',
-                categoryFilter === c.id
-                  ? 'bg-[#1d1d1f] text-white'
-                  : 'bg-white text-[#3f3f46] shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:bg-zinc-50',
-              )}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-
         {mssBoard.length ? (
           <section className="mb-3 rounded-[18px] border border-[#0071e3]/15 bg-[#f4f8fd] px-4 py-3.5">
             <div className="mb-2.5 flex items-baseline justify-between gap-2">
@@ -231,65 +208,53 @@ export function AiBriefPage() {
           </section>
         ) : null}
 
-        <div className="flex min-h-0 flex-1 flex-col gap-3 md:flex-row">
-          <aside className="flex w-full shrink-0 flex-col overflow-hidden rounded-[18px] border-0 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.03),0_8px_24px_rgba(0,0,0,0.05)] md:w-[220px]">
-            <div className="flex items-center gap-2 border-b border-black/[0.04] px-3.5 py-2.5">
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-[#0071e3] text-[10px] text-white">
-                <i className="fa-regular fa-calendar" />
-              </span>
-              <span className="text-[11px] font-semibold tracking-wide text-[#6e6e73]">
-                按日浏览
-              </span>
-            </div>
-            <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
-              {visibleGroups.length === 0 ? (
-                <p className="px-2 py-10 text-center text-[11px] text-[#86868b]">暂无快讯</p>
-              ) : (
-                visibleGroups.map((g, gi) => (
-                  <button
-                    key={g.dateLabel}
-                    type="button"
-                    onClick={() => {
-                      setActiveDate(g.dateLabel);
-                      setHighlightId(g.items[0]?.id ?? null);
-                    }}
-                    className={cn(
-                      'flex w-full flex-col gap-0.5 rounded-xl px-2.5 py-2 text-left transition',
-                      activeDate === g.dateLabel
-                        ? 'bg-[#1d1d1f] text-white shadow-sm'
-                        : 'text-[#1d1d1f] hover:bg-black/[0.04]',
-                    )}
-                  >
-                    <span className="flex items-center justify-between gap-2">
-                      <span className="text-[12px] font-semibold tabular-nums">{g.dateLabel}</span>
-                      {gi === 0 ? (
-                        <span
-                          className={cn(
-                            'rounded px-1 py-px text-[9px] font-bold tracking-wide',
-                            activeDate === g.dateLabel
-                              ? 'bg-white/20 text-white'
-                              : 'bg-[#0071e3]/12 text-[#0071e3]',
-                          )}
-                        >
-                          NEW
-                        </span>
-                      ) : null}
-                    </span>
-                    <span
-                      className={cn(
-                        'text-[10px]',
-                        activeDate === g.dateLabel ? 'text-white/70' : 'text-[#86868b]',
-                      )}
-                    >
-                      {g.items.length} 条快讯
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-          </aside>
+        <div className="mb-5 flex flex-col gap-3 border-b border-black/[0.07] pb-2.5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-1 sm:gap-2">
+            {[{ id: 'all' as const, label: '全部' }, ...AI_BRIEF_CATEGORIES].map((category) => (
+              <button
+                key={category.id}
+                type="button"
+                onClick={() => setCategoryFilter(category.id)}
+                className={cn(
+                  'relative px-3 py-2 text-[12px] font-medium transition after:absolute after:inset-x-2 after:-bottom-[11px] after:h-0.5 after:rounded-full after:bg-transparent',
+                  categoryFilter === category.id
+                    ? 'font-semibold text-[#0071e3] after:bg-[#0071e3]'
+                    : 'text-zinc-500 hover:text-zinc-900',
+                )}
+              >
+                {category.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex w-full shrink-0 flex-col gap-2 sm:flex-row lg:w-auto">
+            <form
+              className="flex min-w-0 flex-1 gap-2 lg:flex-none"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setSearchQuery(searchDraft);
+              }}
+            >
+              <label className="relative min-w-0 flex-1 lg:w-64">
+                <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-zinc-400" />
+                <input
+                  value={searchDraft}
+                  onChange={(event) => setSearchDraft(event.target.value)}
+                  placeholder="搜索标题、摘要…"
+                  className="h-10 w-full rounded-xl border border-zinc-200 bg-white pl-8 pr-3 text-[12px] text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-[#0071e3]/50 focus:ring-2 focus:ring-[#0071e3]/10"
+                />
+              </label>
+              <button
+                type="submit"
+                className="h-10 rounded-xl bg-[#0071e3] px-5 text-[12px] font-semibold text-white transition hover:bg-[#0064c8]"
+              >
+                搜索
+              </button>
+            </form>
+          </div>
+        </div>
 
-          <main className="min-h-0 flex-1 overflow-y-auto rounded-[18px] border-0 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.03),0_8px_24px_rgba(0,0,0,0.05)]">
+        <div className="min-h-0 flex-1">
+          <main className="min-h-0 flex-1">
             {loading && !flat.length ? (
               <div className="flex h-full items-center justify-center px-4 py-16 text-[13px] text-[#6e6e73]">
                 <i className="fa-solid fa-spinner fa-spin mr-2 text-[12px]" />
@@ -299,78 +264,63 @@ export function AiBriefPage() {
               <div className="flex h-full items-center justify-center px-4 py-16 text-[13px] text-[#86868b]">
                 暂无内容
               </div>
+            ) : !visibleGroups.length ? (
+              <div className="rounded-2xl border border-dashed border-zinc-200 bg-white/70 px-4 py-16 text-center text-[13px] text-zinc-400">
+                没有找到符合当前筛选条件的资讯
+              </div>
             ) : (
-              <div>
+              <div className="space-y-8">
                 {visibleGroups.map((group, gi) => (
                   <section key={group.dateLabel} className="scroll-mt-4">
-                    <div
-                      className={cn(
-                        'sticky top-0 z-10 flex items-center gap-2.5 border-b border-black/[0.04] px-4 py-2.5 backdrop-blur md:px-6',
-                        activeDate === group.dateLabel ? 'bg-[#f4f7fb]/95' : 'bg-white/95',
-                      )}
-                    >
-                      <span className="h-4 w-1 rounded-full bg-[#0071e3]" />
-                      <div className="min-w-0">
-                        <p className="text-[14px] font-semibold tracking-tight text-[#1d1d1f]">
-                          {group.dateLabel}
-                        </p>
-                        {gi === 0 ? (
-                          <p className="text-[11px] text-[#0071e3]/80">
-                            最新一日 · 共 {group.items.length} 条
-                          </p>
-                        ) : (
-                          <p className="text-[11px] text-[#86868b]">{group.items.length} 条</p>
-                        )}
-                      </div>
+                    <div className="mb-3 flex items-baseline gap-2 px-1">
+                      <h2 className="text-[18px] font-bold tracking-tight text-zinc-900">
+                        {group.dateLabel}
+                      </h2>
+                      <span className="text-[11px] text-zinc-500">
+                        {gi === 0 ? '最新一日 · ' : ''}{group.items.length} 条
+                      </span>
                     </div>
-                    <div className="divide-y divide-black/[0.04]">
+                    <div className="ml-4 space-y-3 border-l border-zinc-300/80 pl-7">
                       {group.items.map((item, index) => {
                         const meta = classifyAiBriefItem(item);
-                        const globalIndex =
-                          visibleGroups
-                            .slice(0, gi)
-                            .reduce((n, g) => n + g.items.length, 0) +
-                          index +
-                          1;
                         return (
                           <article
                             key={item.id}
                             data-brief-id={item.id}
                             className={cn(
-                              'group scroll-mt-14 px-4 py-4 transition md:px-6',
+                              'group relative scroll-mt-14 rounded-2xl border border-zinc-200/90 bg-white px-4 py-4 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_6px_18px_rgba(0,0,0,0.035)] transition md:px-5',
                               highlightId === item.id
-                                ? 'bg-[#0071e3]/06'
-                                : 'hover:bg-black/[0.02]',
+                                ? 'border-[#0071e3]/30 ring-2 ring-[#0071e3]/8'
+                                : 'hover:border-zinc-300 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)]',
                             )}
                           >
-                            <div className="flex gap-3">
-                              <span className="mt-1 hidden w-7 shrink-0 text-right font-mono text-[11px] tabular-nums text-[#86868b] sm:block">
-                                {String(globalIndex).padStart(2, '0')}
-                              </span>
-                              <div className="min-w-0 flex-1 border-l-2 border-transparent pl-0 transition group-hover:border-[#0071e3]/35 sm:pl-3">
-                                <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                                  {gi === 0 && index === 0 && categoryFilter === 'all' ? (
-                                    <span className="inline-flex items-center gap-1 rounded-md bg-[#0071e3] px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-white">
-                                      <i className="fa-solid fa-bolt text-[8px]" />
-                                      最新
+                            <span className="absolute -left-[35px] top-5 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#0071e3] shadow-[0_0_0_1px_rgba(0,113,227,0.18)]" />
+                            <span className="absolute -left-[69px] top-[17px] hidden w-7 text-right font-mono text-[10px] font-semibold tabular-nums text-zinc-500 sm:block">
+                              {String(index + 1).padStart(2, '0')}
+                            </span>
+                            <div className="min-w-0">
+                                <div className="mb-2 flex flex-wrap items-center gap-2">
+                                  {item.source ? (
+                                    <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-500">
+                                      {item.source}
                                     </span>
                                   ) : null}
-                                  <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-600">
+                                  {gi === 0 && index === 0 && categoryFilter === 'all' ? (
+                                    <span className="rounded-md bg-[#0071e3] px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                                      ✦ 精选
+                                    </span>
+                                  ) : null}
+                                  <span className="rounded-md bg-[#0071e3]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#0071e3]">
                                     {getAiBriefCategoryLabel(meta.category)}
                                   </span>
                                   {meta.mssFit ? (
-                                    <span className="rounded-md bg-[#0071e3]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#0071e3]">
+                                    <span className="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
                                       适合 MSS
                                     </span>
                                   ) : null}
-                                  {item.source ? (
-                                    <span className="text-[10px] text-[#86868b]">
-                                      来源：{item.source}
-                                    </span>
-                                  ) : null}
                                   {typeof item.score === 'number' ? (
-                                    <span className="text-[10px] tabular-nums text-[#86868b]">
-                                      热度 {item.score} 分
+                                    <span className="ml-auto text-[11px] font-semibold tabular-nums text-[#0071e3]">
+                                      ● AI 评分 {item.score}/100
                                     </span>
                                   ) : null}
                                 </div>
@@ -378,18 +328,18 @@ export function AiBriefPage() {
                                   href={item.url}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="block text-[15px] font-semibold leading-snug tracking-tight text-[#1d1d1f] transition hover:text-[#0071e3] hover:underline hover:underline-offset-2 md:text-[16px]"
+                                  className="block text-[15px] font-semibold leading-snug tracking-tight text-zinc-900 transition hover:text-[#0071e3] md:text-[16px]"
                                 >
                                   {item.title}
                                 </a>
                                 {item.summary ? (
-                                  <p className="mt-1.5 line-clamp-2 text-[12px] leading-relaxed text-[#6e6e73] md:text-[13px]">
+                                  <p className="mt-2 text-[12px] leading-relaxed text-zinc-600 md:text-[13px]">
                                     {item.summary}
                                   </p>
                                 ) : null}
                                 {item.reason ? (
-                                  <p className="mt-2 border-l-2 border-[#0071e3]/25 pl-2.5 text-[11px] leading-relaxed text-[#71717a]">
-                                    <span className="font-semibold text-[#52525b]">入选理由：</span>
+                                  <p className="mt-3 border-t border-dashed border-zinc-200 pt-3 text-[11px] leading-relaxed text-[#356f9f]">
+                                    <span className="font-semibold">推荐理由：</span>
                                     {item.reason}
                                   </p>
                                 ) : null}
@@ -398,13 +348,12 @@ export function AiBriefPage() {
                                     href={item.aihotUrl}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="mt-2 inline-flex items-center gap-1 text-[10px] font-medium text-[#0071e3] hover:underline"
+                                    className="mt-3 inline-flex items-center gap-1 text-[10px] font-medium text-[#0071e3] hover:underline"
                                   >
                                     查看详情
                                     <i className="fa-solid fa-arrow-up-right-from-square text-[8px]" />
                                   </a>
                                 ) : null}
-                              </div>
                             </div>
                           </article>
                         );

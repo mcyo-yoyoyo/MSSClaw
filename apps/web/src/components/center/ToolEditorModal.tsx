@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { cn } from '@/lib/utils';
 import { CenterModal } from '@/components/center/CenterShell';
 import {
   FormField,
@@ -68,12 +69,12 @@ function emptyTool(asExternal: boolean): PrototypeToolSeed {
     author: name,
     publisher: name,
     publisherUserId: getCurrentUserId() || undefined,
-    published: true,
+    published: false,
     invokes: 0,
     icon: asExternal ? 'fa-arrow-up-right-from-square' : 'fa-plug',
-    tags: asExternal ? ['外部', 'ai-saas'] : [],
+    tags: [],
     sourceType: asExternal ? 'external' : 'internal',
-    visibility: asExternal ? 'org' : 'public',
+    visibility: asExternal ? undefined : 'public',
     ownerDeptIds: [],
     ownerRegionId: null,
     homepageUrl: '',
@@ -82,12 +83,16 @@ function emptyTool(asExternal: boolean): PrototypeToolSeed {
     marketTitle: '',
     businessScenarioIds: [],
     featuredInFindCases: false,
-    region: asExternal ? ('overseas' as ToolRegion) : undefined,
-    toolTypeId: asExternal ? ('general' as ExternalToolTypeId) : undefined,
+    region: undefined,
+    toolTypeId: undefined,
+    toolTypeIds: [],
+    toolTypeLabels: [],
     cardSummary: '',
     company: '',
     productIntro: '',
     bestFor: '',
+    coreCapabilities: [],
+    docsUrl: '',
     mediaUrl: '',
     screenshotUrl: '',
   };
@@ -168,11 +173,29 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
       showToast('外部工具请填写访问链接');
       return;
     }
+    if (sourceType === 'external' && !form.region) {
+      showToast('请选择目录区域');
+      return;
+    }
+    if (sourceType === 'external' && !form.visibility) {
+      showToast('请选择可见性');
+      return;
+    }
+    const selectedToolTypeIds = (form.toolTypeIds?.length
+      ? form.toolTypeIds
+      : form.toolTypeId
+        ? [form.toolTypeId]
+        : []) as ExternalToolTypeId[];
+    if (sourceType === 'external' && !selectedToolTypeIds.length) {
+      showToast('请至少选择一个工具类型');
+      return;
+    }
     const prev = !isNew ? tools.find((t) => t.id === target) : null;
     const userName = getCurrentUserName() || 'Mcyo';
     const userId = getCurrentUserId();
     const id = isNew ? `tool-${Date.now()}` : (target as string);
-    const needsApproval = isNew || (form.published && !prev?.published);
+    const needsApproval =
+      sourceType !== 'external' && (isNew || (form.published && !prev?.published));
     const tags = ensureMarketShelfTags(form.tags ?? [], marketShelf);
     const marketTitle = form.marketTitle?.trim() || undefined;
     const businessScenarioIds = (form.businessScenarioIds ?? []) as BusinessScenarioId[];
@@ -182,7 +205,10 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
         ...form,
         id,
         name,
-        desc: form.desc.trim(),
+        desc:
+          sourceType === 'external'
+            ? form.cardSummary?.trim() || form.productIntro?.trim() || ''
+            : form.desc.trim(),
         category:
           sourceType === 'external'
             ? 'external'
@@ -202,19 +228,25 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
         ownerDeptIds: (form.ownerDeptIds ?? []) as DeptId[],
         ownerRegionId: (form.ownerRegionId ?? null) as RegionId | null,
         homepageUrl: form.homepageUrl?.trim() || undefined,
-        published: needsApproval ? false : form.published,
+        published: sourceType === 'external' ? true : needsApproval ? false : form.published,
         marketShelf,
         marketTitle: marketShelf === 'external' ? marketTitle : undefined,
         businessScenarioIds: businessScenarioIds.length ? businessScenarioIds : undefined,
         featuredInFindCases: marketShelf === 'none' ? false : Boolean(form.featuredInFindCases),
         ...(sourceType === 'external' || marketShelf === 'external'
           ? {
-              region: (form.region ?? 'overseas') as ToolRegion,
-              toolTypeId: (form.toolTypeId ?? 'general') as ExternalToolTypeId,
+              region: form.region as ToolRegion,
+              toolTypeId: selectedToolTypeIds[0],
+              toolTypeIds: selectedToolTypeIds,
+              toolTypeLabels: selectedToolTypeIds.map(
+                (id) => externalTaxonomy.types.find((type) => type.id === id)?.label ?? id,
+              ),
               cardSummary: form.cardSummary?.trim() || undefined,
               company: form.company?.trim() || undefined,
               productIntro: form.productIntro?.trim() || undefined,
               bestFor: form.bestFor?.trim() || undefined,
+              coreCapabilities: form.coreCapabilities?.filter(Boolean),
+              docsUrl: form.docsUrl?.trim() || undefined,
               mediaUrl: form.mediaUrl?.trim() || undefined,
               screenshotUrl: form.screenshotUrl?.trim() || undefined,
             }
@@ -236,7 +268,10 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
       });
       showToast('工具已保存，已进入上架审批' + shareSyncSaveHint());
     } else {
-      showToast((form.published ? '工具已保存' : '工具已保存（草稿）') + shareSyncSaveHint());
+      showToast(
+        (sourceType === 'external' || form.published ? '工具已保存' : '工具已保存（草稿）') +
+          shareSyncSaveHint(),
+      );
     }
   };
 
@@ -252,52 +287,82 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
       open
       title={title}
       onClose={onClose}
-      actions={<ModalActions onCancel={onClose} onSave={handleSave} saveLabel="保存并提交审批" />}
+      actions={
+        <ModalActions
+          onCancel={onClose}
+          onSave={handleSave}
+          saveLabel={form.sourceType === 'external' || shelf === 'external' ? '保存' : '保存并提交审批'}
+          cancelFirst
+        />
+      }
     >
       <div className="space-y-3 text-left">
         <FormField label="工具名称（产品名）">
-          <FormInput value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        </FormField>
-        <FormField label="描述">
-          <FormTextarea
-            rows={2}
-            value={form.desc}
-            onChange={(e) => setForm({ ...form, desc: e.target.value })}
+          <FormInput
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder="请输入工具的正式产品名称"
           />
         </FormField>
+        {form.sourceType !== 'external' && shelf !== 'external' ? (
+          <FormField label="描述">
+            <FormTextarea
+              rows={2}
+              value={form.desc}
+              onChange={(e) => setForm({ ...form, desc: e.target.value })}
+              placeholder="请简要说明工具用途"
+            />
+          </FormField>
+        ) : null}
         {(form.sourceType === 'external' || shelf === 'external') && (
           <>
             <div className="grid gap-3 sm:grid-cols-2">
               <FormField label="目录区域（海外 / 国内）" hint="决定外精选双栏与筛选统计">
                 <FormSelect
-                  value={form.region ?? 'overseas'}
+                  value={form.region ?? ''}
                   onChange={(e) =>
-                    setForm({ ...form, region: e.target.value as ToolRegion })
+                    setForm({ ...form, region: (e.target.value || undefined) as ToolRegion | undefined })
                   }
                 >
+                  <option value="" disabled>请选择目录区域</option>
                   <option value="overseas">海外</option>
                   <option value="domestic">国内</option>
                 </FormSelect>
               </FormField>
-              <FormField label="工具类型" hint="对应「按工具类型」筛选芯片">
-                <FormSelect
-                  value={(form.toolTypeId as string) || 'general'}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      toolTypeId: e.target.value as ExternalToolTypeId,
-                    })
-                  }
-                >
-                  {externalTypeOptions.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.label}
-                    </option>
-                  ))}
-                </FormSelect>
+              <FormField label="工具类型（可多选）" hint="对应详情页工具类型与货架筛选">
+                <div className="flex min-h-10 flex-wrap gap-1.5 rounded-xl border border-zinc-200 bg-white p-2">
+                  {externalTypeOptions.map((type) => {
+                    const selected = (form.toolTypeIds?.length
+                      ? form.toolTypeIds
+                      : form.toolTypeId
+                        ? [form.toolTypeId]
+                        : []
+                    ).includes(type.id);
+                    return (
+                      <button
+                        key={type.id}
+                        type="button"
+                        onClick={() => {
+                          const current = new Set(form.toolTypeIds ?? (form.toolTypeId ? [form.toolTypeId] : []));
+                          if (current.has(type.id)) current.delete(type.id);
+                          else current.add(type.id);
+                          setForm({ ...form, toolTypeIds: [...current], toolTypeId: [...current][0] });
+                        }}
+                        className={cn(
+                          'rounded-lg px-2 py-1 text-[11px] font-medium transition',
+                          selected
+                            ? 'bg-sky-100 text-sky-800 ring-1 ring-sky-200'
+                            : 'bg-zinc-50 text-zinc-500 hover:bg-zinc-100',
+                        )}
+                      >
+                        {type.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </FormField>
             </div>
-            <FormField label="卡片摘要" hint="货架卡优先展示；可短于完整描述">
+            <FormField label="卡片简介（核心作用）" hint="用于外部工具货架卡片的一句话简介">
               <FormTextarea
                 rows={2}
                 value={form.cardSummary ?? ''}
@@ -312,27 +377,42 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
                 placeholder="例：OpenAI"
               />
             </FormField>
-            <FormField label="产品介绍">
+            <FormField label="产品详细介绍" hint="对应工具详情页“产品详细介绍”">
               <FormTextarea
                 rows={3}
                 value={form.productIntro ?? ''}
                 onChange={(e) => setForm({ ...form, productIntro: e.target.value })}
-                placeholder="详情页概览展示"
+                placeholder="介绍产品定位、主要能力、适用任务及差异化特点"
               />
             </FormField>
-            <FormField label="最适合">
+            <FormField label="最适合" hint="对应工具详情页“最适合”">
               <FormInput
                 value={form.bestFor ?? ''}
                 onChange={(e) => setForm({ ...form, bestFor: e.target.value })}
                 placeholder="例：需要可追溯来源的研究问答"
               />
             </FormField>
+            <FormField label="核心能力" hint="对应工具详情页能力标签，使用逗号分隔">
+              <FormInput
+                value={(form.coreCapabilities ?? []).join('，')}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    coreCapabilities: e.target.value
+                      .split(/[,，]/)
+                      .map((item) => item.trim())
+                      .filter(Boolean),
+                  })
+                }
+                placeholder="例如：深度研究，文件分析，多模态理解"
+              />
+            </FormField>
             <div className="grid gap-3 sm:grid-cols-2">
-              <FormField label="截图 URL">
+              <FormField label="帮助文档 URL">
                 <FormInput
-                  value={form.screenshotUrl ?? ''}
-                  onChange={(e) => setForm({ ...form, screenshotUrl: e.target.value })}
-                  placeholder="https://… 图片地址"
+                  value={form.docsUrl ?? ''}
+                  onChange={(e) => setForm({ ...form, docsUrl: e.target.value })}
+                  placeholder="https://… 官方帮助文档"
                 />
               </FormField>
               <FormField label="演示 / 介绍媒体 URL">
@@ -358,13 +438,17 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
             }
           >
             <div className="flex items-center gap-3">
-              <ToolLogo
-                name={form.name || '工具'}
-                logoUrl={resolveToolLogoUrl(form)}
-                icon={form.icon}
-                size={40}
-                className="rounded-xl"
-              />
+              {form.logoUrl || form.homepageUrl ? (
+                <div className="shrink-0" aria-label="Logo 预览">
+                  <ToolLogo
+                    name={form.name || '工具'}
+                    logoUrl={resolveToolLogoUrl(form)}
+                    icon={form.icon}
+                    size={40}
+                    className="rounded-xl"
+                  />
+                </div>
+              ) : null}
               {shelf === 'internal' || form.marketShelf === 'internal' ? (
                 <p className="text-[11px] leading-relaxed text-zinc-500">
                   已绑定华为品牌标识，与货架展示一致。
@@ -433,8 +517,9 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
           ownerDeptIds={form.ownerDeptIds ?? []}
           ownerRegionId={form.ownerRegionId ?? null}
           sourceType={(form.sourceType ?? 'internal') as AssetSourceType}
-          visibility={(form.visibility ?? 'public') as AssetVisibility}
+          visibility={form.visibility as AssetVisibility | undefined}
           homepageUrl={form.homepageUrl}
+          lockSource={target === 'new-external'}
           onChange={(patch) =>
             setForm({
               ...form,
@@ -545,15 +630,17 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
           </details>
         </div>
 
-        <label className="flex cursor-pointer items-center gap-2">
-          <input
-            type="checkbox"
-            className="accent-claw-600"
-            checked={form.published}
-            onChange={(e) => setForm({ ...form, published: e.target.checked })}
-          />
-          <span className="text-[13px]">提交上架审批（能力上架）</span>
-        </label>
+        {form.sourceType !== 'external' && shelf !== 'external' ? (
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              className="accent-claw-600"
+              checked={form.published}
+              onChange={(e) => setForm({ ...form, published: e.target.checked })}
+            />
+            <span className="text-[13px]">提交上架审批（能力上架）</span>
+          </label>
+        ) : null}
       </div>
     </CenterModal>
   );

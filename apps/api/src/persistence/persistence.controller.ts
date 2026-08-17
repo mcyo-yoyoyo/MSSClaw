@@ -7,6 +7,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
@@ -16,6 +17,15 @@ import {
   type PortalContentPayload,
 } from './persistence.service';
 import { BlobStoreService } from './blob-store.service';
+
+const MARKET_ENGAGEMENT_ACTIONS = new Set([
+  'view',
+  'use',
+  'download',
+  'favorite',
+  'like',
+  'dislike',
+]);
 
 @Controller('workspaces/:workspaceId')
 export class PersistenceController {
@@ -45,6 +55,35 @@ export class PersistenceController {
   @Put('marketplace')
   putMarketplace(@Param('workspaceId') workspaceId: string, @Body() body: MarketplacePayload) {
     return this.persistence.putMarketplace(workspaceId, body);
+  }
+
+  @Get('market-engagement')
+  getMarketEngagement(
+    @Param('workspaceId') workspaceId: string,
+    @Query('userId') userId = 'anonymous',
+  ) {
+    return this.persistence.getMarketEngagement(workspaceId, userId);
+  }
+
+  @Post('market-engagement/:contentId/actions')
+  mutateMarketEngagement(
+    @Param('workspaceId') workspaceId: string,
+    @Param('contentId') contentId: string,
+    @Body()
+    body: {
+      action?: 'view' | 'use' | 'download' | 'favorite' | 'like' | 'dislike';
+      userId?: string;
+      active?: boolean;
+    },
+  ) {
+    if (!body?.action || !MARKET_ENGAGEMENT_ACTIONS.has(body.action)) {
+      throw new BadRequestException('invalid_market_engagement_action');
+    }
+    return this.persistence.mutateMarketEngagement(workspaceId, contentId, {
+      action: body.action,
+      userId: body.userId || 'anonymous',
+      active: body.active,
+    });
   }
 
   @Get('portal-content')

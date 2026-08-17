@@ -1,7 +1,5 @@
 /** 内容运营 · 统一互动指标与排行（P2） */
 
-import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
-
 export type RankMode =
   | 'trending'
   | 'newest'
@@ -11,7 +9,8 @@ export type RankMode =
   | 'most_viewed'
   | 'most_favorited'
   | 'most_liked'
-  | 'most_disliked';
+  | 'most_disliked'
+  | 'excel_order';
 
 export const RANK_MODE_OPTIONS: { id: RankMode; label: string }[] = [
   { id: 'trending', label: '热门推荐' },
@@ -23,6 +22,7 @@ export const RANK_MODE_OPTIONS: { id: RankMode; label: string }[] = [
 
 /** 外部 / 内部 / MSS 货架：按互动指标排序 */
 export const SHELF_RANK_TABS: { id: RankMode; label: string; icon: string }[] = [
+  { id: 'excel_order', label: '清单排序', icon: 'fa-solid fa-arrow-down-1-9' },
   { id: 'most_viewed', label: '查看', icon: 'fa-regular fa-eye' },
   { id: 'most_favorited', label: '收藏', icon: 'fa-regular fa-star' },
   { id: 'most_liked', label: '点赞', icon: 'fa-solid fa-thumbs-up' },
@@ -38,6 +38,8 @@ export const HOME_RANK_TABS: { id: RankMode; label: string }[] = [
 
 export interface ContentEngagement {
   id: string;
+  /** 详情/卡片被打开的次数 */
+  views: number;
   likes: number;
   dislikes: number;
   downloads: number;
@@ -53,6 +55,8 @@ export interface RankableContent {
   publishedAt?: string;
   /** 工具/专家等已有调用量，并入 uses */
   baseUses?: number;
+  /** 外部工具清单排序。 */
+  sourceOrder?: number;
 }
 
 /** 热度：近窗使用 ×0.7 + 点赞 ×0.3 */
@@ -80,31 +84,12 @@ export function needsOptimization(e: ContentEngagement, minVotes = 5, ratio = 0.
 export function emptyEngagement(id: string): ContentEngagement {
   return {
     id,
+    views: 0,
     likes: 0,
     dislikes: 0,
     downloads: 0,
     uses: 0,
     favorites: 0,
-    updatedAt: new Date().toISOString().slice(0, 10),
-  };
-}
-
-/** 演示种子：按 id 稳定生成初始互动，避免全 0 */
-export function seedEngagement(id: string): ContentEngagement {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  const likes = 8 + (h % 40);
-  const dislikes = h % 7;
-  const downloads = 3 + (h % 25);
-  const uses = 20 + (h % 80);
-  const favorites = 2 + (h % 18);
-  return {
-    id,
-    likes,
-    dislikes,
-    downloads,
-    uses,
-    favorites,
     updatedAt: new Date().toISOString().slice(0, 10),
   };
 }
@@ -124,6 +109,7 @@ export function mergeEngagement(
 export function normalizeEngagement(e: ContentEngagement): ContentEngagement {
   return {
     ...e,
+    views: e.views ?? e.uses ?? 0,
     likes: e.likes ?? 0,
     dislikes: e.dislikes ?? 0,
     downloads: e.downloads ?? 0,
@@ -135,6 +121,7 @@ export function normalizeEngagement(e: ContentEngagement): ContentEngagement {
 const resolvedMissCache = new Map<string, ContentEngagement>();
 
 function ensureNumericFields(e: ContentEngagement): ContentEngagement {
+  if (typeof e.views !== 'number') e.views = e.uses ?? 0;
   if (typeof e.likes !== 'number') e.likes = 0;
   if (typeof e.dislikes !== 'number') e.dislikes = 0;
   if (typeof e.downloads !== 'number') e.downloads = 0;
@@ -151,7 +138,7 @@ export function resolveEngagement(
   if (existing) return ensureNumericFields(existing);
   const cached = resolvedMissCache.get(id);
   if (cached) return cached;
-  const created = isDemoContentEnabled() ? seedEngagement(id) : emptyEngagement(id);
+  const created = emptyEngagement(id);
   resolvedMissCache.set(id, created);
   return created;
 }
@@ -170,6 +157,9 @@ export function sortByRankMode<T extends RankableContent>(
 
   scored.sort((a, b) => {
     switch (mode) {
+      case 'excel_order':
+        return (a.item.sourceOrder ?? Number.POSITIVE_INFINITY) -
+          (b.item.sourceOrder ?? Number.POSITIVE_INFINITY);
       case 'trending':
         return heatScore(b.e) - heatScore(a.e);
       case 'newest': {
@@ -184,7 +174,7 @@ export function sortByRankMode<T extends RankableContent>(
       case 'most_downloaded':
         return b.e.downloads - a.e.downloads || b.e.uses - a.e.uses;
       case 'most_viewed':
-        return b.e.uses - a.e.uses;
+        return b.e.views - a.e.views;
       case 'most_favorited':
         return (b.e.favorites ?? 0) - (a.e.favorites ?? 0) || b.e.uses - a.e.uses;
       case 'most_liked':

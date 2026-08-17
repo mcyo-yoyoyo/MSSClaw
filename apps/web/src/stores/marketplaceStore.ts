@@ -1,9 +1,5 @@
 import { create } from 'zustand';
-import { PROTOTYPE_AGENTS } from '@/domain/prototype/agents';
-import { PROTOTYPE_SKILLS } from '@/domain/prototype/skills';
-import { PROTOTYPE_TOOLS, pruneRetiredDemoTools } from '@/domain/prototype/tools';
-import { PROTOTYPE_AUTOMATIONS } from '@/domain/prototype/automations';
-import { PROTOTYPE_KB_DOCS } from '@/domain/prototype/kb';
+import { pruneRetiredDemoTools } from '@/domain/prototype/tools';
 import type {
   PrototypeAgentSeed,
   PrototypeAutomation,
@@ -18,7 +14,6 @@ import { parseAgentUpload } from '@/domain/agentExport';
 import { parseKbDocument } from '@/api/kbClient';
 import { rebuildKbVectorIndex } from '@/api/kbClient';
 import { loadMarketplace, scheduleSaveMarketplace } from '@/domain/persistence/storage';
-import { demoDefaults } from '@/domain/demoContentPolicy';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import {
   matchesAssetOrgFilters,
@@ -118,11 +113,11 @@ interface MarketplaceState {
 
 export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   ready: false,
-  agents: structuredClone(demoDefaults(PROTOTYPE_AGENTS)),
-  skills: structuredClone(demoDefaults(PROTOTYPE_SKILLS)),
-  tools: pruneRetiredDemoTools(structuredClone(demoDefaults(PROTOTYPE_TOOLS))),
-  automations: structuredClone(demoDefaults(PROTOTYPE_AUTOMATIONS)),
-  kbDocs: structuredClone(demoDefaults(PROTOTYPE_KB_DOCS)),
+  agents: [],
+  skills: [],
+  tools: [],
+  automations: [],
+  kbDocs: [],
   agentFilter: 'all',
   skillFilter: 'all',
   agentBusinessFilter: 'all',

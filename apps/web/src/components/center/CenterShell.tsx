@@ -13,6 +13,8 @@ interface CenterModalProps {
   elevate?: boolean;
   /** 覆盖默认标题区（如自定义 Hero） */
   header?: ReactNode;
+  /** 内容较少时让弹窗高度随内容收缩，超过视口后再滚动 */
+  fitContent?: boolean;
 }
 
 export function CenterModal({
@@ -24,6 +26,7 @@ export function CenterModal({
   size = 'md',
   elevate = false,
   header,
+  fitContent = false,
 }: CenterModalProps) {
   if (!open) return null;
 
@@ -32,9 +35,13 @@ export function CenterModal({
   const widthClass = fullscreen
     ? 'h-[min(96vh,calc(100%-1rem))] max-h-none max-w-none'
     : size === '2xl'
-      ? 'h-[min(94vh,920px)] max-w-6xl'
+      ? fitContent
+        ? 'max-h-[94vh] max-w-6xl'
+        : 'h-[min(94vh,920px)] max-w-6xl'
       : size === 'xl'
-        ? 'h-[min(92vh,880px)] max-w-5xl'
+        ? fitContent
+          ? 'max-h-[92vh] max-w-5xl'
+          : 'h-[min(92vh,880px)] max-w-5xl'
         : size === 'lg'
           ? 'max-h-[85vh] max-w-2xl'
           : 'max-h-[85vh] max-w-lg';

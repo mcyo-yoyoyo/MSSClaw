@@ -32,11 +32,7 @@ import { parseCaseUpload } from '@/domain/caseExport';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { usePortalContentStore } from '@/stores/portalContentStore';
-import {
-  ensureEngagementSeeds,
-  forceQueueDemoSeeds,
-  useContentEngagementStore,
-} from '@/stores/contentEngagementStore';
+import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { usePlazaToolGuideStore } from '@/stores/plazaToolGuideStore';
 import { PortalHowToOpsPanel } from '@/features/ops/PortalHowToOpsPanel';
 import { PortalMarketFeaturedPanel } from '@/features/ops/PortalMarketFeaturedPanel';
@@ -151,12 +147,6 @@ export function PortalContentOpsPage() {
       if (pack) setExpandedId(pack.scenario.id);
     }
   }, [consumePortalEditId, items]);
-
-  useEffect(() => {
-    const ids = items.map((i) => i.id);
-    ensureEngagementSeeds(ids);
-    if (ids.length >= 2) forceQueueDemoSeeds(ids);
-  }, [items]);
 
   const scopedItems = useMemo(
     () => items.filter((item) => itemMatchesDeptRegion(item, deptFilter, regionFilter)),

@@ -3,7 +3,6 @@ import { cn } from '@/lib/utils';
 import { getDeptLabel, getRegionLabel, type DeptId, type RegionId } from '@/domain/orgTaxonomy';
 import {
   clampOrgPerspectiveSelection,
-  emptyOrgPerspectiveSelection,
   getScopedDeptFilterOptions,
   getScopedRegionFilterOptions,
   isOrgPerspectiveEmpty,
@@ -64,10 +63,9 @@ function DimRow({
 export function SidebarMarketFilters({ collapsed }: { collapsed: boolean }) {
   const user = useSessionStore((s) => s.user);
   const appView = useAppViewStore((s) => s.appView);
+  const toggleSidebar = useAppViewStore((s) => s.toggleSidebar);
   const orgSelection = useMarketFilterStore((s) => s.orgSelection);
   const setOrgSelection = useMarketFilterStore((s) => s.setOrgSelection);
-  const setBusinessFilter = useMarketFilterStore((s) => s.setBusinessFilter);
-  const reset = useMarketFilterStore((s) => s.reset);
 
   const jumpToMss = ORG_NAV_JUMP_VIEWS.includes(appView);
 
@@ -137,9 +135,9 @@ export function SidebarMarketFilters({ collapsed }: { collapsed: boolean }) {
     return (
       <button
         type="button"
-        onClick={reset}
+        onClick={toggleSidebar}
         className={cn('wb-nav-item', filtersActive && 'active')}
-        title={filtersActive ? '筛选中 · 点击重置为全部' : '领域 / 区域'}
+        title={filtersActive ? '筛选中 · 点击展开筛选' : '展开领域 / 区域筛选'}
       >
         <i className="fa-solid fa-layer-group w-5 text-center text-[15px]" />
         <span className="nav-label">筛选</span>
@@ -149,19 +147,6 @@ export function SidebarMarketFilters({ collapsed }: { collapsed: boolean }) {
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-      {filtersActive ? (
-        <button
-          type="button"
-          onClick={() => {
-            setOrgSelection(emptyOrgPerspectiveSelection());
-            setBusinessFilter('all');
-          }}
-          className="absolute right-0.5 top-0 z-10 text-[10px] font-medium text-zinc-500 hover:text-zinc-800"
-        >
-          重置
-        </button>
-      ) : null}
-
       <div className="flex min-h-0 flex-1 flex-col justify-start gap-3 overflow-hidden pt-1">
         <section className="shrink-0">
           <div className="space-y-0.5">

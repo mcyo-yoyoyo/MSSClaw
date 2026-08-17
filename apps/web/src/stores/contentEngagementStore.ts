@@ -1,42 +1,29 @@
 import { create } from 'zustand';
 import {
   emptyEngagement,
-  mergeEngagement,
   needsOptimization,
   normalizeEngagement,
-  resolveEngagement,
-  seedEngagement,
   type ContentEngagement,
 } from '@/domain/contentEngagement';
-import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
+import { getCurrentUserId } from '@/domain/currentUser';
+import { canUsePlatformDocsApi, currentWorkspaceId } from '@/api/platformDocsApi';
 import {
-  canUsePlatformDocsApi,
-  currentWorkspaceId,
-  fetchPlatformDoc,
-  scheduleSavePlatformDoc,
-} from '@/api/platformDocsApi';
+  fetchMarketEngagementApi,
+  mutateMarketEngagementApi,
+  type MarketEngagementAction,
+  type MarketUserVote,
+} from '@/api/marketEngagementApi';
 
-type UserVote = 'like' | 'dislike' | null;
-
-type EngagementDoc = {
-  byId?: Record<string, ContentEngagement>;
-  userVotes?: Record<string, UserVote>;
-};
-
-function persist(map: Record<string, ContentEngagement>, votes: Record<string, UserVote>) {
-  if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc(currentWorkspaceId(), 'content-engagement', {
-    byId: map,
-    userVotes: votes,
-  });
-}
+type UserVote = MarketUserVote;
 
 interface ContentEngagementState {
   byId: Record<string, ContentEngagement>;
   userVotes: Record<string, UserVote>;
+  hydrated: boolean;
   hydrate: () => void;
   get: (id: string) => ContentEngagement;
   userVote: (id: string) => UserVote;
+  bumpView: (id: string) => void;
   bumpUse: (id: string) => void;
   bumpDownload: (id: string) => void;
   bumpFavorite: (id: string, delta: 1 | -1) => void;
@@ -45,173 +32,80 @@ interface ContentEngagementState {
   optimizationQueue: () => ContentEngagement[];
 }
 
-function ensure(map: Record<string, ContentEngagement>, id: string): ContentEngagement {
-  if (map[id]) return map[id];
-  return isDemoContentEnabled() ? seedEngagement(id) : emptyEngagement(id);
+type StoreSet = (
+  partial:
+    | Partial<ContentEngagementState>
+    | ((state: ContentEngagementState) => Partial<ContentEngagementState>),
+) => void;
+
+function runMutation(
+  set: StoreSet,
+  id: string,
+  action: MarketEngagementAction,
+  active?: boolean,
+) {
+  if (!canUsePlatformDocsApi()) return;
+  void mutateMarketEngagementApi(currentWorkspaceId(), id, {
+    action,
+    userId: getCurrentUserId() || 'anonymous',
+    active,
+  })
+    .then((result) => {
+      const engagement = normalizeEngagement(result.engagement);
+      set((state) => ({
+        byId: { ...state.byId, [id]: engagement },
+        userVotes: { ...state.userVotes, [id]: result.userVote },
+      }));
+    })
+    .catch(() => {
+      // 后端是唯一真相源；失败时不伪造本地计数，等待下次 hydrate。
+    });
 }
 
 export const useContentEngagementStore = create<ContentEngagementState>((set, get) => ({
   byId: {},
   userVotes: {},
+  hydrated: false,
 
   hydrate: () => {
     void (async () => {
       if (!canUsePlatformDocsApi()) {
-        set({ byId: {}, userVotes: {} });
+        set({ byId: {}, userVotes: {}, hydrated: true });
         return;
       }
       try {
-        const remote = await fetchPlatformDoc<EngagementDoc>(
+        const remote = await fetchMarketEngagementApi(
           currentWorkspaceId(),
-          'content-engagement',
+          getCurrentUserId() || 'anonymous',
         );
-        const raw =
-          remote?.byId && typeof remote.byId === 'object' ? remote.byId : {};
         const byId = Object.fromEntries(
-          Object.entries(raw).map(([id, e]) => [id, normalizeEngagement({ ...e, id })]),
+          Object.entries(remote.byId ?? {}).map(([id, value]) => [
+            id,
+            normalizeEngagement({ ...value, id }),
+          ]),
         );
-        const userVotes =
-          remote?.userVotes && typeof remote.userVotes === 'object'
-            ? remote.userVotes
-            : {};
-        set({ byId, userVotes });
+        set({ byId, userVotes: remote.userVotes ?? {}, hydrated: true });
       } catch {
-        set({ byId: {}, userVotes: {} });
+        set({ byId: {}, userVotes: {}, hydrated: true });
       }
     })();
   },
 
-  get: (id) => resolveEngagement(id, get().byId),
-
+  get: (id) => get().byId[id] ?? emptyEngagement(id),
   userVote: (id) => get().userVotes[id] ?? null,
+  bumpView: (id) => runMutation(set, id, 'view'),
+  bumpUse: (id) => runMutation(set, id, 'use'),
+  bumpDownload: (id) => runMutation(set, id, 'download'),
+  bumpFavorite: (id, delta) => runMutation(set, id, 'favorite', delta > 0),
+  toggleLike: (id) => runMutation(set, id, 'like'),
+  toggleDislike: (id) => runMutation(set, id, 'dislike'),
 
-  bumpUse: (id) => {
-    const prev = ensure(get().byId, id);
-    const next = mergeEngagement(prev, { uses: prev.uses + 1 });
-    const byId = { ...get().byId, [id]: next };
-    set({ byId });
-    persist(byId, get().userVotes);
-  },
-
-  bumpDownload: (id) => {
-    const prev = ensure(get().byId, id);
-    const next = mergeEngagement(prev, { downloads: prev.downloads + 1 });
-    const byId = { ...get().byId, [id]: next };
-    set({ byId });
-    persist(byId, get().userVotes);
-  },
-
-  bumpFavorite: (id, delta) => {
-    const prev = ensure(get().byId, id);
-    const favorites = Math.max(0, (prev.favorites ?? 0) + delta);
-    const next = mergeEngagement(prev, { favorites });
-    const byId = { ...get().byId, [id]: next };
-    set({ byId });
-    persist(byId, get().userVotes);
-  },
-
-  toggleLike: (id) => {
-    const prev = ensure(get().byId, id);
-    const vote = get().userVotes[id] ?? null;
-    let likes = prev.likes;
-    let dislikes = prev.dislikes;
-    let nextVote: UserVote = 'like';
-
-    if (vote === 'like') {
-      likes = Math.max(0, likes - 1);
-      nextVote = null;
-    } else if (vote === 'dislike') {
-      dislikes = Math.max(0, dislikes - 1);
-      likes += 1;
-      nextVote = 'like';
-    } else {
-      likes += 1;
-    }
-
-    const byId = { ...get().byId, [id]: mergeEngagement(prev, { likes, dislikes }) };
-    const userVotes = { ...get().userVotes, [id]: nextVote };
-    set({ byId, userVotes });
-    persist(byId, userVotes);
-  },
-
-  toggleDislike: (id) => {
-    const prev = ensure(get().byId, id);
-    const vote = get().userVotes[id] ?? null;
-    let likes = prev.likes;
-    let dislikes = prev.dislikes;
-    let nextVote: UserVote = 'dislike';
-
-    if (vote === 'dislike') {
-      dislikes = Math.max(0, dislikes - 1);
-      nextVote = null;
-    } else if (vote === 'like') {
-      likes = Math.max(0, likes - 1);
-      dislikes += 1;
-      nextVote = 'dislike';
-    } else {
-      dislikes += 1;
-    }
-
-    const byId = { ...get().byId, [id]: mergeEngagement(prev, { likes, dislikes }) };
-    const userVotes = { ...get().userVotes, [id]: nextVote };
-    set({ byId, userVotes });
-    persist(byId, userVotes);
-  },
-
-  optimizationQueue: () => {
-    const { byId } = get();
-    const list = Object.values(byId).length
-      ? Object.values(byId)
-      : [];
-    return list.filter((e) => needsOptimization(e)).sort((a, b) => dislikeRatioDesc(b, a));
-  },
+  optimizationQueue: () =>
+    Object.values(get().byId)
+      .filter((engagement) => needsOptimization(engagement))
+      .sort((a, b) => {
+        const aRatio = a.dislikes / Math.max(1, a.likes + a.dislikes);
+        const bRatio = b.dislikes / Math.max(1, b.likes + b.dislikes);
+        return bRatio - aRatio;
+      }),
 }));
-
-function dislikeRatioDesc(a: ContentEngagement, b: ContentEngagement) {
-  const ra = a.dislikes / Math.max(1, a.likes + a.dislikes);
-  const rb = b.dislikes / Math.max(1, b.likes + b.dislikes);
-  return ra - rb;
-}
-
-/** ???? id ??????? */
-export function ensureEngagementSeeds(ids: string[]) {
-  if (!isDemoContentEnabled()) return;
-  const state = useContentEngagementStore.getState();
-  const byId = { ...state.byId };
-  let changed = false;
-  for (const id of ids) {
-    if (!byId[id]) {
-      byId[id] = seedEngagement(id);
-      changed = true;
-    }
-  }
-  if (changed) {
-    useContentEngagementStore.setState({ byId });
-    persist(byId, state.userVotes);
-  }
-}
-
-let demoQueueSeeded = false;
-
-/** ??????????????????? */
-export function forceQueueDemoSeeds(ids: string[]) {
-  if (!isDemoContentEnabled()) return;
-  if (demoQueueSeeded) return;
-  demoQueueSeeded = true;
-  const state = useContentEngagementStore.getState();
-  const byId = { ...state.byId };
-  ids.slice(0, 2).forEach((id, i) => {
-    byId[id] = {
-      ...(byId[id] ?? emptyEngagement(id)),
-      id,
-      likes: 3 + i,
-      dislikes: 12 + i * 2,
-      downloads: 5,
-      uses: 30,
-      favorites: 4,
-      updatedAt: new Date().toISOString().slice(0, 10),
-    };
-  });
-  useContentEngagementStore.setState({ byId });
-  persist(byId, state.userVotes);
-}

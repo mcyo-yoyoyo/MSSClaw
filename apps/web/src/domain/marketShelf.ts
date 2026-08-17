@@ -125,6 +125,13 @@ export type MarketShelfCard = {
   region?: ToolRegion;
   /** 外部目录：工具类型 id */
   toolTypeId?: string;
+  /** 外部目录：多工具类型 id / 展示名。 */
+  toolTypeIds?: string[];
+  toolTypeLabels?: string[];
+  /** Excel 分类内排序与源顺序。 */
+  externalCategoryRanks?: Record<string, number>;
+  externalSortOrder?: number;
+  sourceOrder?: number;
 };
 
 export const MARKET_SECURITY_LABEL: Record<
@@ -293,7 +300,12 @@ export function listMarketToolCards(
         description: presentation.description,
         productName: presentation.productName,
         outcomeHint: presentation.outcomeHint,
-        sceneTags: presentation.sceneTags?.length ? presentation.sceneTags : undefined,
+        sceneTags:
+          kind === 'external' && t.toolTypeLabels?.length
+            ? t.toolTypeLabels.slice(0, 3)
+            : presentation.sceneTags?.length
+              ? presentation.sceneTags
+              : undefined,
         securityLevel: (kind === 'external' ? 'external' : 'internal') as
           | 'external'
           | 'internal',
@@ -313,6 +325,10 @@ export function listMarketToolCards(
         primaryAction: (canOpen ? 'open' : 'howto') as MarketPrimaryAction,
         region: t.region,
         toolTypeId: t.toolTypeId,
+        toolTypeIds: t.toolTypeIds,
+        toolTypeLabels: t.toolTypeLabels,
+        externalCategoryRanks: t.externalCategoryRanks,
+        externalSortOrder: t.externalSortOrder,
       };
     })
     .sort((a, b) => Number(b.featured) - Number(a.featured) || b.heat - a.heat);

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, SelectHTMLAttributes } from 'react';
 import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { HQ_DEPTS, REGIONS } from '@/domain/orgTaxonomy';
@@ -281,6 +281,30 @@ export function OrgAssetFilterBar({
 
 type DeptIdLike = string;
 
+function OwnershipSelect({
+  children,
+  className,
+  ...props
+}: SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <div className="group relative">
+      <select
+        {...props}
+        className={cn(
+          'w-full appearance-none rounded-xl border border-zinc-200/90 bg-white px-3.5 py-2.5 pr-9 text-[12px] text-zinc-700 shadow-sm outline-none transition',
+          'hover:border-zinc-300 hover:bg-zinc-50/60 focus:border-zinc-400 focus:bg-white focus:ring-4 focus:ring-zinc-900/[0.05]',
+          className,
+        )}
+      >
+        {children}
+      </select>
+      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-zinc-400 transition group-hover:text-zinc-600">
+        <i className="fa-solid fa-chevron-down text-[9px]" />
+      </span>
+    </div>
+  );
+}
+
 /** 编辑表单：归属字段块 */
 export function OwnershipFormFields({
   ownerDeptIds,
@@ -288,13 +312,16 @@ export function OwnershipFormFields({
   sourceType,
   visibility,
   homepageUrl,
+  lockSource = false,
   onChange,
 }: {
   ownerDeptIds: DeptIdLike[];
   ownerRegionId: string | null;
   sourceType: 'internal' | 'external';
-  visibility: 'public' | 'org' | 'private';
+  visibility?: 'public' | 'org' | 'private';
   homepageUrl?: string;
+  /** 来源由入口决定时隐藏来源选择（如“登记外部工具”） */
+  lockSource?: boolean;
   onChange: (patch: {
     ownerDeptIds?: DeptIdLike[];
     ownerRegionId?: string | null;
@@ -334,48 +361,50 @@ export function OwnershipFormFields({
       </div>
       <div>
         <p className="mb-1.5 text-[11px] font-semibold text-zinc-600">归属区域</p>
-        <select
+        <OwnershipSelect
           value={ownerRegionId ?? ''}
           onChange={(e) => onChange({ ownerRegionId: e.target.value || null })}
-          className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-[12px]"
         >
-          <option value="">不限区域</option>
+          <option value="">请选择归属区域（可选）</option>
           {REGIONS.map((r) => (
             <option key={r.id} value={r.id}>
               {r.label}
             </option>
           ))}
-        </select>
+        </OwnershipSelect>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <label className="text-[11px] text-zinc-600">
-          来源
-          <select
-            value={sourceType}
-            onChange={(e) =>
-              onChange({ sourceType: e.target.value as 'internal' | 'external' })
-            }
-            className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-[12px]"
-          >
-            <option value="internal">内部</option>
-            <option value="external">外部</option>
-          </select>
-        </label>
+      <div className={cn('grid gap-2', lockSource ? 'grid-cols-1' : 'grid-cols-2')}>
+        {!lockSource ? (
+          <label className="text-[11px] text-zinc-600">
+            来源
+            <OwnershipSelect
+              value={sourceType}
+              onChange={(e) =>
+                onChange({ sourceType: e.target.value as 'internal' | 'external' })
+              }
+              className="mt-1"
+            >
+              <option value="internal">内部</option>
+              <option value="external">外部</option>
+            </OwnershipSelect>
+          </label>
+        ) : null}
         <label className="text-[11px] text-zinc-600">
           可见性
-          <select
-            value={visibility}
+          <OwnershipSelect
+            value={visibility ?? ''}
             onChange={(e) =>
               onChange({
                 visibility: e.target.value as 'public' | 'org' | 'private',
               })
             }
-            className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-[12px]"
+            className="mt-1"
           >
+            <option value="" disabled>请选择可见性</option>
             <option value="public">公开可见</option>
             <option value="org">组织内</option>
             <option value="private">仅发布方</option>
-          </select>
+          </OwnershipSelect>
         </label>
       </div>
       {sourceType === 'external' ? (

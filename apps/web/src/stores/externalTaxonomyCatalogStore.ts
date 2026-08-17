@@ -22,67 +22,35 @@ import {
 const TYPE_IDS = new Set(EXTERNAL_TOOL_TYPES.map((t) => t.id));
 const SCENE_IDS = new Set(EXTERNAL_WORK_SCENES.map((s) => s.id));
 
-function mergeCatalog(
+function normalizeCatalog(
   saved: Partial<ExternalTaxonomyCatalog> | null,
 ): ExternalTaxonomyCatalog {
-  const defaults = defaultExternalTaxonomyCatalog();
   const savedTypes = (saved?.types ?? []).filter((t) => t?.id && TYPE_IDS.has(t.id));
   const savedScenes = (saved?.scenes ?? []).filter(
     (s) => s?.id && SCENE_IDS.has(s.id),
   );
-  const typeById = new Map(savedTypes.map((t) => [t.id, t] as const));
-  const sceneById = new Map(savedScenes.map((s) => [s.id, s] as const));
-
-  const typeOrder = savedTypes.length
-    ? [
-        ...savedTypes.map((t) => t.id),
-        ...defaults.types.map((t) => t.id).filter((id) => !typeById.has(id)),
-      ]
-    : defaults.types.map((t) => t.id);
-
-  const sceneOrder = savedScenes.length
-    ? [
-        ...savedScenes.map((s) => s.id),
-        ...defaults.scenes.map((s) => s.id).filter((id) => !sceneById.has(id)),
-      ]
-    : defaults.scenes.map((s) => s.id);
-
-  const types: ExternalToolTypeCatalogEntry[] = [];
-  const seenT = new Set<string>();
-  for (const id of typeOrder) {
-    if (seenT.has(id)) continue;
-    seenT.add(id);
-    const base = defaults.types.find((t) => t.id === id)!;
-    const o = typeById.get(id);
-    types.push({
-      id,
-      label: o?.label?.trim() || base.label,
-      csvLabel: o?.csvLabel?.trim() || base.csvLabel,
-      icon: o?.icon?.trim() || base.icon,
-      visible: o?.visible ?? base.visible,
-    });
-  }
-
-  const scenes: ExternalWorkSceneCatalogEntry[] = [];
-  const seenS = new Set<string>();
-  for (const id of sceneOrder) {
-    if (seenS.has(id)) continue;
-    seenS.add(id);
-    const base = defaults.scenes.find((s) => s.id === id)!;
-    const o = sceneById.get(id);
-    scenes.push({
-      id,
-      label: o?.label?.trim() || base.label,
-      icon: o?.icon?.trim() || base.icon,
-      visible: o?.visible ?? base.visible,
-      // 区分「未配置」与「显式空数组」：空数组表示运营清空关联
-      typeIds: Array.isArray(o?.typeIds)
-        ? (o.typeIds.filter((tid) => TYPE_IDS.has(tid)) as ExternalToolTypeId[])
-        : [...base.typeIds],
-    });
-  }
-
-  return { types, scenes };
+  return {
+    version: 2,
+    types: savedTypes.map((item) => ({
+      id: item.id,
+      label: item.label?.trim() || item.id,
+      csvLabel: item.csvLabel?.trim() || item.label?.trim() || item.id,
+      icon: item.icon?.trim() || 'fa-cube',
+      visible: item.visible !== false,
+      filterTypeIds: Array.isArray(item.filterTypeIds)
+        ? (item.filterTypeIds.filter((id) => TYPE_IDS.has(id)) as ExternalToolTypeId[])
+        : [item.id],
+    })),
+    scenes: savedScenes.map((item) => ({
+      id: item.id,
+      label: item.label?.trim() || item.id,
+      icon: item.icon?.trim() || 'fa-cube',
+      visible: item.visible !== false,
+      typeIds: Array.isArray(item.typeIds)
+        ? (item.typeIds.filter((id) => TYPE_IDS.has(id)) as ExternalToolTypeId[])
+        : [],
+    })),
+  };
 }
 
 function persist(catalog: ExternalTaxonomyCatalog) {
@@ -109,7 +77,7 @@ interface ExternalTaxonomyCatalogState {
   dismissToast: () => void;
 }
 
-const initial = mergeCatalog(null);
+const initial: ExternalTaxonomyCatalog = { version: 2, types: [], scenes: [] };
 setExternalTaxonomyCatalog(initial);
 
 export const useExternalTaxonomyCatalogStore = create<ExternalTaxonomyCatalogState>(
@@ -120,7 +88,7 @@ export const useExternalTaxonomyCatalogStore = create<ExternalTaxonomyCatalogSta
     hydrate: () => {
       void (async () => {
         if (!canUsePlatformDocsApi()) {
-          const catalog = mergeCatalog(null);
+          const catalog: ExternalTaxonomyCatalog = { version: 2, types: [], scenes: [] };
           setExternalTaxonomyCatalog(catalog);
           set({ catalog });
           return;
@@ -130,11 +98,11 @@ export const useExternalTaxonomyCatalogStore = create<ExternalTaxonomyCatalogSta
             currentWorkspaceId(),
             'external-taxonomy',
           );
-          const catalog = mergeCatalog(remote);
+          const catalog = normalizeCatalog(remote);
           setExternalTaxonomyCatalog(catalog);
           set({ catalog });
         } catch {
-          const catalog = mergeCatalog(null);
+          const catalog: ExternalTaxonomyCatalog = { version: 2, types: [], scenes: [] };
           setExternalTaxonomyCatalog(catalog);
           set({ catalog });
         }
@@ -207,7 +175,7 @@ export const useExternalTaxonomyCatalogStore = create<ExternalTaxonomyCatalogSta
     },
 
     resetToDefaults: () => {
-      const catalog = mergeCatalog(null);
+      const catalog = defaultExternalTaxonomyCatalog();
       persist(catalog);
       set({ catalog, toast: '已恢复默认外精选分类' });
     },

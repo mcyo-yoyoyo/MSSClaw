@@ -3,6 +3,11 @@ import { createHash, randomBytes } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { buildCatalogPayload, WORKSPACE_CATALOGS } from '../data/workspace-catalogs';
+import {
+  SEED_BUSINESS_SCENARIO_CATALOG,
+  SEED_EXTERNAL_TAXONOMY,
+  SEED_INTERNAL_OFFICE_SCENES,
+} from '../data/market-doc-seeds';
 
 /** 允许持久化的平台文档 kind（对应原前端 localStorage 配置） */
 export const PLATFORM_DOC_KINDS = [
@@ -94,6 +99,31 @@ function randomSalt(): string {
   return randomBytes(16).toString('hex');
 }
 
+function initialMarketDoc(kind: PlatformDocKind): unknown | undefined {
+  if (kind === 'business-scenario-catalog') return SEED_BUSINESS_SCENARIO_CATALOG;
+  if (kind === 'external-taxonomy') return SEED_EXTERNAL_TAXONOMY;
+  if (kind === 'internal-office-scenes') return SEED_INTERNAL_OFFICE_SCENES;
+  return undefined;
+}
+
+function shouldUpgradeMarketDoc(kind: PlatformDocKind, payload: unknown): boolean {
+  if (initialMarketDoc(kind) === undefined) return false;
+  if (
+    kind === 'external-taxonomy' &&
+    (!payload ||
+      typeof payload !== 'object' ||
+      Number((payload as { version?: unknown }).version) !== SEED_EXTERNAL_TAXONOMY.version)
+  ) {
+    return true;
+  }
+  return Boolean(
+    payload &&
+      !Array.isArray(payload) &&
+      typeof payload === 'object' &&
+      Object.keys(payload as Record<string, unknown>).length === 0,
+  );
+}
+
 @Injectable()
 export class PlatformDocsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -105,7 +135,17 @@ export class PlatformDocsService {
     const row = await this.prisma.centerRecord.findUnique({
       where: { id: docId(workspaceId, kind) },
     });
-    if (row) return { kind, payload: row.payload };
+    if (row) {
+      if (shouldUpgradeMarketDoc(kind, row.payload)) {
+        const payload = initialMarketDoc(kind)!;
+        await this.prisma.centerRecord.update({
+          where: { id: row.id },
+          data: { payload: payload as Prisma.InputJsonValue },
+        });
+        return { kind, payload };
+      }
+      return { kind, payload: row.payload };
+    }
 
     const seeded = await this.seedIfNeeded(workspaceId, kind);
     return { kind, payload: seeded };
@@ -138,7 +178,16 @@ export class PlatformDocsService {
     const byKind: Record<string, unknown> = {};
     for (const kind of PLATFORM_DOC_KINDS) {
       const row = rows.find((r) => r.id === docId(workspaceId, kind));
-      byKind[kind] = row ? row.payload : await this.seedIfNeeded(workspaceId, kind);
+      if (row && shouldUpgradeMarketDoc(kind, row.payload)) {
+        const payload = initialMarketDoc(kind)!;
+        await this.prisma.centerRecord.update({
+          where: { id: row.id },
+          data: { payload: payload as Prisma.InputJsonValue },
+        });
+        byKind[kind] = payload;
+      } else {
+        byKind[kind] = row ? row.payload : await this.seedIfNeeded(workspaceId, kind);
+      }
     }
     return { docs: byKind };
   }
@@ -296,8 +345,11 @@ export class PlatformDocsService {
   }
 
   private async seedIfNeeded(workspaceId: string, kind: PlatformDocKind): Promise<unknown> {
+    const marketSeed = initialMarketDoc(kind);
     let payload: unknown = {};
-    if (kind === 'members') {
+    if (marketSeed !== undefined) {
+      payload = marketSeed;
+    } else if (kind === 'members') {
       payload = { members: SEED_MEMBERS };
     } else if (kind === 'auth-credentials') {
       const credentials: Record<string, { salt: string; hash: string; updatedAt: string }> = {};

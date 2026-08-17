@@ -84,21 +84,21 @@ export function StationAnnounceBanner({ className }: { className?: string }) {
   };
 
   return (
-    <div className={cn('flex items-center gap-2.5 py-1', className)}>
+    <div
+      className={cn('flex items-center gap-2.5 py-1', className)}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
       <span className="shrink-0 text-[11px] font-semibold tracking-tight text-zinc-800">
         站内动态
       </span>
-      <div
-        className="plaza-marquee min-w-0 flex-1 overflow-hidden"
-        onMouseEnter={() => setPaused(true)}
-        onMouseLeave={() => setPaused(false)}
-      >
+      <div className="plaza-marquee min-w-0 flex-1 overflow-hidden">
         <div
           className={cn(
             'plaza-marquee-track flex w-max items-center gap-5',
             paused && 'plaza-marquee-paused',
           )}
-          style={{ animationDuration: `${Math.max(16, items.length * 6)}s` }}
+          style={{ animationDuration: `${Math.max(27, items.length * 10)}s` }}
         >
           {track.map((a, i) => (
             <button

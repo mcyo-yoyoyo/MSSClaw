@@ -228,26 +228,13 @@ function seedToolOrFallback(
   blurb: string | undefined,
   catalog?: PrototypeToolSeed | null,
 ): InternalOfficeSceneTool {
-  const seed = DEFAULT_TOOL_BY_ID.get(toolId);
-  const base: InternalOfficeSceneTool = seed
-    ? { ...seed, blurb: blurb?.trim() || seed.blurb }
-    : {
-        id: toolId,
-        name: catalog?.name?.trim() || toolId,
-        blurb: blurb?.trim() || catalog?.desc?.trim() || '内部工具',
-        homepageUrl: catalog?.homepageUrl?.trim() || '#',
-        logoUrl:
-          catalog?.logoUrl?.trim() ||
-          resolveToolLogoUrl(
-            catalog ?? {
-              logoUrl: undefined,
-              homepageUrl: undefined,
-              sourceType: 'internal',
-              tags: ['hw-internal'],
-            },
-          ) ||
-          '',
-      };
+  const base: InternalOfficeSceneTool = {
+    id: toolId,
+    name: catalog?.name?.trim() || toolId,
+    blurb: blurb?.trim() || catalog?.desc?.trim() || '内部工具',
+    homepageUrl: catalog?.homepageUrl?.trim() || '#',
+    logoUrl: catalog ? catalog.logoUrl?.trim() || resolveToolLogoUrl(catalog) || '' : '',
+  };
   return resolveOfficeToolWithCatalog(base, catalog);
 }
 

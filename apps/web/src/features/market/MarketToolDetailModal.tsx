@@ -1,12 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { CenterModal } from '@/components/center/CenterShell';
-import {
-  HowToGuidePreviewModal,
-  HowtoGuideList,
-  openGuideEntry,
-} from '@/components/market/HowToPanel';
 import { resolveToolLogoUrl } from '@/domain/toolLogo';
 import { EXTERNAL_TOOLS_CATALOG } from '@/domain/externalToolsCatalog';
 import type { MarketShelfKind } from '@/domain/marketShelf';
@@ -14,13 +9,8 @@ import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
-import {
-  ensurePlazaToolGuidesBootstrapped,
-  usePlazaToolGuideStore,
-} from '@/stores/plazaToolGuideStore';
 import { useRecentMarketStore } from '@/stores/recentMarketStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
-import type { PlazaToolGuide } from '@/domain/plazaToolGuides';
 
 function resolveToolKind(tool: PrototypeToolSeed | null): MarketShelfKind {
   if (tool?.sourceType === 'internal' || tool?.tags?.includes('hw-internal')) {
@@ -51,18 +41,14 @@ function extractOfficialIntro(guideBody?: string): string {
 
 /** 是什么：官网产品介绍精炼，不写使用场景清单 */
 function pickWhatItIs(tool: PrototypeToolSeed): string {
+  if (tool.productIntro?.trim()) return clipText(tool.productIntro, 1200);
   const catalog = EXTERNAL_TOOLS_CATALOG.find((e) => e.id === tool.id);
   const official = extractOfficialIntro(catalog?.guideBody);
   if (official) return clipText(official, 220);
   return clipText(
-    tool.productIntro?.trim() || catalog?.productIntro?.trim() || tool.desc?.trim() || '',
+    catalog?.productIntro?.trim() || tool.desc?.trim() || '',
     220,
   );
-}
-
-/** 做什么：只保留结果导向一句 */
-function pickWhatItDoes(tool: PrototypeToolSeed): string {
-  return clipText(tool.bestFor?.trim() || tool.cardSummary?.trim() || '', 80);
 }
 
 function SectionTitle({ children }: { children: string }) {
@@ -82,42 +68,20 @@ export function MarketToolDetailModal({
   const showToast = useMarketplaceStore((s) => s.showToast);
   const bumpToolInvokes = useMarketplaceStore((s) => s.bumpToolInvokes);
   const bumpUse = useContentEngagementStore((s) => s.bumpUse);
-  const guideRecords = usePlazaToolGuideStore((s) => s.records);
   const pushRecent = useRecentMarketStore((s) => s.push);
-  const pendingTab = useNavigationIntentStore((s) => s.pendingToolDetailTab);
   const favItems = useMarketFavoriteStore((s) => s.items);
   const toggleFavorite = useMarketFavoriteStore((s) => s.toggle);
 
-  const [guidePreview, setGuidePreview] = useState<PlazaToolGuide | null>(null);
-  const howtoRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    ensurePlazaToolGuidesBootstrapped();
-  }, []);
+  const [showExternalWarning, setShowExternalWarning] = useState(false);
 
   const tool = tools.find((t) => t.id === toolId) ?? null;
   const kind = resolveToolKind(tool);
   const isFav = favItems.some((x) => x.id === toolId && x.kind === kind);
 
-  const guides = useMemo(
-    () =>
-      guideRecords
-        .filter((r) => r.toolId === toolId)
-        .map(({ toolId: _t, ...g }) => g),
-    [guideRecords, toolId],
-  );
-
-  useEffect(() => {
-    if (pendingTab === 'howto' || pendingTab === 'resources') {
-      howtoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, [toolId, pendingTab, guides.length]);
-
   const openUrl = () => {
     if (!tool) return;
     if (!tool.homepageUrl || tool.homepageUrl === '#') {
-      showToast('暂无可用入口，请先看怎么用');
-      howtoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      showToast('暂无可用入口');
       bumpUse(tool.id);
       return;
     }
@@ -133,6 +97,11 @@ export function MarketToolDetailModal({
     });
     if (!win) showToast('浏览器拦截了弹窗，请允许后重试');
     else showToast(`已打开：${tool.name}`);
+  };
+
+  const confirmExternalOpen = () => {
+    setShowExternalWarning(false);
+    openUrl();
   };
 
   const onToggleFavorite = () => {
@@ -165,11 +134,10 @@ export function MarketToolDetailModal({
   }
 
   const whatItIs = pickWhatItIs(tool);
-  const whatItDoes = pickWhatItDoes(tool);
   const kindLabel = kind === 'internal' ? '公司工具' : '外部工具';
   const hasHome = Boolean(tool.homepageUrl && tool.homepageUrl !== '#');
   const hasDocs = Boolean(tool.docsUrl?.trim());
-  const hasShot = Boolean(tool.screenshotUrl?.trim());
+  const hasMedia = Boolean(tool.mediaUrl?.trim());
   const regionLabel =
     kind === 'external'
       ? tool.region === 'domestic'
@@ -186,6 +154,7 @@ export function MarketToolDetailModal({
         title={tool.name}
         onClose={onClose}
         size="xl"
+        fitContent
         header={
           <div className="shrink-0 border-b border-zinc-100 bg-white px-5 py-3.5 md:px-6">
             <div className="flex items-start gap-3.5">
@@ -288,10 +257,21 @@ export function MarketToolDetailModal({
                   帮助文档
                 </a>
               ) : null}
+              {hasMedia ? (
+                <a
+                  href={tool.mediaUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-black/8 px-3.5 py-2 text-[12px] font-medium text-zinc-600 transition hover:bg-black/[0.03]"
+                >
+                  <i className="fa-regular fa-circle-play text-[10px]" />
+                  官方介绍
+                </a>
+              ) : null}
               {hasHome ? (
                 <button
                   type="button"
-                  onClick={openUrl}
+                  onClick={() => (kind === 'external' ? setShowExternalWarning(true) : openUrl())}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-zinc-900 px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-800"
                 >
                   <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" />
@@ -304,60 +284,90 @@ export function MarketToolDetailModal({
       >
         <div className="space-y-6 px-5 py-5 md:px-6">
           <section>
-            <SectionTitle>是什么</SectionTitle>
-            <p className="text-[13px] leading-relaxed text-zinc-600">
+            <SectionTitle>产品详细介绍</SectionTitle>
+            <p className="whitespace-pre-line text-[13px] leading-relaxed text-zinc-600">
               {whatItIs || `${tool.name} 是一款${kindLabel}。`}
             </p>
           </section>
 
-          <section>
-            <SectionTitle>做什么</SectionTitle>
-            <p className="text-[13px] leading-relaxed text-zinc-600">
-              {whatItDoes || '适合日常办公中的对应场景。'}
-            </p>
-          </section>
-
-          {hasShot ? (
-            <a
-              href={tool.screenshotUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50"
-            >
-              <img
-                src={tool.screenshotUrl}
-                alt={`${tool.name} 预览`}
-                className="max-h-[200px] w-full object-contain object-center"
-              />
-            </a>
+          {tool.toolTypeLabels?.length ? (
+            <section>
+              <SectionTitle>工具类型</SectionTitle>
+              <div className="flex flex-wrap gap-1.5">
+                {tool.toolTypeLabels.map((label) => (
+                  <span
+                    key={label}
+                    className="rounded-lg bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-800"
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+            </section>
           ) : null}
 
-          <section ref={howtoRef}>
-            <SectionTitle>怎么用</SectionTitle>
-            <p className="mb-2.5 text-[13px] leading-relaxed text-zinc-600">
-              {kind === 'internal'
-                ? '用公司账号，从统一入口打开即可。有图文说明时，点下面预览。'
-                : '打开入口，按页面提示登录后即可使用。有图文说明时，点下面预览。'}
-            </p>
-            {guides.length ? (
-              <HowtoGuideList
-                guides={guides}
-                onOpenGuide={(g) =>
-                  openGuideEntry(g, {
-                    onPreview: setGuidePreview,
-                    onToast: showToast,
-                  })
-                }
-              />
-            ) : (
-              <p className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70 px-3 py-2.5 text-[12px] leading-relaxed text-zinc-400">
-                暂无图文说明。点右下角「官网」打开即可。
-              </p>
-            )}
-          </section>
+          {tool.bestFor?.trim() ? (
+            <section>
+              <SectionTitle>最适合</SectionTitle>
+              <p className="text-[13px] leading-relaxed text-zinc-600">{tool.bestFor}</p>
+            </section>
+          ) : null}
+
+          {tool.coreCapabilities?.length ? (
+            <section>
+              <SectionTitle>核心能力</SectionTitle>
+              <div className="flex flex-wrap gap-1.5">
+                {tool.coreCapabilities.map((capability) => (
+                  <span
+                    key={capability}
+                    className="rounded-lg bg-zinc-100 px-2 py-1 text-[11px] font-medium text-zinc-700"
+                  >
+                    {capability}
+                  </span>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
         </div>
       </CenterModal>
-      <HowToGuidePreviewModal guide={guidePreview} onClose={() => setGuidePreview(null)} />
+      <CenterModal
+        open={showExternalWarning}
+        title="外部网站安全提示"
+        onClose={() => setShowExternalWarning(false)}
+        size="md"
+        elevate
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => setShowExternalWarning(false)}
+              className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium text-zinc-600 transition hover:bg-black/[0.03]"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={confirmExternalOpen}
+              className="rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-800"
+            >
+              确认并前往
+            </button>
+          </>
+        }
+      >
+        <div className="flex items-start gap-3 rounded-xl border border-rose-100 bg-rose-50/70 p-4">
+          <i className="fa-solid fa-shield-halved mt-0.5 text-[16px] text-rose-600" />
+          <div>
+            <p className="text-[14px] font-semibold text-zinc-900">
+              禁止将公司内部信息上传到外部AI网站
+            </p>
+            <p className="mt-1.5 text-[12px] leading-relaxed text-zinc-600">
+              请确认即将处理的内容不包含公司内部、涉密、个人隐私或未经授权的数据。
+            </p>
+          </div>
+        </div>
+      </CenterModal>
     </>
   );
 }

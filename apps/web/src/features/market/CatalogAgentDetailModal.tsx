@@ -1,11 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { AgentPortrait } from '@/components/brand/AgentPortrait';
 import { CenterModal } from '@/components/center/CenterShell';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
 import { getAgentBusinessLabel } from '@/domain/agentBusinessScenarios';
-import { getAgentPack } from '@/domain/agents/catalog';
-import { buildAgentDemoPrompt, getPrimarySkill } from '@/domain/agents/runtime';
 import { getEfficiencyLabel } from '@/domain/prototype/constants';
 import type { PrototypeAgentSeed } from '@/domain/prototype/types';
 import { downloadAgentFile } from '@/domain/agentExport';
@@ -15,7 +13,6 @@ import {
   getDeptLabel,
   getRegionLabel,
 } from '@/domain/orgTaxonomy';
-import { PROTOTYPE_SKILLS } from '@/domain/prototype/skills';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 
@@ -66,18 +63,19 @@ export function CatalogAgentDetailModal({
   const eng = getEngagement(agent.id);
   const vote = getVote(agent.id);
 
-  const pack = useMemo(() => getAgentPack(agent.id), [agent.id]);
-  const persona = (agent.systemPrompt || pack?.systemPrompt || '').trim();
-  const planSteps = agent.planSteps?.length ? agent.planSteps : pack?.planSteps ?? [];
-  const demoPrompt = (agent.demoPrompt || buildAgentDemoPrompt(agent)).trim();
+  const persona = (agent.systemPrompt || '').trim();
+  const planSteps = agent.planSteps ?? [];
+  const demoPrompt = (
+    agent.demoPrompt || `@${agent.name} 请按你的职责完成任务，并给出结论和下一步行动。`
+  ).trim();
   const bizLabel = getAgentBusinessLabel(agent);
   const deptLabel = agent.ownerDeptIds?.[0] ? getDeptLabel(agent.ownerDeptIds[0]) : '';
   const regionLabel = agent.ownerRegionIds?.[0] ? getRegionLabel(agent.ownerRegionIds[0]) : '';
   const scopeLabel = ASSET_VISIBILITY_LABELS[agent.visibility ?? 'public'];
-  const primaryId = agent.primarySkillId || getPrimarySkill(agent)?.id;
+  const primaryId = agent.primarySkillId || agent.skillIds?.[0];
 
   const skillName = (id: string) => {
-    const hit = skills.find((s) => s.id === id) ?? PROTOTYPE_SKILLS.find((s) => s.id === id);
+    const hit = skills.find((s) => s.id === id);
     return hit ? skillDisplayName(hit) : id;
   };
 

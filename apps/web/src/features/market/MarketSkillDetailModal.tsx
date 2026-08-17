@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { SkillAvatar } from '@/components/brand/SkillAvatar';
 import { CenterModal } from '@/components/center/CenterShell';
@@ -12,7 +12,6 @@ import {
   resolveSkillSecurityScan,
   skillSecurityStatusLabel,
 } from '@/domain/skillSecurityScan';
-import { getSkillPack } from '@/domain/skills/catalog';
 import {
   ASSET_VISIBILITY_LABELS,
   getDeptLabel,
@@ -74,13 +73,14 @@ export function MarketSkillDetailModal({
   const vote = getVote(skill.id);
   const scan = resolveSkillSecurityScan(skill.securityScan);
 
-  const pack = useMemo(() => getSkillPack(skill.id), [skill.id]);
   const name = skillDisplayName(skill);
   const nameEn = skill.nameEn?.trim() && skill.nameEn !== name ? skill.nameEn.trim() : '';
   const desc = stripCategoryPrefix(skillDisplayDesc(skill));
-  const instructions = (skill.instructions || pack?.instructions || '').trim();
-  const planSteps = skill.planSteps?.length ? skill.planSteps : pack?.planSteps ?? [];
-  const demoPrompt = pack?.demoPrompt?.trim() || '';
+  const instructions = (skill.instructions || '').trim();
+  const planSteps = skill.planSteps ?? [];
+  const demoPrompt = skill.command?.trim()
+    ? `${skill.command.trim()} 请按此 Skill 的说明完成任务并输出可交付结果。`
+    : '';
   const bizLabel = getSkillBusinessLabel(skill);
   const deptLabel = skill.ownerDeptIds?.[0] ? getDeptLabel(skill.ownerDeptIds[0]) : '';
   const regionLabel = skill.ownerRegionId ? getRegionLabel(skill.ownerRegionId) : '';

@@ -67,10 +67,47 @@
 /* —— Market / home visual polish (layout unchanged) —— */
 .market-channel-panel {
   position: relative;
+  isolation: isolate;
   overflow: hidden;
   border: none;
   background: #fff;
   box-shadow: var(--shadow-apple);
+}
+
+.shine-border {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  border-radius: inherit;
+  background-size: 260% 100%;
+  background-position: 100% 50%;
+  opacity: 0.78;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: shine-border-sweep 8s linear infinite;
+}
+
+@keyframes shine-border-sweep {
+  0% {
+    background-position: 120% 50%;
+  }
+  100% {
+    background-position: -120% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shine-border {
+    animation: none;
+    background-position: 50% 50%;
+  }
 }
 
 .market-channel-panel::before {
@@ -84,15 +121,15 @@
 }
 
 .market-channel-panel--external::before {
-  background: var(--channel-external);
+  display: none;
 }
 
 .market-channel-panel--internal::before {
-  background: var(--channel-internal);
+  display: none;
 }
 
 .market-channel-panel--projects::before {
-  background: var(--channel-mss);
+  display: none;
 }
 
 .market-channel-panel--external .market-channel-head,
@@ -1061,6 +1098,26 @@
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
 }
 
+.market-chip-rail--external {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.market-chip-rail--external::-webkit-scrollbar {
+  display: none;
+}
+
+.market-chip-rail--external .market-chip-rail__btn {
+  min-width: max-content;
+  flex: 0 0 auto;
+  padding-left: 0.65rem;
+  padding-right: 0.65rem;
+}
+
+.market-chip-rail--external .market-chip-rail__btn span {
+  white-space: nowrap;
+}
+
 
 
 @layer base {
@@ -1459,13 +1516,9 @@
 
 .apple-header {
 
-  background: rgba(255, 255, 255, 0.72);
+  background: linear-gradient(180deg, #ffffff 0%, #fbfbfd 100%);
 
-  backdrop-filter: var(--apple-blur);
-
-  -webkit-backdrop-filter: var(--apple-blur);
-
-  border-bottom: 0.5px solid rgba(0, 0, 0, 0.06);
+  border-bottom-color: transparent;
 
 }
 

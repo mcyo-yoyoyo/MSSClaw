@@ -68,7 +68,8 @@ export function MarketShelfCard({
   const bumpFavorite = useContentEngagementStore((s) => s.bumpFavorite);
   const canDownload = card.kind === 'projects';
 
-  const outcomeLine = card.outcomeHint?.trim() || card.description;
+  const outcomeLine =
+    card.kind === 'external' ? card.description : card.outcomeHint?.trim() || card.description;
   const security = card.securityLevel;
   const badges = card.badges ?? [];
   const sceneTags = (card.sceneTags?.length
@@ -286,7 +287,7 @@ export function MarketShelfCard({
             title="查看"
           >
             <i className="fa-regular fa-eye text-[9px] text-zinc-400" />
-            {formatToolInvokes(engagement?.uses || card.heat)}
+            {formatToolInvokes(engagement?.views ?? 0)}
           </span>
           <button
             type="button"

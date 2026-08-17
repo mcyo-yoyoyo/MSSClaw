@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import { MarketShelfCard } from '@/components/market/MarketShelfCard';
+import { ShineBorder } from '@/components/ui/shine-border';
 import { HOME_RANK_TABS, type RankMode } from '@/domain/contentEngagement';
 import {
   MARKET_SHELF_META,
@@ -54,6 +55,7 @@ export function HomeMarketChannels({
               `market-channel-panel--${kind}`,
             )}
           >
+            <ShineBorder shineColor={['#A07CFE', '#FE8FB5', '#FFBE7B']} />
             <header className="market-channel-head border-b border-black/[0.04] px-3.5 py-3.5">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -114,9 +116,14 @@ export function HomeMarketChannels({
                   ))}
                 </div>
               ) : (
-                <p className="mt-2 text-[10px] text-[#86868b]">
+                <p
+                  className={cn(
+                    'mt-2 text-[10px]',
+                    kind === 'external' ? 'font-medium text-red-600' : 'text-[#86868b]',
+                  )}
+                >
                   {kind === 'external'
-                    ? '精选由运营置顶 · 列表按点击量排序'
+                    ? '外部工具为第三方服务，禁止将公司内部信息上传到外部AI网站'
                     : '与货架办公场景同源 · 点击进入工具详情'}
                 </p>
               )}

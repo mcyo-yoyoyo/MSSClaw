@@ -1,30 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { PrototypeSkillSeed } from '@/domain/prototype/types';
 import { canViewAsset } from '@/domain/assetVisibility';
 import { canExecuteChat } from '@/domain/permissions';
-import { listFeaturedDoTaskSkillIds } from '@/domain/skillBusinessScenarios';
 import { StationAnnounceBanner } from '@/components/home/StationAnnounceBanner';
 import { PageStageHero } from '@/components/layout/PageStageHero';
 import { useHomeStore } from '@/stores/homeStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useSessionStore } from '@/stores/sessionStore';
-import {
-  ensureEngagementSeeds,
-  useContentEngagementStore,
-} from '@/stores/contentEngagementStore';
+import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { type RankMode } from '@/domain/contentEngagement';
 import { HOME_CHANNEL_PINS } from '@/domain/homeChannelPins';
 import {
   applyMarketFeaturedPins,
   listInternalOfficeMarketCards,
-  listMarketProjectCards,
   listMarketToolCards,
   type MarketShelfCard as MarketShelfCardModel,
   type MarketShelfKind,
 } from '@/domain/marketShelf';
 import { openMarketShelf, openMarketToolDetail } from '@/domain/openHomeJourney';
-import { resolveCaseItemsForScenarioId } from '@/domain/portalCase';
 import { HomeMarketChannels } from '@/components/home/HomeMarketChannels';
 import { HomeMeSummary } from '@/components/home/HomeMeSummary';
 import { StageIntentDock } from '@/components/market/StageIntentDock';
@@ -40,7 +33,6 @@ import {
   ensurePlazaToolGuidesBootstrapped,
   usePlazaToolGuideStore,
 } from '@/stores/plazaToolGuideStore';
-import { usePortalContentStore } from '@/stores/portalContentStore';
 import { useMarketFilterStore } from '@/stores/marketFilterStore';
 import { useRecentMarketStore } from '@/stores/recentMarketStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
@@ -49,6 +41,8 @@ import { useMarketFeaturedStore } from '@/stores/marketFeaturedStore';
 import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
 import { greetingForNow } from '@/domain/timeGreeting';
 import { emptyOrgPerspectiveSelection } from '@/domain/orgAxisTags';
+import { getBusinessScenarioMeta } from '@/domain/businessScenarios';
+import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
 
 const DEFAULT_RANK_BY_KIND: Record<MarketShelfKind, RankMode> = {
   external: 'trending',
@@ -58,14 +52,14 @@ const DEFAULT_RANK_BY_KIND: Record<MarketShelfKind, RankMode> = {
 
 export function HomePage() {
   const { applyUserOrgDefaults } = useHomeStore();
+  const agents = useMarketplaceStore((s) => s.agents);
   const skills = useMarketplaceStore((s) => s.skills);
   const user = useSessionStore((s) => s.user);
   const executeAllowed = canExecuteChat(user?.platformRole);
   const engagementOf = useContentEngagementStore((s) => s.get);
   const engagementById = useContentEngagementStore((s) => s.byId);
-  const bumpUse = useContentEngagementStore((s) => s.bumpUse);
+  const bumpView = useContentEngagementStore((s) => s.bumpView);
   const tools = useMarketplaceStore((s) => s.tools);
-  const portalContent = usePortalContentStore((s) => s.items);
   const marketSearch = useMarketFilterStore((s) => s.search);
   const favoritesOnly = useMarketFilterStore((s) => s.favoritesOnly);
   const setMarketBusinessFilter = useMarketFilterStore((s) => s.setBusinessFilter);
@@ -130,16 +124,6 @@ export function HomePage() {
     return ids;
   }, [guideRecords]);
 
-  const portalByScenario = useMemo(() => {
-    const cache = new Map<string, ReturnType<typeof resolveCaseItemsForScenarioId>>();
-    return (scenarioId: string) => {
-      if (!cache.has(scenarioId)) {
-        cache.set(scenarioId, resolveCaseItemsForScenarioId(scenarioId));
-      }
-      return cache.get(scenarioId)!;
-    };
-  }, [portalContent]);
-
   const scopedChannelCards = useMemo(() => {
     const eng = (id: string) => engagementOf(id);
     const org = emptyOrgPerspectiveSelection();
@@ -153,7 +137,42 @@ export function HomePage() {
       [...HOME_CHANNEL_PINS.internal],
     );
     const projects = applyMarketFeaturedPins(
-      listMarketProjectCards(org, 'all', eng, portalByScenario),
+      agents
+        .filter((agent) => agent.published)
+        .filter((agent) => canViewAsset(agent, viewer))
+        .map((agent) => {
+          const engagement = eng(agent.id);
+          const badges: MarketShelfCardModel['badges'] = [];
+          if (agent.ownerDeptIds?.[0]) {
+            badges.push({ label: getDeptLabel(agent.ownerDeptIds[0]), tone: 'dept' });
+          }
+          if (agent.ownerRegionIds?.[0]) {
+            badges.push({ label: getRegionLabel(agent.ownerRegionIds[0]), tone: 'region' });
+          }
+          if (agent.businessScenarioId) {
+            badges.push({
+              label: getBusinessScenarioMeta(agent.businessScenarioId).label,
+              tone: 'type',
+            });
+          }
+          return {
+            id: agent.id,
+            kind: 'projects' as const,
+            title: agent.name,
+            description: agent.desc,
+            outcomeHint: agent.desc,
+            securityLevel: 'mss' as const,
+            icon: agent.icon || 'fa-robot',
+            badges,
+            featured: true,
+            heat: agent.invokes ?? 0,
+            likes: engagement.likes,
+            dislikes: engagement.dislikes,
+            downloads: engagement.downloads,
+            hasHowto: Boolean(agent.systemPrompt || agent.skillIds?.length),
+            primaryAction: 'detail' as const,
+          };
+        }),
       [...HOME_CHANNEL_PINS.projects],
     );
 
@@ -163,11 +182,11 @@ export function HomePage() {
     >;
   }, [
     tools,
+    agents,
     viewer,
     engagementOf,
     engagementById,
     howtoToolIds,
-    portalByScenario,
     officeSceneEntries,
   ]);
 
@@ -209,37 +228,18 @@ export function HomePage() {
   }, [scopedChannelCards, marketSearch, favoritesOnly, favoriteKeys, hiddenKeys]);
 
   const projectsBreakdown = useMemo(() => {
-    const q = marketSearch.trim().toLowerCase();
-    const skillIds = listFeaturedDoTaskSkillIds(skills, 'all', 256);
-    const skill = skillIds
-      .map((id) => skills.find((s) => s.id === id))
-      .filter((s): s is PrototypeSkillSeed => Boolean(s))
+    const skill = skills
+      .filter((item) => item.published && item.featuredInMssMarket !== false)
       .filter((s) => canViewAsset(s, viewer))
-      .filter((s) => {
-        if (!q) return true;
-        return `${s.name} ${s.nameZh ?? ''} ${s.desc} ${s.command ?? ''}`
-          .toLowerCase()
-          .includes(q);
-      }).length;
+      .length;
+    const agent = agents
+      .filter((item) => item.published)
+      .filter((item) => canViewAsset(item, viewer)).length;
     return {
       skill,
-      agent: channelCards.projects.length,
+      agent,
     };
-  }, [skills, viewer, marketSearch, channelCards.projects]);
-
-  const intentCatalog = useMemo(
-    () => [
-      ...scopedChannelCards.external,
-      ...scopedChannelCards.internal,
-      ...scopedChannelCards.projects,
-    ],
-    [scopedChannelCards],
-  );
-
-  useEffect(() => {
-    const ids = intentCatalog.map((c) => c.id);
-    if (ids.length) ensureEngagementSeeds(ids);
-  }, [intentCatalog]);
+  }, [skills, agents, viewer]);
 
   const rememberCard = (card: MarketShelfCardModel) => {
     pushRecent({
@@ -253,11 +253,11 @@ export function HomePage() {
 
   const openPortalCard = (card: MarketShelfCardModel) => {
     rememberCard(card);
+    bumpView(card.id);
     if (card.kind === 'projects') {
       openMarketShelf('projects');
       return;
     }
-    bumpUse(card.id);
     openMarketToolDetail(card.id, card.kind);
   };
 
@@ -296,6 +296,8 @@ export function HomePage() {
         ) : null}
 
         <div className="flex w-full flex-col gap-3 pb-6 md:gap-3.5">
+          <StationAnnounceBanner className="rounded-xl border-0 bg-white/90 px-3.5 py-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_8px_24px_rgba(0,0,0,0.05)]" />
+
           <PageStageHero
             tone="home"
             layout="stack"
@@ -335,8 +337,6 @@ export function HomePage() {
             recent={recentItems}
             onOpen={openWorkbenchItem}
           />
-
-          <StationAnnounceBanner className="rounded-xl border-0 bg-white/90 px-3.5 py-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_8px_24px_rgba(0,0,0,0.05)]" />
 
           <HomeMarketChannels
             cardsByKind={channelCards}

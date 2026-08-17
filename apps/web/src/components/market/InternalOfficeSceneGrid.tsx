@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
 import {
@@ -10,10 +10,7 @@ import {
 import { sortByRankMode, type RankMode } from '@/domain/contentEngagement';
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import { ShelfSectionHead } from '@/components/market/ShelfRankSelect';
-import {
-  ensureEngagementSeeds,
-  useContentEngagementStore,
-} from '@/stores/contentEngagementStore';
+import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
@@ -52,6 +49,7 @@ export function InternalOfficeSceneGrid({
     mode: PickerMode;
   } | null>(null);
   const sceneEntries = useInternalOfficeSceneCatalogStore((s) => s.entries);
+  const bumpView = useContentEngagementStore((s) => s.bumpView);
   const bumpUse = useContentEngagementStore((s) => s.bumpUse);
   const getEngagement = useContentEngagementStore((s) => s.get);
   const engagementById = useContentEngagementStore((s) => s.byId);
@@ -96,11 +94,6 @@ export function InternalOfficeSceneGrid({
     return sortByRankMode(filtered, rankMode, (id) => getEngagement(sceneEngagementId(id)));
   }, [allScenes, search, rankMode, getEngagement, engagementById]);
 
-  useEffect(() => {
-    const ids = allScenes.map((s) => sceneEngagementId(s.id));
-    if (ids.length) ensureEngagementSeeds(ids);
-  }, [allScenes]);
-
   const runWithTool = (scene: InternalOfficeScene, mode: PickerMode) => {
     if (!scene.tools.length) {
       onEmptyAction?.(scene, mode);
@@ -108,7 +101,8 @@ export function InternalOfficeSceneGrid({
     }
     if (scene.tools.length === 1) {
       const tool = scene.tools[0]!;
-      bumpUse(sceneEngagementId(scene.id));
+      if (mode === 'experience') bumpUse(sceneEngagementId(scene.id));
+      else bumpView(sceneEngagementId(scene.id));
       if (mode === 'experience') onExperience(tool);
       else if (mode === 'howto') onHowTo(tool);
       else onOpenDetail(tool);
@@ -121,7 +115,8 @@ export function InternalOfficeSceneGrid({
     if (!picker) return;
     const { mode } = picker;
     setPicker(null);
-    bumpUse(sceneEngagementId(picker.scene.id));
+    if (mode === 'experience') bumpUse(sceneEngagementId(picker.scene.id));
+    else bumpView(sceneEngagementId(picker.scene.id));
     if (mode === 'experience') onExperience(tool);
     else if (mode === 'howto') onHowTo(tool);
     else onOpenDetail(tool);
@@ -345,7 +340,7 @@ function SceneCardStats({ scene }: { scene: InternalOfficeScene }) {
     <div className="mr-auto inline-flex flex-wrap items-center gap-0.5 text-[10px] tabular-nums">
       <span className="inline-flex items-center gap-0.5 px-1 py-0.5 text-[#86868b]" title="查看">
         <i className="fa-regular fa-eye text-[9px] text-zinc-400" />
-        {formatToolInvokes(engagement?.uses ?? 0)}
+        {formatToolInvokes(engagement?.views ?? 0)}
       </span>
       <button
         type="button"
