@@ -4,7 +4,8 @@
  * 规则：同名产品合并；toolTypeIds 保留多分类；externalCategoryRanks 保留分类内排序。
  * 请通过源 Excel 重新生成，不要手工维护条目内容。
  */
-export const EXTERNAL_TOOLS_EXCEL_VERSION = '1.0.5';
+/** 源表版本 + 后端身份迁移版本；后缀变化会触发一次数据库快照修复。 */
+export const EXTERNAL_TOOLS_EXCEL_VERSION = '1.0.5-stable-id-1';
 export const EXTERNAL_TOOLS_EXCEL = [
   {
     "name": "ChatGPT",
@@ -2240,5 +2241,4 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-image"
   }
 ] as const;
-
 

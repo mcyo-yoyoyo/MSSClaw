@@ -237,11 +237,6 @@ export function AppShellSidebar() {
       <nav className="flex min-h-0 flex-1 flex-col overflow-hidden px-1.5 py-1.5">
         {showOpsConfigNav ? (
           <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto scroll-hidden">
-            {!sidebarCollapsed ? (
-              <p className="mb-2 px-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
-                配置与治理
-              </p>
-            ) : null}
             {hasCapabilityBody ? (
               <NavSectionGroup
                 section="platform"

@@ -30,6 +30,8 @@ interface AppViewState {
   toggleSidebar: () => void;
   toggleNavSection: (section: NavSection) => void;
   setNavSectionCollapsed: (section: NavSection, collapsed: boolean) => void;
+  /** 进入管理后台：展开侧栏并摊开各配置分组 */
+  expandAdminNav: () => void;
   openSettings: () => void;
   closeSettings: () => void;
 }
@@ -113,6 +115,15 @@ export const useAppViewStore = create<AppViewState>((set, get) => ({
         ...get().navSectionsCollapsed,
         [section]: collapsed,
       },
+    });
+  },
+
+  expandAdminNav: () => {
+    set({
+      sidebarCollapsed: false,
+      navSectionsCollapsed: Object.fromEntries(
+        NAV_SECTIONS.map((s) => [s, false]),
+      ) as Record<NavSection, boolean>,
     });
   },
 

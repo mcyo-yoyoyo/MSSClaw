@@ -1,5 +1,5 @@
 import { MssZhishuMark } from '@/components/brand/MssZhishuMark';
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { ADMIN_MENU_VIEWS, type AppView } from '@/domain/appView';
 import { writeAppRouteToLocation } from '@/domain/appRoute';
@@ -38,6 +38,7 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
   void _onWorkspaceSwitch;
   const appView = useAppViewStore((s) => s.appView);
   const setAppView = useAppViewStore((s) => s.setAppView);
+  const expandAdminNav = useAppViewStore((s) => s.expandAdminNav);
   const openPalette = useCommandPaletteStore((s) => s.openPalette);
   const isViewEnabled = useNavPresentationStore((s) => s.isViewEnabled);
   const pendingToolId = useNavigationIntentStore((s) => s.pendingToolId);
@@ -66,53 +67,13 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
   );
   const canOpenAdmin = isOpsShell && adminItems.length > 0;
   const adminActive = isOpsOnlyView(appView);
+  /** 顶栏「管理后台」直达首个可用后台页；页间切换走侧栏 */
+  const adminEntryView = adminItems[0]?.view;
   const inboxMessages = useInboxStore((s) => s.messages);
   const unreadMessages = useMemo(() => {
     void inboxMessages;
     return useInboxStore.getState().unreadCount(user?.id);
   }, [inboxMessages, user?.id]);
-  const [adminOpen, setAdminOpen] = useState(false);
-  const adminRef = useRef<HTMLDivElement>(null);
-  const adminBtnRef = useRef<HTMLButtonElement>(null);
-  const [adminMenuPos, setAdminMenuPos] = useState<{ top: number; left: number } | null>(null);
-
-  useEffect(() => {
-    const onDocDown = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (
-        adminRef.current &&
-        !adminRef.current.contains(target) &&
-        !(e.target as HTMLElement | null)?.closest?.('[data-admin-menu]')
-      ) {
-        setAdminOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDocDown);
-    return () => document.removeEventListener('mousedown', onDocDown);
-  }, []);
-
-  useEffect(() => {
-    if (!adminOpen) {
-      setAdminMenuPos(null);
-      return;
-    }
-    const updatePos = () => {
-      const btn = adminBtnRef.current;
-      if (!btn) return;
-      const rect = btn.getBoundingClientRect();
-      setAdminMenuPos({
-        top: rect.bottom + 8,
-        left: rect.left + rect.width / 2,
-      });
-    };
-    updatePos();
-    window.addEventListener('resize', updatePos);
-    window.addEventListener('scroll', updatePos, true);
-    return () => {
-      window.removeEventListener('resize', updatePos);
-      window.removeEventListener('scroll', updatePos, true);
-    };
-  }, [adminOpen]);
 
   const goView = (view: AppView) => {
     writeAppRouteToLocation({ view });
@@ -160,75 +121,21 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
               </button>
             ))}
           </div>
-          {canOpenAdmin ? (
-            <div className="relative shrink-0" ref={adminRef}>
-              <button
-                ref={adminBtnRef}
-                type="button"
-                aria-expanded={adminOpen}
-                aria-haspopup="menu"
-                onMouseDown={(e) => {
-                  // 避免 document mousedown 先关掉再点开
-                  e.stopPropagation();
-                }}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setAdminOpen((v) => {
-                    const next = !v;
-                    if (next && adminBtnRef.current) {
-                      const rect = adminBtnRef.current.getBoundingClientRect();
-                      setAdminMenuPos({
-                        top: rect.bottom + 8,
-                        left: rect.left + rect.width / 2,
-                      });
-                    }
-                    return next;
-                  });
-                }}
-                className={navBtn(adminActive || adminOpen)}
-              >
-                管理后台
-                <i
-                  className={cn(
-                    'fa-solid fa-chevron-down ml-1 text-[9px] opacity-70 transition',
-                    adminOpen && 'rotate-180',
-                  )}
-                />
-              </button>
-            </div>
+          {canOpenAdmin && adminEntryView ? (
+            <button
+              type="button"
+              onClick={() => {
+                expandAdminNav();
+                goView(adminEntryView);
+              }}
+              onMouseEnter={() => ROUTE_PREFETCH[adminEntryView]?.()}
+              className={navBtn(adminActive)}
+            >
+              管理后台
+            </button>
           ) : null}
         </div>
       </nav>
-
-      {canOpenAdmin && adminOpen && adminMenuPos ? (
-        <div
-          data-admin-menu
-          role="menu"
-          className="fixed z-[80] w-52 -translate-x-1/2 rounded-xl border border-zinc-200/80 bg-white py-1.5 shadow-apple-lg"
-          style={{ top: adminMenuPos.top, left: adminMenuPos.left }}
-        >
-          {adminItems.map((item) => (
-            <button
-              key={item.view}
-              type="button"
-              role="menuitem"
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={() => {
-                setAdminOpen(false);
-                goView(item.view);
-              }}
-              onMouseEnter={() => ROUTE_PREFETCH[item.view]?.()}
-              className={cn(
-                'flex w-full px-4 py-2 text-left text-[12px] font-medium hover:bg-zinc-50',
-                appView === item.view ? 'text-zinc-900' : 'text-zinc-600',
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
 
       <div className="flex shrink-0 items-center justify-self-end gap-1 sm:gap-1.5">
         <button

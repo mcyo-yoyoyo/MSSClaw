@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { backfillAgentSeedMetadata } from '@/domain/prototype/agents';
 import { pruneRetiredDemoTools } from '@/domain/prototype/tools';
 import type {
   PrototypeAgentSeed,
@@ -146,6 +147,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     const snapshot = await loadMarketplace(workspaceId);
     set({
       ...snapshot,
+      agents: backfillAgentSeedMetadata(snapshot.agents ?? []),
       tools: pruneRetiredDemoTools(snapshot.tools ?? []),
       ready: true,
     });

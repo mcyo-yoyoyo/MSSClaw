@@ -63,6 +63,28 @@ function normalizeExternalToolName(value: unknown): string {
   return String(value ?? '').trim().toLocaleLowerCase();
 }
 
+function normalizeExternalToolUrl(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .replace(/\/+$/, '')
+    .toLocaleLowerCase();
+}
+
+/**
+ * 首版目录已被精选、互动数据和运营配置引用的稳定 ID。
+ * 名称允许后台修改，但这些 ID 不能再随 Excel 导入重新生成。
+ */
+const LEGACY_STABLE_EXTERNAL_IDS: Record<string, string> = {
+  chatgpt: 'tool-saas-chatgpt',
+  claude: 'tool-saas-claude',
+  gemini: 'tool-saas-gemini',
+  perplexity: 'tool-saas-perplexity',
+  豆包: 'tool-saas-doubao',
+  deepseek: 'tool-saas-deepseek',
+  kimi: 'tool-saas-kimi',
+  qwen: 'tool-saas-tongyi',
+};
+
 function externalToolId(name: string): string {
   const slug = name
     .normalize('NFKD')
@@ -84,14 +106,48 @@ function mergeExcelExternalTools(source: unknown[] | undefined): unknown[] {
       .filter((tool) => tool.sourceType === 'external')
       .map((tool) => [normalizeExternalToolName(tool.name), tool]),
   );
+  const existingById = new Map(
+    tools
+      .filter((raw): raw is Record<string, unknown> => Boolean(raw && typeof raw === 'object' && !Array.isArray(raw)))
+      .filter((tool) => tool.sourceType === 'external' && typeof tool.id === 'string')
+      .map((tool) => [String(tool.id), tool]),
+  );
+  const existingByHomepage = new Map(
+    tools
+      .filter((raw): raw is Record<string, unknown> => Boolean(raw && typeof raw === 'object' && !Array.isArray(raw)))
+      .filter((tool) => tool.sourceType === 'external' && normalizeExternalToolUrl(tool.homepageUrl))
+      .map((tool) => [normalizeExternalToolUrl(tool.homepageUrl), tool]),
+  );
+  const existingByDocs = new Map(
+    tools
+      .filter((raw): raw is Record<string, unknown> => Boolean(raw && typeof raw === 'object' && !Array.isArray(raw)))
+      .filter((tool) => tool.sourceType === 'external' && normalizeExternalToolUrl(tool.docsUrl))
+      .map((tool) => [normalizeExternalToolUrl(tool.docsUrl), tool]),
+  );
 
   const external = EXTERNAL_TOOLS_EXCEL.map((record) => {
-    const existing = existingByName.get(normalizeExternalToolName(record.name)) ?? {};
+    const normalizedName = normalizeExternalToolName(record.name);
+    const stableId = LEGACY_STABLE_EXTERNAL_IDS[normalizedName];
+    const recordDocsUrl = 'docsUrl' in record ? record.docsUrl : undefined;
+    const existing =
+      (stableId ? existingById.get(stableId) : undefined) ??
+      existingByName.get(normalizedName) ??
+      existingByHomepage.get(normalizeExternalToolUrl(record.homepageUrl)) ??
+      existingByDocs.get(normalizeExternalToolUrl(recordDocsUrl)) ??
+      existingById.get(externalToolId(record.name)) ??
+      {};
+    const existingName =
+      typeof existing.name === 'string' && existing.name.trim() ? existing.name.trim() : '';
     return {
       ...existing,
       ...record,
-      id: typeof existing.id === 'string' && existing.id ? existing.id : externalToolId(record.name),
-      name: record.name,
+      id:
+        stableId ||
+        (typeof existing.id === 'string' && existing.id
+          ? existing.id
+          : externalToolId(record.name)),
+      // URL / ID 命中说明只是运营改了展示名，应保留后台名称。
+      name: existingName || record.name,
       desc: record.cardSummary,
       category: 'external',
       author: record.company,

@@ -17,6 +17,12 @@ import {
 } from '@/domain/businessScenarios';
 import { useBusinessScenarioCatalogStore } from '@/stores/businessScenarioCatalogStore';
 import {
+  agentMatchesHubFilters,
+  countAgentHubFilters,
+  emptyAgentHubFilterSelection,
+} from '@/domain/agentHubFilters';
+import { AgentHubFilterRow } from '@/components/market/AgentHubFilterRow';
+import {
   emptyOrgPerspectiveSelection,
   isOrgPerspectiveEmpty,
   skillMatchesOrgPerspectiveSelection,
@@ -60,7 +66,11 @@ import { downloadScenarioUnifiedPack } from '@/domain/caseExport';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useMarketFilterStore } from '@/stores/marketFilterStore';
 import { useSessionStore } from '@/stores/sessionStore';
-import { sortByRankMode, type RankMode } from '@/domain/contentEngagement';
+import {
+  AGENT_HUB_RANK_TABS,
+  sortByRankMode,
+  type RankMode,
+} from '@/domain/contentEngagement';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useMarketHiddenStore } from '@/stores/marketHiddenStore';
 import { resolveCaseItemsForScenarioId } from '@/domain/portalCase';
@@ -130,6 +140,8 @@ export function MarketShelfPage({
   const setBusinessFilter = useMarketFilterStore((s) => s.setBusinessFilter);
   const search = useMarketFilterStore((s) => s.search);
   const favoritesOnly = useMarketFilterStore((s) => s.favoritesOnly);
+  const agentHubFilter = useMarketFilterStore((s) => s.agentHubFilter);
+  const setAgentHubFilter = useMarketFilterStore((s) => s.setAgentHubFilter);
   const favoriteItems = useMarketFavoriteStore((s) => s.items);
   const hydrateFavorites = useMarketFavoriteStore((s) => s.hydrate);
   const hiddenKeys = useMarketHiddenStore((s) => s.keys);
@@ -152,6 +164,8 @@ export function MarketShelfPage({
   /** MSS 集市二级面：Skill Hub | Agent Hub（默认 Skill Hub） */
   const [mssSurface, setMssSurface] = useState<'projects' | 'skills'>('skills');
   const [rankMode, setRankMode] = useState<RankMode>('most_viewed');
+  /** Agent Hub 单独一套排序项（推荐优先 / 下载量 / 点赞量 / 更新时间） */
+  const [agentRankMode, setAgentRankMode] = useState<RankMode>('recommended');
   const [skillDetail, setSkillDetail] = useState<PrototypeSkillSeed | null>(null);
   const [agentDetail, setAgentDetail] = useState<PrototypeAgentSeed | null>(null);
 
@@ -358,6 +372,16 @@ export function MarketShelfPage({
     return sortByRankMode(next, rankMode, getEngagement);
   }, [scopedCards, search, favoritesOnly, favoriteKeys, hiddenKeys, rankMode, getEngagement, engagementById]);
 
+  const isAgentHub = kind === 'projects' && mssSurface === 'projects';
+  const sectionRankMode = isAgentHub ? agentRankMode : rankMode;
+  const setSectionRankMode = isAgentHub ? setAgentRankMode : setRankMode;
+  const sectionRankOptions = isAgentHub ? AGENT_HUB_RANK_TABS : undefined;
+
+  /** 离开 Agent Hub 时清掉页内维度，避免筛选态在没有筛选条的面上隐形生效 */
+  useEffect(() => {
+    if (!isAgentHub) setAgentHubFilter(emptyAgentHubFilterSelection());
+  }, [isAgentHub, setAgentHubFilter]);
+
   const showSceneHub = kind === 'projects' && businessFilter === 'all';
   // 场景分类改为 Chip 筛选，页内始终展示精选 + 列表（不再先进入分类枢纽）
   const showMssSceneChips = kind === 'projects';
@@ -389,13 +413,19 @@ export function MarketShelfPage({
       .filter((agent) => (favSet ? favSet.has(agent.id) : true));
   }, [kind, agents, viewer, orgSelection, search, favoritesOnly, favoriteItems]);
 
-  const mssAgents = useMemo(
+  /** 页内三维度筛选前的池子：用于统计各筛选项命中数 */
+  const agentHubFacetPool = useMemo(
     () =>
       scopedMssAgents.filter(
         (agent) =>
           businessFilter === 'all' || agent.businessScenarioId === businessFilter,
       ),
     [scopedMssAgents, businessFilter],
+  );
+
+  const mssAgents = useMemo(
+    () => agentHubFacetPool.filter((agent) => agentMatchesHubFilters(agent, agentHubFilter)),
+    [agentHubFacetPool, agentHubFilter],
   );
 
   const sceneCategories = useMemo(() => {
@@ -577,14 +607,24 @@ export function MarketShelfPage({
         }),
         primaryAction: 'detail' as const,
         ownerDeptIds: agent.ownerDeptIds,
+        updatedAt: agent.updatedAt,
       };
     });
-    return sortByRankMode(
-      mapped.filter((card) => !hiddenKeys.includes(`${card.kind}:${card.id}`)),
-      rankMode,
-      getEngagement,
-    );
-  }, [mssAgents, canRunProjects, getEngagement, engagementById, hiddenKeys, rankMode]);
+    const visible = mapped.filter((card) => !hiddenKeys.includes(`${card.kind}:${card.id}`));
+    const sorted = sortByRankMode(visible, agentRankMode, getEngagement);
+    // 推荐优先：运营置顶排在最前，其余保持热度序
+    return agentRankMode === 'recommended' && featuredPins.projects?.length
+      ? applyMarketFeaturedPins(sorted, featuredPins.projects)
+      : sorted;
+  }, [
+    mssAgents,
+    canRunProjects,
+    getEngagement,
+    engagementById,
+    hiddenKeys,
+    agentRankMode,
+    featuredPins,
+  ]);
 
   const orgScopeLabel = useMemo(() => {
     const parts: string[] = [];
@@ -853,8 +893,11 @@ export function MarketShelfPage({
   };
 
   const emptyHint =
-    search.trim() || !isOrgPerspectiveEmpty(orgSelection) || businessFilter !== 'all'
-      ? '当前筛选下暂无内容。可重置左侧领域/区域、切换场景分类，或调整搜索关键词。'
+    search.trim() ||
+    !isOrgPerspectiveEmpty(orgSelection) ||
+    businessFilter !== 'all' ||
+    countAgentHubFilters(agentHubFilter) > 0
+      ? '当前筛选下暂无内容。可清除能力类型/开放范围/适配平台筛选、重置左侧领域/区域、切换场景分类，或调整搜索关键词。'
       : '权限范围内暂无上架内容。若预期应可见，请联系运营确认可见性与上架状态。';
 
   const gridCards =
@@ -1078,6 +1121,15 @@ export function MarketShelfPage({
           </div>
         ) : null}
 
+        {isAgentHub ? (
+          <AgentHubFilterRow
+            className="mb-5"
+            agents={agentHubFacetPool}
+            selection={agentHubFilter}
+            onChange={setAgentHubFilter}
+          />
+        ) : null}
+
         {kind === 'internal' ? (
           <div className="flex flex-col">
             <InternalOfficeSceneGrid
@@ -1184,8 +1236,9 @@ export function MarketShelfPage({
                 <ShelfSectionHead
                   title="精选推荐"
                   count={activeFeatured.length}
-                  rankMode={rankMode}
-                  onRankChange={setRankMode}
+                  rankMode={sectionRankMode}
+                  onRankChange={setSectionRankMode}
+                  rankOptions={sectionRankOptions}
                 />
                 <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                   {activeFeatured.map((c) => {
@@ -1222,9 +1275,10 @@ export function MarketShelfPage({
           <ShelfSectionHead
             title={showFeaturedStrip ? '更多' : '全部'}
             count={gridCards.length}
-            rankMode={rankMode}
-            onRankChange={setRankMode}
+            rankMode={sectionRankMode}
+            onRankChange={setSectionRankMode}
             showExcelOrder={kind === 'external'}
+            rankOptions={sectionRankOptions}
           />
           {kind === 'external' ? (
             gridCards.length ? (

@@ -15,6 +15,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     author: '华为 MSS',
     published: true,
     invokes: 5200,
+    updatedAt: '2026-08-12',
     skillIds: [
       'skill-data-analysis',
       'skill-so-report',
@@ -40,6 +41,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     author: '华为 MSS',
     published: true,
     invokes: 4280,
+    updatedAt: '2026-08-05',
     skillIds: ['skill-data-analysis', 'skill-so-report', 'skill-work-summary'],
     chatId: 'marketing',
     icon: 'fa-chart-pie',
@@ -58,6 +60,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     author: '华为 MSS',
     published: true,
     invokes: 3150,
+    updatedAt: '2026-07-28',
     skillIds: ['skill-doc-compliance', 'skill-doc-gen', 'skill-doc-parser'],
     chatId: 'knowledge',
     icon: 'fa-file-shield',
@@ -75,6 +78,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     author: '华为 MSS',
     published: true,
     invokes: 1890,
+    updatedAt: '2026-06-18',
     skillIds: ['skill-file-archive', 'skill-work-summary', 'skill-doc-parser'],
     chatId: 'marketing',
     icon: 'fa-folder-tree',
@@ -93,6 +97,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     author: '华为 MSS',
     published: true,
     invokes: 2240,
+    updatedAt: '2026-07-09',
     skillIds: ['skill-ppt-gen', 'skill-data-analysis', 'skill-doc-gen'],
     chatId: 'marketing',
     icon: 'fa-file-powerpoint',
@@ -110,6 +115,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     author: '华为 MSS',
     published: true,
     invokes: 5340,
+    updatedAt: '2026-08-14',
     skillIds: ['skill-meeting-minutes', 'skill-doc-gen', 'skill-wecom'],
     chatId: 'marketing',
     icon: 'fa-clipboard-list',
@@ -128,6 +134,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     author: '华为 MSS',
     published: true,
     invokes: 1420,
+    updatedAt: '2026-06-30',
     skillIds: ['skill-launch-sentiment', 'skill-doc-gen', 'skill-wecom'],
     chatId: 'marketing',
     icon: 'fa-bullhorn',
@@ -144,6 +151,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     author: '华为 MSS',
     published: true,
     invokes: 980,
+    updatedAt: '2026-05-22',
     skillIds: ['skill-survey-insight', 'skill-data-analysis', 'skill-doc-gen'],
     chatId: 'marketing',
     icon: 'fa-square-poll-vertical',
@@ -161,6 +169,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     author: '华为 MSS',
     published: true,
     invokes: 2100,
+    updatedAt: '2026-07-16',
     skillIds: ['skill-review-collect', 'skill-review-translate', 'skill-data-analysis'],
     chatId: 'knowledge',
     icon: 'fa-download',
@@ -179,6 +188,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     author: '华为 MSS',
     published: true,
     invokes: 1960,
+    updatedAt: '2026-07-02',
     skillIds: ['skill-review-translate', 'skill-review-cluster', 'skill-doc-gen'],
     chatId: 'knowledge',
     icon: 'fa-language',
@@ -197,6 +207,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     author: '华为 MSS',
     published: true,
     invokes: 2780,
+    updatedAt: '2026-07-21',
     skillIds: ['skill-review-cluster', 'skill-data-analysis', 'skill-doc-gen'],
     chatId: 'knowledge',
     icon: 'fa-comments',
@@ -215,6 +226,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     author: '华为 MSS',
     published: true,
     invokes: 3680,
+    updatedAt: '2026-08-08',
     skillIds: ['skill-retail-insight', 'skill-so-report', 'skill-doc-gen'],
     chatId: 'marketing',
     icon: 'fa-store',
@@ -232,6 +244,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     author: '华为 MSS',
     published: true,
     invokes: 4120,
+    updatedAt: '2026-08-11',
     skillIds: ['skill-price-monitor', 'skill-data-analysis', 'skill-wecom'],
     chatId: 'marketing',
     icon: 'fa-tags',
@@ -249,6 +262,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     author: '华为 MSS',
     published: true,
     invokes: 1560,
+    updatedAt: '2026-06-06',
     skillIds: ['skill-jd-parser', 'skill-resume-screen', 'skill-interview-analysis'],
     chatId: 'knowledge',
     icon: 'fa-user-check',
@@ -267,6 +281,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     author: '华为 MSS',
     published: true,
     invokes: 1890,
+    updatedAt: '2026-06-24',
     skillIds: ['skill-training-gen', 'skill-retail-coach', 'skill-doc-gen'],
     chatId: 'knowledge',
     icon: 'fa-graduation-cap',
@@ -285,6 +300,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     author: '华为 MSS',
     published: true,
     invokes: 3520,
+    updatedAt: '2026-08-01',
     skillIds: [
       'skill-rag',
       'skill-rerank',
@@ -311,6 +327,7 @@ const PROTOTYPE_AGENTS_RAW: PrototypeAgentSeed[] = [
     author: '华为 MSS',
     published: true,
     invokes: 860,
+    updatedAt: '2026-05-15',
     skillIds: ['skill-retail-coach', 'skill-training-gen', 'skill-wecom'],
     chatId: 'knowledge',
     icon: 'fa-headset',
@@ -332,3 +349,24 @@ function withAgentPack(agent: PrototypeAgentSeed): PrototypeAgentSeed {
 }
 
 export const PROTOTYPE_AGENTS: PrototypeAgentSeed[] = PROTOTYPE_AGENTS_RAW.map(withAgentPack);
+
+const AGENT_SEED_BY_ID = new Map(PROTOTYPE_AGENTS.map((agent) => [agent.id, agent]));
+
+/**
+ * 后端持久化的 Agent 记录可能早于新增的展示字段（如 updatedAt）。
+ * 按同 id 种子回填「缺失」项，已有值一律不动，避免覆盖运营配置。
+ */
+export function backfillAgentSeedMetadata(
+  agents: PrototypeAgentSeed[],
+): PrototypeAgentSeed[] {
+  return agents.map((agent) => {
+    const seed = AGENT_SEED_BY_ID.get(agent.id);
+    if (!seed) return agent;
+    const patch: Partial<PrototypeAgentSeed> = {};
+    if (!agent.updatedAt && seed.updatedAt) patch.updatedAt = seed.updatedAt;
+    if (!agent.capabilityTypeIds?.length && seed.capabilityTypeIds?.length) {
+      patch.capabilityTypeIds = seed.capabilityTypeIds;
+    }
+    return Object.keys(patch).length ? { ...agent, ...patch } : agent;
+  });
+}

@@ -152,7 +152,7 @@ export const INTERNAL_OFFICE_SCENES: InternalOfficeScene[] = [
   },
   {
     id: 'intel',
-    label: '资讯信息追踪用员工助手',
+    label: '咨询信息追踪用员工助手情报官',
     english: 'INTELLIGENCE',
     description: '围绕关注主题自动监测、筛选和研判，让信息从人找变成主动送。',
     tools: [EMPLOYEE_ASSISTANT],

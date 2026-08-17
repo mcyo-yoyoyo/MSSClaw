@@ -7,17 +7,22 @@ export function ShelfRankSelect({
   onChange,
   className,
   showExcelOrder = false,
+  options,
 }: {
   value: RankMode;
   onChange: (next: RankMode) => void;
   className?: string;
   showExcelOrder?: boolean;
+  /** 覆盖默认排序项（如 Agent Hub 用 AGENT_HUB_RANK_TABS） */
+  options?: { id: RankMode; label: string; icon: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const tabs = showExcelOrder
-    ? SHELF_RANK_TABS
-    : SHELF_RANK_TABS.filter((tab) => tab.id !== 'excel_order');
+  const tabs =
+    options ??
+    (showExcelOrder
+      ? SHELF_RANK_TABS
+      : SHELF_RANK_TABS.filter((tab) => tab.id !== 'excel_order'));
   const current = tabs.find((t) => t.id === value) ?? tabs[0]!;
 
   useEffect(() => {
@@ -93,6 +98,7 @@ export function ShelfSectionHead({
   onRankChange,
   className,
   showExcelOrder = false,
+  rankOptions,
 }: {
   title: string;
   count?: number;
@@ -100,6 +106,7 @@ export function ShelfSectionHead({
   onRankChange: (next: RankMode) => void;
   className?: string;
   showExcelOrder?: boolean;
+  rankOptions?: { id: RankMode; label: string; icon: string }[];
 }) {
   return (
     <div className={cn('mb-3 flex items-center justify-between gap-3', className)}>
@@ -113,6 +120,7 @@ export function ShelfSectionHead({
         value={rankMode}
         onChange={onRankChange}
         showExcelOrder={showExcelOrder}
+        options={rankOptions}
       />
     </div>
   );

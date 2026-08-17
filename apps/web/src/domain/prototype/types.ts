@@ -1,5 +1,6 @@
 /** 与根目录 index.html 设计稿对齐的原始种子类型（单一数据源） */
 
+import type { AgentCapabilityTypeId } from '@/domain/agentHubFilters';
 import type { BusinessScenarioId } from '@/domain/businessScenarios';
 import type {
   ExternalToolTypeId,
@@ -136,6 +137,11 @@ export interface PrototypeAgentSeed {
   scenarioTags?: string[];
   /** 业务场景分类（与业务用户 MSS 集市视角对齐；缺省回退技能/静态映射） */
   businessScenarioId?: BusinessScenarioId;
+  /**
+   * 能力类型（Agent Hub 筛选维度）。
+   * 缺省时按名称 / 简介 / 场景标签关键词推断，见 domain/agentHubFilters。
+   */
+  capabilityTypeIds?: AgentCapabilityTypeId[];
 }
 
 export interface PrototypeSkillSeed extends AssetOwnershipFields {

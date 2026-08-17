@@ -10,7 +10,11 @@ export type RankMode =
   | 'most_favorited'
   | 'most_liked'
   | 'most_disliked'
-  | 'excel_order';
+  | 'excel_order'
+  /** 推荐优先：运营精选 / 置顶在前，其余按热度 */
+  | 'recommended'
+  /** 更新时间：按资产自身 updatedAt 倒序 */
+  | 'recently_updated';
 
 export const RANK_MODE_OPTIONS: { id: RankMode; label: string }[] = [
   { id: 'trending', label: '热门推荐' },
@@ -27,6 +31,17 @@ export const SHELF_RANK_TABS: { id: RankMode; label: string; icon: string }[] = 
   { id: 'most_favorited', label: '收藏', icon: 'fa-regular fa-star' },
   { id: 'most_liked', label: '点赞', icon: 'fa-solid fa-thumbs-up' },
   { id: 'most_disliked', label: '点踩', icon: 'fa-solid fa-thumbs-down' },
+];
+
+/**
+ * Agent Hub 排序（《Agent Hub页面优化建议 V1.4》§1.4）：
+ * 推荐优先 · 下载量 · 点赞量 · 更新时间
+ */
+export const AGENT_HUB_RANK_TABS: { id: RankMode; label: string; icon: string }[] = [
+  { id: 'recommended', label: '推荐优先', icon: 'fa-solid fa-wand-magic-sparkles' },
+  { id: 'most_downloaded', label: '下载量', icon: 'fa-solid fa-download' },
+  { id: 'most_liked', label: '点赞量', icon: 'fa-solid fa-thumbs-up' },
+  { id: 'recently_updated', label: '更新时间', icon: 'fa-regular fa-clock' },
 ];
 
 /** 首页 MSS 工具集市排行 Tab（去掉最高评分；不含「最多使用」以免与热门重叠） */
@@ -53,6 +68,10 @@ export interface ContentEngagement {
 export interface RankableContent {
   id: string;
   publishedAt?: string;
+  /** 资产自身更新时间（YYYY-MM-DD）；用于「更新时间」排序 */
+  updatedAt?: string;
+  /** 运营精选 / 置顶；用于「推荐优先」排序 */
+  featured?: boolean;
   /** 工具/专家等已有调用量，并入 uses */
   baseUses?: number;
   /** 外部工具清单排序。 */
@@ -162,6 +181,20 @@ export function sortByRankMode<T extends RankableContent>(
           (b.item.sourceOrder ?? Number.POSITIVE_INFINITY);
       case 'trending':
         return heatScore(b.e) - heatScore(a.e);
+      case 'recommended': {
+        const fa = a.item.featured ? 1 : 0;
+        const fb = b.item.featured ? 1 : 0;
+        return fb - fa || heatScore(b.e) - heatScore(a.e);
+      }
+      case 'recently_updated': {
+        // 未配置更新时间的排在最后，不与「无数据」争前排
+        const da = a.item.updatedAt ?? '';
+        const db = b.item.updatedAt ?? '';
+        if (!da && !db) return heatScore(b.e) - heatScore(a.e);
+        if (!da) return 1;
+        if (!db) return -1;
+        return db.localeCompare(da);
+      }
       case 'newest': {
         const da = a.item.publishedAt ?? a.e.updatedAt;
         const db = b.item.publishedAt ?? b.e.updatedAt;
