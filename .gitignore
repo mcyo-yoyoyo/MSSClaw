@@ -17,3 +17,5 @@ apps/web/dist/
 .vercel
 .env*
 .gstack/
+*.tsbuildinfo
+.claude/settings.local.json
