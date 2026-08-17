@@ -16,3 +16,4 @@ coverage/
 apps/web/dist/
 .vercel
 .env*
+.gstack/

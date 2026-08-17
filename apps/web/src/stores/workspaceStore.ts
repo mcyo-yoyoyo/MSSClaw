@@ -94,13 +94,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
       const health = await fetchApiHealthInfo();
       if (!health.ok) {
-        // 本机只开前端时：安静本地模式，不惊吓普通用户
-        const loopback =
-          typeof location !== 'undefined' &&
-          (location.hostname === 'localhost' ||
-            location.hostname === '127.0.0.1' ||
-            location.hostname === '[::1]');
-        finishLocal(loopback ? 'local-demo' : 'unreachable');
+        finishLocal('unreachable');
         return;
       }
 

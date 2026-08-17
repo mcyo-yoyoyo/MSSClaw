@@ -42,10 +42,20 @@ const MSS_FIT_RE =
 export function classifyAiBriefItem(input: {
   title: string;
   summary?: string;
+  category?: string;
 }): { category: AiBriefCategoryId; mssFit: boolean } {
   const text = `${input.title} ${input.summary ?? ''}`;
+  const sourceCategory: Partial<Record<string, AiBriefCategoryId>> = {
+    'ai-models': 'model',
+    'ai-products': 'tool',
+    tip: 'tool',
+    paper: 'oss',
+    industry: 'industry',
+  };
   const category =
-    CATEGORY_RULES.find((r) => r.re.test(text))?.id ?? 'industry';
+    (input.category ? sourceCategory[input.category] : undefined) ??
+    CATEGORY_RULES.find((r) => r.re.test(text))?.id ??
+    'industry';
   return { category, mssFit: MSS_FIT_RE.test(text) };
 }
 

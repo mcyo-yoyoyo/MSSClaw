@@ -39,7 +39,8 @@ export function AiBriefPage() {
   const [categoryFilter, setCategoryFilter] = useState<AiBriefCategoryId | 'all'>('all');
 
   useEffect(() => {
-    void hydrate();
+    // 每次进入快讯页主动同步，避免开发热更新或上游短暂失败后长期停留在兜底内容。
+    void hydrate(true);
     hydratePref();
     hydrateEmailCopy();
   }, [hydrate, hydratePref, hydrateEmailCopy]);
@@ -115,7 +116,7 @@ export function AiBriefPage() {
           className="mb-4 shrink-0"
           tone="brief"
           title="AI快讯"
-          subtitle="每日 AI 产业动态 · 按类速读 · 单独标出适合 MSS 业务的条目"
+          subtitle={`${payload.fromFallback ? '本地兜底 · ' : ''}精选动态 · 按类速读 · 单独标出适合 MSS 业务的条目`}
         >
           <div className="ai-brief-subscribe">
             <button
@@ -362,6 +363,16 @@ export function AiBriefPage() {
                                       适合 MSS
                                     </span>
                                   ) : null}
+                                  {item.source ? (
+                                    <span className="text-[10px] text-[#86868b]">
+                                      来源：{item.source}
+                                    </span>
+                                  ) : null}
+                                  {typeof item.score === 'number' ? (
+                                    <span className="text-[10px] tabular-nums text-[#86868b]">
+                                      热度 {item.score} 分
+                                    </span>
+                                  ) : null}
                                 </div>
                                 <a
                                   href={item.url}
@@ -375,6 +386,23 @@ export function AiBriefPage() {
                                   <p className="mt-1.5 line-clamp-2 text-[12px] leading-relaxed text-[#6e6e73] md:text-[13px]">
                                     {item.summary}
                                   </p>
+                                ) : null}
+                                {item.reason ? (
+                                  <p className="mt-2 border-l-2 border-[#0071e3]/25 pl-2.5 text-[11px] leading-relaxed text-[#71717a]">
+                                    <span className="font-semibold text-[#52525b]">入选理由：</span>
+                                    {item.reason}
+                                  </p>
+                                ) : null}
+                                {item.aihotUrl ? (
+                                  <a
+                                    href={item.aihotUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="mt-2 inline-flex items-center gap-1 text-[10px] font-medium text-[#0071e3] hover:underline"
+                                  >
+                                    查看详情
+                                    <i className="fa-solid fa-arrow-up-right-from-square text-[8px]" />
+                                  </a>
                                 ) : null}
                               </div>
                             </div>

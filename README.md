@@ -1,191 +1,253 @@
-# MSS Claw Platform
+# MSSClaw
 
-企业级 **AI Employee Operating System** 原型：找案例 → 学/准备/开干 → 做任务，覆盖专家、技能、知识与门户运营配置。
+面向企业内部场景的 AI 工作平台原型。它把场景案例、Agent、Skill、工具、知识库和自动化能力组织在同一个工作空间中，让用户可以从“发现案例”进入“配置能力”，再通过任务对话执行工作。
 
-当前以 **React 前端 + 可选 Nest API** 运行；大量演示数据可落在浏览器 `localStorage`，API 在线时会话与 Marketplace 写入 SQLite。
+> 当前仓库适合产品演示、交互验证和小规模试点，不应直接视为生产级多租户 AI 平台。生产级身份认证、细粒度授权、共享数据库和真实执行链路仍需继续建设。
 
-## 在线演示
+## 核心能力
 
-| 渠道 | 地址 |
-|------|------|
-| GitHub Pages | https://mcyo-yoyoyo.github.io/MSSClaw/ |
-| Vercel | https://mssclaw.vercel.app |
+| 模块 | 能力 |
+| --- | --- |
+| 工作入口 | 首页任务入口、AI 快讯、场景案例、企业内外部工具集市 |
+| 任务执行 | 多轮会话、Agent / Skill 调用、执行过程与交付物展示 |
+| 能力中心 | Agent、Skill、工具、知识库、工作流、自动化、提示词与记忆配置 |
+| 平台运营 | 门户内容、推荐位、场景分类、公告、展示方式与租户配置 |
+| 平台治理 | 组织权限、资产审核、执行历史、审计和演示内容开关 |
 
-- 演示账号：`mcyo@huawei.com`（平台运营）；另有 `jacky` / `dickson` / `somebody` 与 `test1`–`test10@huawei.com`；
-- **生产前**：在「系统设置 · 组织权限」关闭演示密码，并用「账号密码」批量配置各账号密码
-- 与本地 `npm run dev` 为同一套 React 应用（静态托管 `apps/web` 构建产物）
-- **共享配置**：API 在线时业务配置走 Nest 平台文档 / SQLite，不以浏览器 localStorage 为真理源；仅登录 token、API Base 等本机偏好可留在浏览器
+## 运行方式
 
-### Vercel
+MSSClaw 按“React 前端 + Nest API”运行。共享业务数据写入 SQLite，上传文件写入 Blob 文件目录。
 
-只部署前端，**不要**把 Framework 设为 Nest/Node 或 Root 指到 `apps/api`。
-
-| 项 | 建议 |
-|----|------|
-| Root Directory | 仓库根（已有根目录 `vercel.json`）或 `apps/web` |
-| Framework | Vite / Other |
-| Build | `npm run build --workspace @mss-claw/web` |
-| Output | `apps/web/dist`（Root 为仓库根时） |
-| 数据库 / Serverless | 不需要（纯静态即可；Nest API 需另外部署） |
-
-### GitHub Pages
-
-推送 `main` 后 Actions 构建并写入 **`gh-pages` 分支**。Pages 源请选该分支，勿指向 `main` 根目录（会变成 README/Jekyll），也勿启用自动 Deploy Jekyll 工作流。
+前端默认探测同源 `/api`。本地开发时，Vite 将 `/api` 代理到 `http://localhost:3000`。前端和后端需要同时启动；若健康检查失败、API 地址错误或响应格式不匹配，页面顶部会显示明确告警，相关共享数据可能无法加载或保存。
 
 ## 快速开始
 
-### 前端（默认）
+### 环境要求
+
+- Node.js 20（CI 使用版本）
+- npm 10 或兼容版本
+
+### 启动前端与 API
+
+首次运行 API：
+
+```bash
+npm install
+cp deploy/api.env.example apps/api/.env
+npm run prisma:generate --workspace @mss-claw/api
+npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+npm run prisma:seed --workspace @mss-claw/api
+```
+
+Windows PowerShell 使用下面的复制命令：
 
 ```powershell
-cd "D:\Vibe Coding\MSSClaw"
 npm install
+Copy-Item deploy\api.env.example apps\api\.env
+npm run prisma:generate --workspace @mss-claw/api
+npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+npm run prisma:seed --workspace @mss-claw/api
+```
+
+然后分别启动两个进程：
+
+```bash
+# 终端 1：Nest API，默认 http://localhost:3000/api/v1
+npm run dev:api
+
+# 终端 2：React 前端，默认 http://localhost:5173
 npm run dev
 ```
 
-浏览器打开 **http://localhost:5173**。
+验证 API：
 
-### 可选：后端 API + SQLite 持久化
-
-```powershell
-cd "D:\Vibe Coding\MSSClaw"
-npm install
-
-cd apps/api
-# 若无 .env，可手动创建，内容示例：
-# DATABASE_URL="file:./dev.db"
-# PORT=3000
-# CORS_ORIGIN=http://localhost:5173
-npm run prisma:generate
-npx prisma migrate deploy
-npm run prisma:seed
-
-cd ../..
-npm run dev:api   # 终端 1 · http://localhost:3000/api/v1
-npm run dev       # 终端 2 · Vite 代理 /api → 3000
+```bash
+curl http://localhost:3000/api/v1/health
 ```
 
-- API 在线：任务会话、Marketplace 等写入 SQLite  
-- API 离线：自动回退 `localStorage`
+## 演示内容与账号
 
-### 可选：静态 HTML 设计稿
+仓库默认包含案例、Agent、Skill、工具和知识库等演示数据。未单独设置密码且演示密码策略开启时，可使用：
 
-```powershell
-npm run dev:prototype
+| 角色 | 账号 | 初始密码 |
+| --- | --- | --- |
+| 平台运营 | `mcyo@huawei.com` | `mssclaw` |
+| 能力运营 | `jacky@huawei.com` | `mssclaw` |
+| 业务用户 | `dickson@huawei.com` | `mssclaw` |
+
+正式使用前应关闭演示密码，并为每个账号单独设密。
+
+正式试点构建时，可禁止注入演示内容：
+
+```bash
+VITE_INCLUDE_DEMO_CONTENT=false npm run build
 ```
 
-访问 `http://localhost:5173/docs/legacy-prototype/index.html`（只读旧稿）。
+这只影响新加载的内置内容，不会自动清理已写入浏览器的数据。已打开过系统的用户需要在“偏好设置 → 演示内容”中清理，或清除对应站点数据。
 
-## 产品能力（原型）
+## 常用命令
 
-| 区域 | 说明 |
-|------|------|
-| 找案例 | 场景方案卡；橱窗预览前沿洞察 / 场景案例 / 培训课件 |
-| 做任务 | 场景技能 / 专家入口 → 对话执行 |
-| 场景案例 | 学习 / 准备 / 开干预览（业务从找案例进入） |
-| 能力配置 | 配置专家、技能、工具、知识等（按角色与展示配置开关） |
-| 门户运营 | **场景方案包唯一配置入口**：三槽分责（洞察 / 案例 / 课件）+ 职能·区域筛选 |
-| 系统设置 | 成员与组织、角色权限、部门区域、审计、展示配置等 |
+| 命令 | 说明 |
+| --- | --- |
+| `npm run dev` | 启动 React 前端 |
+| `npm run dev:api` | 启动 Nest API（watch 模式） |
+| `npm run build` | 类型检查并构建前端 |
+| `npm run build:api` | 构建 API |
+| `npm run preview` | 预览前端构建产物 |
+| `npm run smoke` | 运行前端冒烟检查 |
+| `npm run dev:prototype` | 启动旧版静态原型 |
 
-角色示意：`super_admin`（平台运营）、`capability_ops`（能力开发）、`business_user`、`viewer`。
+## 配置
 
-## 技术栈
+### 前端
 
-| 层 | 技术 |
-|----|------|
-| 前端 | React 19、TypeScript、Vite 6、Tailwind CSS 3、Zustand、Zod、React Router 7 |
-| 其他前端库 | Chart.js、xlsx、fflate、clsx / tailwind-merge |
-| 后端（可选） | NestJS 11、Prisma 6、SQLite |
-| 工程 | npm workspaces（`apps/web`、`apps/api`） |
+可在 `apps/web/.env` 中配置：
 
-规划中（未作为运行时硬依赖）：LangGraph 真执行、Redis / Kafka、生产级 JWT RBAC 等，见 [ARCHITECTURE.md](./ARCHITECTURE.md)。
+| 变量 | 说明 |
+| --- | --- |
+| `VITE_API_BASE_URL` | API 地址；留空时使用同源 `/api` |
+| `VITE_API_KEY` | 与后端 `API_KEY` 对应的请求密钥 |
+| `VITE_INCLUDE_DEMO_CONTENT=false` | 构建时关闭内置演示内容 |
 
-代码规模约：**TS/TSX 近 5 万行**（不含 `node_modules` / `dist`）。
+API 地址和密钥也可以在应用的运行时设置中覆盖。
+
+### API
+
+完整示例见 [`deploy/api.env.example`](./deploy/api.env.example)。关键配置包括：
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `DATABASE_URL` | 无 | Prisma SQLite 数据库地址，必须配置 |
+| `PORT` | `3000` | API 端口 |
+| `CORS_ORIGIN` | `http://localhost:5173` | 允许的前端 Origin，多个值用逗号分隔 |
+| `API_KEY` | 空 | 可选的全局 API 密钥 |
+| `JSON_BODY_LIMIT` | `20mb` | 请求体大小限制 |
+| `BLOB_ROOT` | 应用默认目录 | 上传文件存储目录 |
+| `MAX_CONCURRENT_SSE` | `200` | SSE 执行流并发上限 |
+| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | 空 | OpenAI 兼容模型配置 |
+
+未配置模型时，执行服务会尝试读取工作空间中保存的模型配置；两者都不存在时会明确报错。`ALLOW_SCRIPTED_EXECUTION=1` 仅用于本地冒烟测试。
+
+## AI 快讯
+
+AI 快讯通过后端代理读取 AIHOT REST API v1 的精选内容，并转换为平台统一结构。页面不会把上游名称作为产品品牌展示。
+
+- 每次进入 AI 快讯页面时主动拉取一次；停留在页面期间不自动轮询。
+- 默认读取最近 7 天、最多 100 条精选内容，并按发布日期分组。
+- 服务端响应声明 5 分钟共享缓存；上游 `items` 接口自身约有 60 秒共享缓存。
+- 拉取失败时自动使用仓库内置的离线兜底内容，下次进入页面立即重试。
+- “适合 MSS 业务”目前根据标题和摘要中的业务关键词判断；上游入选理由不等同于 MSS 适配理由。
+
+相关接口：
+
+```text
+GET /api/v1/ai-daily-news
+```
+
+## 数据存储
+
+启用 Nest API 后，Prisma 使用 SQLite。默认开发配置通常为：
+
+```env
+DATABASE_URL="file:./dev.db"
+```
+
+数据库文件位于 `apps/api/prisma/dev.db`。SQLite 当前只有 `Workspace` 和 `CenterRecord` 两张通用表：
+
+| 存储范围 | 主要内容 |
+| --- | --- |
+| `Workspace` | 工作空间元数据、目录 JSON、部分任务会话 |
+| `CenterRecord` | Agent、Skill、工具、工作流、知识库配置、市场数据、门户内容、执行记录、成员权限、账号凭据、登录会话、审计和平台配置等 JSON 数据 |
+
+不存入 SQLite 的内容：
+
+- AI 快讯正文实时从上游读取，SQLite 不保存快讯副本。
+- 上传附件保存在后端 `data/blobs` 文件目录。
+- 登录令牌和部分本机偏好保存在浏览器 `localStorage`。
+- 模型本身及推理权重不保存在项目数据库中。
+
+## 架构
+
+```text
+Browser
+  └─ React 19 + Vite + Zustand
+       ├─ localStorage（登录令牌与本机偏好）
+       └─ /api/v1
+            └─ NestJS 11
+                 ├─ Prisma + SQLite
+                 ├─ Blob 文件存储
+                 └─ OpenAI-compatible LLM
+```
+
+前端按 `components / features / domain / stores / api` 分层；后端按工作空间、能力中心、持久化、知识检索和执行流拆分模块。详细设计见 [`ARCHITECTURE.md`](./ARCHITECTURE.md)。
+
+### 主要 API
+
+所有接口均以 `/api/v1` 为前缀。
+
+| 范围 | 代表接口 |
+| --- | --- |
+| 健康与认证 | `GET /health`、`POST /auth/login`、`GET /auth/me` |
+| 工作空间 | `GET /workspaces`、`GET /workspaces/:id/catalog` |
+| 共享数据 | sessions、marketplace、portal-content、docs、blobs |
+| AI 快讯 | `GET /ai-daily-news` |
+| 能力中心 | agents、skills、prompts、workflows、tools、knowledge-bases、memory-stores |
+| 知识检索 | 文档解析、搜索、向量状态与重建 |
+| 执行 | `GET /workspaces/:id/executions`、`POST /executions/stream` |
 
 ## 目录结构
 
-```
+```text
 MSSClaw/
 ├── apps/
-│   ├── web/                 # React SPA（默认入口）
-│   │   └── src/
-│   │       ├── components/  # UI 组件
-│   │       ├── domain/      # 领域模型与业务逻辑
-│   │       ├── features/    # 页面（home / ai-map / ops / …）
-│   │       ├── stores/      # Zustand
-│   │       └── …
-│   └── api/                 # NestJS + Prisma（可选）
-├── docs/
-│   ├── legacy-prototype/    # 静态设计稿
-│   └── MIGRATION.md
+│   ├── web/                 # React SPA
+│   │   ├── public/          # 品牌与静态资源
+│   │   └── src/             # 页面、组件、领域逻辑、Store 与 API 客户端
+│   └── api/                 # NestJS API
+│       ├── prisma/          # SQLite schema、迁移与 seed
+│       └── src/             # 业务模块与控制器
+├── api/                     # Vercel 边缘/函数入口
+├── deploy/                  # 内网部署说明、Nginx 与环境变量示例
+├── docs/                    # 使用、迁移、性能与产品文档
+├── scripts/                 # 数据目录与快讯维护脚本
 ├── ARCHITECTURE.md
-├── CURSOR_RULES.md
-├── vercel.json
-└── package.json             # workspaces 脚本
+└── package.json             # npm workspaces 入口
 ```
 
-## 脚本
+## 构建与部署
 
-| 命令 | 说明 |
-|------|------|
-| `npm run dev` | React 前端 :5173 |
-| `npm run dev:react` | 同上 |
-| `npm run dev:prototype` | 静态 HTML 原型 |
-| `npm run dev:api` | Nest API |
-| `npm run build` | 构建前端 → `apps/web/dist` |
-| `npm run build:api` | 构建 API |
-| `npm run preview` / `preview:react` | 预览前端构建 |
-| `npm run smoke` | 前端冒烟脚本 |
+### 静态前端
 
-## API（V1 骨架）
+```bash
+npm ci
+npm run build
+```
 
-| 端点 | 说明 |
-|------|------|
-| `GET /api/v1/health` | 健康检查 |
-| `GET /api/v1/workspaces` | Workspace 列表 |
-| `GET /api/v1/workspaces/:id/catalog` | 资源目录 |
-| `GET/PUT /api/v1/workspaces/:id/sessions` | 任务会话 |
-| `GET/PUT /api/v1/workspaces/:id/marketplace` | Agent / Skill / 自动化 / KB |
-| `POST /api/v1/executions/stream` | SSE 执行流 |
+产物位于 `apps/web/dist`，可由 Nginx、Vercel 或其他静态服务器托管，但必须同时配置可访问的 Nest API 和 `/api` 反向代理。仓库已包含 `vercel.json` 和 GitHub Pages workflow。
 
-## 内网部署与并发（约 500 人 / 64G·2T）
+已配置的演示地址：
 
-详见 **[docs/PERFORMANCE.md](./docs/PERFORMANCE.md)** 与 **[deploy/nginx.mssclaw.conf.example](./deploy/nginx.mssclaw.conf.example)**。
+- [Vercel](https://mssclaw.vercel.app)
+- [GitHub Pages](https://mcyo-yoyoyo.github.io/MSSClaw/)
 
-| 模式 | 约 500 并发 | 建议 |
-|------|-------------|------|
-| **静态前端 only** | ✅ 推荐 | Nginx 托管 `apps/web/dist`；每用户独立 localStorage |
-| **前端 + Nest/SQLite** | ❌ 勿当共享业务库 | 仅小流量演示；共享写会互相覆盖且 SQLite 写串行 |
+### 内网部署
 
-**64G + 2T 硬件余量充足**；瓶颈在架构而非内存/磁盘。静态站点约 1–2GB RAM 即可。
+共享 API 部署需要同时考虑数据库备份、Blob 持久化、反向代理、密钥管理和并发限制。操作步骤见 [`deploy/LAN-PRODUCTION.md`](./deploy/LAN-PRODUCTION.md)，容量边界见 [`docs/PERFORMANCE.md`](./docs/PERFORMANCE.md)。
 
-API 加固环境变量示例：`deploy/api.env.example`（限流、SSE 上限、可选 `API_KEY`、JSON body 上限）。
-
-### 内网部署：去掉演示数据
-
-代码内置了大量示例案例 / Agent / Skill / How to 等，**仅清浏览器缓存不够**——刷新后还会再灌进来。正式使用请二选一（可并用）：
-
-1. **部署时关掉（推荐）**  
-   构建前端时设置：
-   ```bash
-   VITE_INCLUDE_DEMO_CONTENT=false
-   ```
-   新打开的浏览器不会再加载系统自带示例；再通过「门户运营」导入真实案例即可。
-
-2. **已上线环境快速清空**（需 **平台运营** 账号，如 `mcyo@huawei.com`）  
-   - 入口 A：**侧栏「门户运营」** → 页头黄条旁 / 右上角 **「清空演示数据」**  
-   - 入口 B：侧栏或头像菜单 **「偏好设置」** → 往下滚到 **「演示内容」** → **「清空演示数据（正式使用）」**  
-   会清除本机示例缓存并关闭注入，然后刷新；**不会**清除登录、成员、租户与密码。  
-   **一键恢复**：清空后同一位置会出现 **「一键恢复演示内容」**，可重新加载系统自带示例（覆盖本机门户相关数据）。  
-   每个使用者的浏览器各自有一份 localStorage，若多人已打开过演示站，需各自点一次，或统一发新构建（上面第 1 步）。  
-   若构建时设置了 `VITE_INCLUDE_DEMO_CONTENT=false`，则无法在浏览器里恢复演示内容。
+当前 Prisma schema 使用 SQLite。若要支持大量用户共享写入，不能只替换连接字符串；需要迁移 datasource、重新生成迁移并完成并发与一致性验证。
 
 ## 文档
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — 架构与路线图  
-- [docs/MIGRATION.md](./docs/MIGRATION.md) — 设计稿 → React 迁移对照  
-- [CURSOR_RULES.md](./CURSOR_RULES.md) — Cursor / 协作约定  
+- [`docs/GUIDE.md`](./docs/GUIDE.md)：产品使用与开发指南
+- [`ARCHITECTURE.md`](./ARCHITECTURE.md)：系统架构与演进方向
+- [`deploy/LAN-PRODUCTION.md`](./deploy/LAN-PRODUCTION.md)：内网部署手册
+- [`docs/PERFORMANCE.md`](./docs/PERFORMANCE.md)：容量、并发和已知边界
+- [`docs/MIGRATION.md`](./docs/MIGRATION.md)：静态设计稿到 React 的迁移记录
+- [`CURSOR_RULES.md`](./CURSOR_RULES.md)：仓库协作约定
 
-## 路线图（摘要）
+## 当前边界
 
-- ✅ V1–V2.7：工程化、Center UI、Mock/SSE、Nest + Prisma SQLite  
-- 🔲 V3：LangGraph 真执行、生产级 RBAC / JWT、编辑器写回 API 等  
+- 默认数据库为 SQLite，适合开发和小规模试点，不适合高并发共享写入。
+- API Key 和当前会话认证用于演示级保护，不等同于完整的企业 SSO、JWT 与细粒度 RBAC。
+- LLM 执行使用 OpenAI 兼容接口；工作流编排和 Agent runtime 仍处于持续演进阶段。
+- 后端接口不可用时，部分页面仍可能展示本地兜底数据，但新增和修改不保证保存或跨设备同步。

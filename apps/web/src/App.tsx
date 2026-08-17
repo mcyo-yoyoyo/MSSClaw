@@ -168,14 +168,9 @@ export function App() {
       }
       const health = await fetchApiHealthInfo();
       if (!health.ok) {
-        const loopback =
-          typeof location !== 'undefined' &&
-          (location.hostname === 'localhost' ||
-            location.hostname === '127.0.0.1' ||
-            location.hostname === '[::1]');
         useWorkspaceStore.setState({
           apiConnected: false,
-          apiStatus: loopback ? 'local-demo' : 'unreachable',
+          apiStatus: 'unreachable',
         });
         return;
       }

@@ -22,7 +22,7 @@ type State = {
   error: string | null;
   lastSyncedAt: string | null;
   hydrate: (force?: boolean) => Promise<void>;
-  /** 平台运营：强制拉取 ai-bot.cn 并刷新展示 */
+  /** 平台运营：强制拉取 AIHOT 并刷新展示 */
   syncFromSource: () => Promise<SyncResult>;
   latest: () => AiBotNewsItem | null;
 };
@@ -43,7 +43,12 @@ export const useAiBotDailyNewsStore = create<State>((set, get) => ({
   lastSyncedAt: readCachedAiBotDailyNews()?.fetchedAt ?? null,
 
   hydrate: async (force = false) => {
-    if (!force && Date.now() - lastHydratedAt < TTL_MS && get().payload.groups.length) {
+    if (
+      !force &&
+      !get().payload.fromFallback &&
+      Date.now() - lastHydratedAt < TTL_MS &&
+      get().payload.groups.length
+    ) {
       return;
     }
     if (inflight) return inflight;
@@ -51,7 +56,8 @@ export const useAiBotDailyNewsStore = create<State>((set, get) => ({
     inflight = (async () => {
       try {
         const payload = await fetchAiBotDailyNews();
-        lastHydratedAt = Date.now();
+        // 只有真实上游响应才进入 TTL；兜底结果应允许用户下次进入页面时立即重试。
+        if (!payload.fromFallback) lastHydratedAt = Date.now();
         set({
           payload,
           loading: false,
@@ -79,7 +85,7 @@ export const useAiBotDailyNewsStore = create<State>((set, get) => ({
         set({ syncing: false, error: '同步失败，已保留当前内容' });
         return {
           ok: false,
-          message: '未能从 ai-bot.cn 拉取最新快讯（接口不可用），已保留当前内容',
+          message: '未能从 AIHOT 拉取最新快讯（接口不可用），已保留当前内容',
           itemCount: get().payload.groups.reduce((n, g) => n + g.items.length, 0),
           latestDate: get().payload.groups[0]?.dateLabel ?? null,
         };

@@ -1,11 +1,11 @@
 /**
- * AI 快讯：聚合自 https://ai-bot.cn/daily-ai-news
+ * AI 快讯：聚合自 AIHOT REST API v1。
  * 浏览器侧走同源 `/api/ai-daily-news`（Vite 中间件 / Vercel Function）规避 CORS。
  */
 
 import { AI_BOT_DAILY_NEWS_FALLBACK as FALLBACK_SEED } from '@/domain/aiBotDailyNewsFallback';
 
-export const AI_BOT_DAILY_NEWS_URL = 'https://ai-bot.cn/daily-ai-news';
+export const AI_BOT_DAILY_NEWS_URL = 'https://aihot.virxact.com';
 
 export type AiBotNewsItem = {
   id: string;
@@ -13,6 +13,11 @@ export type AiBotNewsItem = {
   title: string;
   summary: string;
   url: string;
+  source?: string;
+  category?: string;
+  reason?: string;
+  score?: number;
+  aihotUrl?: string;
 };
 
 export type AiBotNewsGroup = {
@@ -23,6 +28,7 @@ export type AiBotNewsGroup = {
 export type AiBotDailyNewsPayload = {
   sourceUrl: string;
   fetchedAt: string;
+  sourceName?: string;
   groups: AiBotNewsGroup[];
   /** true 表示接口失败后使用本地兜底 / 运营缓存 */
   fromFallback?: boolean;
@@ -95,12 +101,14 @@ export function flattenAiBotNews(payload: AiBotDailyNewsPayload): AiBotNewsItem[
 
 export function apiAiDailyNewsPath(): string {
   const base = import.meta.env.BASE_URL || '/';
-  return new URL('api/v1/ai-daily-news', base.endsWith('/') ? base : `${base}/`).pathname;
+  const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+  return `${normalizedBase}api/v1/ai-daily-news`;
 }
 
 function legacyAiDailyNewsPath(): string {
   const base = import.meta.env.BASE_URL || '/';
-  return new URL('api/ai-daily-news', base.endsWith('/') ? base : `${base}/`).pathname;
+  const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+  return `${normalizedBase}api/ai-daily-news`;
 }
 
 /** @deprecated 保留导出以免旧引用报错；不再作为真相源 */

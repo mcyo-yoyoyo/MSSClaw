@@ -1,87 +1,85 @@
 import { Controller, Get, Header } from '@nestjs/common';
 
-const SOURCE = 'https://ai-bot.cn/daily-ai-news';
+const SOURCE = 'https://aihot.virxact.com';
+const ITEMS_API = `${SOURCE}/api/v1/items?mode=selected&window=7d&limit=100`;
 
-function stripTags(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&#8221;/g, '”')
-    .replace(/&#8220;/g, '“')
-    .replace(/&amp;/g, '&')
-    .replace(/\s+/g, ' ')
-    .trim();
+type AihotItem = {
+  id?: string;
+  title?: string;
+  summary?: string | null;
+  publishedAt?: string;
+  discoveredAt?: string;
+  category?: string;
+  score?: number;
+  reason?: string | null;
+  source?: { name?: string };
+  links?: { original?: string; aihot?: string };
+};
+
+function dateLabel(value?: string): string {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return '日期未知';
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    month: 'numeric',
+    day: 'numeric',
+    weekday: 'short',
+  })
+    .format(date)
+    .replace(/日周/, '·周');
 }
 
-function hashId(input: string): string {
-  let h = 0;
-  for (let i = 0; i < input.length; i += 1) h = (h * 31 + input.charCodeAt(i)) | 0;
-  return `aibot-${(h >>> 0).toString(36)}`;
-}
-
-function parseHtml(html: string) {
-  const sections = html.split(/class="news-list"/i).slice(1);
-  const groups: Array<{
-    dateLabel: string;
-    items: Array<{ id: string; dateLabel: string; title: string; summary: string; url: string }>;
-  }> = [];
-  for (const section of sections) {
-    const dateMatch = section.match(/class="news-date"[^>]*>([^<]+)/i);
-    const dateLabel = (dateMatch?.[1] ?? '').trim();
-    if (!dateLabel) continue;
-    const items: Array<{
-      id: string;
-      dateLabel: string;
-      title: string;
-      summary: string;
-      url: string;
-    }> = [];
-    const itemRe =
-      /class="news-content"[\s\S]*?<h2>\s*<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/gi;
-    let m: RegExpExecArray | null;
-    while ((m = itemRe.exec(section))) {
-      const url = m[1].trim();
-      const title = stripTags(m[2]);
-      const summary = stripTags(m[3]);
-      if (!title) continue;
-      items.push({
-        id: hashId(`${dateLabel}|${url}|${title}`),
-        dateLabel,
-        title,
-        summary,
-        url,
-      });
-    }
-    if (items.length) groups.push({ dateLabel, items });
+function mapPayload(items: AihotItem[]) {
+  const grouped = new Map<string, Array<Record<string, unknown>>>();
+  for (const item of items) {
+    const title = item.title?.trim();
+    if (!item.id || !title) continue;
+    const label = dateLabel(item.publishedAt ?? item.discoveredAt);
+    const mapped = {
+      id: `aihot-${item.id}`,
+      dateLabel: label,
+      title,
+      summary: item.summary?.trim() ?? '',
+      url: item.links?.original || item.links?.aihot || SOURCE,
+      source: item.source?.name?.trim() || undefined,
+      category: item.category || undefined,
+      reason: item.reason?.trim() || undefined,
+      score: typeof item.score === 'number' ? item.score : undefined,
+      aihotUrl: item.links?.aihot || undefined,
+    };
+    grouped.set(label, [...(grouped.get(label) ?? []), mapped]);
   }
   return {
     sourceUrl: SOURCE,
+    sourceName: 'AIHOT',
     fetchedAt: new Date().toISOString(),
-    groups,
+    groups: [...grouped].map(([label, groupedItems]) => ({
+      dateLabel: label,
+      items: groupedItems,
+    })),
   };
 }
 
-/** 公司局域网 Nest 侧代理 ai-bot.cn，与 Vercel Function 同结构 */
+/** 公司局域网 Nest 侧代理 AIHOT，并转换为前端既有快讯结构。 */
 @Controller('ai-daily-news')
 export class AiDailyNewsController {
   @Get()
   @Header('Cache-Control', 's-maxage=300, stale-while-revalidate=600')
   async fetchDaily() {
     try {
-      const upstream = await fetch(SOURCE, {
+      const upstream = await fetch(ITEMS_API, {
         headers: {
-          'User-Agent':
-            'Mozilla/5.0 (compatible; MSSClawBot/1.0; +https://github.com/mssclaw/ai-brief)',
-          Accept: 'text/html,application/xhtml+xml',
+          'User-Agent': 'mssclaw-ai-brief/1.0',
+          Accept: 'application/json',
         },
       });
       if (!upstream.ok) {
         return { error: `upstream ${upstream.status}`, groups: [], sourceUrl: SOURCE };
       }
-      const html = await upstream.text();
-      const payload = parseHtml(html);
+      const data = (await upstream.json()) as { items?: AihotItem[] };
+      const payload = mapPayload(Array.isArray(data.items) ? data.items : []);
       if (!payload.groups.length) {
-        return { error: 'parse empty', groups: [], sourceUrl: SOURCE };
+        return { error: 'upstream empty', groups: [], sourceUrl: SOURCE };
       }
       return payload;
     } catch (e) {
