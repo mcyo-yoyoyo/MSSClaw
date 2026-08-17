@@ -4,9 +4,11 @@ import type {
   AssetApprovalReason,
   AssetApprovalRequest,
 } from '@/domain/assetApproval';
+import { approvalActionTitle } from '@/domain/assetApproval';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { usePortalContentStore } from '@/stores/portalContentStore';
+import { useInboxStore } from '@/stores/inboxStore';
 import {
   canUsePlatformDocsApi,
   currentWorkspaceId,
@@ -45,6 +47,9 @@ interface AssetApprovalState {
     reasons?: AssetApprovalReason[];
     note?: string;
     targetVersion?: string;
+    packageName?: string;
+    packageBlobId?: string;
+    packageUrl?: string;
     unpublishMode?: AssetApprovalRequest['unpublishMode'];
     unpublishVersions?: string[];
   }) => void;
@@ -106,11 +111,19 @@ function applyApproval(kind: AssetApprovalKind, assetId: string, req: AssetAppro
     const skill = market.skills.find((s) => s.id === assetId);
     if (skill) {
       if (wantUnpublish) {
+        const retireVersions = new Set(req.unpublishVersions ?? []);
+        const nextVersions = (skill.versions ?? []).map((version) =>
+          req.unpublishMode === 'versions' && retireVersions.has(version.version)
+            ? { ...version, status: 'retired' as const }
+            : version,
+        );
+        const unpublishAll = req.unpublishMode !== 'versions';
         market.upsertSkill({
           ...skill,
-          published: false,
-          featuredInDoTask: false,
-          featuredInMssMarket: false,
+          published: unpublishAll ? false : skill.published,
+          featuredInDoTask: unpublishAll ? false : skill.featuredInDoTask,
+          featuredInMssMarket: unpublishAll ? false : skill.featuredInMssMarket,
+          versions: nextVersions,
           updatedAt: stamp,
           updatedBy: actor,
         });
@@ -221,11 +234,13 @@ export const useAssetApprovalStore = create<AssetApprovalState>((set, get) => ({
       assetId: input.assetId,
       assetName: input.assetName,
       submitterName: input.submitterName || getCurrentUserName() || '未知用户',
+      submitterUserId: getCurrentUserId() || undefined,
       stepIndex: 1,
       createdAt: now,
       reasons: input.reasons?.length ? input.reasons : ['publish_executable'],
       note: input.note?.trim() || undefined,
       targetVersion: input.targetVersion?.trim() || undefined,
+      packageName: input.packageName?.trim() || undefined,
       unpublishMode: input.unpublishMode,
       unpublishVersions: input.unpublishVersions,
     };
@@ -269,6 +284,15 @@ export const useAssetApprovalStore = create<AssetApprovalState>((set, get) => ({
           ? `「${cur.assetName}」更新已生效并同步集市`
           : `「${cur.assetName}」已通过上架审批`;
       useMarketplaceStore.getState().showToast(doneMsg);
+      if (cur.submitterUserId) {
+        useInboxStore.getState().pushMessage({
+          kind: 'system',
+          title: approvalActionTitle(cur.reasons) + '已通过',
+          body: doneMsg,
+          toUserId: cur.submitterUserId,
+          fromName: 'MSS 质量与运营',
+        });
+      }
       set({ current: null, currentRecordId: null, history });
       return;
     }
@@ -301,7 +325,16 @@ export const useAssetApprovalStore = create<AssetApprovalState>((set, get) => ({
     persistFromState(history, get().watched, lastWatchedMap);
     useMarketplaceStore
       .getState()
-      .showToast(`「${cur.assetName}」审批已驳回，已通知提交人（演示）`);
+      .showToast(`「${cur.assetName}」审批已驳回，已通知提交人`);
+    if (cur.submitterUserId) {
+      useInboxStore.getState().pushMessage({
+        kind: 'system',
+        title: `${approvalActionTitle(cur.reasons)}已驳回`,
+        body: `「${cur.assetName}」审批未通过。${note?.trim() ? `驳回意见：${note.trim()}` : '审批人未填写驳回意见。'}请修改后重新提交。`,
+        toUserId: cur.submitterUserId,
+        fromName: '审批中心',
+      });
+    }
     set({ current: null, currentRecordId: null, history });
   },
 

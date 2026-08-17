@@ -13,9 +13,11 @@ import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useRecentMarketStore } from '@/stores/recentMarketStore';
 import { useSessionStore } from '@/stores/sessionStore';
+import { useAssetApprovalStore, type AssetApprovalRecord } from '@/stores/assetApprovalStore';
+import { skillDisplayName } from '@/domain/skillDisplay';
 
 type KindFilter = MarketShelfKind | 'all';
-type MeTab = 'favorites' | 'recent' | 'tasks';
+type MeTab = 'submissions' | 'favorites' | 'recent' | 'tasks';
 
 type RowItem = {
   id: string;
@@ -24,6 +26,17 @@ type RowItem = {
   icon?: string;
   logoUrl?: string;
   at?: number;
+};
+
+type SubmissionItem = {
+  id: string;
+  kind: 'skill' | 'agent';
+  title: string;
+  icon?: string;
+  logoUrl?: string;
+  version?: string;
+  published: boolean;
+  approval?: AssetApprovalRecord;
 };
 
 function formatRelative(at?: number): string {
@@ -45,6 +58,10 @@ export function MePage() {
   const setNote = useMarketFavoriteStore((s) => s.setNote);
   const recent = useRecentMarketStore((s) => s.items);
   const showToast = useMarketplaceStore((s) => s.showToast);
+  const skills = useMarketplaceStore((s) => s.skills);
+  const agents = useMarketplaceStore((s) => s.agents);
+  const approvalHistory = useAssetApprovalStore((s) => s.history);
+  const hydrateApprovals = useAssetApprovalStore((s) => s.hydrate);
   const isViewEnabled = useNavPresentationStore((s) => s.isViewEnabled);
   const appView = useAppViewStore((s) => s.appView);
   const setAppView = useAppViewStore((s) => s.setAppView);
@@ -59,6 +76,63 @@ export function MePage() {
   useEffect(() => {
     if (appView === 'ai-tasks' && showTasks) setTab('tasks');
   }, [appView, showTasks]);
+
+  useEffect(() => {
+    hydrateApprovals();
+  }, [hydrateApprovals]);
+
+  const submissionRows = useMemo(() => {
+    if (!user) return [];
+    const latestByAsset = new Map<string, AssetApprovalRecord>();
+    approvalHistory
+      .filter((record) => record.submitterUserId === user.id || (!record.submitterUserId && record.submitterName === user.name))
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .forEach((record) => {
+        const key = `${record.kind}:${record.assetId}`;
+        if (!latestByAsset.has(key)) latestByAsset.set(key, record);
+      });
+    const rows: SubmissionItem[] = [
+      ...skills
+        .filter((skill) => skill.publisherUserId === user.id || latestByAsset.has(`skill:${skill.id}`))
+        .map((skill) => ({
+          id: skill.id,
+          kind: 'skill' as const,
+          title: skillDisplayName(skill),
+          icon: skill.icon,
+          logoUrl: skill.iconUrl,
+          version: skill.version,
+          published: skill.published,
+          approval: latestByAsset.get(`skill:${skill.id}`),
+        })),
+      ...agents
+        .filter((agent) => agent.publisherUserId === user.id || latestByAsset.has(`agent:${agent.id}`))
+        .map((agent) => ({
+          id: agent.id,
+          kind: 'agent' as const,
+          title: agent.name,
+          icon: agent.icon,
+          logoUrl: agent.avatarUrl,
+          version: undefined,
+          published: agent.published,
+          approval: latestByAsset.get(`agent:${agent.id}`),
+        })),
+    ];
+    latestByAsset.forEach((approval) => {
+      if (!rows.some((row) => row.id === approval.assetId && row.kind === approval.kind)) {
+        rows.push({
+          id: approval.assetId,
+          kind: approval.kind === 'agent' ? 'agent' : 'skill',
+          title: approval.assetName,
+          icon: approval.kind === 'agent' ? 'fa-robot' : 'fa-cube',
+          logoUrl: undefined,
+          version: approval.targetVersion,
+          published: approval.status === 'approved',
+          approval,
+        });
+      }
+    });
+    return rows;
+  }, [agents, approvalHistory, skills, user]);
 
   const favRows = useMemo(
     () => (kindFilter === 'all' ? favorites : favorites.filter((x) => x.kind === kindFilter)),
@@ -96,6 +170,7 @@ export function MePage() {
   const roleDesc = user ? ROLE_DESCRIPTIONS[user.platformRole] : '';
 
   const tabs: { id: MeTab; label: string; count?: number; hidden?: boolean }[] = [
+    { id: 'submissions', label: '我的提交', count: submissionRows.length },
     { id: 'favorites', label: '我的收藏', count: favorites.length },
     { id: 'recent', label: '最近浏览', count: recent.length },
     { id: 'tasks', label: '任务记录', hidden: !showTasks },
@@ -186,6 +261,16 @@ export function MePage() {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {tab === 'tasks' && showTasks ? (
             <AiTasksPage embedded />
+          ) : tab === 'submissions' ? (
+            <MeShelfGrid empty="还没有提交过 Skill 或 Agent。" count={submissionRows.length}>
+              {submissionRows.map((item) => (
+                <SubmissionCard
+                  key={`${item.kind}:${item.id}`}
+                  item={item}
+                  onOpen={() => openMarketToolDetail(item.id, 'projects')}
+                />
+              ))}
+            </MeShelfGrid>
           ) : tab === 'recent' ? (
             <MeShelfGrid
               empty="打开或试用过的能力会出现在这里。"
@@ -234,6 +319,50 @@ export function MePage() {
         </div>
       </PageCanvas>
     </div>
+  );
+}
+
+function SubmissionCard({
+  item,
+  onOpen,
+}: {
+  item: SubmissionItem;
+  onOpen: () => void;
+}) {
+  const approvalLabel = item.approval?.status === 'pending'
+    ? '审批中'
+    : item.approval?.status === 'rejected'
+      ? '已驳回'
+      : item.approval?.status === 'cancelled'
+        ? '已撤回'
+        : item.published
+          ? '已上架'
+          : '未上架';
+  const tone = approvalLabel === '已上架'
+    ? 'bg-emerald-50 text-emerald-700'
+    : approvalLabel === '已驳回'
+      ? 'bg-red-50 text-red-700'
+      : 'bg-amber-50 text-amber-700';
+  return (
+    <li className="rounded-2xl border border-black/[0.05] bg-white p-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+      <button type="button" onClick={onOpen} className="flex w-full items-start gap-3 text-left">
+        <ToolLogo name={item.title} logoUrl={item.logoUrl} icon={item.icon ?? 'fa-cube'} size={38} />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span className="truncate text-[13px] font-semibold text-zinc-900">{item.title}</span>
+            <span className={cn('shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium', tone)}>{approvalLabel}</span>
+          </span>
+          <span className="mt-1 block text-[11px] text-zinc-400">
+            {item.kind === 'skill' ? 'Skill' : 'Agent'}
+            {item.version ? ` · v${item.version}` : ''}
+            {item.approval?.targetVersion ? ` · 目标 v${item.approval.targetVersion}` : ''}
+          </span>
+          {item.approval?.rejectNote ? (
+            <span className="mt-2 block rounded-lg bg-red-50 px-2 py-1.5 text-[11px] text-red-700">驳回说明：{item.approval.rejectNote}</span>
+          ) : null}
+        </span>
+      </button>
+    </li>
   );
 }
 

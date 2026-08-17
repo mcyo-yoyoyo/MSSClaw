@@ -96,7 +96,7 @@ function emptySkill(): PrototypeSkillSeed {
     updatedAt: stamp,
     updatedBy: name,
     sourceType: 'internal',
-    visibility: 'public',
+    visibility: 'org',
     ownerDeptIds: getCurrentDeptIds().slice(0, 1),
     ownerRegionId: getCurrentRegionId(),
     homepageUrl: '',
@@ -200,7 +200,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       ...parsed,
       id: '',
       published: false,
-      visibility: 'public',
+      visibility: 'org',
       ownerDeptIds: form.ownerDeptIds?.length
         ? form.ownerDeptIds.slice(0, 1)
         : getCurrentDeptIds().slice(0, 1),
@@ -309,6 +309,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
 
     const reasons: AssetApprovalReason[] = [];
     if (wantPublish && !prev?.published) reasons.push('publish_executable');
+    if (form.visibility === 'public' && prev?.visibility !== 'public') reasons.push('visibility_public');
     // 已上架后取消勾选：走下架审批，不可直接下架
     if (prev?.published && !wantPublish) reasons.push('unpublish_skill');
 

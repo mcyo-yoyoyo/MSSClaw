@@ -1,9 +1,5 @@
 import type { InboxMessage } from '@/domain/inbox';
-import {
-  canUsePlatformDocsApi,
-  fetchPlatformDoc,
-  scheduleSavePlatformDoc,
-} from '@/api/platformDocsApi';
+import { canUseInboxApi, fetchInboxMessages } from '@/api/inboxApi';
 
 /** 内存态：禁止写入 localStorage */
 const memoryInbox = new Map<string, InboxMessage[]>();
@@ -16,20 +12,17 @@ export function loadInboxMessages(workspaceId: string): InboxMessage[] {
 
 export function saveInboxMessages(workspaceId: string, messages: InboxMessage[]) {
   memoryInbox.set(workspaceId, structuredClone(messages));
-  if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc(workspaceId, 'inbox', { messages });
 }
 
-export async function hydrateInboxMessages(workspaceId: string): Promise<InboxMessage[]> {
-  if (!canUsePlatformDocsApi()) {
+export async function hydrateInboxMessages(
+  workspaceId: string,
+  userId: string,
+): Promise<InboxMessage[]> {
+  if (!canUseInboxApi() || !userId) {
     return loadInboxMessages(workspaceId);
   }
   try {
-    const remote = await fetchPlatformDoc<{ messages?: InboxMessage[] }>(
-      workspaceId,
-      'inbox',
-    );
-    const messages = Array.isArray(remote?.messages) ? remote.messages : [];
+    const messages = await fetchInboxMessages(workspaceId, userId);
     memoryInbox.set(workspaceId, messages);
     return structuredClone(messages);
   } catch {

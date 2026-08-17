@@ -1,25 +1,23 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { canViewAsset } from '@/domain/assetVisibility';
 import { canExecuteChat } from '@/domain/permissions';
-import { StationAnnounceBanner } from '@/components/home/StationAnnounceBanner';
 import { PageStageHero } from '@/components/layout/PageStageHero';
 import { useHomeStore } from '@/stores/homeStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
-import { type RankMode } from '@/domain/contentEngagement';
 import { HOME_CHANNEL_PINS } from '@/domain/homeChannelPins';
 import {
   applyMarketFeaturedPins,
   listInternalOfficeMarketCards,
   listMarketToolCards,
+  qualifiesAsFeaturedContent,
   type MarketShelfCard as MarketShelfCardModel,
   type MarketShelfKind,
 } from '@/domain/marketShelf';
 import { openMarketShelf, openMarketToolDetail } from '@/domain/openHomeJourney';
 import { HomeMarketChannels } from '@/components/home/HomeMarketChannels';
-import { HomeMeSummary } from '@/components/home/HomeMeSummary';
 import { StageIntentDock } from '@/components/market/StageIntentDock';
 import {
   capabilityKey,
@@ -44,12 +42,6 @@ import { emptyOrgPerspectiveSelection } from '@/domain/orgAxisTags';
 import { getBusinessScenarioMeta } from '@/domain/businessScenarios';
 import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
 
-const DEFAULT_RANK_BY_KIND: Record<MarketShelfKind, RankMode> = {
-  external: 'trending',
-  internal: 'trending',
-  projects: 'trending',
-};
-
 export function HomePage() {
   const { applyUserOrgDefaults } = useHomeStore();
   const agents = useMarketplaceStore((s) => s.agents);
@@ -64,17 +56,15 @@ export function HomePage() {
   const favoritesOnly = useMarketFilterStore((s) => s.favoritesOnly);
   const setMarketBusinessFilter = useMarketFilterStore((s) => s.setBusinessFilter);
   const hydrateRecent = useRecentMarketStore((s) => s.hydrate);
-  const recentItems = useRecentMarketStore((s) => s.items);
   const pushRecent = useRecentMarketStore((s) => s.push);
   const hydrateFavorites = useMarketFavoriteStore((s) => s.hydrate);
   const favoriteItems = useMarketFavoriteStore((s) => s.items);
   const hiddenKeys = useMarketHiddenStore((s) => s.keys);
   const hydrateHidden = useMarketHiddenStore((s) => s.hydrate);
   const hydrateFeaturedPins = useMarketFeaturedStore((s) => s.hydrate);
+  const featuredPins = useMarketFeaturedStore((s) => s.pins);
   const officeSceneEntries = useInternalOfficeSceneCatalogStore((s) => s.entries);
   const guideRecords = usePlazaToolGuideStore((s) => s.records);
-  const [rankByKind, setRankByKind] =
-    useState<Record<MarketShelfKind, RankMode>>(DEFAULT_RANK_BY_KIND);
   const pendingBusinessScenario = useNavigationIntentStore((s) => s.pendingBusinessScenario);
   const consumeBusinessScenario = useNavigationIntentStore((s) => s.consumeBusinessScenario);
 
@@ -128,10 +118,23 @@ export function HomePage() {
     const eng = (id: string) => engagementOf(id);
     const org = emptyOrgPerspectiveSelection();
 
-    const external = applyMarketFeaturedPins(
+    const externalRanked = applyMarketFeaturedPins(
       listMarketToolCards(tools, 'external', viewer, org, 'all', eng, howtoToolIds),
-      [...HOME_CHANNEL_PINS.external],
+      featuredPins.external ?? [],
     );
+    const overseasFeatured = externalRanked
+      .filter(
+        (card) =>
+          card.region === 'overseas' &&
+          card.featured &&
+          qualifiesAsFeaturedContent(card),
+      )
+      .slice(0, 3);
+    const overseasFeaturedIds = new Set(overseasFeatured.map((card) => card.id));
+    const external = [
+      ...overseasFeatured,
+      ...externalRanked.filter((card) => !overseasFeaturedIds.has(card.id)),
+    ];
     const internal = applyMarketFeaturedPins(
       listInternalOfficeMarketCards(tools, eng, howtoToolIds, officeSceneEntries),
       [...HOME_CHANNEL_PINS.internal],
@@ -183,6 +186,7 @@ export function HomePage() {
   }, [
     tools,
     agents,
+    featuredPins,
     viewer,
     engagementOf,
     engagementById,
@@ -261,31 +265,6 @@ export function HomePage() {
     openMarketToolDetail(card.id, card.kind);
   };
 
-  const openWorkbenchItem = (item: {
-    id: string;
-    kind: MarketShelfKind;
-    title: string;
-    icon?: string;
-    logoUrl?: string;
-  }) => {
-    const card =
-      channelCards[item.kind].find((c) => c.id === item.id) ??
-      ({
-        id: item.id,
-        kind: item.kind,
-        title: item.title,
-        description: '',
-        icon: item.icon ?? 'fa-solid fa-star',
-        logoUrl: item.logoUrl,
-        badges: [],
-        featured: false,
-        heat: 0,
-        hasHowto: false,
-        primaryAction: 'detail' as const,
-      } satisfies MarketShelfCardModel);
-    openPortalCard(card);
-  };
-
   return (
     <div className="home-surface flex min-h-0 flex-1 flex-col overflow-y-auto scroll-hidden">
       <div className="page-canvas mx-auto flex w-full flex-1 flex-col overflow-x-visible py-3 md:py-4">
@@ -296,8 +275,6 @@ export function HomePage() {
         ) : null}
 
         <div className="flex w-full flex-col gap-3 pb-6 md:gap-3.5">
-          <StationAnnounceBanner className="rounded-xl border-0 bg-white/90 px-3.5 py-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_8px_24px_rgba(0,0,0,0.05)]" />
-
           <PageStageHero
             tone="home"
             layout="stack"
@@ -332,19 +309,9 @@ export function HomePage() {
             />
           </PageStageHero>
 
-          <HomeMeSummary
-            favorites={favoriteItems}
-            recent={recentItems}
-            onOpen={openWorkbenchItem}
-          />
-
           <HomeMarketChannels
             cardsByKind={channelCards}
             projectsBreakdown={projectsBreakdown}
-            rankByKind={rankByKind}
-            onRankChange={(kind, mode) =>
-              setRankByKind((prev) => ({ ...prev, [kind]: mode }))
-            }
             onOpen={openPortalCard}
             searchActive={Boolean(marketSearch.trim())}
           />

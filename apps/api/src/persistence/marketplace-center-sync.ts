@@ -7,6 +7,7 @@ export interface MarketplacePayload {
   automations?: unknown[];
   kbDocs?: unknown[];
   externalCatalogVersion?: string;
+  internalCatalogVersion?: string;
 }
 
 type JsonRecord = Record<string, unknown>;

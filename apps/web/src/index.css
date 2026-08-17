@@ -1109,7 +1109,7 @@
 
 .market-chip-rail--external .market-chip-rail__btn {
   min-width: max-content;
-  flex: 0 0 auto;
+  flex: 1 0 auto;
   padding-left: 0.65rem;
   padding-right: 0.65rem;
 }

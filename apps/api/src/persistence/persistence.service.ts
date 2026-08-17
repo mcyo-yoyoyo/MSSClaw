@@ -14,6 +14,10 @@ import {
   EXTERNAL_TOOLS_EXCEL,
   EXTERNAL_TOOLS_EXCEL_VERSION,
 } from '../data/external-tools-excel-v1-0-5';
+import {
+  INTERNAL_TOOLS_EXCEL,
+  INTERNAL_TOOLS_EXCEL_VERSION,
+} from '../data/internal-tools-excel-v1-0-5';
 
 export type { MarketplacePayload };
 
@@ -22,6 +26,18 @@ export interface PortalContentPayload {
   /** 乐观锁版本；客户端 PUT 时带 expectedRevision */
   revision?: number;
   expectedRevision?: number;
+}
+
+export interface InboxMessageInput {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  fromUserId?: string;
+  fromName: string;
+  toUserId: string;
+  createdAt?: string;
+  meta?: Record<string, unknown>;
 }
 
 export type MarketEngagementAction =
@@ -93,6 +109,40 @@ function mergeExcelExternalTools(source: unknown[] | undefined): unknown[] {
   return [...internal, ...external];
 }
 
+function mergeExcelInternalTools(source: unknown[] | undefined): unknown[] {
+  const tools = Array.isArray(source) ? source : [];
+  const byId = new Map(
+    tools
+      .filter((raw): raw is Record<string, unknown> => Boolean(raw && typeof raw === 'object' && !Array.isArray(raw)))
+      .map((tool) => [String(tool.id ?? ''), tool]),
+  );
+  const updatedIds = new Set<string>();
+  const updated = INTERNAL_TOOLS_EXCEL.map((record) => {
+    updatedIds.add(record.id);
+    const existing = byId.get(record.id) ?? {};
+    return {
+      ...existing,
+      ...record,
+      desc: record.cardSummary,
+      category: 'platform',
+      author: '华为内部',
+      published: true,
+      invokes: typeof existing.invokes === 'number' ? existing.invokes : 0,
+      icon: typeof existing.icon === 'string' && existing.icon ? existing.icon : record.icon,
+      tags: Array.isArray(existing.tags) ? existing.tags : ['hw-internal'],
+      sourceType: 'internal',
+      visibility: typeof existing.visibility === 'string' ? existing.visibility : 'public',
+      ownerDeptIds: Array.isArray(existing.ownerDeptIds) ? existing.ownerDeptIds : [],
+      ownerRegionId: existing.ownerRegionId ?? null,
+      marketShelf: 'internal',
+    };
+  });
+  return [...tools.filter((raw) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return true;
+    return !updatedIds.has(String((raw as Record<string, unknown>).id ?? ''));
+  }), ...updated];
+}
+
 @Injectable()
 export class PersistenceService {
   constructor(private readonly prisma: PrismaService) {}
@@ -113,6 +163,81 @@ export class PersistenceService {
       data: { catalogJson: catalog as Prisma.InputJsonValue },
     });
     return { chats };
+  }
+
+  async getInboxMessages(workspaceId: string, userId: string) {
+    const [messages, states] = await Promise.all([
+      this.prisma.inboxMessageRecord.findMany({
+        where: { workspaceId, toUserId: { in: [userId, '*'] } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.inboxUserMessageState.findMany({ where: { workspaceId, userId } }),
+    ]);
+    const stateByMessage = new Map(states.map((state) => [state.messageId, state]));
+    return {
+      messages: messages
+        .filter((message) => !stateByMessage.get(message.id)?.deletedAt)
+        .map((message) => ({
+          ...message,
+          createdAt: message.createdAt.toISOString(),
+          read: Boolean(stateByMessage.get(message.id)?.readAt),
+        })),
+    };
+  }
+
+  async createInboxMessage(workspaceId: string, input: InboxMessageInput) {
+    const message = await this.prisma.inboxMessageRecord.upsert({
+      where: { workspaceId_id: { workspaceId, id: input.id } },
+      create: {
+        workspaceId,
+        id: input.id,
+        kind: input.kind,
+        title: input.title,
+        body: input.body,
+        fromUserId: input.fromUserId,
+        fromName: input.fromName,
+        toUserId: input.toUserId,
+        createdAt: input.createdAt ? new Date(input.createdAt) : new Date(),
+        meta: input.meta ? (input.meta as Prisma.InputJsonValue) : Prisma.JsonNull,
+      },
+      update: {},
+    });
+    return { ...message, createdAt: message.createdAt.toISOString(), read: false };
+  }
+
+  async markInboxMessageRead(workspaceId: string, userId: string, messageId: string) {
+    await this.prisma.inboxUserMessageState.upsert({
+      where: { workspaceId_userId_messageId: { workspaceId, userId, messageId } },
+      create: { workspaceId, userId, messageId, readAt: new Date() },
+      update: { readAt: new Date(), deletedAt: null },
+    });
+    return { ok: true };
+  }
+
+  async markAllInboxMessagesRead(workspaceId: string, userId: string) {
+    const messages = await this.prisma.inboxMessageRecord.findMany({
+      where: { workspaceId, toUserId: { in: [userId, '*'] } },
+      select: { id: true },
+    });
+    await this.prisma.$transaction(
+      messages.map(({ id: messageId }) =>
+        this.prisma.inboxUserMessageState.upsert({
+          where: { workspaceId_userId_messageId: { workspaceId, userId, messageId } },
+          create: { workspaceId, userId, messageId, readAt: new Date() },
+          update: { readAt: new Date() },
+        }),
+      ),
+    );
+    return { ok: true, count: messages.length };
+  }
+
+  async deleteInboxMessageForUser(workspaceId: string, userId: string, messageId: string) {
+    await this.prisma.inboxUserMessageState.upsert({
+      where: { workspaceId_userId_messageId: { workspaceId, userId, messageId } },
+      create: { workspaceId, userId, messageId, deletedAt: new Date() },
+      update: { deletedAt: new Date() },
+    });
+    return { ok: true };
   }
 
   async getMarketplace(workspaceId: string): Promise<MarketplacePayload | null> {
@@ -435,6 +560,10 @@ export class PersistenceService {
       tools = mergeExcelExternalTools(tools);
       changed = true;
     }
+    if (payload.internalCatalogVersion !== INTERNAL_TOOLS_EXCEL_VERSION) {
+      tools = mergeExcelInternalTools(tools);
+      changed = true;
+    }
     return {
       payload: {
         ...payload,
@@ -444,6 +573,7 @@ export class PersistenceService {
         automations: Array.isArray(payload.automations) ? payload.automations : [],
         kbDocs: Array.isArray(payload.kbDocs) ? payload.kbDocs : [],
         externalCatalogVersion: EXTERNAL_TOOLS_EXCEL_VERSION,
+        internalCatalogVersion: INTERNAL_TOOLS_EXCEL_VERSION,
       },
       changed,
     };

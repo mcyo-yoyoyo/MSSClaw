@@ -45,6 +45,7 @@ import { useSkillReviewStore } from '@/stores/skillReviewStore';
 import { useAppViewStore } from '@/stores/appViewStore';
 
 type DistTab = 'dept' | 'region' | 'scene' | 'homo';
+type DistSort = 'original' | 'asc' | 'desc';
 
 interface SkillCenterPageProps {
   onInvoke: (skill: PrototypeSkillSeed) => void;
@@ -97,6 +98,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
     kind: SkillOpsRequestKind;
   } | null>(null);
   const [distTab, setDistTab] = useState<DistTab>('dept');
+  const [distSort, setDistSort] = useState<DistSort>('original');
   const [scanGate, setScanGate] = useState<SkillSecurityScanGateMode>(() => getSecurityScanGateMode());
   useEffect(() => {
     setScanGate(getSecurityScanGateMode());
@@ -145,6 +147,12 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
   }, [distTab, skills]);
 
   const maxDist = Math.max(1, 0, ...distRows.map((r) => r.count));
+  const sortedDistRows = useMemo(() => {
+    if (distSort === 'original') return distRows;
+    return [...distRows].sort((a, b) =>
+      distSort === 'asc' ? a.count - b.count : b.count - a.count,
+    );
+  }, [distRows, distSort]);
 
   const listCards = useMemo((): { skill: PrototypeSkillSeed; card: MarketShelfCardModel }[] => {
     return list.map((s) => {
@@ -255,7 +263,20 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
         <section className="mb-4 rounded-2xl border border-zinc-200/90 bg-white p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-[13px] font-semibold text-zinc-800">多维度分布看板</h3>
-            <div className="flex flex-wrap gap-1 rounded-lg bg-zinc-100/80 p-0.5">
+            <div className="flex items-center gap-2">
+              {distTab !== 'homo' ? (
+                <button
+                  type="button"
+                  onClick={() => setDistSort((value) => value === 'original' ? 'asc' : value === 'asc' ? 'desc' : 'original')}
+                  className="flex flex-col items-center rounded-md px-1.5 py-0.5 leading-none hover:bg-zinc-100"
+                  title="切换排序：原排序 → 升序 → 降序"
+                  aria-label="切换看板排序"
+                >
+                  <span className={distSort === 'asc' ? 'text-sky-600' : 'text-zinc-300'}>▲</span>
+                  <span className={distSort === 'desc' ? 'text-sky-600' : 'text-zinc-300'}>▼</span>
+                </button>
+              ) : null}
+              <div className="flex flex-wrap gap-1 rounded-lg bg-zinc-100/80 p-0.5">
               {(
                 [
                   ['dept', '领域'],
@@ -281,6 +302,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
                   ) : null}
                 </button>
               ))}
+              </div>
             </div>
           </div>
           {distTab === 'homo' ? (
@@ -312,24 +334,20 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-              {distRows.map((row) => (
+            <div className="space-y-2">
+              {sortedDistRows.map((row) => (
                 <div
                   key={row.id}
-                  className="rounded-xl border border-zinc-100 bg-zinc-50/70 px-3 py-2.5"
+                  className="grid grid-cols-[110px_minmax(0,1fr)_40px] items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-zinc-50"
                 >
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="truncate text-[12px] font-medium text-zinc-700">{row.label}</span>
-                    <span className="tabular-nums text-[13px] font-semibold text-zinc-900">
-                      {row.count}
-                    </span>
-                  </div>
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-200/80">
+                  <span className="truncate text-left text-[12px] font-medium text-zinc-700">{row.label}</span>
+                  <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
                     <div
-                      className="h-full rounded-full bg-zinc-800/80"
+                      className="h-full rounded-full bg-zinc-800/80 transition-[width]"
                       style={{ width: `${Math.round((row.count / maxDist) * 100)}%` }}
                     />
                   </div>
+                  <span className="text-right tabular-nums text-[12px] font-semibold text-zinc-900">{row.count}</span>
                 </div>
               ))}
             </div>
@@ -392,54 +410,22 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {listCards.length ? (
             listCards.map(({ skill: s, card }) => (
-              <div key={s.id} className="flex flex-col gap-1.5">
+              <div key={s.id}>
                 <MarketShelfCard
                   card={card}
                   primaryLabel="详情"
                   onOpen={() => setDetail(s)}
                   onPrimary={() => setDetail(s)}
+                  footerActions={
+                    <div className="grid grid-cols-5 gap-1.5">
+                      <button type="button" onClick={() => handleInvoke(s)} className="rounded-lg bg-zinc-900 py-1.5 text-[10px] font-semibold text-white">调用</button>
+                      <button type="button" onClick={() => { downloadSkillFile(s); showToast(`已下载 Skill 包 ${skillDisplayName(s)}.skill.zip`); }} className="rounded-lg bg-zinc-100 py-1.5 text-[10px] font-medium text-zinc-600">下载</button>
+                      <button type="button" onClick={() => setEditorTarget(s.id)} className="rounded-lg bg-zinc-100 py-1.5 text-[10px] font-medium text-zinc-600">编辑</button>
+                      <button type="button" onClick={() => setOpsRequest({ skill: s, kind: 'update' })} className="rounded-lg bg-sky-50 py-1.5 text-[10px] font-medium text-sky-900">更新</button>
+                      <button type="button" onClick={() => setOpsRequest({ skill: s, kind: 'unpublish' })} className="rounded-lg bg-amber-50 py-1.5 text-[10px] font-medium text-amber-900">下架</button>
+                    </div>
+                  }
                 />
-                <div className="flex flex-wrap gap-1.5 px-0.5">
-                  <button
-                    type="button"
-                    onClick={() => handleInvoke(s)}
-                    className="apple-btn-primary flex-1 rounded-lg py-1.5 text-[11px] font-semibold text-white transition"
-                  >
-                    调用
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      downloadSkillFile(s);
-                      showToast(`已下载 Skill 包 ${skillDisplayName(s)}.skill.zip`);
-                    }}
-                    className="rounded-lg border border-black/8 px-2.5 py-1.5 text-[11px] font-medium transition hover:bg-black/[0.03]"
-                    title="下载 Skill 包"
-                  >
-                    <i className="fa-solid fa-download" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditorTarget(s.id)}
-                    className="rounded-lg border border-black/8 px-2.5 py-1.5 text-[11px] font-medium transition hover:bg-black/[0.03]"
-                  >
-                    编辑
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOpsRequest({ skill: s, kind: 'update' })}
-                    className="rounded-lg border border-sky-200 bg-sky-50/80 px-2 py-1.5 text-[11px] font-medium text-sky-900 transition hover:bg-sky-100"
-                  >
-                    更新
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOpsRequest({ skill: s, kind: 'unpublish' })}
-                    className="rounded-lg border border-amber-200 bg-amber-50/80 px-2 py-1.5 text-[11px] font-medium text-amber-900 transition hover:bg-amber-100"
-                  >
-                    下架
-                  </button>
-                </div>
               </div>
             ))
           ) : (

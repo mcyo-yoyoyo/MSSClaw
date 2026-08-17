@@ -17,6 +17,47 @@ export type EfficiencyCategory = 'office' | 'manage' | 'process' | 'experience';
 /** @deprecated 请优先使用 DeptId（domain/orgTaxonomy）；保持兼容首页既有命名 */
 export type HomeCategory = DeptId;
 
+export interface AgentInputOutputInfo {
+  inputTypes?: string[];
+  inputFormat?: string;
+  inputFields?: string[];
+  inputExample?: string;
+  supportedFiles?: string[];
+  outputFormat?: string;
+  outputFields?: string[];
+  outputExample?: string;
+  resultUsage?: string;
+}
+
+export interface AgentQuickStartInfo {
+  prerequisites?: string[];
+  inputRequirements?: string[];
+  steps?: string[];
+  installGuide?: string;
+  faqs?: Array<{ question: string; answer: string }>;
+}
+
+export interface AgentCaseItem {
+  title: string;
+  scenario?: string;
+  audience?: string;
+  problem?: string;
+  input?: string;
+  output?: string;
+  outcome?: string;
+  resourceUrl?: string;
+}
+
+export interface AgentEnvironmentInfo {
+  platforms?: string[];
+  usageModes?: string[];
+  requirements?: string[];
+  configuration?: string[];
+  packageGuide?: string;
+  requiresCode?: boolean;
+  supportsAssistantImport?: boolean;
+}
+
 /** Skill / Tool 共用的归属与上架字段 */
 export interface AssetOwnershipFields {
   ownerDeptIds?: DeptId[];
@@ -65,6 +106,24 @@ export interface PrototypeAgentSeed {
   demoPrompt?: string;
   /** 多 Skill 编排计划步骤 */
   planSteps?: string[];
+  /** 前台详情页核心能力、适用对象与边界 */
+  capabilities?: string[];
+  targetUsers?: string[];
+  capabilityBoundaries?: string[];
+  /** 详情页结构化输入输出、快速上手与案例 */
+  inputOutput?: AgentInputOutputInfo;
+  quickStart?: AgentQuickStartInfo;
+  cases?: AgentCaseItem[];
+  /** 版本与维护信息 */
+  version?: string;
+  versionSummary?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  maintainer?: string;
+  /** 环境、安装与反馈入口 */
+  environment?: AgentEnvironmentInfo;
+  installCommand?: string;
+  feedbackUrl?: string;
   /** 归属机关职能（可多选；缺省回退 homeTag） */
   ownerDeptIds?: DeptId[];
   /** 相关一线区域（用于区域轴筛选） */
@@ -244,6 +303,8 @@ export interface PrototypeToolSeed extends AssetOwnershipFields {
   productIntro?: string;
   /** Excel「核心能力」拆分后的标签。 */
   coreCapabilities?: string[];
+  /** Excel「站内使用指导」拆分后的步骤。 */
+  usageGuide?: string[];
 }
 
 export interface PrototypeKbCollection {

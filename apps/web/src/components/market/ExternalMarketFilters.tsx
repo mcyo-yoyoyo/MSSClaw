@@ -55,6 +55,7 @@ export function ExternalMarketFilters({
           onClick={() => onTypeChange('all')}
           className={cn('market-chip-rail__btn', type === 'all' && 'is-active')}
         >
+          <i className="fa-solid fa-border-all text-[10px] opacity-75" aria-hidden />
           全部
         </button>
         {toolTypes.map((c) => (
@@ -64,6 +65,7 @@ export function ExternalMarketFilters({
             onClick={() => onTypeChange(c.id)}
             className={cn('market-chip-rail__btn', type === c.id && 'is-active')}
           >
+            <i className={cn('fa-solid text-[10px] opacity-75', c.icon)} aria-hidden />
             <span className="truncate">{c.label}</span>
           </button>
         ))}

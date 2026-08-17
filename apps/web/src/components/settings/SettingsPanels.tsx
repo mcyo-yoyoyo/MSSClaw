@@ -126,8 +126,19 @@ function MembersAndOrgPanel({
   const [role, setRole] = useState<PlatformRole>('business_user');
   const [deptId, setDeptId] = useState<DeptId | ''>('');
   const [regionId, setRegionId] = useState<RegionId | ''>('');
+  const [memberQuery, setMemberQuery] = useState('');
   const [pwdTick, setPwdTick] = useState(0);
   const [pwdOpen, setPwdOpen] = useState(false);
+
+  const filteredMembers = useMemo(() => {
+    const query = memberQuery.trim().toLocaleLowerCase();
+    if (!query) return members;
+    return members.filter((member) =>
+      [member.name, member.email].some((value) =>
+        value.toLocaleLowerCase().includes(query),
+      ),
+    );
+  }, [memberQuery, members]);
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
@@ -286,7 +297,21 @@ function MembersAndOrgPanel({
         </p>
       )}
 
-      <Section title={`成员列表 · ${members.length}`}>
+      <Section
+        title={`成员列表 · ${filteredMembers.length}`}
+        action={
+          <label className="relative w-full sm:w-64">
+            <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-zinc-400" />
+            <input
+              value={memberQuery}
+              onChange={(event) => setMemberQuery(event.target.value)}
+              placeholder="搜索姓名或邮箱"
+              aria-label="搜索成员姓名或邮箱"
+              className="h-9 w-full rounded-xl border border-zinc-200 bg-white pl-8 pr-3 text-[12px] font-normal text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-[#0071e3]/50 focus:ring-2 focus:ring-[#0071e3]/10"
+            />
+          </label>
+        }
+      >
         <div className="overflow-x-auto rounded-xl border border-black/[0.06]">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="border-b border-black/[0.06] bg-[#fafafa] text-[11px] font-bold uppercase text-[#86868b]">
@@ -300,7 +325,7 @@ function MembersAndOrgPanel({
               </tr>
             </thead>
             <tbody>
-              {members.map((member) => (
+              {filteredMembers.map((member) => (
                 <tr key={member.id} className="border-b border-black/[0.05] last:border-0">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
@@ -466,6 +491,13 @@ function MembersAndOrgPanel({
                   </td>
                 </tr>
               ))}
+              {filteredMembers.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-[12px] text-zinc-400">
+                    未找到匹配的成员
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
@@ -1431,10 +1463,21 @@ function formatAuditTime(iso: string): string {
   }
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <section>
-      <h3 className="mb-3 text-sm font-bold text-[#1d1d1f]">{title}</h3>
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <h3 className="text-sm font-bold text-[#1d1d1f]">{title}</h3>
+        {action}
+      </div>
       {children}
     </section>
   );

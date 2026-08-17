@@ -12,6 +12,7 @@ import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useMarketCompareStore } from '@/stores/marketCompareStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
+import type { ReactNode } from 'react';
 
 export function MarketShelfCard({
   card,
@@ -24,6 +25,7 @@ export function MarketShelfCard({
   primaryLabel: primaryLabelOverride,
   howToLabel: _howToLabel,
   enableCompare = true,
+  footerActions,
 }: {
   card: MarketShelfCardModel;
   variant?: 'grid' | 'featured' | 'compact';
@@ -38,6 +40,8 @@ export function MarketShelfCard({
   howToLabel?: string;
   /** 轻量对比勾选（同货架 2–3 项）；首页关闭 */
   enableCompare?: boolean;
+  /** 管理后台专用：将操作集中收纳到卡片内部。 */
+  footerActions?: ReactNode;
 }) {
   void _onHowTo;
   void _howToLabel;
@@ -382,6 +386,11 @@ export function MarketShelfCard({
           {primaryLabel}
         </button>
       </div>
+      {footerActions ? (
+        <div className="mt-2" onClick={(event) => event.stopPropagation()}>
+          {footerActions}
+        </div>
+      ) : null}
     </article>
   );
 }

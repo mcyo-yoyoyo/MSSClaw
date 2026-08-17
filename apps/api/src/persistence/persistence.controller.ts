@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Header,
   Param,
@@ -45,6 +46,76 @@ export class PersistenceController {
     @Body() body: { chats: Record<string, unknown> },
   ) {
     return this.persistence.putSessions(workspaceId, body.chats ?? {});
+  }
+
+  @Get('inbox/messages')
+  getInboxMessages(
+    @Param('workspaceId') workspaceId: string,
+    @Query('userId') userId: string,
+  ) {
+    if (!userId) throw new BadRequestException('userId_required');
+    return this.persistence.getInboxMessages(workspaceId, userId);
+  }
+
+  @Post('inbox/messages')
+  createInboxMessage(
+    @Param('workspaceId') workspaceId: string,
+    @Body()
+    body: {
+      id?: string;
+      kind?: string;
+      title?: string;
+      body?: string;
+      fromUserId?: string;
+      fromName?: string;
+      toUserId?: string;
+      createdAt?: string;
+      meta?: Record<string, unknown>;
+    },
+  ) {
+    if (!body.id || !body.title || !body.body || !body.toUserId) {
+      throw new BadRequestException('id_title_body_toUserId_required');
+    }
+    return this.persistence.createInboxMessage(workspaceId, {
+      id: body.id,
+      kind: body.kind || 'system',
+      title: body.title,
+      body: body.body,
+      fromUserId: body.fromUserId,
+      fromName: body.fromName || '系统',
+      toUserId: body.toUserId,
+      createdAt: body.createdAt,
+      meta: body.meta,
+    });
+  }
+
+  @Post('inbox/messages/:messageId/read')
+  markInboxMessageRead(
+    @Param('workspaceId') workspaceId: string,
+    @Param('messageId') messageId: string,
+    @Body() body: { userId?: string },
+  ) {
+    if (!body.userId) throw new BadRequestException('userId_required');
+    return this.persistence.markInboxMessageRead(workspaceId, body.userId, messageId);
+  }
+
+  @Post('inbox/read-all')
+  markAllInboxMessagesRead(
+    @Param('workspaceId') workspaceId: string,
+    @Body() body: { userId?: string },
+  ) {
+    if (!body.userId) throw new BadRequestException('userId_required');
+    return this.persistence.markAllInboxMessagesRead(workspaceId, body.userId);
+  }
+
+  @Delete('inbox/messages/:messageId')
+  deleteInboxMessage(
+    @Param('workspaceId') workspaceId: string,
+    @Param('messageId') messageId: string,
+    @Query('userId') userId: string,
+  ) {
+    if (!userId) throw new BadRequestException('userId_required');
+    return this.persistence.deleteInboxMessageForUser(workspaceId, userId, messageId);
   }
 
   @Get('marketplace')

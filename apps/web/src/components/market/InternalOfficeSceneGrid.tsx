@@ -180,7 +180,7 @@ export function InternalOfficeSceneGrid({
                 <article
                   key={scene.id}
                   className={cn(
-                    'flex h-full min-h-[168px] flex-col rounded-2xl border border-zinc-200/90 bg-white px-4 py-4 transition',
+                    'flex h-full min-h-[180px] flex-col rounded-2xl border border-zinc-200/90 bg-white px-4 py-4 transition',
                     hasTools
                       ? 'hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-[0_10px_24px_-16px_rgba(24,24,27,0.35)]'
                       : 'opacity-80',
@@ -215,7 +215,7 @@ export function InternalOfficeSceneGrid({
                         )}
                       </div>
                     </div>
-                    <p className="mt-2.5 line-clamp-2 flex-1 text-[13px] leading-snug text-zinc-500">
+                    <p className="mt-2.5 flex-1 whitespace-normal text-[13px] leading-relaxed text-zinc-500">
                       {scene.description}
                     </p>
                     {!hasTools ? (

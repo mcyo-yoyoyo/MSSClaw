@@ -16,7 +16,7 @@ export function ShineBorder({
   const style: CSSProperties = {
     padding: borderWidth,
     animationDuration: `${duration}s`,
-    backgroundImage: `linear-gradient(115deg, transparent 8%, ${colors.join(', ')}, transparent 92%)`,
+    backgroundImage: `linear-gradient(115deg, transparent 36%, ${colors.join(', ')}, transparent 64%)`,
   };
 
   return <span aria-hidden className={cn('shine-border', className)} style={style} />;

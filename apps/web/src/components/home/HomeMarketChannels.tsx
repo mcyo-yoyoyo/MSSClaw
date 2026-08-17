@@ -1,7 +1,6 @@
 import { cn } from '@/lib/utils';
 import { MarketShelfCard } from '@/components/market/MarketShelfCard';
 import { ShineBorder } from '@/components/ui/shine-border';
-import { HOME_RANK_TABS, type RankMode } from '@/domain/contentEngagement';
 import {
   MARKET_SHELF_META,
   type MarketShelfCard as MarketShelfCardModel,
@@ -26,15 +25,11 @@ const TOP_N = 3;
 
 export function HomeMarketChannels({
   cardsByKind,
-  rankByKind,
-  onRankChange,
   onOpen,
   searchActive,
   projectsBreakdown,
 }: {
   cardsByKind: Record<MarketShelfKind, MarketShelfCardModel[]>;
-  rankByKind: Record<MarketShelfKind, RankMode>;
-  onRankChange: (kind: MarketShelfKind, mode: RankMode) => void;
   onOpen: (card: MarketShelfCardModel) => void;
   searchActive?: boolean;
   /** MSS工具集市：Skill / Agent 分列数量 */
@@ -46,7 +41,6 @@ export function HomeMarketChannels({
         const meta = MARKET_SHELF_META[kind];
         const total = cardsByKind[kind].length;
         const cards = cardsByKind[kind].slice(0, TOP_N);
-        const rank = rankByKind[kind];
         return (
           <article
             key={kind}
@@ -97,25 +91,7 @@ export function HomeMarketChannels({
                   进入 <i className="fa-solid fa-arrow-right text-[9px]" />
                 </button>
               </div>
-              {kind === 'projects' ? (
-                <div className="mt-2.5 flex flex-wrap gap-1">
-                  {HOME_RANK_TABS.map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => onRankChange(kind, tab.id)}
-                      className={cn(
-                        'rounded-md px-2 py-0.5 text-[10px] font-medium transition',
-                        rank === tab.id
-                          ? 'bg-[#1d1d1f] text-white'
-                          : 'bg-black/[0.04] text-[#6e6e73] hover:bg-black/[0.07] hover:text-[#1d1d1f]',
-                      )}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-              ) : (
+              {kind !== 'projects' ? (
                 <p
                   className={cn(
                     'mt-2 text-[10px]',
@@ -126,7 +102,7 @@ export function HomeMarketChannels({
                     ? '外部工具为第三方服务，禁止将公司内部信息上传到外部AI网站'
                     : '与货架办公场景同源 · 点击进入工具详情'}
                 </p>
-              )}
+              ) : null}
             </header>
 
             <div className="flex flex-1 flex-col gap-2 p-2.5">

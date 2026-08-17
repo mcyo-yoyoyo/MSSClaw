@@ -116,6 +116,15 @@ function shouldUpgradeMarketDoc(kind: PlatformDocKind, payload: unknown): boolea
   ) {
     return true;
   }
+  if (
+    kind === 'internal-office-scenes' &&
+    (!payload ||
+      Array.isArray(payload) ||
+      typeof payload !== 'object' ||
+      Number((payload as { version?: unknown }).version) !== SEED_INTERNAL_OFFICE_SCENES.version)
+  ) {
+    return true;
+  }
   return Boolean(
     payload &&
       !Array.isArray(payload) &&

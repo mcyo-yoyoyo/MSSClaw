@@ -285,8 +285,8 @@ export function listMarketToolCards(
           : {
               title: t.name,
               productName: undefined as string | undefined,
-              description: t.desc,
-              outcomeHint: t.bestFor?.trim() || t.cardSummary?.trim() || undefined,
+              description: t.cardSummary?.trim() || t.desc,
+              outcomeHint: t.cardSummary?.trim() || t.bestFor?.trim() || undefined,
               sceneTags: (t.bestFor ?? '')
                 .split(/[、,，/｜|]/)
                 .map((s) => s.trim())
@@ -352,8 +352,8 @@ export function listInternalOfficeMarketCards(
       id: st.id,
       kind: 'internal' as const,
       title: resolved.name,
-      description: (t?.desc || st.blurb).trim(),
-      outcomeHint: t?.bestFor?.trim() || st.blurb || undefined,
+      description: (t?.cardSummary || t?.desc || st.blurb).trim(),
+      outcomeHint: t?.cardSummary?.trim() || t?.bestFor?.trim() || st.blurb || undefined,
       sceneTags: (t?.bestFor ?? '')
         .split(/[、,，/｜|]/)
         .map((s) => s.trim())

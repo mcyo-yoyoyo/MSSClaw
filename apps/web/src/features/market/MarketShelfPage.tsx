@@ -899,7 +899,7 @@ export function MarketShelfPage({
                 ? '按场景选公司工具'
                 : allowScenarioRun
                   ? '可试用优先进入 AI 任务 · 下载为辅'
-                  : 'Skill / Agent Hub 以下载学习为主'
+                  : 'Agent偏任务流程助手，可处理相对完整的业务任务；Skill偏单点能力，可被Agent或员工助手调用'
           }
           tip={
             kind === 'external'
@@ -1130,13 +1130,13 @@ export function MarketShelfPage({
                       {
                         key: 'overseas',
                         title: '海外精选',
-                        sub: 'GLOBAL TOP 4',
+                        sub: `GLOBAL TOP ${externalFeaturedOverseas.length}`,
                         items: externalFeaturedOverseas,
                       },
                       {
                         key: 'domestic',
                         title: '国内精选',
-                        sub: 'CHINA TOP 4',
+                        sub: `CHINA TOP ${externalFeaturedDomestic.length}`,
                         items: externalFeaturedDomestic,
                       },
                     ] as const

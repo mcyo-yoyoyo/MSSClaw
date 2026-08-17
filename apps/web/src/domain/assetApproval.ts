@@ -72,6 +72,7 @@ export interface AssetApprovalRequest {
   assetId: string;
   assetName: string;
   submitterName: string;
+  submitterUserId?: string;
   /** 0=提交人完成，1=待业务主管，2=待质量运营，3=全部通过 */
   stepIndex: number;
   createdAt: number;
@@ -81,6 +82,10 @@ export interface AssetApprovalRequest {
   note?: string;
   /** 目标版本号（更新申请） */
   targetVersion?: string;
+  /** 更新申请上传的完整 Skill 包文件名。 */
+  packageName?: string;
+  packageBlobId?: string;
+  packageUrl?: string;
   /** 下架范围（MVP 以 all 为主；versions 预留） */
   unpublishMode?: SkillUnpublishMode;
   /** 指定下架的版本号列表（预留） */

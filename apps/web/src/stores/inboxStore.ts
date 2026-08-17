@@ -4,6 +4,13 @@ import { saveInboxMessages } from '@/domain/persistence/inboxStorage';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
 import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import {
+  canUseInboxApi,
+  createInboxMessage,
+  deleteInboxForUser,
+  markInboxAllRead,
+  markInboxRead,
+} from '@/api/inboxApi';
 
 interface InboxState {
   ready: boolean;
@@ -43,9 +50,9 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   bootstrap: (wsId) => {
     void (async () => {
       const { hydrateInboxMessages } = await import('@/domain/persistence/inboxStorage');
-      const messages = await hydrateInboxMessages(wsId);
-      set({ messages, ready: true });
       const uid = getCurrentUserId();
+      const messages = await hydrateInboxMessages(wsId, uid);
+      set({ messages, ready: true });
       if (uid) get().seedDemoIfEmpty(uid);
     })();
   },
@@ -69,6 +76,7 @@ export const useInboxStore = create<InboxState>((set, get) => ({
     };
     set((s) => ({ messages: [msg, ...s.messages] }));
     get().persist();
+    if (canUseInboxApi()) void createInboxMessage(workspaceId(), msg);
   },
 
   pushToUsers: (userIds, input) => {
@@ -79,10 +87,12 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   },
 
   markRead: (id) => {
+    const uid = getCurrentUserId();
     set((s) => ({
       messages: s.messages.map((m) => (m.id === id ? { ...m, read: true } : m)),
     }));
     get().persist();
+    if (uid && canUseInboxApi()) void markInboxRead(workspaceId(), uid, id);
   },
 
   markAllRead: (userId) => {
@@ -93,11 +103,14 @@ export const useInboxStore = create<InboxState>((set, get) => ({
       ),
     }));
     get().persist();
+    if (uid && canUseInboxApi()) void markInboxAllRead(workspaceId(), uid);
   },
 
   remove: (id) => {
+    const uid = getCurrentUserId();
     set((s) => ({ messages: s.messages.filter((m) => m.id !== id) }));
     get().persist();
+    if (uid && canUseInboxApi()) void deleteInboxForUser(workspaceId(), uid, id);
   },
 
   unreadCount: (userId) => {
@@ -152,5 +165,8 @@ export const useInboxStore = create<InboxState>((set, get) => ({
     ];
     set((s) => ({ messages: [...seeds, ...s.messages] }));
     get().persist();
+    if (canUseInboxApi()) {
+      for (const message of seeds) void createInboxMessage(workspaceId(), message);
+    }
   },
 }));

@@ -38,7 +38,10 @@ function normalizeEntries(
 function persist(entries: InternalOfficeSceneCatalogEntry[]) {
   setInternalOfficeSceneCatalog(entries);
   if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc(currentWorkspaceId(), 'internal-office-scenes', entries);
+  void scheduleSavePlatformDoc(currentWorkspaceId(), 'internal-office-scenes', {
+    version: 2,
+    entries,
+  });
 }
 
 interface InternalOfficeSceneCatalogState {

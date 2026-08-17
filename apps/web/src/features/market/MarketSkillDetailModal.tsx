@@ -23,7 +23,7 @@ import {
   resolveSkillExecutionTrust,
 } from '@/domain/executionTrust';
 
-type DetailTab = 'overview' | 'notes' | 'guide' | 'cases' | 'versions' | 'reviews' | 'security';
+type DetailTab = 'overview' | 'notes' | 'guide' | 'files' | 'versions' | 'reviews' | 'security';
 
 /** MVP：评价模块暂不上线，Tab 保留占位。改为 true 即可恢复完整评价 UI。 */
 const SKILL_REVIEWS_MVP_ENABLED = false;
@@ -62,6 +62,7 @@ export function MarketSkillDetailModal({
   };
 }) {
   const [tab, setTab] = useState<DetailTab>('overview');
+  const [selectedFile, setSelectedFile] = useState('SKILL.md');
   const getEngagement = useContentEngagementStore((s) => s.get);
   const engagementById = useContentEngagementStore((s) => s.byId);
   const bumpDownload = useContentEngagementStore((s) => s.bumpDownload);
@@ -94,6 +95,29 @@ export function MarketSkillDetailModal({
   const env = skill.envInfo;
   const trust = resolveSkillExecutionTrust(canRun);
   const trustMeta = EXECUTION_TRUST_META[trust];
+  const skillFiles = [
+    {
+      path: 'SKILL.md',
+      size: `${Math.max(1, Math.ceil((instructions || desc).length / 1024))} KB`,
+      content: instructions || `# ${name}\n\n${desc || '暂无 Skill 正文。'}`,
+    },
+    {
+      path: 'README.md',
+      size: `${Math.max(1, Math.ceil((usageNotes || desc).length / 1024))} KB`,
+      content: `# ${name}\n\n## 功能简介\n${desc || '暂无描述'}\n\n## 使用须知\n${usageNotes || '暂无额外使用须知。'}`,
+    },
+    {
+      path: 'manifest.json',
+      size: '1 KB',
+      content: JSON.stringify({
+        id: skill.id,
+        name,
+        version: skill.version,
+        command: skill.command,
+        connector: skill.connector,
+      }, null, 2),
+    },
+  ];
 
   const handleDownload = () => {
     bumpDownload(skill.id);
@@ -105,8 +129,8 @@ export function MarketSkillDetailModal({
     { id: 'overview', label: '概览' },
     { id: 'notes', label: '使用须知' },
     { id: 'guide', label: '快速上手' },
-    { id: 'cases', label: '案例' },
-    { id: 'versions', label: '版本' },
+    { id: 'files', label: `文件 ${skillFiles.length}` },
+    { id: 'versions' as const, label: '版本' },
     {
       id: 'reviews',
       label: '评价',
@@ -148,7 +172,7 @@ export function MarketSkillDetailModal({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="truncate text-[17px] font-semibold tracking-tight text-zinc-900">
+                    <h3 className="truncate text-[20px] font-bold tracking-tight text-zinc-900">
                       {name}
                     </h3>
                     <span
@@ -180,9 +204,14 @@ export function MarketSkillDetailModal({
                       {trustMeta.label}
                     </span>
                   </div>
-                  {nameEn ? (
-                    <p className="mt-0.5 truncate text-[12px] text-zinc-400">{nameEn}</p>
-                  ) : null}
+                  <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-zinc-400">
+                    {skill.command ? (
+                      <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 font-mono font-medium text-zinc-600">
+                        {skill.command}
+                      </span>
+                    ) : null}
+                    {nameEn ? <span className="truncate">{nameEn}</span> : null}
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -196,106 +225,55 @@ export function MarketSkillDetailModal({
               <p className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-zinc-600">
                 {desc || '暂无描述'}
               </p>
-              <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              <div className="mt-2.5 flex flex-wrap items-center gap-1.5" aria-label="Skill 分类标签">
+                {bizLabel ? (
+                  <span className="rounded-md bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-800">
+                    场景 · {bizLabel}
+                  </span>
+                ) : null}
                 {deptLabel ? (
-                  <span className="rounded-md bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-800">
-                    {deptLabel}
+                  <span className="rounded-md bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-800">
+                    领域 · {deptLabel}
                   </span>
                 ) : null}
                 {regionLabel ? (
-                  <span className="rounded-md bg-teal-50 px-1.5 py-0.5 text-[10px] font-medium text-teal-800">
-                    {regionLabel}
+                  <span className="rounded-md bg-teal-50 px-2 py-0.5 text-[10px] font-medium text-teal-800">
+                    区域 · {regionLabel}
                   </span>
                 ) : null}
-                {bizLabel ? (
-                  <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
-                    {bizLabel}
+                {skill.tags.slice(0, 3).map((tag) => (
+                  <span key={tag} className="rounded-md bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600">
+                    {tag}
                   </span>
-                ) : null}
+                ))}
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-zinc-500">
-                {skill.command ? (
-                  <span className="rounded-md bg-zinc-900 px-1.5 py-0.5 font-mono text-[10px] text-white">
-                    {skill.command}
-                  </span>
-                ) : null}
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-zinc-500">
                 <span className="tabular-nums">v{skill.version}</span>
-                <span className="text-zinc-300">·</span>
-                <span>↓ {formatToolInvokes(eng.downloads)}</span>
-                <span className="text-zinc-300">·</span>
-                <span>
-                  赞 {formatToolInvokes(eng.likes)} / 踩 {formatToolInvokes(eng.dislikes)}
+                <span title="访问量"><i className="fa-regular fa-eye mr-1" />{formatToolInvokes(eng.views)}</span>
+                <span title="收藏量"><i className="fa-regular fa-star mr-1" />{formatToolInvokes(eng.favorites)}</span>
+                <span title="下载数"><i className="fa-solid fa-download mr-1" />{formatToolInvokes(eng.downloads)}</span>
+                <span title="点赞量"><i className="fa-solid fa-thumbs-up mr-1" />{formatToolInvokes(eng.likes)}</span>
+                <span title="点踩量"><i className="fa-solid fa-thumbs-down mr-1" />{formatToolInvokes(eng.dislikes)}</span>
+                <span className={skill.published ? 'text-emerald-700' : 'text-amber-700'}>
+                  <i className="fa-solid fa-circle mr-1 text-[5px] align-middle" />
+                  {skill.published ? '已上线' : '待上线'}
                 </span>
-                <span className="text-zinc-300">·</span>
-                <span className="inline-flex items-center gap-1">
-                  <i className="fa-solid fa-shield-halved text-[9px] text-zinc-400" />
-                  {skillSecurityStatusLabel(scan.status)}
+                <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-medium text-zinc-600">
+                  {getEfficiencyLabel(skill.category)}
                 </span>
-                <span className="text-zinc-300">·</span>
-                <span>{getEfficiencyLabel(skill.category)}</span>
               </div>
             </div>
           </div>
         </div>
       }
       actions={
-        <div className="flex w-full items-center justify-between gap-3">
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => toggleLike(skill.id)}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition',
-                vote === 'like'
-                  ? 'bg-sky-50 text-sky-800'
-                  : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700',
-              )}
-            >
-              <i className="fa-solid fa-thumbs-up text-[10px]" />
-              {formatToolInvokes(eng.likes)}
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleDislike(skill.id)}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition',
-                vote === 'dislike'
-                  ? 'bg-zinc-100 text-zinc-800'
-                  : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700',
-              )}
-            >
-              <i className="fa-solid fa-thumbs-down text-[10px]" />
-              {formatToolInvokes(eng.dislikes)}
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium text-zinc-600 transition hover:bg-black/[0.03]"
-            >
-              关闭
-            </button>
-            <button
-              type="button"
-              onClick={handleDownload}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-[12px] font-medium text-zinc-700 transition hover:bg-zinc-50"
-            >
-              <i className="fa-solid fa-download text-[11px]" />
-              下载
-            </button>
-            {canRun ? (
-              <button
-                type="button"
-                onClick={() => onRun(skill)}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-800"
-              >
-                <i className="fa-solid fa-play text-[10px]" />
-                在线试用
-              </button>
-            ) : null}
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium text-zinc-600 transition hover:bg-black/[0.03]"
+        >
+          关闭
+        </button>
       }
     >
       <div className="grid min-h-[480px] md:grid-cols-[minmax(0,1.85fr)_minmax(220px,0.7fr)]">
@@ -474,49 +452,57 @@ export function MarketSkillDetailModal({
                     </li>
                   </ul>
                 </details>
+                <section>
+                  <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">落地案例与输入输出</h4>
+                  {cases.length ? (
+                    <div className="space-y-3">
+                      {cases.map((c, i) => (
+                        <article key={`${c.title}-${i}`} className="rounded-xl border border-zinc-100 bg-white p-3.5">
+                          <p className="text-[12px] font-semibold text-zinc-800">{c.title}</p>
+                          {c.input ? <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-zinc-50 p-2.5 text-[11px] text-zinc-600">输入：{c.input}</pre> : null}
+                          {c.output ? <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-emerald-50/60 p-2.5 text-[11px] text-zinc-600">输出：{c.output}</pre> : null}
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70 px-3 py-5 text-center text-[11px] text-zinc-400">
+                      暂无上传案例素材
+                    </p>
+                  )}
+                </section>
               </div>
             ) : null}
 
-            {tab === 'cases' ? (
-              <div className="space-y-4">
-                {cases.length ? (
-                  cases.map((c, i) => (
-                    <section
-                      key={`${c.title}-${i}`}
-                      className="rounded-2xl border border-zinc-200 bg-white p-4"
+            {tab === 'files' ? (
+              <div className="grid min-h-[320px] overflow-hidden rounded-2xl border border-zinc-200 bg-white sm:grid-cols-[210px_minmax(0,1fr)]">
+                <div className="border-b border-zinc-100 bg-zinc-50/70 p-2 sm:border-b-0 sm:border-r">
+                  <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                    Skill 文件包 · {skillFiles.length} 个文件
+                  </p>
+                  {skillFiles.map((file) => (
+                    <button
+                      key={file.path}
+                      type="button"
+                      onClick={() => setSelectedFile(file.path)}
+                      className={cn(
+                        'flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-[11px] transition',
+                        selectedFile === file.path ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-white',
+                      )}
                     >
-                      <h4 className="text-[13px] font-semibold text-zinc-800">{c.title}</h4>
-                      {c.input ? (
-                        <>
-                          <p className="mb-1 mt-3 text-[11px] text-zinc-400">输入</p>
-                          <pre className="whitespace-pre-wrap rounded-xl bg-zinc-50 px-3 py-2.5 text-[12px] text-zinc-700">
-                            {c.input}
-                          </pre>
-                        </>
-                      ) : null}
-                      {c.output ? (
-                        <>
-                          <p className="mb-1 mt-3 text-[11px] text-zinc-400">输出 / 效果</p>
-                          <pre className="whitespace-pre-wrap rounded-xl bg-emerald-50/50 px-3 py-2.5 text-[12px] text-zinc-700">
-                            {c.output}
-                          </pre>
-                        </>
-                      ) : null}
-                    </section>
-                  ))
-                ) : demoPrompt ? (
-                  <section className="rounded-2xl border border-zinc-200 bg-white p-4">
-                    <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">演示示例（回退）</h4>
-                    <p className="mb-2 text-[11px] text-zinc-400">输入</p>
-                    <pre className="whitespace-pre-wrap rounded-xl bg-zinc-50 px-3 py-2.5 text-[12px] text-zinc-700">
-                      {demoPrompt}
-                    </pre>
-                  </section>
-                ) : (
-                  <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-4 py-10 text-center text-[12px] text-zinc-400">
-                    暂无录入案例。可在「配置 Skill → 编辑 → 高级项」中维护。
+                      <span className="min-w-0 truncate"><i className="fa-regular fa-file-code mr-1.5" />{file.path}</span>
+                      <span className={selectedFile === file.path ? 'text-white/50' : 'text-zinc-400'}>{file.size}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 text-[11px]">
+                    <span className="font-mono font-semibold text-zinc-700">{selectedFile}</span>
+                    <span className="text-zinc-400">在线预览</span>
                   </div>
-                )}
+                  <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap p-4 font-mono text-[11px] leading-relaxed text-zinc-700">
+                    {skillFiles.find((file) => file.path === selectedFile)?.content}
+                  </pre>
+                </div>
               </div>
             ) : null}
 
@@ -618,27 +604,45 @@ export function MarketSkillDetailModal({
 
         <aside className="flex flex-col gap-3 border-t border-zinc-100 bg-zinc-50/40 px-4 py-4 md:border-t-0 md:px-5">
           <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-3">
-            <p className="mb-2 text-[11px] font-semibold text-zinc-500">运行与环境</p>
+            <p className="mb-2 text-[11px] font-semibold text-zinc-500">创建人信息</p>
             <dl className="divide-y divide-zinc-50">
-              <MetaRow label="连接器" value={skill.connector || '平台默认'} />
-              <MetaRow label="版本" value={`v${skill.version}`} />
-              <MetaRow
-                label="运行状态"
-                value={skill.published ? '已上架可调用' : '已沉淀 · 未上架'}
-              />
-              <MetaRow label="环境依赖" value={env?.dependencies || undefined} />
-              <MetaRow label="算法框架" value={env?.framework || undefined} />
-              <MetaRow label="运行版本" value={env?.runtimeVersion || undefined} />
-              <MetaRow label="硬件 / 网络" value={env?.hardwareNetwork || undefined} />
-              <MetaRow
-                label="适配说明"
-                value={
-                  env?.dependencies || env?.framework
-                    ? undefined
-                    : '浏览器端任务对话 / 技能包本地预览'
-                }
-              />
+              <MetaRow label="创建人" value={skill.author || skill.publisher || '未知'} />
+              <MetaRow label="创建时间" value={createdAt} />
+              <MetaRow label="更新者" value={updatedBy} />
+              <MetaRow label="更新时间" value={updatedAt} />
+              <MetaRow label="发布方" value={skill.publisher || skill.author || '未知'} />
+              <MetaRow label="可见性" value={ASSET_VISIBILITY_LABELS[skill.visibility ?? 'public']} />
             </dl>
+          </div>
+
+          <div className="space-y-2 rounded-xl border border-zinc-200/80 bg-white p-3">
+            <button type="button" onClick={handleDownload} className="w-full rounded-xl bg-zinc-900 px-3 py-2 text-[12px] font-semibold text-white">
+              <i className="fa-solid fa-download mr-1.5" />下载 Skill 包
+            </button>
+            {canRun ? (
+              <button type="button" onClick={() => onRun(skill)} className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-800">
+                <i className="fa-solid fa-play mr-1.5" />在线试用
+              </button>
+            ) : null}
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => toggleLike(skill.id)} className={cn('rounded-lg px-2 py-1.5 text-[11px] font-medium', vote === 'like' ? 'bg-sky-50 text-sky-800' : 'bg-zinc-50 text-zinc-600')}>
+                <i className="fa-solid fa-thumbs-up mr-1" />点赞 {formatToolInvokes(eng.likes)}
+              </button>
+              <button type="button" onClick={() => toggleDislike(skill.id)} className={cn('rounded-lg px-2 py-1.5 text-[11px] font-medium', vote === 'dislike' ? 'bg-zinc-200 text-zinc-900' : 'bg-zinc-50 text-zinc-600')}>
+                <i className="fa-solid fa-thumbs-down mr-1" />点踩 {formatToolInvokes(eng.dislikes)}
+              </button>
+            </div>
+            {adminActions ? (
+              <div className="grid grid-cols-2 gap-2 border-t border-zinc-100 pt-2">
+                <button type="button" onClick={adminActions.onUpdateRequest} className="rounded-lg bg-sky-50 px-2 py-1.5 text-[11px] font-semibold text-sky-900">更新申请</button>
+                <button type="button" onClick={adminActions.onUnpublishRequest} className="rounded-lg bg-amber-50 px-2 py-1.5 text-[11px] font-semibold text-amber-900">下架申请</button>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="rounded-xl border border-dashed border-zinc-200 bg-white px-3 py-3">
+            <p className="text-[11px] font-semibold text-zinc-700">相关推荐</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">待对接公司 IT。后续将按标签、功能和业务链路推荐上下游 Skill。</p>
           </div>
 
           <button
@@ -658,34 +662,21 @@ export function MarketSkillDetailModal({
             </p>
           </button>
 
-          <dl className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2 divide-y divide-zinc-50">
-            <MetaRow label="Skill ID" value={skill.id} />
-            <MetaRow label="创建人" value={skill.author || skill.publisher || '未知'} />
-            <MetaRow label="创建时间" value={createdAt} />
-            <MetaRow label="更新者" value={updatedBy} />
-            <MetaRow label="更新时间" value={updatedAt} />
-            <MetaRow label="发布方" value={skill.publisher || skill.author || undefined} />
-            <MetaRow label="可见性" value={ASSET_VISIBILITY_LABELS[skill.visibility ?? 'public']} />
-          </dl>
+          <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-3">
+            <p className="mb-2 text-[11px] font-semibold text-zinc-500">运行与环境</p>
+            <dl className="divide-y divide-zinc-50">
+              <MetaRow label="连接器" value={skill.connector || '平台默认'} />
+              <MetaRow label="版本" value={`v${skill.version}`} />
+              <MetaRow label="运行状态" value={skill.published ? '已上架可调用' : '已沉淀 · 未上架'} />
+              <MetaRow label="环境依赖" value={env?.dependencies || '待补充'} />
+              <MetaRow label="硬件 / 网络" value={env?.hardwareNetwork || '浏览器端 / 组织网络'} />
+              <MetaRow label="适配说明" value={env?.framework || '平台任务对话与本地包预览'} />
+            </dl>
+          </div>
 
-          {adminActions ? (
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={adminActions.onUpdateRequest}
-                className="rounded-xl border border-sky-200 bg-sky-50 px-2 py-2 text-[11px] font-semibold text-sky-900 transition hover:bg-sky-100"
-              >
-                更新申请
-              </button>
-              <button
-                type="button"
-                onClick={adminActions.onUnpublishRequest}
-                className="rounded-xl border border-amber-200 bg-amber-50 px-2 py-2 text-[11px] font-semibold text-amber-900 transition hover:bg-amber-100"
-              >
-                下架申请
-              </button>
-            </div>
-          ) : null}
+          <p className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2 text-[11px] leading-relaxed text-zinc-500">
+            <span className="font-semibold text-zinc-700">通告：</span>使用前请确认权限范围、数据合规要求及当前运行环境。
+          </p>
 
           {!canRun ? (
             <p className="rounded-xl border border-dashed border-zinc-200 bg-white px-3 py-2 text-center text-[11px] text-zinc-400">

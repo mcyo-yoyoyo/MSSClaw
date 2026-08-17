@@ -66,7 +66,8 @@ export async function hydrateAllPlatformDocs(workspaceId?: string): Promise<void
 
   const { hydrateInboxMessages } = await import('@/domain/persistence/inboxStorage');
   const { useInboxStore } = await import('@/stores/inboxStore');
-  const inbox = await hydrateInboxMessages(ws);
+  const { getCurrentUserId } = await import('@/domain/currentUser');
+  const inbox = await hydrateInboxMessages(ws, getCurrentUserId());
   useInboxStore.setState({ messages: inbox });
 
   const { hydrateWarroomWebhookUrl } = await import('@/domain/webhookConfig');

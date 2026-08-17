@@ -62,6 +62,22 @@ export function AssetApprovalModal() {
             {current.targetVersion ? (
               <p className="mt-1 text-[11px] text-zinc-500">目标版本：v{current.targetVersion}</p>
             ) : null}
+            {current.unpublishMode === 'versions' && current.unpublishVersions?.length ? (
+              <p className="mt-1 text-[11px] text-zinc-500">
+                下架版本：{current.unpublishVersions.map((version) => `v${version}`).join('、')}
+              </p>
+            ) : null}
+            {current.packageName ? (
+              <a
+                href={current.packageUrl || undefined}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-medium text-blue-600 hover:text-blue-700"
+              >
+                <i className="fa-solid fa-file-zipper" />
+                完整包：{current.packageName}
+              </a>
+            ) : null}
             {current.note ? (
               <p className="mt-1.5 rounded-lg bg-zinc-50 px-2.5 py-1.5 text-[11px] leading-relaxed text-zinc-600">
                 {current.note}
@@ -141,7 +157,7 @@ export function AssetApprovalModal() {
 
           <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-3 py-2.5 text-[11px] leading-relaxed text-zinc-600">
             <strong className="font-semibold text-zinc-800">流程说明：</strong>
-            上线、更新、下架共用同一审批链路。全部节点通过后系统自动变更集市状态；驳回可不填意见。演示环境可点击「模拟通过」推进节点。
+            上线、更新、下架共用同一审批链路。全部节点通过后系统自动变更集市状态；驳回意见可选填，并会通知提交人。
           </div>
         </div>
 
@@ -171,7 +187,7 @@ export function AssetApprovalModal() {
           >
             {current.stepIndex >= 2
               ? approvalFinalCta(current.reasons)
-              : `模拟通过「${activeNode?.title ?? ''}」`}
+              : `通过「${activeNode?.title ?? ''}」`}
           </button>
         </div>
       </div>

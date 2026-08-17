@@ -57,3 +57,33 @@ model MarketUserInteraction {
   @@id([workspaceId, userId, contentId])
   @@index([workspaceId, userId, favorited])
 }
+
+/// 工作区消息正文。广播消息使用 toUserId="*"，定向消息保存具体用户 id。
+model InboxMessageRecord {
+  workspaceId String
+  id          String
+  kind        String
+  title       String
+  body        String
+  fromUserId  String?
+  fromName    String
+  toUserId    String
+  meta        Json?
+  createdAt   DateTime @default(now())
+
+  @@id([workspaceId, id])
+  @@index([workspaceId, toUserId, createdAt])
+}
+
+/// 每个用户独立的消息状态，避免广播消息共享已读/删除状态。
+model InboxUserMessageState {
+  workspaceId String
+  userId      String
+  messageId   String
+  readAt      DateTime?
+  deletedAt   DateTime?
+  updatedAt   DateTime @updatedAt
+
+  @@id([workspaceId, userId, messageId])
+  @@index([workspaceId, userId, deletedAt])
+}
