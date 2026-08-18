@@ -233,6 +233,47 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     showToast(`已解析 Skill 包「${fileLabel}」，请确认信息与范围`);
   };
 
+  /**
+   * 把 zip 原包存进 blob 并写入 packageBlob，供详情页「文件」解压成目录树。
+   * 返回是否成功，调用方据此决定提示文案。
+   */
+  const storePackageBlob = async (file: File): Promise<boolean> => {
+    // blob 走 JSON base64，膨胀约 33%；提前拦住必然失败的大包
+    if (file.size > 12 * 1024 * 1024) {
+      showToast('包体积超过 12MB，请精简后再上传');
+      return false;
+    }
+    setUploadingPackage(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ''));
+        reader.onerror = () => reject(reader.error ?? new Error('read_failed'));
+        reader.readAsDataURL(file);
+      });
+      const uploaded = await uploadWorkspaceBlob(currentWorkspaceId(), {
+        name: file.name,
+        mimeType: file.type || 'application/zip',
+        dataUrl,
+      });
+      setForm((f) => ({
+        ...f,
+        packageBlob: {
+          id: uploaded.id,
+          url: uploaded.url,
+          name: uploaded.name,
+          size: uploaded.size,
+          uploadedAt: new Date().toISOString(),
+        },
+      }));
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setUploadingPackage(false);
+    }
+  };
+
   const handleUpload = async (file: File | null) => {
     if (!file) return;
     setParsing(true);
@@ -243,6 +284,11 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
         return;
       }
       applyParsed(items[0], file.name);
+      // 提报时上传的 zip 同时留档为原包，用户不必到高级项里再传一次
+      if (file.name.toLowerCase().endsWith('.zip')) {
+        const ok = await storePackageBlob(file);
+        showToast(ok ? '已解析并留档 Skill 原包' : '已解析，但原包留档失败（详情页将无文件树）');
+      }
     } catch {
       showToast('Skill 包解析失败，请检查格式');
     } finally {
@@ -769,40 +815,12 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                         showToast('请上传 .zip 格式的 Skill 包');
                         return;
                       }
-                      // blob 走 JSON base64，膨胀约 33%；提前拦住必然失败的大包
-                      if (file.size > 12 * 1024 * 1024) {
-                        showToast('包体积超过 12MB，请精简后再上传');
-                        return;
-                      }
-                      setUploadingPackage(true);
-                      try {
-                        const dataUrl = await new Promise<string>((resolve, reject) => {
-                          const reader = new FileReader();
-                          reader.onload = () => resolve(String(reader.result ?? ''));
-                          reader.onerror = () => reject(reader.error ?? new Error('read_failed'));
-                          reader.readAsDataURL(file);
-                        });
-                        const uploaded = await uploadWorkspaceBlob(currentWorkspaceId(), {
-                          name: file.name,
-                          mimeType: file.type || 'application/zip',
-                          dataUrl,
-                        });
-                        setForm((f) => ({
-                          ...f,
-                          packageBlob: {
-                            id: uploaded.id,
-                            url: uploaded.url,
-                            name: uploaded.name,
-                            size: uploaded.size,
-                            uploadedAt: new Date().toISOString(),
-                          },
-                        }));
-                        showToast(`已上传 Skill 包：${uploaded.name}`);
-                      } catch {
-                        showToast('Skill 包上传失败，请检查后端连接后重试');
-                      } finally {
-                        setUploadingPackage(false);
-                      }
+                      const ok = await storePackageBlob(file);
+                      showToast(
+                        ok
+                          ? `已上传 Skill 包：${file.name}`
+                          : 'Skill 包上传失败，请检查后端连接后重试',
+                      );
                     }}
                     className="block w-full text-[12px] file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-[12px] file:font-medium file:text-white"
                   />
