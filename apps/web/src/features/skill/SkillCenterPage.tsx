@@ -120,12 +120,13 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
     hydrateApprovals();
   }, [hydrateApprovals]);
 
-  const list = useMemo(
-    () =>
-      filteredSkills().filter((s) =>
-        skillMatchesLifecycleSelection(s, approvals, lifecycleSelection),
-      ),
-    [filteredSkills, approvals, lifecycleSelection],
+  /**
+   * 不要包 useMemo：filteredSkills 是 store 里定义一次的函数，引用恒定，
+   * 职能 / 区域 / 场景 / 范围 / 搜索变化都不会进依赖数组，memo 会一直返回旧结果。
+   * 组件本就订阅整个 store，筛选变化必然重渲染，直接算即可（量级 ~25 条）。
+   */
+  const list = filteredSkills().filter((s) =>
+    skillMatchesLifecycleSelection(s, approvals, lifecycleSelection),
   );
 
   const stats = useMemo(() => {
