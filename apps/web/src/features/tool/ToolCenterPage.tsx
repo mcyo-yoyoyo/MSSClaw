@@ -89,6 +89,13 @@ export function ToolCenterPage() {
   }, [pendingToolId, tools, consumeToolId, showToast]);
 
   const engagementById = useContentEngagementStore((s) => s.byId);
+  const hydrateEngagement = useContentEngagementStore((s) => s.hydrate);
+
+  // 统计卡依赖埋点数据，而全局只在启动时拉一次；进页面再拉一次，
+  // 避免启动时未连后端导致整页统计为 0
+  useEffect(() => {
+    hydrateEngagement();
+  }, [hydrateEngagement]);
 
   const stats = useMemo(() => {
     const pub = tools.filter((t) => t.published).length;

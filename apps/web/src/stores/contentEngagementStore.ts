@@ -70,7 +70,10 @@ export const useContentEngagementStore = create<ContentEngagementState>((set, ge
   hydrate: () => {
     void (async () => {
       if (!canUsePlatformDocsApi()) {
-        set({ byId: {}, userVotes: {}, hydrated: true });
+        // 未连后端：保留已拉到的计数。清空会让统计页整片显示 0，
+        // 而全局只在 App 启动时 hydrate 一次，启动时登录态未就绪就会
+        // 整个会话都是 0（曾表现为「配置工具」统计卡全零）。
+        set({ hydrated: true });
         return;
       }
       try {
@@ -86,7 +89,8 @@ export const useContentEngagementStore = create<ContentEngagementState>((set, ge
         );
         set({ byId, userVotes: remote.userVotes ?? {}, hydrated: true });
       } catch {
-        set({ byId: {}, userVotes: {}, hydrated: true });
+        // 同上：请求失败不覆盖既有计数
+        set({ hydrated: true });
       }
     })();
   },
