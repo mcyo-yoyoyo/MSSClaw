@@ -1889,8 +1889,17 @@
   .app-sidebar:not(.sidebar-collapsed) .nav-label,
   .app-sidebar:not(.sidebar-collapsed) .nav-section-header,
   .app-sidebar:not(.sidebar-collapsed) .sidebar-footer-user-text,
-  .app-sidebar:not(.sidebar-collapsed) .sidebar-collapse-label {
+  .app-sidebar:not(.sidebar-collapsed) .sidebar-collapse-label,
+  /* 窄栏没有文字可对齐，箭头会孤零零悬在右侧，与收起态一样隐藏 */
+  .app-sidebar:not(.sidebar-collapsed) .sidebar-footer-caret {
     display: none;
+  }
+
+  /* 与 .sidebar-collapsed 保持一致：头像居中，不再左对齐留大片空白 */
+  .app-sidebar:not(.sidebar-collapsed) .sidebar-footer-user {
+    justify-content: center;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
   }
 
   .app-sidebar:not(.sidebar-collapsed) .new-task-btn {
