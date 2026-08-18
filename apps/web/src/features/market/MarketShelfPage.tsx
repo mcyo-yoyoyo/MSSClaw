@@ -200,7 +200,8 @@ export function MarketShelfPage({
   useEffect(() => {
     setExternalType('all');
     setMssSurface('skills');
-    setRankMode(kind === 'external' ? 'excel_order' : 'most_viewed');
+    // 外部工具按 Excel 清单序、公司工具按办公场景字典序；MSS 集市才按互动量
+    setRankMode(kind === 'projects' ? 'most_viewed' : 'excel_order');
   }, [kind]);
 
   /** 运营隐藏类型后，清除已失效的筛选态 */

@@ -7,7 +7,17 @@ import {
   type InternalOfficeScene,
   type InternalOfficeSceneTool,
 } from '@/domain/internalOfficeScenes';
-import { sortByRankMode, type RankMode } from '@/domain/contentEngagement';
+import {
+  SHELF_RANK_TABS,
+  sortByRankMode,
+  type RankMode,
+} from '@/domain/contentEngagement';
+
+/** 办公场景排序：默认按运营在「配置办公场景」里排的顺序 */
+const OFFICE_SCENE_RANK_TABS = [
+  { id: 'excel_order' as RankMode, label: '运营排序', icon: 'fa-solid fa-arrow-down-1-9' },
+  ...SHELF_RANK_TABS.filter((tab) => tab.id !== 'excel_order'),
+];
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import { ShelfSectionHead } from '@/components/market/ShelfRankSelect';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
@@ -26,7 +36,7 @@ function sceneEngagementId(sceneId: string) {
 export function InternalOfficeSceneGrid({
   search,
   catalogTools,
-  rankMode = 'most_viewed',
+  rankMode = 'excel_order',
   onRankModeChange,
   onOpenDetail,
   onHowTo,
@@ -55,7 +65,13 @@ export function InternalOfficeSceneGrid({
   const engagementById = useContentEngagementStore((s) => s.byId);
 
   const allScenes = useMemo(
-    () => resolveOfficeScenesWithCatalog(catalogTools, sceneEntries),
+    () =>
+      // sourceOrder = 场景字典中的次序，供「运营排序」使用；
+      // 不带这个字段时 sortByRankMode 会回落到互动量，后台的上移/下移看不出效果
+      resolveOfficeScenesWithCatalog(catalogTools, sceneEntries).map((scene, index) => ({
+        ...scene,
+        sourceOrder: index,
+      })),
     [catalogTools, sceneEntries],
   );
 
@@ -168,6 +184,7 @@ export function InternalOfficeSceneGrid({
             count={scenes.length}
             rankMode={rankMode}
             onRankChange={onRankModeChange}
+            rankOptions={OFFICE_SCENE_RANK_TABS}
             className="mb-0"
           />
         ) : null}
