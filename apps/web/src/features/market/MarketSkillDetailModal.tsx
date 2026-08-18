@@ -42,6 +42,21 @@ function MetaRow({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
+/**
+ * 版本时间：年月日 + 时分。
+ * 存量数据只存到日期（YYYY-MM-DD），按产品口径补 00:00 展示，不猜测真实时刻。
+ */
+function formatVersionTime(value?: string): string {
+  const raw = value?.trim();
+  if (!raw) return '—';
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(raw);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const ymd = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return dateOnly ? `${ymd} 00:00` : `${ymd} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export function MarketSkillDetailModal({
   skill,
   canRun,
@@ -373,6 +388,37 @@ export function MarketSkillDetailModal({
                   </div>
                 )}
                 <section>
+                  <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">使用案例</h4>
+                  {cases.length ? (
+                    <div className="space-y-3">
+                      {cases.map((c, i) => (
+                        <article key={`${c.title}-${i}`} className="rounded-xl border border-zinc-100 bg-white p-3.5">
+                          <p className="text-[12px] font-semibold text-zinc-800">{c.title}</p>
+                          {c.input ? <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-zinc-50 p-2.5 text-[11px] text-zinc-600">输入：{c.input}</pre> : null}
+                          {c.output ? <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-emerald-50/60 p-2.5 text-[11px] text-zinc-600">输出：{c.output}</pre> : null}
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70 px-3 py-5 text-center text-[11px] text-zinc-400">
+                      暂无上传案例素材
+                    </p>
+                  )}
+
+                  {caseAttachments.length ? (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-[11px] font-medium text-zinc-500">案例附件</p>
+                      {caseAttachments.map((file, i) => (
+                        <CaseDocumentPreview
+                          key={`${file.blobId ?? file.name}-${i}`}
+                          file={file}
+                          variant="default"
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </section>
+                <section>
                   <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">权限要求</h4>
                   <p className="text-[13px] leading-relaxed text-zinc-600">
                     {ASSET_VISIBILITY_LABELS[skill.visibility ?? 'public']}
@@ -390,7 +436,7 @@ export function MarketSkillDetailModal({
                 <section className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-4">
                   <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">调用方式</h4>
                   <p className="text-[12px] leading-relaxed text-zinc-600">
-                    在任务对话中输入命令，或点底部「执行」一键启动；亦可「下载」后本地预览。
+                    请下载 Skill 包使用，推荐将 Skill 部署在员工助手执行。
                   </p>
                   {skill.command ? (
                     <code className="mt-3 block rounded-xl bg-zinc-900 px-3 py-2.5 font-mono text-[13px] text-emerald-300">
@@ -431,37 +477,6 @@ export function MarketSkillDetailModal({
                     </li>
                   </ul>
                 </details>
-                <section>
-                  <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">使用案例</h4>
-                  {cases.length ? (
-                    <div className="space-y-3">
-                      {cases.map((c, i) => (
-                        <article key={`${c.title}-${i}`} className="rounded-xl border border-zinc-100 bg-white p-3.5">
-                          <p className="text-[12px] font-semibold text-zinc-800">{c.title}</p>
-                          {c.input ? <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-zinc-50 p-2.5 text-[11px] text-zinc-600">输入：{c.input}</pre> : null}
-                          {c.output ? <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-emerald-50/60 p-2.5 text-[11px] text-zinc-600">输出：{c.output}</pre> : null}
-                        </article>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70 px-3 py-5 text-center text-[11px] text-zinc-400">
-                      暂无上传案例素材
-                    </p>
-                  )}
-
-                  {caseAttachments.length ? (
-                    <div className="mt-3 space-y-2">
-                      <p className="text-[11px] font-medium text-zinc-500">案例附件</p>
-                      {caseAttachments.map((file, i) => (
-                        <CaseDocumentPreview
-                          key={`${file.blobId ?? file.name}-${i}`}
-                          file={file}
-                          variant="default"
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-                </section>
               </div>
             ) : null}
 
@@ -518,7 +533,7 @@ export function MarketSkillDetailModal({
                         </td>
                         <td className="px-2 py-2.5 text-zinc-600">{v.notes || '—'}</td>
                         <td className="px-2 py-2.5 tabular-nums text-zinc-500">
-                          {v.publishedAt || '—'}
+                          {formatVersionTime(v.publishedAt)}
                         </td>
                         <td className="px-2 py-2.5">
                           <span
@@ -596,7 +611,7 @@ export function MarketSkillDetailModal({
 
         <aside className="flex flex-col gap-3 border-t border-zinc-100 bg-zinc-50/40 px-4 py-4 md:border-t-0 md:px-5">
           <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-3">
-            <p className="mb-2 text-[11px] font-semibold text-zinc-500">创建人信息</p>
+            <p className="mb-2 text-[11px] font-semibold text-zinc-500">相关信息</p>
             <dl className="divide-y divide-zinc-50">
               <MetaRow label="创建人" value={skill.author || skill.publisher || '未知'} />
               <MetaRow label="创建时间" value={createdAt} />
@@ -632,9 +647,11 @@ export function MarketSkillDetailModal({
             ) : null}
           </div>
 
-          <div className="rounded-xl border border-dashed border-zinc-200 bg-white px-3 py-3">
-            <p className="text-[11px] font-semibold text-zinc-700">相关推荐</p>
-            <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">待对接公司 IT。后续将按标签、功能和业务链路推荐上下游 Skill。</p>
+          <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-3">
+            <p className="mb-2 text-[11px] font-semibold text-zinc-500">相关推荐</p>
+            <p className="text-[11px] leading-relaxed text-zinc-400">
+              待对接公司 IT。后续将按标签、功能和业务链路推荐上下游 Skill。
+            </p>
           </div>
 
           <button
