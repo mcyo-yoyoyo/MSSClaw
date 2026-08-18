@@ -353,17 +353,3 @@ export function resolveOfficeScenesWithCatalog(
   return materializeOfficeScenes(entries, catalogTools);
 }
 
-export const INTERNAL_OFFICE_SCENE_ICON_PRESETS = [
-  'fa-pen-to-square',
-  'fa-book-open',
-  'fa-file-lines',
-  'fa-comments',
-  'fa-magnifying-glass',
-  'fa-screwdriver-wrench',
-  'fa-binoculars',
-  'fa-database',
-  'fa-robot',
-  'fa-briefcase',
-  'fa-lightbulb',
-  'fa-users',
-] as const;

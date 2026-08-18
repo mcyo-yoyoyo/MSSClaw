@@ -22,7 +22,6 @@ import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { resolveToolLogoUrl } from '@/domain/toolLogo';
 import { AssetAccentMark } from '@/components/brand/AssetAccentMark';
-import { PortalInternalOfficeScenePanel } from '@/features/ops/PortalInternalOfficeScenePanel';
 
 type PinCandidate = {
   id: string;
@@ -202,8 +201,6 @@ export function PortalMarketFeaturedPanel() {
           </button>
         ))}
       </div>
-
-      {kind === 'internal' ? <PortalInternalOfficeScenePanel /> : null}
 
       {kind === 'external' ? (
         <div className="inline-flex rounded-xl border border-zinc-200 bg-zinc-50 p-0.5">
