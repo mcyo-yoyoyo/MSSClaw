@@ -5,6 +5,7 @@ import { BlobStoreService } from './blob-store.service';
 import { PlatformDocsService } from './platform-docs.service';
 import { AuthController, PlatformDocsController } from './platform-docs.controller';
 import { AiDailyNewsController } from './ai-daily-news.controller';
+import { AiNewsArchiveService } from './ai-news-archive.service';
 
 @Module({
   controllers: [
@@ -13,7 +14,7 @@ import { AiDailyNewsController } from './ai-daily-news.controller';
     AuthController,
     AiDailyNewsController,
   ],
-  providers: [PersistenceService, BlobStoreService, PlatformDocsService],
+  providers: [PersistenceService, BlobStoreService, PlatformDocsService, AiNewsArchiveService],
   exports: [BlobStoreService, PlatformDocsService],
 })
 export class PersistenceModule {}

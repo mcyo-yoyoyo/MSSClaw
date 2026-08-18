@@ -96,13 +96,18 @@ export function ToolCenterPage() {
     // 口径：后端 engagement 记录。tool.invokes 带演示种子基数，不作统计口径。
     const sum = (pick: (e: ContentEngagement) => number) =>
       tools.reduce((n, t) => n + pick(engagementById[t.id] ?? emptyEngagement(t.id)), 0);
-    const totalViews = sum((e) => e.views);
-    const totalFavorites = sum((e) => e.favorites);
+    const company = tools.filter((t) => resolveToolMarketShelf(t) === 'internal').length;
     return [
       ['Tool 总数', tools.length],
       ['已发布', pub],
       ['外部工具', external],
-      ['站内查看 / 收藏', `${totalViews.toLocaleString()} / ${totalFavorites.toLocaleString()}`],
+      ['公司工具', company],
+      // uses 记的是「跳转官网」：详情页 / 货架 / 首页场景三处打开外链时累加
+      ['跳转官网', sum((e) => e.uses).toLocaleString()],
+      ['查看', sum((e) => e.views).toLocaleString()],
+      ['收藏', sum((e) => e.favorites).toLocaleString()],
+      ['点赞', sum((e) => e.likes).toLocaleString()],
+      ['点踩', sum((e) => e.dislikes).toLocaleString()],
     ] as [string, string | number][];
   }, [tools, engagementById]);
 
@@ -159,22 +164,41 @@ export function ToolCenterPage() {
         <StatCardGrid items={stats} />
 
         <div className="mb-4 flex flex-col gap-2 rounded-2xl border border-black/[0.05] bg-white/80 p-2 shadow-sm sm:flex-row sm:items-center">
-          <label className="relative sm:w-48">
-            <span className="sr-only">工具类型</span>
-            <select
-              value={toolTypeFilter}
-              onChange={(event) => setToolTypeFilter(event.target.value as ToolTypeFilter)}
-              className="w-full appearance-none rounded-xl border border-zinc-200 bg-zinc-50/80 px-3.5 py-2.5 pr-9 text-[12px] font-medium text-zinc-700 outline-none transition hover:border-zinc-300 hover:bg-white focus:border-zinc-400 focus:ring-4 focus:ring-zinc-900/[0.05]"
-            >
-              {TOOL_TYPE_FILTERS.map((option) => (
-                <option key={option.value} value={option.value}>
+          <div
+            className="flex flex-wrap items-center gap-1.5"
+            role="group"
+            aria-label="工具类型"
+          >
+            {TOOL_TYPE_FILTERS.map((option) => {
+              const active = toolTypeFilter === option.value;
+              const count = tools.filter((t) => matchesToolType(t, option.value)).length;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setToolTypeFilter(option.value)}
+                  aria-pressed={active}
+                  className={cn(
+                    'inline-flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-[12px] font-medium transition',
+                    active
+                      ? 'border-zinc-900 bg-zinc-900 text-white'
+                      : 'border-zinc-200 bg-zinc-50/80 text-zinc-600 hover:border-zinc-300 hover:bg-white hover:text-zinc-900',
+                  )}
+                >
                   {option.label}
-                </option>
-              ))}
-            </select>
-            <i className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-zinc-400" />
-          </label>
-          <label className="relative min-w-0 flex-1">
+                  <span
+                    className={cn(
+                      'tabular-nums text-[11px]',
+                      active ? 'text-white/70' : 'text-zinc-400',
+                    )}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <label className="relative min-w-0 sm:ml-auto sm:w-64">
             <span className="sr-only">搜索工具</span>
             <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[11px] text-zinc-400" />
             <input
@@ -195,9 +219,6 @@ export function ToolCenterPage() {
               </button>
             ) : null}
           </label>
-          <span className="shrink-0 px-2 text-[11px] tabular-nums text-zinc-400">
-            {list.length} 个结果
-          </span>
         </div>
 
         <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">

@@ -152,6 +152,7 @@ export function MarketShelfPage({
   const engagementById = useContentEngagementStore((s) => s.byId);
   const bumpDownload = useContentEngagementStore((s) => s.bumpDownload);
   const bumpView = useContentEngagementStore((s) => s.bumpView);
+  const bumpUse = useContentEngagementStore((s) => s.bumpUse);
   const guideRecords = usePlazaToolGuideStore((s) => s.records);
   const featuredPins = useMarketFeaturedStore((s) => s.pins);
   const externalTaxonomy = useExternalTaxonomyCatalogStore((s) => s.catalog);
@@ -1162,6 +1163,7 @@ export function MarketShelfPage({
                 });
                 const win = window.open(tool.homepageUrl, '_blank', 'noopener,noreferrer');
                 bumpToolInvokes(tool.id);
+                bumpUse(tool.id);
                 if (!win) showToast('浏览器拦截了弹窗，请允许后重试');
                 else showToast(`已打开：${tool.name}`);
               }}

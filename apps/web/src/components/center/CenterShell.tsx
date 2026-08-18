@@ -224,9 +224,10 @@ export function LearningCallout({
   );
 }
 
+/** 各页统计项 4~9 个不等，按最小宽度自适应列数，避免固定列数下末行参差 */
 export function StatCardGrid({ items }: { items: [string, string | number][] }) {
   return (
-    <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
+    <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))]">
       {items.map(([label, val]) => (
         <div key={label} className="apple-card p-3">
           <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">{label}</p>

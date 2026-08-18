@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { CentersModule } from './centers/centers.module';
 import { ExecutionsModule } from './executions/executions.module';
@@ -14,6 +15,8 @@ import { OptionalApiKeyGuard } from './common/optional-api-key.guard';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    // AI 快讯每日归档等定时任务
+    ScheduleModule.forRoot(),
     // 默认：每 IP 每分钟 6000 次（内网 NAT 友好）；可用 THROTTLE_* 覆盖
     ThrottlerModule.forRoot([
       {
