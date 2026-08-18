@@ -55,7 +55,6 @@ interface InternalOfficeSceneCatalogState {
     patch: Partial<Omit<InternalOfficeSceneCatalogEntry, 'id'>>,
   ) => void;
   setToolIds: (id: InternalOfficeSceneId, toolIds: string[]) => void;
-  setToolBlurb: (id: InternalOfficeSceneId, toolId: string, blurb: string) => void;
   moveEntry: (id: InternalOfficeSceneId, dir: -1 | 1) => void;
   addEntry: () => InternalOfficeSceneId;
   removeEntry: (id: InternalOfficeSceneId) => void;
@@ -124,13 +123,6 @@ export const useInternalOfficeSceneCatalogStore =
       get().updateEntry(id, { toolIds: [...new Set(toolIds.filter(Boolean))] });
     },
 
-    setToolBlurb: (id, toolId, blurb) => {
-      const entry = get().entries.find((e) => e.id === id);
-      if (!entry) return;
-      get().updateEntry(id, {
-        toolBlurbs: { ...entry.toolBlurbs, [toolId]: blurb },
-      });
-    },
 
     addEntry: () => {
       const list = get().entries;
