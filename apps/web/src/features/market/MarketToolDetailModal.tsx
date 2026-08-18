@@ -9,10 +9,7 @@ import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
-import {
-  isDownloadOnlyTool,
-  TOOL_EXTERNAL_WARNING_COPY,
-} from '@/domain/externalToolDelivery';
+import { TOOL_EXTERNAL_WARNING_RULES } from '@/domain/externalToolDelivery';
 import { useRecentMarketStore } from '@/stores/recentMarketStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 
@@ -145,8 +142,6 @@ export function MarketToolDetailModal({
   }
 
   const whatItIs = pickWhatItIs(tool);
-  const warningCopy =
-    TOOL_EXTERNAL_WARNING_COPY[isDownloadOnlyTool(tool) ? 'download_only' : 'web'];
   const kindLabel = kind === 'internal' ? '公司工具' : '外部工具';
   const hasHome = Boolean(tool.homepageUrl && tool.homepageUrl !== '#');
   const hasDocs = Boolean(tool.docsUrl?.trim());
@@ -357,16 +352,23 @@ export function MarketToolDetailModal({
           </>
         }
       >
-        <div className="flex items-start gap-3 rounded-xl border border-rose-100 bg-rose-50/70 p-4">
-          <i className="fa-solid fa-shield-halved mt-0.5 text-[16px] text-rose-600" />
-          <div>
-            <p className="text-[14px] font-semibold text-zinc-900">
-              {warningCopy.title}
-            </p>
-            <p className="mt-1.5 text-[12px] leading-relaxed text-zinc-600">
-              {warningCopy.body}
-            </p>
-          </div>
+        <div className="space-y-2.5">
+          {TOOL_EXTERNAL_WARNING_RULES.map((rule) => (
+            <div
+              key={rule.id}
+              className="flex items-start gap-3 rounded-xl border border-rose-100 bg-rose-50/70 p-3.5"
+            >
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-rose-100/80">
+                <i className={cn('fa-solid text-[12px] text-rose-600', rule.icon)} />
+              </span>
+              <p className="text-[12px] leading-relaxed text-zinc-600">
+                <span className="mr-1 text-[13px] font-semibold text-zinc-900">
+                  {rule.label}：
+                </span>
+                {rule.body}
+              </p>
+            </div>
+          ))}
         </div>
       </CenterModal>
     </>

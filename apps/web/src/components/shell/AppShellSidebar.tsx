@@ -358,7 +358,13 @@ export function AppShellSidebar() {
             <p className="truncate text-[10px] leading-snug text-zinc-500">{roleLabel || '账号与设置'}</p>
           </div>
           {!sidebarCollapsed ? (
-            <i className="fa-solid fa-chevron-up text-[9px] text-zinc-400" />
+            <i
+              className={cn(
+                'sidebar-footer-caret fa-solid fa-chevron-up shrink-0 text-[10px] text-zinc-400 transition-transform duration-150',
+                accountOpen && 'rotate-180',
+              )}
+              aria-hidden
+            />
           ) : null}
         </button>
       </div>

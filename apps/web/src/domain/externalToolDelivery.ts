@@ -42,17 +42,22 @@ export function isDownloadOnlyTool(tool: { id: string; deliveryForm?: ToolDelive
   return resolveToolDeliveryForm(tool) === 'download_only';
 }
 
-/** 「立即体验」安全提示文案 */
-export const TOOL_EXTERNAL_WARNING_COPY: Record<
-  ToolDeliveryForm,
-  { title: string; body: string }
-> = {
-  web: {
-    title: '禁止将公司内部信息上传到外部AI网站',
-    body: '请确认即将处理的内容不包含公司内部、涉密、个人隐私或未经授权的数据。',
+/**
+ * 「立即体验」前的安全提示：数据与工具两条红线，对所有外部工具一并展示。
+ * 早期按交付形态二选一，实际两类风险并存（网页端也可能诱导下载客户端），
+ * 因此改为并列呈现，不再依赖形态判定。
+ */
+export const TOOL_EXTERNAL_WARNING_RULES: { id: string; label: string; icon: string; body: string }[] = [
+  {
+    id: 'data',
+    label: '数据安全',
+    icon: 'fa-shield-halved',
+    body: '禁止将公司内部信息、涉密资料、或未经授权的数据上传至外部AI网站。',
   },
-  download_only: {
-    title: '禁止在公司内部下载未授权工具到内网使用',
-    body: '该工具需下载客户端后使用，没有可直接使用的网页端。请勿在办公终端或内网环境安装未经审批的外部工具；确有需要请先完成安全与合规审批。',
+  {
+    id: 'tool',
+    label: '工具安全',
+    icon: 'fa-download',
+    body: '禁止在办公终端或内网环境下载、安装未经审批的外部工具。如有需求，须提前完成安全与合规审批。',
   },
-};
+];
