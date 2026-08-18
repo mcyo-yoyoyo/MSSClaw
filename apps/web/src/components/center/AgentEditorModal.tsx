@@ -12,6 +12,11 @@ import {
   listVisibleBusinessScenarioCategories,
   type BusinessScenarioId,
 } from '@/domain/businessScenarios';
+import {
+  AGENT_LIFECYCLE_OPTIONS,
+  resolveAgentLifecycle,
+  type AgentLifecycleStatus,
+} from '@/domain/agentLifecycle';
 import type { PrototypeAgentSeed } from '@/domain/prototype/types';
 import { ASSET_VISIBILITY_LABELS, type AssetVisibility } from '@/domain/orgTaxonomy';
 import {
@@ -425,6 +430,43 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
               </option>
             ))}
           </FormSelect>
+        </FormField>
+        <FormField
+          label="成熟度状态"
+          hint="决定详情页顶部状态标签与主按钮；「可运行」为立即体验，「建设中」为查看 Demo"
+        >
+          <FormSelect
+            value={resolveAgentLifecycle(form)}
+            onChange={(e) =>
+              setForm({ ...form, lifecycleStatus: e.target.value as AgentLifecycleStatus })
+            }
+          >
+            {AGENT_LIFECYCLE_OPTIONS.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label} — {opt.hint}
+              </option>
+            ))}
+          </FormSelect>
+        </FormField>
+        <FormField
+          label="Demo 入口"
+          hint="建设中 Agent 的主按钮「查看 Demo」指向该链接；留空则降级为方案文档"
+        >
+          <FormInput
+            value={form.demoUrl ?? ''}
+            placeholder="https://"
+            onChange={(e) => setForm({ ...form, demoUrl: e.target.value })}
+          />
+        </FormField>
+        <FormField
+          label="方案文档入口"
+          hint="解决方案 PPT / Word 链接；无 Demo 时作为主按钮兜底"
+        >
+          <FormInput
+            value={form.solutionDocUrl ?? ''}
+            placeholder="https://"
+            onChange={(e) => setForm({ ...form, solutionDocUrl: e.target.value })}
+          />
         </FormField>
         <FormField
           label="挂载 Skill"

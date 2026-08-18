@@ -10,6 +10,11 @@ import {
   getAgentSystemPrompt,
 } from '@/domain/agents/runtime';
 import { getAgentBusinessLabel } from '@/domain/agentBusinessScenarios';
+import {
+  AGENT_LIFECYCLE_META,
+  resolveAgentLifecycle,
+  resolveAgentPrimaryAction,
+} from '@/domain/agentLifecycle';
 import type {
   AgentCaseItem,
   PrototypeAgentSeed,
@@ -208,6 +213,17 @@ export function CatalogAgentDetailModal({
   const createdAt = agent.createdAt?.trim() || '未记录';
   const primaryId = agent.primarySkillId || agent.skillIds?.[0];
 
+  const lifecycle = resolveAgentLifecycle(agent);
+  const lifecycleMeta = AGENT_LIFECYCLE_META[lifecycle];
+  const hasDemo = Boolean(agent.demoUrl?.trim());
+  const hasSolutionDoc = Boolean(agent.solutionDocUrl?.trim());
+  const primaryAction = resolveAgentPrimaryAction({
+    status: lifecycle,
+    canRun,
+    hasDemo,
+    hasSolutionDoc,
+  });
+
   const mountedSkills = useMemo(
     () =>
       (agent.skillIds ?? [])
@@ -349,8 +365,15 @@ export function CatalogAgentDetailModal({
                     >
                       {scopeLabel}
                     </span>
-                    <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600">
-                      {agent.published ? '已上架' : '试用中'}
+                    <span
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold',
+                        lifecycleMeta.badgeClass,
+                      )}
+                      title="Agent 当前成熟度：决定主操作入口"
+                    >
+                      <span className={cn('h-1.5 w-1.5 rounded-full', lifecycleMeta.dotClass)} />
+                      {lifecycleMeta.badgeText({ hasDemo, hasSolutionDoc })}
                     </span>
                     <span className="rounded-md bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-800">
                       {version}
@@ -651,22 +674,36 @@ export function CatalogAgentDetailModal({
           <div className="space-y-4 p-4 md:sticky md:top-0">
             <section>
               <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-400">开始使用</p>
+              {/* §5.3 主按钮只保留一个，且与当前成熟度一致 */}
               <button
                 type="button"
-                disabled={!canRun}
-                onClick={() => canRun && onRun(agent)}
+                disabled={Boolean(primaryAction.disabledHint)}
+                onClick={() => {
+                  if (primaryAction.disabledHint) return;
+                  if (primaryAction.id === 'experience') {
+                    onRun(agent);
+                    return;
+                  }
+                  const url =
+                    primaryAction.id === 'demo' ? agent.demoUrl : agent.solutionDocUrl;
+                  if (!url) return;
+                  const opened = window.open(url, '_blank', 'noopener,noreferrer');
+                  if (!opened) onToast('浏览器拦截了新窗口，请允许弹窗后重试');
+                }}
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[12px] font-semibold transition',
-                  canRun
-                    ? 'bg-zinc-900 text-white hover:bg-zinc-800'
-                    : 'cursor-not-allowed bg-zinc-100 text-zinc-400',
+                  primaryAction.disabledHint
+                    ? 'cursor-not-allowed bg-zinc-100 text-zinc-400'
+                    : 'bg-zinc-900 text-white hover:bg-zinc-800',
                 )}
               >
-                <i className="fa-solid fa-play text-[10px]" />
-                {canRun ? '立即体验' : '暂不支持在线体验'}
+                <i className={cn('fa-solid text-[10px]', primaryAction.icon)} />
+                {primaryAction.label}
               </button>
-              {!canRun ? (
-                <p className="mt-2 text-[10px] leading-relaxed text-zinc-400">可下载资源包后按教程使用，或先查看案例了解产出效果。</p>
+              {primaryAction.disabledHint ? (
+                <p className="mt-2 text-[10px] leading-relaxed text-zinc-400">
+                  {primaryAction.disabledHint}
+                </p>
               ) : null}
             </section>
 

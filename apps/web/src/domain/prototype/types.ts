@@ -1,6 +1,7 @@
 /** 与根目录 index.html 设计稿对齐的原始种子类型（单一数据源） */
 
 import type { AgentCapabilityTypeId } from '@/domain/agentHubFilters';
+import type { AgentLifecycleStatus } from '@/domain/agentLifecycle';
 import type { BusinessScenarioId } from '@/domain/businessScenarios';
 import type { ToolDeliveryForm } from '@/domain/externalToolDelivery';
 import type { PortalCasePreviewFile } from '@/domain/prototype/portalContent';
@@ -123,6 +124,16 @@ export interface PrototypeAgentSeed {
   createdAt?: string;
   updatedAt?: string;
   maintainer?: string;
+  /**
+   * 成熟度状态（可运行 / 建设中）：驱动顶部状态标签与右侧主按钮。
+   * 与运行时的 canRun 是两个维度，缺省按「已上架且挂了 Skill」推断，
+   * 见 domain/agentLifecycle。
+   */
+  lifecycleStatus?: AgentLifecycleStatus;
+  /** 建设中 Agent 的 Demo 入口；有则主按钮为「查看 Demo」 */
+  demoUrl?: string;
+  /** 解决方案文档（PPT / Word）入口；无 Demo 时主按钮降级到它 */
+  solutionDocUrl?: string;
   /** 环境、安装与反馈入口 */
   environment?: AgentEnvironmentInfo;
   installCommand?: string;
