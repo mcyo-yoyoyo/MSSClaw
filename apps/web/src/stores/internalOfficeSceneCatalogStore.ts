@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import {
+  createOfficeSceneId,
   defaultInternalOfficeSceneCatalog,
   isInternalOfficeSceneId,
+  migrateInternalOfficeSceneLabel,
   setInternalOfficeSceneCatalog,
   type InternalOfficeSceneCatalogEntry,
   type InternalOfficeSceneId,
@@ -20,7 +22,7 @@ function normalizeEntries(
     .filter((entry) => entry?.id && isInternalOfficeSceneId(entry.id))
     .map((entry) => ({
       id: entry.id,
-      label: entry.label?.trim() || entry.id,
+      label: migrateInternalOfficeSceneLabel(entry.label?.trim() || entry.id),
       english: entry.english?.trim() || '',
       description: entry.description?.trim() || '',
       icon: entry.icon?.trim() || 'fa-cube',
@@ -55,6 +57,8 @@ interface InternalOfficeSceneCatalogState {
   setToolIds: (id: InternalOfficeSceneId, toolIds: string[]) => void;
   setToolBlurb: (id: InternalOfficeSceneId, toolId: string, blurb: string) => void;
   moveEntry: (id: InternalOfficeSceneId, dir: -1 | 1) => void;
+  addEntry: () => InternalOfficeSceneId;
+  removeEntry: (id: InternalOfficeSceneId) => void;
   resetToDefaults: () => void;
   dismissToast: () => void;
 }
@@ -126,6 +130,33 @@ export const useInternalOfficeSceneCatalogStore =
       get().updateEntry(id, {
         toolBlurbs: { ...entry.toolBlurbs, [toolId]: blurb },
       });
+    },
+
+    addEntry: () => {
+      const list = get().entries;
+      const id = createOfficeSceneId(list.map((e) => e.id));
+      const entry: InternalOfficeSceneCatalogEntry = {
+        id,
+        label: '新场景',
+        english: '',
+        description: '',
+        icon: 'fa-cube',
+        // 未绑定工具前默认不对业务可见，避免露出空场景
+        visible: false,
+        toolIds: [],
+        toolBlurbs: {},
+      };
+      const next = [...list, entry];
+      persist(next);
+      set({ entries: next, toast: '已新增办公场景' });
+      return id;
+    },
+
+    removeEntry: (id) => {
+      const next = get().entries.filter((e) => e.id !== id);
+      if (next.length === get().entries.length) return;
+      persist(next);
+      set({ entries: next, toast: '已删除办公场景' });
     },
 
     moveEntry: (id, dir) => {

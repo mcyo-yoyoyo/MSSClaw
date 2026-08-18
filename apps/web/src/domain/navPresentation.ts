@@ -162,6 +162,13 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
     hiddenFromSidebar: true,
   },
   { id: 'tools', label: '配置工具', subtitle: '连接器 · 外部 API · 上架', icon: 'fa-plug', section: 'platform' },
+  {
+    id: 'office-scenes',
+    label: '配置办公场景',
+    subtitle: '场景字典 · 工具绑定与陈列',
+    icon: 'fa-diagram-project',
+    section: 'platform',
+  },
   { id: 'kb', label: '管理知识', subtitle: '企业文档 · RAG · 溯源治理', icon: 'fa-book-open', section: 'platform' },
   { id: 'memory', label: '管理记忆', subtitle: 'Agent 长期记忆 · Reflection', icon: 'fa-brain', section: 'platform' },
   { id: 'automation', label: '自动化设置', subtitle: '定时 · 告警 · 周报', icon: 'fa-bolt', section: 'platform' },
@@ -310,6 +317,7 @@ function mvpForRole(role: PlatformRole): Record<NavSlotId, boolean> {
         agents: false,
         skills: true,
         tools: false,
+        'office-scenes': false,
         kb: false,
         executions: true,
         approvals: true,
@@ -330,6 +338,7 @@ function mvpForRole(role: PlatformRole): Record<NavSlotId, boolean> {
         agents: true,
         skills: true,
         tools: true,
+        'office-scenes': true,
         executions: true,
         approvals: true,
       }),
@@ -401,7 +410,7 @@ function standardForRole(role: PlatformRole): Record<NavSlotId, boolean> {
   // 标准能力：仅超管加开知识/自动化/租户配置；能力开发仍维持「仅配置技能」
   if (role === 'super_admin') {
     return withAdminLocks(
-      { ...base, tools: true, kb: true, automation: true, 'workspace-config': true, task: true },
+      { ...base, tools: true, 'office-scenes': true, kb: true, automation: true, 'workspace-config': true, task: true },
       role,
     );
   }
@@ -565,6 +574,7 @@ export const NAV_FALLBACK_ORDER: AppView[] = [
   'skills',
   'agents',
   'tools',
+  'office-scenes',
   'kb',
   'memory',
   'automation',

@@ -7,7 +7,8 @@
 import { internalToolAssetUrl, resolveToolLogoUrl } from '@/domain/toolLogo';
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
 
-export type InternalOfficeSceneId =
+/** 内置场景 id（随默认字典下发；运营可在其上增删） */
+export type InternalOfficeScenePresetId =
   | 'capture'
   | 'read'
   | 'write'
@@ -18,7 +19,13 @@ export type InternalOfficeSceneId =
   | 'knowledge'
   | 'agent';
 
-export const INTERNAL_OFFICE_SCENE_IDS: InternalOfficeSceneId[] = [
+/**
+ * 场景 id 允许运营自建，因此是开放字符串而非固定联合类型。
+ * 早期版本写死 9 个 id，导致新增场景在 hydrate 时被过滤掉。
+ */
+export type InternalOfficeSceneId = string;
+
+export const INTERNAL_OFFICE_SCENE_PRESET_IDS: InternalOfficeScenePresetId[] = [
   'capture',
   'read',
   'write',
@@ -30,8 +37,28 @@ export const INTERNAL_OFFICE_SCENE_IDS: InternalOfficeSceneId[] = [
   'agent',
 ];
 
+/** @deprecated 用 INTERNAL_OFFICE_SCENE_PRESET_IDS；保留旧名兼容引用 */
+export const INTERNAL_OFFICE_SCENE_IDS = INTERNAL_OFFICE_SCENE_PRESET_IDS;
+
+export function isInternalOfficeScenePresetId(
+  id: string,
+): id is InternalOfficeScenePresetId {
+  return (INTERNAL_OFFICE_SCENE_PRESET_IDS as string[]).includes(id);
+}
+
+/** 只校验形态：非空、限定字符集，避免脏 id 进入持久化 */
 export function isInternalOfficeSceneId(id: string): id is InternalOfficeSceneId {
-  return (INTERNAL_OFFICE_SCENE_IDS as string[]).includes(id);
+  return /^[a-z0-9][a-z0-9-]{0,47}$/i.test(id.trim());
+}
+
+/** 生成不与现有条目冲突的自建场景 id */
+export function createOfficeSceneId(existingIds: string[]): string {
+  const taken = new Set(existingIds);
+  for (let i = 1; i < 1000; i += 1) {
+    const candidate = `scene-${i}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `scene-${Date.now()}`;
 }
 
 export interface InternalOfficeSceneTool {
@@ -152,7 +179,7 @@ export const INTERNAL_OFFICE_SCENES: InternalOfficeScene[] = [
   },
   {
     id: 'intel',
-    label: '咨询信息追踪用员工助手情报官',
+    label: '资讯信息追踪用员工助手情报官',
     english: 'INTELLIGENCE',
     description: '围绕关注主题自动监测、筛选和研判，让信息从人找变成主动送。',
     tools: [EMPLOYEE_ASSISTANT],
@@ -185,6 +212,20 @@ const DEFAULT_TOOL_BY_ID = (() => {
   }
   return map;
 })();
+
+/**
+ * 场景名迁移：仅改写仍停留在旧默认值上的条目。
+ * 场景字典可由运营编辑，后端存量会覆盖种子，所以改种子不足以让改名生效；
+ * 这里只认「值完全等于旧默认值」的情况，避免踩掉运营手工改过的名字。
+ */
+const RENAMED_SCENE_LABELS: Record<string, string> = {
+  资讯信息追踪用员工助手: '资讯信息追踪用员工助手情报官',
+  咨询信息追踪用员工助手情报官: '资讯信息追踪用员工助手情报官',
+};
+
+export function migrateInternalOfficeSceneLabel(label: string): string {
+  return RENAMED_SCENE_LABELS[label.trim()] ?? label;
+}
 
 export function defaultInternalOfficeSceneCatalog(): InternalOfficeSceneCatalogEntry[] {
   return INTERNAL_OFFICE_SCENES.map((s) => ({
