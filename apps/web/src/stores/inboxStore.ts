@@ -134,7 +134,7 @@ export const useInboxStore = create<InboxState>((set, get) => ({
       {
         id: `msg-seed-${now}-1`,
         kind: 'system',
-        title: '欢迎使用「MSS AI提效作战平台」',
+        title: '欢迎使用「MSS AI提效平台」',
         body: '这里是你的通知中枢：找案例学样板 → 做任务进入用·做任务开工 → 任务记录查看进度与交付 → 交付物可推送到协作空间或成员。系统提醒、协作通知与交付推送都会汇集于此。',
         fromName: 'MSS AI',
         toUserId: userId,

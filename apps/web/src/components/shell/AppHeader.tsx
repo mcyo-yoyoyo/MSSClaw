@@ -91,10 +91,10 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
   return (
     <header className="apple-header z-50 grid h-[52px] shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-3 sm:px-4 md:px-6">
       <div className="flex min-w-0 items-center justify-self-start gap-2 sm:gap-3">
-        <MssZhishuMark size={32} className="shrink-0" title="MSS AI提效作战平台" />
+        <MssZhishuMark size={32} className="shrink-0" title="MSS AI提效平台" />
         <div className="min-w-0 leading-tight max-lg:hidden">
           <p className="truncate text-[14px] font-semibold tracking-tight text-zinc-900">
-            MSS AI提效作战平台
+            MSS AI提效平台
           </p>
         </div>
       </div>

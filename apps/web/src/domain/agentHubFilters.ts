@@ -95,13 +95,13 @@ export function getAgentCapabilityTypeLabel(id: AgentCapabilityTypeId): string {
 
 /** §1.3.10 适配平台候选值；运营在 environment.platforms 中配置 */
 export const AGENT_PLATFORM_PRESETS = [
-  'MSS AI提效作战平台',
+  'MSS AI提效平台',
   '员工助手',
   '企业数字产线',
 ] as const;
 
 /** environment.platforms 缺省时的兜底平台（与详情页环境信息 Tab 一致） */
-export const DEFAULT_AGENT_PLATFORM = 'MSS AI提效作战平台';
+export const DEFAULT_AGENT_PLATFORM = 'MSS AI提效平台';
 
 /**
  * 筛选只依赖这些字段，避免与 prototype/types 形成循环依赖。

@@ -28,6 +28,7 @@ export function isOpsOnlyView(view: string): boolean {
     view === 'agents' ||
     view === 'skills' ||
     view === 'tools' ||
+    view === 'office-scenes' ||
     view === 'memory' ||
     view === 'kb' ||
     view === 'prompts' ||

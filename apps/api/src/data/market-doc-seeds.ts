@@ -68,7 +68,7 @@ export const SEED_INTERNAL_OFFICE_SCENES = {
     visible: true, toolIds: ['tool-hw-xiaoluban'], toolBlurbs: { 'tool-hw-xiaoluban': '专项业务答疑' },
   },
   {
-    id: 'intel', label: '咨询信息追踪用员工助手情报官', english: 'INTELLIGENCE',
+    id: 'intel', label: '资讯信息追踪用员工助手情报官', english: 'INTELLIGENCE',
     description: '围绕关注主题自动监测、筛选和研判，让信息从人找变成主动送。', icon: 'fa-binoculars',
     visible: true, toolIds: ['tool-hw-assistant'], toolBlurbs: { 'tool-hw-assistant': '个人日常 Skill' },
   },

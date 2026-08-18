@@ -2,6 +2,7 @@
 
 import type { AgentCapabilityTypeId } from '@/domain/agentHubFilters';
 import type { BusinessScenarioId } from '@/domain/businessScenarios';
+import type { ToolDeliveryForm } from '@/domain/externalToolDelivery';
 import type {
   ExternalToolTypeId,
   ToolRegion,
@@ -311,6 +312,11 @@ export interface PrototypeToolSeed extends AssetOwnershipFields {
   coreCapabilities?: string[];
   /** Excel「站内使用指导」拆分后的步骤。 */
   usageGuide?: string[];
+  /**
+   * 交付形态：网页端可直接使用 vs 仅客户端（需下载安装）。
+   * 缺省按 domain/externalToolDelivery 的静态表判定；此字段用于运营覆盖。
+   */
+  deliveryForm?: ToolDeliveryForm;
 }
 
 export interface PrototypeKbCollection {

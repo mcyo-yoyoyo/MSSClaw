@@ -27,6 +27,7 @@ import {
   LazySkillCenterPage,
   LazyTaskCenterPage,
   LazyMyMessagesPage,
+  LazyOfficeSceneOpsPage,
   LazyToolCenterPage,
   LazyWorkflowStudioPage,
   LazyAiBriefPage,
@@ -222,6 +223,12 @@ function AppViewRouterContent({ appView, handlers }: AppViewRouterProps) {
       return (
         <LazyView label={label}>
           <LazyToolCenterPage />
+        </LazyView>
+      );
+    case 'office-scenes':
+      return (
+        <LazyView label={label}>
+          <LazyOfficeSceneOpsPage />
         </LazyView>
       );
     case 'memory':

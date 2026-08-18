@@ -15,27 +15,29 @@ import { AssetAccentMark, assetAccentBorderStyle } from '@/components/brand/Asse
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { resolveToolLogoUrl } from '@/domain/toolLogo';
 import { resolveToolMarketShelf } from '@/domain/aiToolCategories';
+import {
+  emptyEngagement,
+  type ContentEngagement,
+} from '@/domain/contentEngagement';
+import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { isAiSaasTool } from '@/domain/portalNavigation';
 
-type ToolTypeFilter = 'all' | 'overseas' | 'domestic' | 'company' | 'mss';
+type ToolTypeFilter = 'all' | 'overseas' | 'domestic' | 'company';
 
 const TOOL_TYPE_FILTERS: Array<{ value: ToolTypeFilter; label: string }> = [
   { value: 'all', label: '全部工具' },
   { value: 'overseas', label: '海外工具' },
   { value: 'domestic', label: '国内工具' },
   { value: 'company', label: '公司工具' },
-  { value: 'mss', label: 'MSS工具' },
 ];
 
 function matchesToolType(tool: Parameters<typeof resolveToolMarketShelf>[0], filter: ToolTypeFilter) {
   if (filter === 'all') return true;
   if (filter === 'overseas') return tool.sourceType === 'external' && tool.region === 'overseas';
   if (filter === 'domestic') return tool.sourceType === 'external' && tool.region === 'domestic';
-  const shelf = resolveToolMarketShelf(tool);
-  if (filter === 'company') return shelf === 'internal';
-  return tool.sourceType !== 'external' && shelf !== 'internal';
+  return resolveToolMarketShelf(tool) === 'internal';
 }
 
 export function ToolCenterPage() {
@@ -86,17 +88,23 @@ export function ToolCenterPage() {
     else showToast(`未找到工具：${id}`);
   }, [pendingToolId, tools, consumeToolId, showToast]);
 
+  const engagementById = useContentEngagementStore((s) => s.byId);
+
   const stats = useMemo(() => {
     const pub = tools.filter((t) => t.published).length;
     const external = tools.filter((t) => t.sourceType === 'external').length;
-    const totalInvokes = tools.reduce((n, t) => n + t.invokes, 0);
+    // 口径：后端 engagement 记录。tool.invokes 带演示种子基数，不作统计口径。
+    const sum = (pick: (e: ContentEngagement) => number) =>
+      tools.reduce((n, t) => n + pick(engagementById[t.id] ?? emptyEngagement(t.id)), 0);
+    const totalViews = sum((e) => e.views);
+    const totalFavorites = sum((e) => e.favorites);
     return [
       ['Tool 总数', tools.length],
       ['已发布', pub],
       ['外部工具', external],
-      ['总打开/调用', totalInvokes.toLocaleString()],
+      ['站内查看 / 收藏', `${totalViews.toLocaleString()} / ${totalFavorites.toLocaleString()}`],
     ] as [string, string | number][];
-  }, [tools]);
+  }, [tools, engagementById]);
 
   return (
     <div className="center-surface center-page scroll-hidden flex-1 overflow-y-auto">
@@ -142,7 +150,7 @@ export function ToolCenterPage() {
                 className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white transition"
               >
                 <i className="fa-solid fa-plus mr-1" />
-                登记外部工具
+                添加工具
               </button>
             </>
           }

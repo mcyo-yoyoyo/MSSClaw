@@ -59,6 +59,10 @@ export const LazyToolCenterPage = lazy(() =>
   import('@/features/tool/ToolCenterPage').then((m) => ({ default: m.ToolCenterPage })),
 );
 
+export const LazyOfficeSceneOpsPage = lazy(() =>
+  import('@/features/ops/OfficeSceneOpsPage').then((m) => ({ default: m.OfficeSceneOpsPage })),
+);
+
 export const LazyMemoryCenterPage = lazy(() =>
   import('@/features/_legacy/memory/MemoryCenterPage').then((m) => ({ default: m.MemoryCenterPage })),
 );
@@ -127,6 +131,7 @@ export const ROUTE_PREFETCH: Partial<Record<AppView, () => void>> = {
   automation: () => void import('@/features/automation/AutomationCenterPage'),
   workflow: () => void import('@/features/_legacy/workflow/WorkflowStudioPage'),
   tools: () => void import('@/features/tool/ToolCenterPage'),
+  'office-scenes': () => void import('@/features/ops/OfficeSceneOpsPage'),
   memory: () => void import('@/features/_legacy/memory/MemoryCenterPage'),
   prompts: () => void import('@/features/_legacy/prompt/PromptCenterPage'),
   admin: () => void import('@/features/_legacy/settings/SettingsPage'),

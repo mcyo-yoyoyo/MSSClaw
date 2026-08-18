@@ -145,12 +145,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
   if (!target) return null;
 
   const isNew = target === 'new' || target === 'new-external';
-  const title =
-    target === 'new-external'
-      ? '登记外部工具'
-      : isNew
-        ? '登记工具'
-        : '编辑工具';
+  const title = isNew ? '添加工具' : '编辑工具';
 
   const shelf = (form.marketShelf ?? 'none') as MarketShelfSlot;
   const scenarioCats = listVisibleBusinessScenarioCategories();
@@ -194,8 +189,9 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
     const userName = getCurrentUserName() || 'Mcyo';
     const userId = getCurrentUserId();
     const id = isNew ? `tool-${Date.now()}` : (target as string);
+    // 新建工具直接上架；仅存量草稿改为上架时仍需审批
     const needsApproval =
-      sourceType !== 'external' && (isNew || (form.published && !prev?.published));
+      sourceType !== 'external' && !isNew && form.published && !prev?.published;
     const tags = ensureMarketShelfTags(form.tags ?? [], marketShelf);
     const marketTitle = form.marketTitle?.trim() || undefined;
     const businessScenarioIds = (form.businessScenarioIds ?? []) as BusinessScenarioId[];
@@ -228,7 +224,8 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
         ownerDeptIds: (form.ownerDeptIds ?? []) as DeptId[],
         ownerRegionId: (form.ownerRegionId ?? null) as RegionId | null,
         homepageUrl: form.homepageUrl?.trim() || undefined,
-        published: sourceType === 'external' ? true : needsApproval ? false : form.published,
+        published:
+          sourceType === 'external' || isNew ? true : needsApproval ? false : form.published,
         marketShelf,
         marketTitle: marketShelf === 'external' ? marketTitle : undefined,
         businessScenarioIds: businessScenarioIds.length ? businessScenarioIds : undefined,
@@ -291,12 +288,45 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
         <ModalActions
           onCancel={onClose}
           onSave={handleSave}
-          saveLabel={form.sourceType === 'external' || shelf === 'external' ? '保存' : '保存并提交审批'}
+          saveLabel={
+            isNew || form.sourceType === 'external' || shelf === 'external'
+              ? '保存'
+              : '保存并提交审批'
+          }
           cancelFirst
         />
       }
     >
       <div className="space-y-3 text-left">
+        {isNew ? (
+          <FormField
+            label="上架货架"
+            hint="决定这条数据进入哪个业务货架；不同货架需要填写的字段不同"
+          >
+            <FormSelect
+              value={shelf}
+              onChange={(e) => {
+                const next = e.target.value as MarketShelfSlot;
+                setForm({
+                  ...form,
+                  marketShelf: next,
+                  sourceType: next === 'external' ? 'external' : 'internal',
+                  category:
+                    next === 'external' ? 'external' : next === 'internal' ? 'platform' : 'connector',
+                  icon:
+                    next === 'external' ? 'fa-arrow-up-right-from-square' : form.icon || 'fa-plug',
+                  connectorType: next === 'none' ? form.connectorType || 'http' : undefined,
+                  visibility: next === 'external' ? form.visibility : form.visibility ?? 'public',
+                  featuredInFindCases: next === 'none' ? false : form.featuredInFindCases,
+                });
+              }}
+            >
+              <option value="external">外部工具精选</option>
+              <option value="internal">公司工具推荐</option>
+              <option value="none">不上架（仅配置目录 / 连接器）</option>
+            </FormSelect>
+          </FormField>
+        ) : null}
         <FormField label="工具名称（产品名）">
           <FormInput
             value={form.name}
@@ -519,6 +549,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
           sourceType={(form.sourceType ?? 'internal') as AssetSourceType}
           visibility={form.visibility as AssetVisibility | undefined}
           homepageUrl={form.homepageUrl}
+          alwaysShowHomepage={shelf === 'internal'}
           lockSource={target === 'new-external'}
           onChange={(patch) =>
             setForm({
@@ -557,7 +588,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
           ) : (
             <p className="text-[11px] text-zinc-400">当前未上架到业务货架（可在门户运营上架外部工具）。</p>
           )}
-          <details className="rounded-lg border border-zinc-200 bg-white px-2.5 py-2">
+          <details className="rounded-lg border border-zinc-200 bg-white px-2.5 py-2" hidden={isNew}>
             <summary className="cursor-pointer text-[11px] font-medium text-zinc-600">
               高级：本工具建议货架（可选，仍推荐以门户为准）
             </summary>

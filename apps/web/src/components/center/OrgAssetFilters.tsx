@@ -312,6 +312,7 @@ export function OwnershipFormFields({
   sourceType,
   visibility,
   homepageUrl,
+  alwaysShowHomepage = false,
   lockSource = false,
   onChange,
 }: {
@@ -320,6 +321,8 @@ export function OwnershipFormFields({
   sourceType: 'internal' | 'external';
   visibility?: 'public' | 'org' | 'private';
   homepageUrl?: string;
+  /** 非外部来源也需要访问链接时打开（如公司工具推荐，前台场景卡要跳转） */
+  alwaysShowHomepage?: boolean;
   /** 来源由入口决定时隐藏来源选择（如“登记外部工具”） */
   lockSource?: boolean;
   onChange: (patch: {
@@ -407,9 +410,9 @@ export function OwnershipFormFields({
           </OwnershipSelect>
         </label>
       </div>
-      {sourceType === 'external' ? (
+      {sourceType === 'external' || alwaysShowHomepage ? (
         <label className="block text-[11px] text-zinc-600">
-          官网 / 深链
+          {sourceType === 'external' ? '官网 / 深链' : '访问链接（内网地址 / 深链）'}
           <input
             value={homepageUrl ?? ''}
             onChange={(e) => onChange({ homepageUrl: e.target.value })}
