@@ -3,7 +3,6 @@ import { cn } from '@/lib/utils';
 import { SkillAvatar } from '@/components/brand/SkillAvatar';
 import { CenterModal } from '@/components/center/CenterShell';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
-import { getEfficiencyLabel } from '@/domain/prototype/constants';
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
 import { getSkillBusinessLabel } from '@/domain/skillBusinessScenarios';
 import { skillDisplayDesc, skillDisplayName } from '@/domain/skillDisplay';
@@ -194,15 +193,6 @@ export function MarketSkillDetailModal({
                         未上架
                       </span>
                     )}
-                    <span
-                      className={cn(
-                        'rounded-md px-1.5 py-0.5 text-[10px] font-semibold',
-                        trustMeta.badgeClass,
-                      )}
-                      title={trustMeta.hint}
-                    >
-                      {trustMeta.label}
-                    </span>
                   </div>
                   <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-zinc-400">
                     {skill.command ? (
@@ -254,13 +244,6 @@ export function MarketSkillDetailModal({
                 <span title="下载数"><i className="fa-solid fa-download mr-1" />{formatToolInvokes(eng.downloads)}</span>
                 <span title="点赞量"><i className="fa-solid fa-thumbs-up mr-1" />{formatToolInvokes(eng.likes)}</span>
                 <span title="点踩量"><i className="fa-solid fa-thumbs-down mr-1" />{formatToolInvokes(eng.dislikes)}</span>
-                <span className={skill.published ? 'text-emerald-700' : 'text-amber-700'}>
-                  <i className="fa-solid fa-circle mr-1 text-[5px] align-middle" />
-                  {skill.published ? '已上线' : '待上线'}
-                </span>
-                <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-medium text-zinc-600">
-                  {getEfficiencyLabel(skill.category)}
-                </span>
               </div>
             </div>
           </div>
@@ -303,7 +286,7 @@ export function MarketSkillDetailModal({
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-5 md:py-5">
             {tab === 'overview' ? (
-              <div className="space-y-5">
+              <div className="flex min-h-full flex-col gap-5">
                 {skill.descEn && skill.descEn !== desc ? (
                   <section>
                     <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">能力说明</h4>
@@ -360,12 +343,12 @@ export function MarketSkillDetailModal({
                   </section>
                 ) : null}
                 {instructions ? (
-                  <section>
-                    <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">
+                  <section className="flex min-h-0 flex-1 flex-col">
+                    <h4 className="mb-2 shrink-0 text-[12px] font-semibold text-zinc-800">
                       Skill 正文摘要
                       <span className="ml-2 font-normal text-zinc-400">对话执行时注入</span>
                     </h4>
-                    <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-xl border border-zinc-100 bg-zinc-50/80 px-3.5 py-3 text-[12px] leading-relaxed text-zinc-700">
+                    <pre className="min-h-[10rem] flex-1 overflow-y-auto whitespace-pre-wrap rounded-xl border border-zinc-100 bg-zinc-50/80 px-3.5 py-3 text-[12px] leading-relaxed text-zinc-700">
                       {instructions.slice(0, 800)}
                       {instructions.length > 800 ? '…' : ''}
                     </pre>
