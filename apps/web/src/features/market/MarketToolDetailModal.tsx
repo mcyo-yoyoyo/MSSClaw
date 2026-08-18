@@ -46,24 +46,6 @@ function findCatalogTool(tool: PrototypeToolSeed) {
   );
 }
 
-function pickUsageGuide(tool: PrototypeToolSeed): string[] {
-  if (tool.usageGuide?.length) return tool.usageGuide.slice(0, 4);
-  const guideBody = findCatalogTool(tool)?.guideBody || '';
-  const steps = guideBody
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter((line) => /^\d+[.、]\s*/.test(line))
-    .map((line) => line.replace(/^\d+[.、]\s*/, ''))
-    .slice(0, 4);
-  if (steps.length) return steps;
-  return [
-    `点击“立即体验”进入 ${tool.name}，按页面提示登录。`,
-    '说明交付目标、使用对象、输出格式以及不能改变的约束。',
-    '补充可公开使用的材料，复杂任务先确认结构或执行计划。',
-    '交付前人工核对事实、数字、引用以及数据合规要求。',
-  ];
-}
-
 /** 是什么：官网产品介绍精炼，不写使用场景清单 */
 function pickWhatItIs(tool: PrototypeToolSeed): string {
   if (tool.productIntro?.trim()) return clipText(tool.productIntro, 1200);
@@ -159,11 +141,9 @@ export function MarketToolDetailModal({
   }
 
   const whatItIs = pickWhatItIs(tool);
-  const usageGuide = pickUsageGuide(tool);
   const kindLabel = kind === 'internal' ? '公司工具' : '外部工具';
   const hasHome = Boolean(tool.homepageUrl && tool.homepageUrl !== '#');
   const hasDocs = Boolean(tool.docsUrl?.trim());
-  const hasMedia = Boolean(tool.mediaUrl?.trim());
   const regionLabel =
     kind === 'external'
       ? tool.region === 'domestic'
@@ -343,29 +323,6 @@ export function MarketToolDetailModal({
               </div>
             </section>
           ) : null}
-
-          <section id="tool-usage-guide">
-            <SectionTitle>站内使用指导</SectionTitle>
-            <ol className="grid gap-2 sm:grid-cols-2">
-              {usageGuide.map((step, index) => (
-                <li key={`${index}-${step}`} className="flex items-start gap-2.5 rounded-xl bg-zinc-50 px-3 py-2.5 text-[12px] leading-relaxed text-zinc-600">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-[10px] font-semibold text-white">
-                    {index + 1}
-                  </span>
-                  <span>{step}</span>
-                </li>
-              ))}
-            </ol>
-            {hasMedia ? (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {hasMedia ? (
-                  <a href={tool.mediaUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium text-blue-600 hover:text-blue-700">
-                    查看官方介绍 / 演示 <i className="fa-solid fa-arrow-up-right-from-square ml-1 text-[9px]" />
-                  </a>
-                ) : null}
-              </div>
-            ) : null}
-          </section>
 
         </div>
       </CenterModal>
