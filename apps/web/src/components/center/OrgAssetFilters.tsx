@@ -313,6 +313,7 @@ export function OwnershipFormFields({
   visibility,
   homepageUrl,
   alwaysShowHomepage = false,
+  singleDept = false,
   lockSource = false,
   onChange,
 }: {
@@ -323,6 +324,11 @@ export function OwnershipFormFields({
   homepageUrl?: string;
   /** 非外部来源也需要访问链接时打开（如公司工具推荐，前台场景卡要跳转） */
   alwaysShowHomepage?: boolean;
+  /**
+   * 归属职能单选：点选即替换，再点当前项清空。
+   * 用于只保留一个职能的场景（如 Skill 提报），避免多选后被截断导致新选项失效。
+   */
+  singleDept?: boolean;
   /** 来源由入口决定时隐藏来源选择（如“登记外部工具”） */
   lockSource?: boolean;
   onChange: (patch: {
@@ -334,6 +340,10 @@ export function OwnershipFormFields({
   }) => void;
 }) {
   const toggleDept = (id: string) => {
+    if (singleDept) {
+      onChange({ ownerDeptIds: ownerDeptIds[0] === id ? [] : [id] });
+      return;
+    }
     const next = ownerDeptIds.includes(id)
       ? ownerDeptIds.filter((d) => d !== id)
       : [...ownerDeptIds, id];
@@ -343,7 +353,12 @@ export function OwnershipFormFields({
   return (
     <div className="space-y-3 rounded-xl border border-black/[0.06] bg-[#fafafa]/80 p-3">
       <div>
-        <p className="mb-1.5 text-[11px] font-semibold text-zinc-600">归属职能</p>
+        <p className="mb-1.5 text-[11px] font-semibold text-zinc-600">
+          归属职能
+          {singleDept ? (
+            <span className="ml-1.5 font-normal text-zinc-400">单选 · 不选则不限</span>
+          ) : null}
+        </p>
         <div className="flex flex-wrap gap-1.5">
           {HQ_DEPTS.map((d) => (
             <button
