@@ -31,7 +31,7 @@ export function PortalSceneCategoryPanel() {
     <div className="space-y-4">
       <div className="rounded-2xl border border-zinc-200/90 bg-white p-4">
         <p className="text-[12px] leading-relaxed text-zinc-500">
-          配置 AI工具hub「场景分类」卡片的名称、简介、图标、是否展示与排序。场景编码（S1–S8）保持稳定，以兼容项目 /
+          配置 AI工具Hub「场景分类」卡片的名称、简介、图标、是否展示与排序。场景编码（S1–S8）保持稳定，以兼容项目 /
           Skill 映射；不在此新增编码。
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">

@@ -32,7 +32,7 @@ export function HomeMarketChannels({
   cardsByKind: Record<MarketShelfKind, MarketShelfCardModel[]>;
   onOpen: (card: MarketShelfCardModel) => void;
   searchActive?: boolean;
-  /** AI工具hub：Skill / Agent 分列数量 */
+  /** AI工具Hub：Skill / Agent 分列数量 */
   projectsBreakdown?: { skill: number; agent: number };
 }) {
   return (

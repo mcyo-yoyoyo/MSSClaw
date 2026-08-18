@@ -1083,7 +1083,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                   />
                   <span>
                     <span className="block text-[13px] font-medium text-zinc-800">
-                      精选露出到「AI工具hub · 场景技能」
+                      精选露出到「AI工具Hub · 场景技能」
                     </span>
                     <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500">
                       {DO_TASK_FEATURED_HINT}

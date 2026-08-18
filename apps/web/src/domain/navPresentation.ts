@@ -97,7 +97,7 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   },
   {
     id: 'market-projects',
-    label: 'AI工具hub',
+    label: 'AI工具Hub',
     subtitle: 'MSS 建设集市 · 顶栏入口',
     icon: 'fa-layer-group',
     section: 'workspace',

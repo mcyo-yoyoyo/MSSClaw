@@ -1,6 +1,6 @@
 /**
  * MSS AI 工具平台 · 货架
- * 统一卡片模型：外部工具精选 / 内部办公推荐 / AI工具hub
+ * 统一卡片模型：外部工具精选 / 内部办公推荐 / AI工具Hub
  */
 
 import {
@@ -64,7 +64,7 @@ export const MARKET_SHELF_META: Record<
   },
   projects: {
     view: 'market-projects',
-    label: 'AI工具hub',
+    label: 'AI工具Hub',
     shortLabel: 'AI工具',
   },
 };

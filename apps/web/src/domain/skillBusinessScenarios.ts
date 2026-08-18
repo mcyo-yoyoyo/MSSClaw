@@ -138,7 +138,7 @@ export function resolveSkillBusinessScenario(
 }
 
 /**
- * 是否精选露出到「AI工具hub · 场景技能」：
+ * 是否精选露出到「AI工具Hub · 场景技能」：
  * - 显式 featuredInMssMarket（优先）
  * - 显式 featuredInDoTask（兼容旧字段）
  * - 未设置时回退 HOME_BUSINESS_SKILLS 静态精选

@@ -269,7 +269,7 @@ export function PortalContentOpsPage() {
           tip={
             opsSurface === 'packs' ? (
               <>
-                业务用户在 <strong className="font-semibold">AI工具hub</strong> 看到的是
+                业务用户在 <strong className="font-semibold">AI工具Hub</strong> 看到的是
                 <strong className="font-semibold">场景分类 → 项目卡 → 文档预览 / How to</strong>
                 。运营侧按三槽分责填写材料；「用户侧预览」打开对应场景学习内容。
               </>

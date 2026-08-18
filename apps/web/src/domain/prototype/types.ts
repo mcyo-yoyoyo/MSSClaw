@@ -172,7 +172,7 @@ export interface PrototypeSkillSeed extends AssetOwnershipFields {
    */
   published: boolean;
   /**
-   * 精选露出：出现在「AI工具hub · 场景技能」。
+   * 精选露出：出现在「AI工具Hub · 场景技能」。
    * 未设置时回退静态 HOME_BUSINESS_SKILLS 白名单。
    * @deprecated 语义等同 featuredInMssMarket；保留字段兼容旧数据
    */

@@ -55,7 +55,7 @@ const VIEW_LABELS: Partial<Record<AppView, string>> = {
   me: '个人中心',
   'market-external': '外部工具精选',
   'market-internal': '内部办公推荐',
-  'market-projects': 'AI工具hub',
+  'market-projects': 'AI工具Hub',
   'ai-tasks': 'AI任务',
   'ai-brief': 'AI快讯',
   task: '任务记录',

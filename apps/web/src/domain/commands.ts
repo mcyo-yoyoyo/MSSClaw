@@ -61,9 +61,9 @@ const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
   },
   {
     id: 'goto-market-projects',
-    label: 'AI工具hub',
+    label: 'AI工具Hub',
     icon: 'fa-layer-group',
-    keywords: 'AI工具hub AI项目 项目中心 样板 场景 找案例 Skill Agent',
+    keywords: 'AI工具Hub AI项目 项目中心 样板 场景 找案例 Skill Agent',
     view: 'market-projects',
     run: () => openMarketShelf('projects'),
   },
