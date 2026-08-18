@@ -24,7 +24,12 @@ export function ToastHost({ sources }: ToastHostProps) {
 
   useEffect(() => {
     for (const src of sources) {
-      if (!src.message) continue;
+      if (!src.message) {
+        // 队列后立即 dismiss，这里清掉记忆；否则「同一文案再次出现」会被下面的
+        // 去重当成重复而静默丢弃（例如连续两次相同的校验失败提示）
+        lastSeenRef.current.delete(src.key);
+        continue;
+      }
       const prev = lastSeenRef.current.get(src.key);
       if (prev === src.message) continue;
       lastSeenRef.current.set(src.key, src.message);

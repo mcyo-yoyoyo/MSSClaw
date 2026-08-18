@@ -922,21 +922,20 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
             <div className="rounded-xl border border-zinc-200 px-3 py-2.5 space-y-2">
               <p className="text-[13px] font-semibold text-zinc-800">发布权限范围</p>
               <p className="text-[11px] text-zinc-500">
-                默认公开可见（角标「公开」）：不区分登录人领域/区域。
-                组织内可见（角标「领域」）：业务用户仅能看到归属命中本人领域或区域的
+                默认组织内可见（角标「领域」）：业务用户仅能看到归属命中本人领域或区域的
                 Skill；发布方与平台运营可看全部。
+                公开可见（角标「公开」）：不区分登录人领域/区域，需通过审批。
               </p>
               <label className="flex cursor-pointer items-center gap-2">
                 <input
                   type="radio"
                   name="skill-vis"
                   className="accent-claw-600"
-                  checked={(form.visibility ?? 'public') === 'public'}
+                  checked={(form.visibility ?? 'org') === 'public'}
                   onChange={() => setForm({ ...form, visibility: 'public' })}
                 />
                 <span className="text-[13px] font-medium text-zinc-800">
                   {ASSET_VISIBILITY_LABELS.public}
-                  <span className="ml-1.5 text-[11px] font-normal text-zinc-400">（默认）</span>
                 </span>
               </label>
               <label className="flex cursor-pointer items-center gap-2">
