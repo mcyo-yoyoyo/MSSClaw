@@ -11,6 +11,14 @@ import { resolveToolLogoUrl } from '@/domain/toolLogo';
 import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 
+interface SceneDraft {
+  label: string;
+  english: string;
+  description: string;
+  visible: boolean;
+  toolIds: string[];
+}
+
 interface CandidateTool {
   id: string;
   name: string;
@@ -31,7 +39,6 @@ export function OfficeSceneOpsPage() {
   const entries = useInternalOfficeSceneCatalogStore((s) => s.entries);
   const hydrate = useInternalOfficeSceneCatalogStore((s) => s.hydrate);
   const updateEntry = useInternalOfficeSceneCatalogStore((s) => s.updateEntry);
-  const setToolIds = useInternalOfficeSceneCatalogStore((s) => s.setToolIds);
   const moveEntry = useInternalOfficeSceneCatalogStore((s) => s.moveEntry);
   const addEntry = useInternalOfficeSceneCatalogStore((s) => s.addEntry);
   const removeEntry = useInternalOfficeSceneCatalogStore((s) => s.removeEntry);
@@ -41,6 +48,8 @@ export function OfficeSceneOpsPage() {
 
   const [selectedId, setSelectedId] = useState<InternalOfficeSceneId | null>(null);
   const [toolQuery, setToolQuery] = useState('');
+  /** 表单改动先落草稿，点「保存」才写库；新增/删除/排序仍即时生效 */
+  const [draft, setDraft] = useState<SceneDraft | null>(null);
 
   useEffect(() => {
     hydrate();
@@ -89,6 +98,55 @@ export function OfficeSceneOpsPage() {
   const selected = entries.find((e) => e.id === selectedId) ?? null;
   const selectedIndex = entries.findIndex((e) => e.id === selectedId);
 
+  const draftOf = (entry: typeof selected): SceneDraft | null =>
+    entry
+      ? {
+          label: entry.label,
+          english: entry.english,
+          description: entry.description,
+          visible: entry.visible,
+          toolIds: [...entry.toolIds],
+        }
+      : null;
+
+  /** 切换场景或外部数据变化时重置草稿 */
+  useEffect(() => {
+    const entry = entries.find((e) => e.id === selectedId) ?? null;
+    setDraft(draftOf(entry));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, entries]);
+
+  const dirty = Boolean(
+    selected &&
+      draft &&
+      (draft.label !== selected.label ||
+        draft.english !== selected.english ||
+        draft.description !== selected.description ||
+        draft.visible !== selected.visible ||
+        draft.toolIds.join('|') !== selected.toolIds.join('|')),
+  );
+
+  const patchDraft = (patch: Partial<SceneDraft>) =>
+    setDraft((d) => (d ? { ...d, ...patch } : d));
+
+  const saveDraft = () => {
+    if (!selected || !draft) return;
+    updateEntry(selected.id, {
+      label: draft.label,
+      english: draft.english,
+      description: draft.description,
+      visible: draft.visible,
+      toolIds: draft.toolIds,
+    });
+  };
+
+  /** 有未保存改动时切换场景先确认，避免静默丢失 */
+  const selectScene = (id: InternalOfficeSceneId) => {
+    if (id === selectedId) return;
+    if (dirty && !window.confirm('当前场景有未保存的改动，切换后将丢失。确定切换？')) return;
+    setSelectedId(id);
+  };
+
   const filteredCandidates = useMemo(() => {
     const q = toolQuery.trim().toLocaleLowerCase();
     if (!q) return candidateTools;
@@ -109,12 +167,12 @@ export function OfficeSceneOpsPage() {
     ] as [string, string | number][];
   }, [entries]);
 
-  const boundTool = selected ? toolById.get(selected.toolIds[0] ?? '') ?? null : null;
+  const boundTool = draft ? toolById.get(draft.toolIds[0] ?? '') ?? null : null;
 
   /** 一个场景只挂一个工具：点选即替换，再点当前项则清空 */
   const selectTool = (toolId: string) => {
-    if (!selected) return;
-    setToolIds(selected.id, selected.toolIds[0] === toolId ? [] : [toolId]);
+    if (!draft) return;
+    patchDraft({ toolIds: draft.toolIds[0] === toolId ? [] : [toolId] });
   };
 
   return (
@@ -126,7 +184,7 @@ export function OfficeSceneOpsPage() {
           tip={
             <>
               每个场景绑定一个公司工具。工具的名称、说明、访问链接与 Logo 均取自「配置工具」，此处不重复维护；
-              这里只决定场景如何陈列、展示顺序与绑定哪个工具；场景图标即所绑工具的图标，无需单独配置。场景未绑定工具时业务侧无法打开。
+              这里只决定场景如何陈列、展示顺序与绑定哪个工具；场景图标即所绑工具的图标，无需单独配置。场景未绑定工具时业务侧无法打开。表单改动需点「保存」才写入；新增、删除与排序即时生效。
             </>
           }
           actions={
@@ -197,7 +255,7 @@ export function OfficeSceneOpsPage() {
                     <li key={entry.id}>
                       <button
                         type="button"
-                        onClick={() => setSelectedId(entry.id)}
+                        onClick={() => selectScene(entry.id)}
                         aria-current={active ? 'true' : undefined}
                         className={cn(
                           'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition',
@@ -254,7 +312,7 @@ export function OfficeSceneOpsPage() {
             </nav>
 
             {/* 右：选中场景详情 */}
-            {selected ? (
+            {selected && draft ? (
               <section className="space-y-3">
                 <div className="rounded-2xl border border-black/[0.05] bg-white p-4 shadow-sm">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -302,8 +360,8 @@ export function OfficeSceneOpsPage() {
                         <input
                           type="checkbox"
                           className="accent-zinc-800"
-                          checked={selected.visible}
-                          onChange={(e) => updateEntry(selected.id, { visible: e.target.checked })}
+                          checked={draft.visible}
+                          onChange={(e) => patchDraft({ visible: e.target.checked })}
                         />
                         业务可见
                       </label>
@@ -324,16 +382,16 @@ export function OfficeSceneOpsPage() {
                     <label className="block text-[11px] text-zinc-600">
                       场景名
                       <input
-                        value={selected.label}
-                        onChange={(e) => updateEntry(selected.id, { label: e.target.value })}
+                        value={draft.label}
+                        onChange={(e) => patchDraft({ label: e.target.value })}
                         className="mt-1 w-full rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[12px] outline-none focus:border-zinc-400"
                       />
                     </label>
                     <label className="block text-[11px] text-zinc-600">
                       英文副标
                       <input
-                        value={selected.english}
-                        onChange={(e) => updateEntry(selected.id, { english: e.target.value })}
+                        value={draft.english}
+                        onChange={(e) => patchDraft({ english: e.target.value })}
                         className="mt-1 w-full rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[12px] outline-none focus:border-zinc-400"
                       />
                     </label>
@@ -342,8 +400,8 @@ export function OfficeSceneOpsPage() {
                     简介
                     <textarea
                       rows={2}
-                      value={selected.description}
-                      onChange={(e) => updateEntry(selected.id, { description: e.target.value })}
+                      value={draft.description}
+                      onChange={(e) => patchDraft({ description: e.target.value })}
                       className="mt-1 w-full rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[12px] outline-none focus:border-zinc-400"
                     />
                   </label>
@@ -386,7 +444,7 @@ export function OfficeSceneOpsPage() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => setToolIds(selected.id, [])}
+                        onClick={() => patchDraft({ toolIds: [] })}
                         className="shrink-0 rounded-lg border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-500 transition hover:border-rose-200 hover:text-rose-600"
                       >
                         取消绑定
@@ -398,9 +456,9 @@ export function OfficeSceneOpsPage() {
                     </p>
                   )}
 
-                  {selected.toolIds.length > 1 ? (
+                  {draft.toolIds.length > 1 ? (
                     <p className="mb-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700">
-                      该场景存量绑定了 {selected.toolIds.length} 个工具，重新点选将只保留一个。
+                      该场景存量绑定了 {draft.toolIds.length} 个工具，重新点选将只保留一个。
                     </p>
                   ) : null}
 
@@ -409,7 +467,7 @@ export function OfficeSceneOpsPage() {
                   </p>
                   <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="场景绑定工具">
                     {filteredCandidates.map((t) => {
-                      const on = selected.toolIds[0] === t.id;
+                      const on = draft.toolIds[0] === t.id;
                       return (
                         <button
                           key={t.id}
@@ -436,6 +494,33 @@ export function OfficeSceneOpsPage() {
                       </p>
                     ) : null}
                   </div>
+                </div>
+
+                <div className="sticky bottom-0 flex items-center justify-end gap-2 rounded-2xl border border-black/[0.05] bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
+                  {dirty ? (
+                    <span className="mr-auto inline-flex items-center gap-1.5 text-[11px] text-amber-700">
+                      <i className="fa-solid fa-circle text-[6px]" />
+                      有未保存的改动
+                    </span>
+                  ) : (
+                    <span className="mr-auto text-[11px] text-zinc-400">改动已保存</span>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!dirty}
+                    onClick={() => setDraft(draftOf(selected))}
+                    className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium text-zinc-600 transition hover:bg-black/[0.03] disabled:opacity-40"
+                  >
+                    放弃改动
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!dirty}
+                    onClick={saveDraft}
+                    className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white transition disabled:opacity-40"
+                  >
+                    保存
+                  </button>
                 </div>
               </section>
             ) : null}
