@@ -36,6 +36,7 @@ interface CandidateTool {
  */
 export function OfficeSceneOpsPage() {
   const tools = useMarketplaceStore((s) => s.tools);
+  const showToast = useMarketplaceStore((s) => s.showToast);
   const entries = useInternalOfficeSceneCatalogStore((s) => s.entries);
   const hydrate = useInternalOfficeSceneCatalogStore((s) => s.hydrate);
   const updateEntry = useInternalOfficeSceneCatalogStore((s) => s.updateEntry);
@@ -56,11 +57,11 @@ export function OfficeSceneOpsPage() {
   }, [hydrate]);
 
   useEffect(() => {
-    // 保存失败必须停留，让运营看到改动没落库；成功/进行中才自动消失
-    if (!toast || toastTone === 'error') return;
-    const t = window.setTimeout(() => dismissToast(), 2400);
-    return () => window.clearTimeout(t);
-  }, [toast, toastTone, dismissToast]);
+    // 成功走全局 toast；「保存中」只在操作条里体现，不弹窗打扰
+    if (!toast) return;
+    if (toastTone === 'ok') showToast(toast);
+    if (toastTone !== 'error') dismissToast();
+  }, [toast, toastTone, showToast, dismissToast]);
 
   /** 默认选中第一个场景；选中项被删除或未加载时回落 */
   useEffect(() => {
@@ -201,38 +202,20 @@ export function OfficeSceneOpsPage() {
 
         <StatCardGrid items={stats} />
 
-        {toast ? (
+        {toast && toastTone === 'error' ? (
           <div
-            role={toastTone === 'error' ? 'alert' : 'status'}
-            className={cn(
-              'mb-3 flex items-start gap-2 rounded-xl border px-3 py-2 text-[12px]',
-              toastTone === 'error'
-                ? 'border-rose-200 bg-rose-50 text-rose-800'
-                : toastTone === 'pending'
-                  ? 'border-zinc-200 bg-zinc-50 text-zinc-600'
-                  : 'border-emerald-200 bg-emerald-50 text-emerald-800',
-            )}
+            role="alert"
+            className="mb-3 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-800"
           >
-            <i
-              className={cn(
-                'mt-0.5 text-[11px]',
-                toastTone === 'error'
-                  ? 'fa-solid fa-triangle-exclamation'
-                  : toastTone === 'pending'
-                    ? 'fa-solid fa-spinner fa-spin'
-                    : 'fa-solid fa-circle-check',
-              )}
-            />
+            <i className="fa-solid fa-triangle-exclamation mt-0.5 text-[11px]" />
             <span className="flex-1">{toast}</span>
-            {toastTone === 'error' ? (
-              <button
-                type="button"
-                onClick={dismissToast}
-                className="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium text-rose-700 hover:bg-rose-100"
-              >
-                知道了
-              </button>
-            ) : null}
+            <button
+              type="button"
+              onClick={dismissToast}
+              className="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium text-rose-700 hover:bg-rose-100"
+            >
+              知道了
+            </button>
           </div>
         ) : null}
 
@@ -497,7 +480,12 @@ export function OfficeSceneOpsPage() {
                 </div>
 
                 <div className="sticky bottom-0 flex items-center justify-end gap-2 rounded-2xl border border-black/[0.05] bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
-                  {dirty ? (
+                  {toastTone === 'pending' ? (
+                    <span className="mr-auto inline-flex items-center gap-1.5 text-[11px] text-zinc-500">
+                      <i className="fa-solid fa-spinner fa-spin text-[10px]" />
+                      保存中…
+                    </span>
+                  ) : dirty ? (
                     <span className="mr-auto inline-flex items-center gap-1.5 text-[11px] text-amber-700">
                       <i className="fa-solid fa-circle text-[6px]" />
                       有未保存的改动
