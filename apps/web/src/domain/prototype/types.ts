@@ -22,6 +22,8 @@ export type EfficiencyCategory = 'office' | 'manage' | 'process' | 'experience';
 export type HomeCategory = DeptId;
 
 export interface AgentInputOutputInfo {
+  /** §4.2 三段式中间环节：用业务语言说明 Agent 会做哪些处理（识别/抽取/匹配/生成…） */
+  processSteps?: string[];
   inputTypes?: string[];
   inputFormat?: string;
   inputFields?: string[];
@@ -110,10 +112,16 @@ export interface PrototypeAgentSeed {
   demoPrompt?: string;
   /** 多 Skill 编排计划步骤 */
   planSteps?: string[];
+  /** §6.1 一句话价值：用业务语言说明能帮用户完成什么工作，顶部与概览共用 */
+  valueProposition?: string;
   /** 前台详情页核心能力、适用对象与边界 */
   capabilities?: string[];
   targetUsers?: string[];
   capabilityBoundaries?: string[];
+  /** §6.4 适用判断：适合 / 不适合 / 是否需人工复核 */
+  suitableFor?: string[];
+  notSuitableFor?: string[];
+  requiresHumanReview?: boolean;
   /** 详情页结构化输入输出、快速上手与案例 */
   inputOutput?: AgentInputOutputInfo;
   quickStart?: AgentQuickStartInfo;
