@@ -92,7 +92,8 @@ export type MarketShelfCard = {
   /** 外精选 / 公司推荐：品牌 Logo（可上传或由官网初始化） */
   logoUrl?: string;
   /** 领域 / 区域 / 类型 */
-  badges: { label: string; tone?: 'dept' | 'region' | 'type' }[];
+  /** className 用于状态类标签自定义配色（如上架状态绿/黄/灰），优先级高于 tone */
+  badges: { label: string; tone?: 'dept' | 'region' | 'type'; className?: string }[];
   featured: boolean;
   heat: number;
   /** 点赞数（MSS Skill/Agent 展示） */

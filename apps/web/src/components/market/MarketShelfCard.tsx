@@ -271,6 +271,7 @@ export function MarketShelfCard({
                     b.tone === 'dept' && 'bg-violet-50 text-violet-800',
                     b.tone === 'region' && 'bg-teal-50 text-teal-800',
                     b.tone === 'type' && 'bg-amber-50 text-amber-800',
+                    b.className,
                   )}
                 >
                   {b.label}

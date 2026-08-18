@@ -27,6 +27,13 @@ export const SKILL_LIFECYCLE_LABELS: Record<SkillLifecycleStatus, string> = {
   unpublished: '已下架',
 };
 
+/** 列表卡片标签配色：已上架绿 / 审批中黄 / 已下架灰 */
+export const SKILL_LIFECYCLE_BADGE_CLASS: Record<SkillLifecycleStatus, string> = {
+  published: 'bg-emerald-50 text-emerald-800',
+  pending: 'bg-amber-50 text-amber-800',
+  unpublished: 'bg-zinc-100 text-zinc-600',
+};
+
 /** 取该资产上仍在流转的审批记录（同资产可能有多条历史，只认 pending） */
 export function findPendingApproval(
   approvals: AssetApprovalRecord[],
@@ -55,3 +62,20 @@ export function skillMatchesLifecycleFilter(
   if (filter === 'all') return true;
   return resolveSkillLifecycleStatus(skill, approvals) === filter;
 }
+
+/** 卡片多选：空集合表示不筛（等价于「全部」），与职能 / 区域的多选语义一致 */
+export function skillMatchesLifecycleSelection(
+  skill: { id: string; published?: boolean },
+  approvals: AssetApprovalRecord[],
+  selected: SkillLifecycleStatus[],
+): boolean {
+  if (!selected.length) return true;
+  return selected.includes(resolveSkillLifecycleStatus(skill, approvals));
+}
+
+/** 多选可用项（不含「全部」——空集合即全部） */
+export const SKILL_LIFECYCLE_STATUSES: SkillLifecycleStatus[] = [
+  'published',
+  'pending',
+  'unpublished',
+];

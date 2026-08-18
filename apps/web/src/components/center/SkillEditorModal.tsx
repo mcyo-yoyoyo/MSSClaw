@@ -451,7 +451,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       open
       elevate
       size="lg"
-      title={isNew ? '创建 Skill' : '编辑 Skill'}
+      title={isNew ? '提报 Skill' : '编辑 Skill'}
       onClose={onClose}
       actions={
         <div className="flex w-full items-center justify-between gap-2">

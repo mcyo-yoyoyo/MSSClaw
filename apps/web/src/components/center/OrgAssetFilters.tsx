@@ -60,7 +60,8 @@ export function OrgAssetFilterBar({
   collapsible = true,
   extra,
 }: OrgAssetFilterBarProps) {
-  const [open, setOpen] = useState(!collapsible);
+  // 默认展开：筛选是运营看板的主要操作，收起态需要多点一次才能看到可选项
+  const [open, setOpen] = useState(true);
   const businessOptions = useMemo(() => listVisibleBusinessScenarioCategories(), []);
 
   const summary = useMemo(() => {
@@ -383,7 +384,7 @@ export function OwnershipFormFields({
           value={ownerRegionId ?? ''}
           onChange={(e) => onChange({ ownerRegionId: e.target.value || null })}
         >
-          <option value="">请选择归属区域（可选）</option>
+          <option value="">—请选择区域—</option>
           {REGIONS.map((r) => (
             <option key={r.id} value={r.id}>
               {r.label}

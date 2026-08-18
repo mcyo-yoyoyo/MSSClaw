@@ -10,10 +10,11 @@ import {
 import { SKILL_VISIBILITY_SCOPE_OPTIONS } from '@/domain/assetFilters';
 import {
   resolveSkillLifecycleStatus,
-  skillMatchesLifecycleFilter,
-  SKILL_LIFECYCLE_FILTER_OPTIONS,
+  SKILL_LIFECYCLE_BADGE_CLASS,
   SKILL_LIFECYCLE_LABELS,
-  type SkillLifecycleFilter,
+  SKILL_LIFECYCLE_STATUSES,
+  skillMatchesLifecycleSelection,
+  type SkillLifecycleStatus,
 } from '@/domain/skillLifecycleStatus';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 import {
@@ -105,7 +106,8 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
     skill: PrototypeSkillSeed;
     kind: SkillOpsRequestKind;
   } | null>(null);
-  const [lifecycleFilter, setLifecycleFilter] = useState<SkillLifecycleFilter>('all');
+  /** 空数组 = 不筛（等价「全部」），与职能 / 区域的多选语义一致 */
+  const [lifecycleSelection, setLifecycleSelection] = useState<SkillLifecycleStatus[]>([]);
   const [distTab, setDistTab] = useState<DistTab>('dept');
   const [distSort, setDistSort] = useState<DistSort>('original');
   const [scanGate, setScanGate] = useState<SkillSecurityScanGateMode>(() => getSecurityScanGateMode());
@@ -119,8 +121,11 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
   }, [hydrateApprovals]);
 
   const list = useMemo(
-    () => filteredSkills().filter((s) => skillMatchesLifecycleFilter(s, approvals, lifecycleFilter)),
-    [filteredSkills, approvals, lifecycleFilter],
+    () =>
+      filteredSkills().filter((s) =>
+        skillMatchesLifecycleSelection(s, approvals, lifecycleSelection),
+      ),
+    [filteredSkills, approvals, lifecycleSelection],
   );
 
   const stats = useMemo(() => {
@@ -185,7 +190,11 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
       }
       if (bizLabel) badges.push({ label: bizLabel, tone: 'type' });
       // 上架状态放首位：筛选后需要一眼看出每张卡属于哪一档
-      badges.unshift({ label: SKILL_LIFECYCLE_LABELS[resolveSkillLifecycleStatus(s, approvals)] });
+      const lifecycle = resolveSkillLifecycleStatus(s, approvals);
+      badges.unshift({
+        label: SKILL_LIFECYCLE_LABELS[lifecycle],
+        className: SKILL_LIFECYCLE_BADGE_CLASS[lifecycle],
+      });
       return {
         skill: s,
         card: {
@@ -272,7 +281,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
                 className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white transition"
               >
                 <i className="fa-solid fa-plus mr-1" />
-                创建 Skill
+                提报 Skill
               </button>
             </>
           }
@@ -426,20 +435,45 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
           onScopeChange={setSkillScopeFilter}
           showScope
           extra={
-            <label className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5">
               <span className="shrink-0 text-[11px] text-zinc-500">上架状态</span>
-              <select
-                value={lifecycleFilter}
-                onChange={(e) => setLifecycleFilter(e.target.value as SkillLifecycleFilter)}
-                className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-[12px] text-zinc-700 outline-none transition hover:border-zinc-300 focus:border-zinc-400"
-              >
-                {SKILL_LIFECYCLE_FILTER_OPTIONS.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <div className="flex flex-wrap gap-1" role="group" aria-label="上架状态">
+                {SKILL_LIFECYCLE_STATUSES.map((id) => {
+                  const active = lifecycleSelection.includes(id);
+                  const count = skills.filter(
+                    (s) => resolveSkillLifecycleStatus(s, approvals) === id,
+                  ).length;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() =>
+                        setLifecycleSelection((prev) =>
+                          prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                        )
+                      }
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition',
+                        active
+                          ? 'border-zinc-900 bg-zinc-900 text-white'
+                          : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300',
+                      )}
+                    >
+                      {SKILL_LIFECYCLE_LABELS[id]}
+                      <span
+                        className={cn(
+                          'tabular-nums',
+                          active ? 'text-white/70' : 'text-zinc-400',
+                        )}
+                      >
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           }
         />
 
