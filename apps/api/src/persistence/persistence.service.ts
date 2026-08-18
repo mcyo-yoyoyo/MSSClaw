@@ -315,7 +315,7 @@ export class PersistenceService {
     // 首次读取时在后端完成转换并落库，前端始终只消费数据库快照。
     const built = await this.buildMarketplaceFromCenterRecords(workspaceId);
     if (!built) return null;
-    const payload = this.enrichMarketplaceMetadata(built).payload;
+    const payload = this.enrichMarketplaceMetadata(built, true).payload;
     await this.prisma.centerRecord.upsert({
       where: { id: `marketplace-${workspaceId}` },
       create: {
@@ -330,8 +330,17 @@ export class PersistenceService {
   }
 
   async putMarketplace(workspaceId: string, payload: MarketplacePayload) {
-    payload = this.enrichMarketplaceMetadata(payload).payload;
     const id = `marketplace-${workspaceId}`;
+    // 前端快照不含目录版本号；沿用库中已有值，避免被抹掉后误判为「需要重新播种」
+    const existing = (await this.prisma.centerRecord.findUnique({ where: { id } }))
+      ?.payload as MarketplacePayload | undefined;
+    payload = this.enrichMarketplaceMetadata({
+      ...payload,
+      externalCatalogVersion:
+        payload.externalCatalogVersion ?? existing?.externalCatalogVersion,
+      internalCatalogVersion:
+        payload.internalCatalogVersion ?? existing?.internalCatalogVersion,
+    }).payload;
     await this.prisma.centerRecord.upsert({
       where: { id },
       create: {
@@ -575,7 +584,15 @@ export class PersistenceService {
     return { agents, skills, tools, automations, kbDocs };
   }
 
-  private enrichMarketplaceMetadata(payload: MarketplacePayload): {
+  /**
+   * @param seedCatalogs 是否用 Excel 清单播种工具目录。
+   *   仅首次生成 marketplace 快照时为 true——初始化完成后数据库即唯一真相源，
+   *   运营的增删改不应被清单回灌覆盖（历史上每次读写都合并，导致下架等改动被打回）。
+   */
+  private enrichMarketplaceMetadata(
+    payload: MarketplacePayload,
+    seedCatalogs = false,
+  ): {
     payload: MarketplacePayload;
     changed: boolean;
   } {
@@ -612,13 +629,15 @@ export class PersistenceService {
     const agents = enrich(payload.agents, MARKET_AGENT_BUSINESS_SCENARIO, false);
     const skills = enrich(payload.skills, MARKET_SKILL_BUSINESS_SCENARIO, true);
     let tools = Array.isArray(payload.tools) ? payload.tools : [];
-    if (payload.externalCatalogVersion !== EXTERNAL_TOOLS_EXCEL_VERSION) {
-      tools = mergeExcelExternalTools(tools);
-      changed = true;
-    }
-    if (payload.internalCatalogVersion !== INTERNAL_TOOLS_EXCEL_VERSION) {
-      tools = mergeExcelInternalTools(tools);
-      changed = true;
+    if (seedCatalogs) {
+      if (payload.externalCatalogVersion !== EXTERNAL_TOOLS_EXCEL_VERSION) {
+        tools = mergeExcelExternalTools(tools);
+        changed = true;
+      }
+      if (payload.internalCatalogVersion !== INTERNAL_TOOLS_EXCEL_VERSION) {
+        tools = mergeExcelInternalTools(tools);
+        changed = true;
+      }
     }
     return {
       payload: {
@@ -628,8 +647,12 @@ export class PersistenceService {
         tools,
         automations: Array.isArray(payload.automations) ? payload.automations : [],
         kbDocs: Array.isArray(payload.kbDocs) ? payload.kbDocs : [],
-        externalCatalogVersion: EXTERNAL_TOOLS_EXCEL_VERSION,
-        internalCatalogVersion: INTERNAL_TOOLS_EXCEL_VERSION,
+        externalCatalogVersion: seedCatalogs
+          ? EXTERNAL_TOOLS_EXCEL_VERSION
+          : payload.externalCatalogVersion,
+        internalCatalogVersion: seedCatalogs
+          ? INTERNAL_TOOLS_EXCEL_VERSION
+          : payload.internalCatalogVersion,
       },
       changed,
     };

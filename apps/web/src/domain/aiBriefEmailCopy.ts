@@ -30,7 +30,7 @@ export const DEFAULT_AI_BRIEF_EMAIL_COPY: AiBriefEmailCopy = {
   headline: 'MSS AI快讯',
   dateSuffix: '精选产业动态速读',
   ctaTitle: '学工具、用工具、造工具',
-  ctaBlurb: '打开平台浏览外部工具精选、公司工具推荐与 MSS 工具集市。',
+  ctaBlurb: '打开平台浏览外部工具精选、内部办公推荐与 MSS 工具集市。',
   ctaButtonLabel: '进入 MSS AI平台',
   platformUrl: '',
   footerNote:

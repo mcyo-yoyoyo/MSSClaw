@@ -181,7 +181,7 @@ export function OfficeSceneOpsPage() {
       <div className="mx-auto max-w-6xl">
         <CenterPageHeader
           title="配置办公场景"
-          subtitle="公司工具推荐页的场景字典：陈列文案、展示顺序与场景内的工具绑定"
+          subtitle="内部办公推荐页的场景字典：陈列文案、展示顺序与场景内的工具绑定"
           tip={
             <>
               每个场景绑定一个公司工具。工具的名称、说明、访问链接与 Logo 均取自「配置工具」，此处不重复维护；

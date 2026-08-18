@@ -56,8 +56,8 @@ function DimRow({
 
 /**
  * 市场面左栏：领域 · 区域（数据轴）
- * - 首页 / 外部精选 / 公司推荐：点击具体项 → 跳转 MSS工具集市
- * - MSS工具集市：页内筛选
+ * - 首页 / 外部精选 / 公司推荐：点击具体项 → 跳转 AI工具Hub
+ * - AI工具Hub：页内筛选
  * 场景已迁入 MSS 页面分类卡
  */
 export function SidebarMarketFilters({ collapsed }: { collapsed: boolean }) {

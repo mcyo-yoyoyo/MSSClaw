@@ -269,7 +269,7 @@ export function PortalContentOpsPage() {
           tip={
             opsSurface === 'packs' ? (
               <>
-                业务用户在 <strong className="font-semibold">MSS工具集市</strong> 看到的是
+                业务用户在 <strong className="font-semibold">AI工具Hub</strong> 看到的是
                 <strong className="font-semibold">场景分类 → 项目卡 → 文档预览 / How to</strong>
                 。运营侧按三槽分责填写材料；「用户侧预览」打开对应场景学习内容。
               </>
@@ -306,7 +306,7 @@ export function PortalContentOpsPage() {
               </>
             ) : (
               <>
-                维护外部工具精选 / 公司工具推荐的 How to：可上传文件或填链接（图片 / PDF / PPT /
+                维护外部工具精选 / 内部办公推荐的 How to：可上传文件或填链接（图片 / PDF / PPT /
                 短视频 / 文字），「链接」类型仅填 URL；保存后详情页「快速上手」与货架 How to 立即生效。
               </>
             )

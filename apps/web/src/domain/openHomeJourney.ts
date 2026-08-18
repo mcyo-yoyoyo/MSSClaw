@@ -29,7 +29,7 @@ export function openMeCenter() {
   useAppViewStore.getState().setAppView('me');
 }
 
-/** 打开货架（外部 / 内部 / MSS工具集市） */
+/** 打开货架（外部 / 内部 / AI工具Hub） */
 export function openMarketShelf(kind: MarketShelfKind = 'external', opts?: HomeJourneyOpts) {
   if (opts?.businessId) {
     useMarketFilterStore.getState().setBusinessFilter(opts.businessId);
@@ -40,7 +40,7 @@ export function openMarketShelf(kind: MarketShelfKind = 'external', opts?: HomeJ
 
 /**
  * 从首页 / 外部精选 / 公司推荐点击左栏领域或区域：
- * 跳转 MSS工具集市，并带上组织轴筛选（场景回到全部分类卡）。
+ * 跳转 AI工具Hub，并带上组织轴筛选（场景回到全部分类卡）。
  */
 export function openMssMarketHub(opts?: {
   deptId?: DeptId | null;

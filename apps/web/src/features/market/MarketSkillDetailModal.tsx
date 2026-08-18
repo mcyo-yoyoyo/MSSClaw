@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { SkillAvatar } from '@/components/brand/SkillAvatar';
 import { CenterModal } from '@/components/center/CenterShell';
+import { CaseDocumentPreview } from '@/components/content/CaseDocumentPreview';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
 import { getSkillBusinessLabel } from '@/domain/skillBusinessScenarios';
@@ -22,7 +23,7 @@ import {
   resolveSkillExecutionTrust,
 } from '@/domain/executionTrust';
 
-type DetailTab = 'overview' | 'notes' | 'guide' | 'files' | 'versions' | 'reviews' | 'security';
+type DetailTab = 'overview' | 'guide' | 'files' | 'versions' | 'reviews' | 'security';
 
 /** MVP：评价模块暂不上线，Tab 保留占位。改为 true 即可恢复完整评价 UI。 */
 const SKILL_REVIEWS_MVP_ENABLED = false;
@@ -91,6 +92,7 @@ export function MarketSkillDetailModal({
   const updatedBy = skill.updatedBy || skill.publisher || skill.author || '—';
   const usageNotes = skill.usageNotes?.trim() || '';
   const cases = skill.cases?.filter((c) => c.title?.trim()) ?? [];
+  const caseAttachments = skill.caseAttachments ?? [];
   const env = skill.envInfo;
   const trust = resolveSkillExecutionTrust(canRun);
   const trustMeta = EXECUTION_TRUST_META[trust];
@@ -126,7 +128,6 @@ export function MarketSkillDetailModal({
 
   const tabs: { id: DetailTab; label: string; badge?: string }[] = [
     { id: 'overview', label: '概览' },
-    { id: 'notes', label: '使用须知' },
     { id: 'guide', label: '快速上手' },
     { id: 'files', label: `文件 ${skillFiles.length}` },
     { id: 'versions' as const, label: '版本' },
@@ -357,8 +358,8 @@ export function MarketSkillDetailModal({
               </div>
             ) : null}
 
-            {tab === 'notes' ? (
-              <div className="space-y-4">
+            {tab === 'guide' ? (
+              <div className="space-y-5">
                 {usageNotes ? (
                   <section className="rounded-2xl border border-amber-100 bg-amber-50/50 p-4">
                     <h4 className="mb-2 text-[12px] font-semibold text-amber-900">运营录入 · 使用须知</h4>
@@ -386,11 +387,6 @@ export function MarketSkillDetailModal({
                     <li>勿在提示中粘贴未脱敏的客户隐私与密钥。</li>
                   </ul>
                 </section>
-              </div>
-            ) : null}
-
-            {tab === 'guide' ? (
-              <div className="space-y-5">
                 <section className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-4">
                   <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">调用方式</h4>
                   <p className="text-[12px] leading-relaxed text-zinc-600">
@@ -436,7 +432,7 @@ export function MarketSkillDetailModal({
                   </ul>
                 </details>
                 <section>
-                  <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">落地案例与输入输出</h4>
+                  <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">使用案例</h4>
                   {cases.length ? (
                     <div className="space-y-3">
                       {cases.map((c, i) => (
@@ -452,6 +448,19 @@ export function MarketSkillDetailModal({
                       暂无上传案例素材
                     </p>
                   )}
+
+                  {caseAttachments.length ? (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-[11px] font-medium text-zinc-500">案例附件</p>
+                      {caseAttachments.map((file, i) => (
+                        <CaseDocumentPreview
+                          key={`${file.blobId ?? file.name}-${i}`}
+                          file={file}
+                          variant="default"
+                        />
+                      ))}
+                    </div>
+                  ) : null}
                 </section>
               </div>
             ) : null}

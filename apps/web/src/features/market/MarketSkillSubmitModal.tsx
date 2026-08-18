@@ -71,8 +71,10 @@ export function MarketSkillSubmitModal({
     setCommand('');
     setInstructions('');
     setBusinessId(businessFilter === 'all' ? 'S1' : businessFilter);
-    setOwnerDeptIds((user?.deptIds ?? []).slice(0, 1) as DeptId[]);
-    setOwnerRegionId((user?.regionId ?? null) as RegionId | null);
+    // 归属职能 / 区域不再按登录人预填：提报的技能未必属于本人所在职能，
+    // 预填会被当成已确认的选择而直接提交
+    setOwnerDeptIds([]);
+    setOwnerRegionId(null);
     setVisibility('org');
     setPackName(null);
     setParsedExtra(null);
@@ -286,12 +288,13 @@ export function MarketSkillSubmitModal({
           </FormSelect>
         </FormField>
         <OwnershipFormFields
+          singleDept
           ownerDeptIds={ownerDeptIds}
           ownerRegionId={ownerRegionId}
           sourceType="internal"
           visibility={visibility}
           onChange={(patch) => {
-            if (patch.ownerDeptIds) setOwnerDeptIds((patch.ownerDeptIds as DeptId[]).slice(0, 1));
+            if (patch.ownerDeptIds) setOwnerDeptIds(patch.ownerDeptIds as DeptId[]);
             if (patch.ownerRegionId !== undefined) {
               setOwnerRegionId(patch.ownerRegionId as RegionId | null);
             }

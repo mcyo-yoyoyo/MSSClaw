@@ -1,4 +1,4 @@
-/** 公司工具推荐默认华为 Logo（取自华为官网 favicon-logo.svg，适配 GitHub Pages base） */
+/** 内部办公推荐默认华为 Logo（取自华为官网 favicon-logo.svg，适配 GitHub Pages base） */
 export function companyToolLogoUrl(): string {
   const base = String(import.meta.env.BASE_URL || '/');
   const normalized = base.endsWith('/') ? base : `${base}/`;

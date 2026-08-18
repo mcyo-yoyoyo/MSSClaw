@@ -166,7 +166,7 @@ export function PortalMarketFeaturedPanel() {
         <strong className="font-semibold text-zinc-700">外部工具精选</strong>
         ：上架选品、场景标题与精选置顶（每货架最多 {MARKET_FEATURED_MAX}{' '}
         个）。分类芯片请到「外精选分类」维护。
-        <strong className="ml-1 font-semibold text-zinc-700">公司工具推荐</strong>
+        <strong className="ml-1 font-semibold text-zinc-700">内部办公推荐</strong>
         ：下方可配办公场景字典；链接/Logo 在「配置工具」，How to 在「工具 How to」。
         <strong className="ml-1 font-semibold text-zinc-700">MSS 集市</strong>
         ：仅场景卡置顶。
