@@ -7,6 +7,8 @@ import { MARKET_SHELF_META, type MarketShelfKind } from '@/domain/marketShelf';
 import { openMarketShelf, openMarketToolDetail } from '@/domain/openHomeJourney';
 import { ROLE_DESCRIPTIONS, ROLE_LABELS } from '@/domain/rbac';
 import { AiTasksPage } from '@/features/ai-tasks/AiTasksPage';
+import { MarketSkillDetailModal } from '@/features/market/MarketSkillDetailModal';
+import { CatalogAgentDetailModal } from '@/features/market/CatalogAgentDetailModal';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
@@ -68,6 +70,10 @@ export function MePage() {
   const user = useSessionStore((s) => s.user);
   const showTasks = isViewEnabled('ai-tasks');
 
+  /** 我的提交里的 Skill / Agent 用各自的详情弹窗打开（工具详情查不到这些 id） */
+  const [submissionDetail, setSubmissionDetail] = useState<
+    { kind: 'skill' | 'agent'; id: string } | null
+  >(null);
   const [kindFilter, setKindFilter] = useState<KindFilter>('all');
   const [tab, setTab] = useState<MeTab>(
     appView === 'ai-tasks' && showTasks ? 'tasks' : 'favorites',
@@ -267,7 +273,19 @@ export function MePage() {
                 <SubmissionCard
                   key={`${item.kind}:${item.id}`}
                   item={item}
-                  onOpen={() => openMarketToolDetail(item.id, 'projects')}
+                  onOpen={() => {
+                    const exists =
+                      item.kind === 'skill'
+                        ? skills.some((s) => s.id === item.id)
+                        : agents.some((a) => a.id === item.id);
+                    if (!exists) {
+                      showToast(
+                        `该${item.kind === 'skill' ? ' Skill ' : ' Agent '}已不在当前可见范围内，可能已被删除或调整了可见性`,
+                      );
+                      return;
+                    }
+                    setSubmissionDetail({ kind: item.kind, id: item.id });
+                  }}
                 />
               ))}
             </MeShelfGrid>
@@ -318,6 +336,39 @@ export function MePage() {
           )}
         </div>
       </PageCanvas>
+
+      {submissionDetail?.kind === 'skill'
+        ? (() => {
+            const skill = skills.find((s) => s.id === submissionDetail.id);
+            if (!skill) return null;
+            return (
+              <MarketSkillDetailModal
+                skill={skill}
+                // 个人中心为只读查看：不承载执行入口，避免绕过货架的可见性与审批状态
+                canRun={false}
+                onClose={() => setSubmissionDetail(null)}
+                onRun={() => setSubmissionDetail(null)}
+                onToast={showToast}
+              />
+            );
+          })()
+        : null}
+
+      {submissionDetail?.kind === 'agent'
+        ? (() => {
+            const agent = agents.find((a) => a.id === submissionDetail.id);
+            if (!agent) return null;
+            return (
+              <CatalogAgentDetailModal
+                agent={agent}
+                canRun={false}
+                onClose={() => setSubmissionDetail(null)}
+                onRun={() => setSubmissionDetail(null)}
+                onToast={showToast}
+              />
+            );
+          })()
+        : null}
     </div>
   );
 }

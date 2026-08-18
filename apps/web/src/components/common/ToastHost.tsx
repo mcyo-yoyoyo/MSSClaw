@@ -51,7 +51,7 @@ export function ToastHost({ sources }: ToastHostProps) {
   if (!active) return null;
 
   return (
-    <div className="toast-enter pointer-events-auto fixed bottom-5 right-5 z-[110] flex max-w-sm items-center gap-3 rounded-2xl border border-black/[0.06] bg-[#1d1d1f]/95 px-4 py-3 text-[13px] font-medium text-white shadow-2xl backdrop-blur-md">
+    <div className="toast-enter pointer-events-auto fixed bottom-5 right-5 z-[200] flex max-w-sm items-center gap-3 rounded-2xl border border-black/[0.06] bg-[#1d1d1f]/95 px-4 py-3 text-[13px] font-medium text-white shadow-2xl backdrop-blur-md">
       <span className="flex-1 leading-snug">{active.message}</span>
       <button
         type="button"
