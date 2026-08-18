@@ -36,6 +36,7 @@ export function OfficeSceneOpsPage() {
   const addEntry = useInternalOfficeSceneCatalogStore((s) => s.addEntry);
   const removeEntry = useInternalOfficeSceneCatalogStore((s) => s.removeEntry);
   const toast = useInternalOfficeSceneCatalogStore((s) => s.toast);
+  const toastTone = useInternalOfficeSceneCatalogStore((s) => s.toastTone);
   const dismissToast = useInternalOfficeSceneCatalogStore((s) => s.dismissToast);
 
   const [selectedId, setSelectedId] = useState<InternalOfficeSceneId | null>(null);
@@ -46,10 +47,11 @@ export function OfficeSceneOpsPage() {
   }, [hydrate]);
 
   useEffect(() => {
-    if (!toast) return;
+    // 保存失败必须停留，让运营看到改动没落库；成功/进行中才自动消失
+    if (!toast || toastTone === 'error') return;
     const t = window.setTimeout(() => dismissToast(), 2400);
     return () => window.clearTimeout(t);
-  }, [toast, dismissToast]);
+  }, [toast, toastTone, dismissToast]);
 
   /** 默认选中第一个场景；选中项被删除或未加载时回落 */
   useEffect(() => {
@@ -142,8 +144,37 @@ export function OfficeSceneOpsPage() {
         <StatCardGrid items={stats} />
 
         {toast ? (
-          <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-800">
-            {toast}
+          <div
+            role={toastTone === 'error' ? 'alert' : 'status'}
+            className={cn(
+              'mb-3 flex items-start gap-2 rounded-xl border px-3 py-2 text-[12px]',
+              toastTone === 'error'
+                ? 'border-rose-200 bg-rose-50 text-rose-800'
+                : toastTone === 'pending'
+                  ? 'border-zinc-200 bg-zinc-50 text-zinc-600'
+                  : 'border-emerald-200 bg-emerald-50 text-emerald-800',
+            )}
+          >
+            <i
+              className={cn(
+                'mt-0.5 text-[11px]',
+                toastTone === 'error'
+                  ? 'fa-solid fa-triangle-exclamation'
+                  : toastTone === 'pending'
+                    ? 'fa-solid fa-spinner fa-spin'
+                    : 'fa-solid fa-circle-check',
+              )}
+            />
+            <span className="flex-1">{toast}</span>
+            {toastTone === 'error' ? (
+              <button
+                type="button"
+                onClick={dismissToast}
+                className="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium text-rose-700 hover:bg-rose-100"
+              >
+                知道了
+              </button>
+            ) : null}
           </div>
         ) : null}
 

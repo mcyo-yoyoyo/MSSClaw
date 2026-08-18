@@ -16,6 +16,7 @@ import {
   type BusinessScenarioId,
 } from '@/domain/businessScenarios';
 import { useBusinessScenarioCatalogStore } from '@/stores/businessScenarioCatalogStore';
+import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
 import {
   agentMatchesHubFilters,
   countAgentHubFilters,
@@ -191,6 +192,8 @@ export function MarketShelfPage({
     hydrateFavorites();
     hydrateHidden();
     useBusinessScenarioCatalogStore.getState().hydrate();
+    // 公司工具推荐的办公场景网格读该字典；启动时若未连后端会是空的，进页面再拉一次
+    useInternalOfficeSceneCatalogStore.getState().hydrate();
     hydrateBuildStatsCopy();
   }, [hydrateFeaturedPins, hydrateFavorites, hydrateHidden, hydrateBuildStatsCopy]);
 
