@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import { SkillAvatar } from '@/components/brand/SkillAvatar';
 import { CenterModal } from '@/components/center/CenterShell';
 import { CaseDocumentPreview } from '@/components/content/CaseDocumentPreview';
+import { SkillPackageTree } from '@/components/market/SkillPackageTree';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
 import { getSkillBusinessLabel } from '@/domain/skillBusinessScenarios';
@@ -144,7 +145,7 @@ export function MarketSkillDetailModal({
   const tabs: { id: DetailTab; label: string; badge?: string }[] = [
     { id: 'overview', label: '概览' },
     { id: 'guide', label: '快速上手' },
-    { id: 'files', label: `文件 ${skillFiles.length}` },
+    { id: 'files', label: '文件' },
     { id: 'versions' as const, label: '版本' },
     {
       id: 'reviews',
@@ -480,11 +481,15 @@ export function MarketSkillDetailModal({
               </div>
             ) : null}
 
-            {tab === 'files' ? (
+            {tab === 'files' && skill.packageBlob ? (
+              <SkillPackageTree source={skill.packageBlob} />
+            ) : null}
+
+            {tab === 'files' && !skill.packageBlob ? (
               <div className="grid min-h-[320px] overflow-hidden rounded-2xl border border-zinc-200 bg-white sm:grid-cols-[210px_minmax(0,1fr)]">
                 <div className="border-b border-zinc-100 bg-zinc-50/70 p-2 sm:border-b-0 sm:border-r">
                   <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
-                    Skill 文件包 · {skillFiles.length} 个文件
+                    Skill 文件包 · {skillFiles.length} 个文件（未上传压缩包，以下为按配置生成）
                   </p>
                   {skillFiles.map((file) => (
                     <button

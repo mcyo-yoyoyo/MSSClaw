@@ -226,6 +226,18 @@ export interface PrototypeSkillSeed extends AssetOwnershipFields {
    * 视频类体积普遍超限，暂不开放。
    */
   caseAttachments?: PortalCasePreviewFile[];
+  /**
+   * 上传的 Skill 压缩包：只存 blob 引用，不把解压内容塞进这条 JSON——
+   * 包内可能有几十个文件，展开后会把 CenterRecord 撑爆。
+   * 详情页「文件」按需拉取并在浏览器内解压成文件树。
+   */
+  packageBlob?: {
+    id: string;
+    url: string;
+    name: string;
+    size: number;
+    uploadedAt: string;
+  };
   /** 环境与适配信息 */
   envInfo?: SkillEnvInfo;
   /** 版本清单（完整产品；当前版本仍以 version 字段为准） */
