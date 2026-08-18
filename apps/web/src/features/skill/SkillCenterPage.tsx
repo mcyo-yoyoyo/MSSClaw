@@ -71,6 +71,13 @@ function skillMonthStamp(s: PrototypeSkillSeed): string | null {
   return m?.[1] ?? null;
 }
 
+/** 看板排序三态的图标与文案；沿用 FA6 的排序图标，避免 ▲▼ 字形对不齐 */
+const DIST_SORT_META: Record<DistSort, { label: string; icon: string }> = {
+  original: { label: '默认', icon: 'fa-arrow-up-arrow-down' },
+  asc: { label: '升序', icon: 'fa-arrow-up-short-wide' },
+  desc: { label: '降序', icon: 'fa-arrow-down-wide-short' },
+};
+
 export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
   const {
     skills,
@@ -298,12 +305,17 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
                 <button
                   type="button"
                   onClick={() => setDistSort((value) => value === 'original' ? 'asc' : value === 'asc' ? 'desc' : 'original')}
-                  className="flex flex-col items-center rounded-md px-1.5 py-0.5 leading-none hover:bg-zinc-100"
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-semibold transition',
+                    distSort === 'original'
+                      ? 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:text-zinc-800'
+                      : 'border-zinc-900 bg-zinc-900 text-white',
+                  )}
                   title="切换排序：原排序 → 升序 → 降序"
-                  aria-label="切换看板排序"
+                  aria-label={`切换看板排序，当前${DIST_SORT_META[distSort].label}`}
                 >
-                  <span className={distSort === 'asc' ? 'text-sky-600' : 'text-zinc-300'}>▲</span>
-                  <span className={distSort === 'desc' ? 'text-sky-600' : 'text-zinc-300'}>▼</span>
+                  <i className={cn('fa-solid text-[10px]', DIST_SORT_META[distSort].icon)} />
+                  {DIST_SORT_META[distSort].label}
                 </button>
               ) : null}
               <div className="flex flex-wrap gap-1 rounded-lg bg-zinc-100/80 p-0.5">
