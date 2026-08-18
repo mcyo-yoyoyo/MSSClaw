@@ -172,7 +172,7 @@ export interface PrototypeSkillSeed extends AssetOwnershipFields {
    */
   published: boolean;
   /**
-   * 精选露出：出现在「MSS工具集市 · 场景技能」。
+   * 精选露出：出现在「AI工具hub · 场景技能」。
    * 未设置时回退静态 HOME_BUSINESS_SKILLS 白名单。
    * @deprecated 语义等同 featuredInMssMarket；保留字段兼容旧数据
    */
@@ -269,7 +269,7 @@ export interface PrototypeToolSeed extends AssetOwnershipFields {
   /**
    * 上架到哪一业务货架。
    * - external → 外部工具精选
-   * - internal → 公司工具推荐
+   * - internal → 内部办公推荐
    * - none → 仅配置目录
    * 缺省按 sourceType + 标签（ai-saas / hw-internal）推断。
    */

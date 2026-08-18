@@ -89,7 +89,7 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   },
   {
     id: 'market-internal',
-    label: '公司工具推荐',
+    label: '内部办公推荐',
     subtitle: '公司办公工具货架 · 顶栏入口',
     icon: 'fa-building',
     section: 'workspace',
@@ -97,7 +97,7 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   },
   {
     id: 'market-projects',
-    label: 'MSS工具集市',
+    label: 'AI工具hub',
     subtitle: 'MSS 建设集市 · 顶栏入口',
     icon: 'fa-layer-group',
     section: 'workspace',

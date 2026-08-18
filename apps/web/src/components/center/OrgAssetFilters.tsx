@@ -322,7 +322,7 @@ export function OwnershipFormFields({
   sourceType: 'internal' | 'external';
   visibility?: 'public' | 'org' | 'private';
   homepageUrl?: string;
-  /** 非外部来源也需要访问链接时打开（如公司工具推荐，前台场景卡要跳转） */
+  /** 非外部来源也需要访问链接时打开（如内部办公推荐，前台场景卡要跳转） */
   alwaysShowHomepage?: boolean;
   /**
    * 归属职能单选：点选即替换，再点当前项清空。

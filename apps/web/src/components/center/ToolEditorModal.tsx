@@ -322,7 +322,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
               }}
             >
               <option value="external">外部工具精选</option>
-              <option value="internal">公司工具推荐</option>
+              <option value="internal">内部办公推荐</option>
               <option value="none">不上架（仅配置目录 / 连接器）</option>
             </FormSelect>
           </FormField>
@@ -463,7 +463,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
             label="品牌 Logo"
             hint={
               shelf === 'internal' || form.marketShelf === 'internal'
-                ? '公司工具推荐统一使用华为 Logo，无需单独上传。'
+                ? '内部办公推荐统一使用华为 Logo，无需单独上传。'
                 : '外精选展示用。可上传；不传则按官网地址自动取 favicon。'
             }
           >
@@ -582,7 +582,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
           {shelf !== 'none' ? (
             <p className="rounded-lg border border-emerald-100 bg-emerald-50/70 px-2.5 py-1.5 text-[11px] text-emerald-800">
               当前货架：
-              {shelf === 'external' ? '外部工具精选' : '公司工具推荐（场景引用）'}
+              {shelf === 'external' ? '外部工具精选' : '内部办公推荐（场景引用）'}
               {form.marketTitle?.trim() ? ` · ${form.marketTitle.trim()}` : ''}
             </p>
           ) : (
@@ -614,7 +614,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
                 >
                   <option value="none">不上架（仅配置目录）</option>
                   <option value="external">外部工具精选</option>
-                  <option value="internal">公司工具推荐</option>
+                  <option value="internal">内部办公推荐</option>
                 </FormSelect>
                 <p className="mt-1 text-[11px] leading-snug text-zinc-500">{MARKET_SHELF_SLOT_HINT}</p>
               </FormField>

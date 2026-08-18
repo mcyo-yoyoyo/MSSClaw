@@ -8,7 +8,7 @@ export const CAPABILITY_SHELF_HINT =
   '能力上架后进入目录；外部工具再配置「上架货架 / 精选置顶」才会出现在外精选橱窗。公司推荐前台为办公场景，请维护工具链接与 How to。';
 
 export const DO_TASK_FEATURED_HINT =
-  '精选露出到「MSS工具集市 · 场景技能」（须同时已上架可调用并选择业务场景）。未勾选则仅留在配置目录。';
+  '精选露出到「AI工具hub · 场景技能」（须同时已上架可调用并选择业务场景）。未勾选则仅留在配置目录。';
 
 export const FIND_CASES_FEATURED_HINT =
   '外精选露出请在「门户运营 · 货架运营」用精选置顶配置；本字段已停用，保留仅兼容旧数据。';
