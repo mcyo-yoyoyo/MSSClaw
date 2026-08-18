@@ -16,6 +16,9 @@ import {
   type BusinessScenarioId,
 } from '@/domain/businessScenarios';
 import { DO_TASK_FEATURED_HINT } from '@/domain/capabilityShelf';
+import { uploadWorkspaceBlob } from '@/api/blobApi';
+import { currentWorkspaceId } from '@/api/platformDocsApi';
+import type { PortalCasePreviewFile } from '@/domain/prototype/portalContent';
 import { resolveSkillBusinessScenario, resolveSkillFeaturedInDoTask } from '@/domain/skillBusinessScenarios';
 import {
   getCurrentDeptIds,
@@ -86,6 +89,7 @@ function emptySkill(): PrototypeSkillSeed {
     planSteps: [],
     usageNotes: '',
     cases: [],
+    caseAttachments: [],
     envInfo: {
       dependencies: '',
       framework: '',
@@ -117,6 +121,7 @@ function normalizeSkillForm(skill: PrototypeSkillSeed): PrototypeSkillSeed {
     planSteps: Array.isArray(skill.planSteps) ? skill.planSteps : [],
     usageNotes: skill.usageNotes ?? '',
     cases: Array.isArray(skill.cases) ? skill.cases : [],
+    caseAttachments: Array.isArray(skill.caseAttachments) ? skill.caseAttachments : [],
     envInfo: {
       dependencies: skill.envInfo?.dependencies ?? '',
       framework: skill.envInfo?.framework ?? '',
@@ -154,6 +159,7 @@ interface SkillEditorModalProps {
 export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   const { skills, upsertSkill, showToast } = useMarketplaceStore();
   const [form, setForm] = useState<PrototypeSkillSeed>(emptySkill());
+  const [uploadingCase, setUploadingCase] = useState(false);
   const [step, setStep] = useState<WizardStep>(0);
   const [wantPublish, setWantPublish] = useState(false);
   const [packName, setPackName] = useState<string | null>(null);
@@ -362,6 +368,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
           output: c.output?.trim() || undefined,
         }))
         .filter((c) => c.title),
+      caseAttachments: (form.caseAttachments ?? []).length ? form.caseAttachments : undefined,
       envInfo: hasEnv ? envInfo : undefined,
       author: prev?.author ?? userName,
       publisher: form.publisher || userName,
@@ -740,6 +747,94 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                   }
                   placeholder="周报生成|输入本周要点…|输出结构化周报…"
                 />
+              </FormField>
+              <FormField
+                label="使用案例附件"
+                hint="支持 PDF / PPTX；详情「快速上手 · 使用案例」可在线预览"
+              >
+                <div className="space-y-2">
+                  <input
+                    type="file"
+                    accept=".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                    disabled={uploadingCase}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (!file) return;
+                      const lower = file.name.toLowerCase();
+                      if (!lower.endsWith('.pdf') && !lower.endsWith('.pptx')) {
+                        showToast('仅支持 PDF / PPTX 附件');
+                        return;
+                      }
+                      setUploadingCase(true);
+                      try {
+                        const dataUrl = await new Promise<string>((resolve, reject) => {
+                          const reader = new FileReader();
+                          reader.onload = () => resolve(String(reader.result ?? ''));
+                          reader.onerror = () => reject(reader.error ?? new Error('file_read_failed'));
+                          reader.readAsDataURL(file);
+                        });
+                        const uploaded = await uploadWorkspaceBlob(currentWorkspaceId(), {
+                          name: file.name,
+                          mimeType: file.type || 'application/octet-stream',
+                          dataUrl,
+                        });
+                        const item: PortalCasePreviewFile = {
+                          name: uploaded.name,
+                          mimeType: uploaded.mimeType,
+                          size: uploaded.size,
+                          url: uploaded.url,
+                          blobId: uploaded.id,
+                          kind: lower.endsWith('.pdf') ? 'pdf' : 'pptx',
+                        };
+                        setForm((f) => ({
+                          ...f,
+                          caseAttachments: [...(f.caseAttachments ?? []), item],
+                        }));
+                        showToast(`已上传附件：${uploaded.name}`);
+                      } catch {
+                        showToast('附件上传失败，请检查后端连接后重试');
+                      } finally {
+                        setUploadingCase(false);
+                      }
+                    }}
+                    className="block w-full text-[12px] file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-[12px] file:font-medium file:text-white"
+                  />
+                  {uploadingCase ? (
+                    <p className="text-[11px] text-zinc-500">
+                      <i className="fa-solid fa-spinner fa-spin mr-1" />
+                      上传中…
+                    </p>
+                  ) : null}
+                  {(form.caseAttachments ?? []).map((att, idx) => (
+                    <div
+                      key={`${att.blobId ?? att.name}-${idx}`}
+                      className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50/80 px-2.5 py-1.5"
+                    >
+                      <i
+                        className={cn(
+                          'text-[12px]',
+                          att.kind === 'pdf'
+                            ? 'fa-solid fa-file-pdf text-rose-500'
+                            : 'fa-solid fa-file-powerpoint text-orange-500',
+                        )}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-[12px] text-zinc-700">{att.name}</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            caseAttachments: (f.caseAttachments ?? []).filter((_, i) => i !== idx),
+                          }))
+                        }
+                        className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-zinc-500 transition hover:bg-rose-50 hover:text-rose-600"
+                      >
+                        移除
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </FormField>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <FormField label="环境依赖">

@@ -3,6 +3,7 @@
 import type { AgentCapabilityTypeId } from '@/domain/agentHubFilters';
 import type { BusinessScenarioId } from '@/domain/businessScenarios';
 import type { ToolDeliveryForm } from '@/domain/externalToolDelivery';
+import type { PortalCasePreviewFile } from '@/domain/prototype/portalContent';
 import type {
   ExternalToolTypeId,
   ToolRegion,
@@ -198,8 +199,14 @@ export interface PrototypeSkillSeed extends AssetOwnershipFields {
   planSteps?: string[];
   /** 使用须知（前置条件 / 权限 / 注意 / 限制，运营录入） */
   usageNotes?: string;
-  /** 落地案例（标题、输入、输出，运营录入） */
+  /** 使用案例（标题、输入、输出，运营录入） */
   cases?: SkillCaseItem[];
+  /**
+   * 使用案例附件（详情「快速上手 · 使用案例」可在线预览）。
+   * 仅支持 PDF / PPTX：blob 上传走 JSON base64，受 JSON_BODY_LIMIT 限制，
+   * 视频类体积普遍超限，暂不开放。
+   */
+  caseAttachments?: PortalCasePreviewFile[];
   /** 环境与适配信息 */
   envInfo?: SkillEnvInfo;
   /** 版本清单（完整产品；当前版本仍以 version 字段为准） */

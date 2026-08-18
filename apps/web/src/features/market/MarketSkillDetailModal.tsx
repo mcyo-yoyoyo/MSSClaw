@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { SkillAvatar } from '@/components/brand/SkillAvatar';
 import { CenterModal } from '@/components/center/CenterShell';
+import { CaseDocumentPreview } from '@/components/content/CaseDocumentPreview';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
 import { getSkillBusinessLabel } from '@/domain/skillBusinessScenarios';
@@ -91,6 +92,7 @@ export function MarketSkillDetailModal({
   const updatedBy = skill.updatedBy || skill.publisher || skill.author || '—';
   const usageNotes = skill.usageNotes?.trim() || '';
   const cases = skill.cases?.filter((c) => c.title?.trim()) ?? [];
+  const caseAttachments = skill.caseAttachments ?? [];
   const env = skill.envInfo;
   const trust = resolveSkillExecutionTrust(canRun);
   const trustMeta = EXECUTION_TRUST_META[trust];
@@ -446,6 +448,19 @@ export function MarketSkillDetailModal({
                       暂无上传案例素材
                     </p>
                   )}
+
+                  {caseAttachments.length ? (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-[11px] font-medium text-zinc-500">案例附件</p>
+                      {caseAttachments.map((file, i) => (
+                        <CaseDocumentPreview
+                          key={`${file.blobId ?? file.name}-${i}`}
+                          file={file}
+                          variant="default"
+                        />
+                      ))}
+                    </div>
+                  ) : null}
                 </section>
               </div>
             ) : null}
