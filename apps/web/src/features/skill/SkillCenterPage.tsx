@@ -9,6 +9,14 @@ import {
 } from '@/domain/orgTaxonomy';
 import { SKILL_VISIBILITY_SCOPE_OPTIONS } from '@/domain/assetFilters';
 import {
+  resolveSkillLifecycleStatus,
+  skillMatchesLifecycleFilter,
+  SKILL_LIFECYCLE_FILTER_OPTIONS,
+  SKILL_LIFECYCLE_LABELS,
+  type SkillLifecycleFilter,
+} from '@/domain/skillLifecycleStatus';
+import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
+import {
   listVisibleBusinessScenarioCategories,
 } from '@/domain/businessScenarios';
 import { resolveSkillBusinessScenario, getSkillBusinessLabel } from '@/domain/skillBusinessScenarios';
@@ -97,13 +105,23 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
     skill: PrototypeSkillSeed;
     kind: SkillOpsRequestKind;
   } | null>(null);
+  const [lifecycleFilter, setLifecycleFilter] = useState<SkillLifecycleFilter>('all');
   const [distTab, setDistTab] = useState<DistTab>('dept');
   const [distSort, setDistSort] = useState<DistSort>('original');
   const [scanGate, setScanGate] = useState<SkillSecurityScanGateMode>(() => getSecurityScanGateMode());
   useEffect(() => {
     setScanGate(getSecurityScanGateMode());
   }, []);
-  const list = filteredSkills();
+  const approvals = useAssetApprovalStore((s) => s.history);
+  const hydrateApprovals = useAssetApprovalStore((s) => s.hydrate);
+  useEffect(() => {
+    hydrateApprovals();
+  }, [hydrateApprovals]);
+
+  const list = useMemo(
+    () => filteredSkills().filter((s) => skillMatchesLifecycleFilter(s, approvals, lifecycleFilter)),
+    [filteredSkills, approvals, lifecycleFilter],
+  );
 
   const stats = useMemo(() => {
     const total = skills.length;
@@ -166,6 +184,8 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
         badges.push({ label: getRegionLabel(s.ownerRegionId), tone: 'region' });
       }
       if (bizLabel) badges.push({ label: bizLabel, tone: 'type' });
+      // 上架状态放首位：筛选后需要一眼看出每张卡属于哪一档
+      badges.unshift({ label: SKILL_LIFECYCLE_LABELS[resolveSkillLifecycleStatus(s, approvals)] });
       return {
         skill: s,
         card: {
@@ -191,7 +211,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
         },
       };
     });
-  }, [list, getEngagement, engagementById]);
+  }, [list, approvals, getEngagement, engagementById]);
 
   const handleInvoke = (skill: PrototypeSkillSeed) => {
     if (!skill.published) {
@@ -405,6 +425,22 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
           onBusinessChange={setSkillBusinessFilter}
           onScopeChange={setSkillScopeFilter}
           showScope
+          extra={
+            <label className="flex items-center gap-1.5">
+              <span className="shrink-0 text-[11px] text-zinc-500">上架状态</span>
+              <select
+                value={lifecycleFilter}
+                onChange={(e) => setLifecycleFilter(e.target.value as SkillLifecycleFilter)}
+                className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-[12px] text-zinc-700 outline-none transition hover:border-zinc-300 focus:border-zinc-400"
+              >
+                {SKILL_LIFECYCLE_FILTER_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          }
         />
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
