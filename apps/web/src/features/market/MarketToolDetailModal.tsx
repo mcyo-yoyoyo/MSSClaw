@@ -89,8 +89,8 @@ export function MarketToolDetailModal({
   const openUrl = () => {
     if (!tool) return;
     if (!tool.homepageUrl || tool.homepageUrl === '#') {
+      // 没有可用入口时不计入跳转量，否则「跳转官网」会被无效点击灌水
       showToast('暂无可用入口');
-      bumpUse(tool.id);
       return;
     }
     const win = window.open(tool.homepageUrl, '_blank', 'noopener,noreferrer');

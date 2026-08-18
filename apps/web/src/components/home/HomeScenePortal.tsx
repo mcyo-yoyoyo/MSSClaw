@@ -355,6 +355,7 @@ export function HomeScenePortal({
     }
     const win = window.open(tool.homepageUrl, '_blank', 'noopener,noreferrer');
     useMarketplaceStore.getState().bumpToolInvokes(toolId);
+    useContentEngagementStore.getState().bumpUse(toolId);
     if (!win) {
       showToast('浏览器拦截了弹窗，请允许本站弹窗后重试，或复制链接手动打开');
       return;
