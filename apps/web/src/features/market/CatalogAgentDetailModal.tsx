@@ -266,7 +266,7 @@ export function CatalogAgentDetailModal({
 
   const environment = agent.environment;
   const platforms = nonEmpty(
-    environment?.platforms?.length ? environment.platforms : ['MSS AI提效作战平台'],
+    environment?.platforms?.length ? environment.platforms : ['MSS AI提效平台'],
   );
   const usageModes = nonEmpty(
     environment?.usageModes?.length
