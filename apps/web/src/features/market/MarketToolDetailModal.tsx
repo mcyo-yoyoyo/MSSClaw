@@ -9,6 +9,10 @@ import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
+import {
+  isDownloadOnlyTool,
+  TOOL_EXTERNAL_WARNING_COPY,
+} from '@/domain/externalToolDelivery';
 import { useRecentMarketStore } from '@/stores/recentMarketStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 
@@ -141,6 +145,8 @@ export function MarketToolDetailModal({
   }
 
   const whatItIs = pickWhatItIs(tool);
+  const warningCopy =
+    TOOL_EXTERNAL_WARNING_COPY[isDownloadOnlyTool(tool) ? 'download_only' : 'web'];
   const kindLabel = kind === 'internal' ? '公司工具' : '外部工具';
   const hasHome = Boolean(tool.homepageUrl && tool.homepageUrl !== '#');
   const hasDocs = Boolean(tool.docsUrl?.trim());
@@ -355,10 +361,10 @@ export function MarketToolDetailModal({
           <i className="fa-solid fa-shield-halved mt-0.5 text-[16px] text-rose-600" />
           <div>
             <p className="text-[14px] font-semibold text-zinc-900">
-              禁止将公司内部信息上传到外部AI网站
+              {warningCopy.title}
             </p>
             <p className="mt-1.5 text-[12px] leading-relaxed text-zinc-600">
-              请确认即将处理的内容不包含公司内部、涉密、个人隐私或未经授权的数据。
+              {warningCopy.body}
             </p>
           </div>
         </div>
