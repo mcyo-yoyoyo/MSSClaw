@@ -90,6 +90,7 @@ function emptySkill(): PrototypeSkillSeed {
     usageNotes: '',
     cases: [],
     caseAttachments: [],
+    packageBlob: undefined,
     envInfo: {
       dependencies: '',
       framework: '',
@@ -122,6 +123,7 @@ function normalizeSkillForm(skill: PrototypeSkillSeed): PrototypeSkillSeed {
     usageNotes: skill.usageNotes ?? '',
     cases: Array.isArray(skill.cases) ? skill.cases : [],
     caseAttachments: Array.isArray(skill.caseAttachments) ? skill.caseAttachments : [],
+    packageBlob: skill.packageBlob,
     envInfo: {
       dependencies: skill.envInfo?.dependencies ?? '',
       framework: skill.envInfo?.framework ?? '',
@@ -160,6 +162,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   const { skills, upsertSkill, showToast } = useMarketplaceStore();
   const [form, setForm] = useState<PrototypeSkillSeed>(emptySkill());
   const [uploadingCase, setUploadingCase] = useState(false);
+  const [uploadingPackage, setUploadingPackage] = useState(false);
   const [step, setStep] = useState<WizardStep>(0);
   const [wantPublish, setWantPublish] = useState(false);
   const [packName, setPackName] = useState<string | null>(null);
@@ -230,6 +233,47 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     showToast(`已解析 Skill 包「${fileLabel}」，请确认信息与范围`);
   };
 
+  /**
+   * 把 zip 原包存进 blob 并写入 packageBlob，供详情页「文件」解压成目录树。
+   * 返回是否成功，调用方据此决定提示文案。
+   */
+  const storePackageBlob = async (file: File): Promise<boolean> => {
+    // blob 走 JSON base64，膨胀约 33%；提前拦住必然失败的大包
+    if (file.size > 12 * 1024 * 1024) {
+      showToast('包体积超过 12MB，请精简后再上传');
+      return false;
+    }
+    setUploadingPackage(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ''));
+        reader.onerror = () => reject(reader.error ?? new Error('read_failed'));
+        reader.readAsDataURL(file);
+      });
+      const uploaded = await uploadWorkspaceBlob(currentWorkspaceId(), {
+        name: file.name,
+        mimeType: file.type || 'application/zip',
+        dataUrl,
+      });
+      setForm((f) => ({
+        ...f,
+        packageBlob: {
+          id: uploaded.id,
+          url: uploaded.url,
+          name: uploaded.name,
+          size: uploaded.size,
+          uploadedAt: new Date().toISOString(),
+        },
+      }));
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setUploadingPackage(false);
+    }
+  };
+
   const handleUpload = async (file: File | null) => {
     if (!file) return;
     setParsing(true);
@@ -240,6 +284,11 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
         return;
       }
       applyParsed(items[0], file.name);
+      // 提报时上传的 zip 同时留档为原包，用户不必到高级项里再传一次
+      if (file.name.toLowerCase().endsWith('.zip')) {
+        const ok = await storePackageBlob(file);
+        showToast(ok ? '已解析并留档 Skill 原包' : '已解析，但原包留档失败（详情页将无文件树）');
+      }
     } catch {
       showToast('Skill 包解析失败，请检查格式');
     } finally {
@@ -369,6 +418,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
         }))
         .filter((c) => c.title),
       caseAttachments: (form.caseAttachments ?? []).length ? form.caseAttachments : undefined,
+      packageBlob: form.packageBlob,
       envInfo: hasEnv ? envInfo : undefined,
       author: prev?.author ?? userName,
       publisher: form.publisher || userName,
@@ -451,7 +501,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       open
       elevate
       size="lg"
-      title={isNew ? '创建 Skill' : '编辑 Skill'}
+      title={isNew ? '提报 Skill' : '编辑 Skill'}
       onClose={onClose}
       actions={
         <div className="flex w-full items-center justify-between gap-2">
@@ -747,6 +797,58 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                   }
                   placeholder="周报生成|输入本周要点…|输出结构化周报…"
                 />
+              </FormField>
+              <FormField
+                label="Skill 压缩包"
+                hint="上传 .zip；详情页「文件」将解压展示完整目录树，并可下载原包"
+              >
+                <div className="space-y-2">
+                  <input
+                    type="file"
+                    accept=".zip,application/zip"
+                    disabled={uploadingPackage}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (!file) return;
+                      if (!file.name.toLowerCase().endsWith('.zip')) {
+                        showToast('请上传 .zip 格式的 Skill 包');
+                        return;
+                      }
+                      const ok = await storePackageBlob(file);
+                      showToast(
+                        ok
+                          ? `已上传 Skill 包：${file.name}`
+                          : 'Skill 包上传失败，请检查后端连接后重试',
+                      );
+                    }}
+                    className="block w-full text-[12px] file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-[12px] file:font-medium file:text-white"
+                  />
+                  {uploadingPackage ? (
+                    <p className="text-[11px] text-zinc-500">
+                      <i className="fa-solid fa-spinner fa-spin mr-1" />
+                      上传中…
+                    </p>
+                  ) : null}
+                  {form.packageBlob ? (
+                    <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50/80 px-2.5 py-1.5">
+                      <i className="fa-solid fa-file-zipper text-[12px] text-zinc-500" />
+                      <span className="min-w-0 flex-1 truncate text-[12px] text-zinc-700">
+                        {form.packageBlob.name}
+                      </span>
+                      <span className="shrink-0 text-[11px] tabular-nums text-zinc-400">
+                        {(form.packageBlob.size / 1024).toFixed(0)} KB
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, packageBlob: undefined }))}
+                        className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-zinc-500 transition hover:bg-rose-50 hover:text-rose-600"
+                      >
+                        移除
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               </FormField>
               <FormField
                 label="使用案例附件"

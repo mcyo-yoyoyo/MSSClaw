@@ -12,6 +12,11 @@ import {
   listVisibleBusinessScenarioCategories,
   type BusinessScenarioId,
 } from '@/domain/businessScenarios';
+import {
+  AGENT_LIFECYCLE_OPTIONS,
+  resolveAgentLifecycle,
+  type AgentLifecycleStatus,
+} from '@/domain/agentLifecycle';
 import type { PrototypeAgentSeed } from '@/domain/prototype/types';
 import { ASSET_VISIBILITY_LABELS, type AssetVisibility } from '@/domain/orgTaxonomy';
 import {
@@ -108,6 +113,11 @@ function normalizeAgent(agent: PrototypeAgentSeed): PrototypeAgentSeed {
 interface AgentEditorModalProps {
   target: AgentEditorTarget;
   onClose: () => void;
+}
+
+/** 多行文本 → 去空白数组：详情页多个字段都用「每行一条」录入 */
+function splitLines(value: string): string[] {
+  return value.split('\n').map((line) => line.trim()).filter(Boolean);
 }
 
 export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
@@ -215,11 +225,27 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
       form.visibility === 'org' || form.visibility === 'private' ? form.visibility : 'public';
     const businessScenarioId = form.businessScenarioId as BusinessScenarioId;
     const scenarioLabel = getBusinessScenarioMeta(businessScenarioId).label;
+    // 空字符串 / 空数组不落库，避免前台把"已配置但为空"当成有内容而不再走兜底
+    const clean = (v?: string) => v?.trim() || undefined;
+    const cleanList = (v?: string[]) => (v?.length ? v : undefined);
+
     upsertAgent(
       {
         ...form,
         id,
         name,
+        valueProposition: clean(form.valueProposition),
+        capabilities: cleanList(form.capabilities),
+        targetUsers: cleanList(form.targetUsers),
+        capabilityBoundaries: cleanList(form.capabilityBoundaries),
+        suitableFor: cleanList(form.suitableFor),
+        notSuitableFor: cleanList(form.notSuitableFor),
+        version: clean(form.version),
+        maintainer: clean(form.maintainer),
+        demoUrl: clean(form.demoUrl),
+        solutionDocUrl: clean(form.solutionDocUrl),
+        // 运营改过内容就刷新更新时间，右侧操作栏与 Agent Hub「更新时间」排序都读它
+        updatedAt: new Date().toISOString().slice(0, 10),
         desc: form.desc.trim(),
         systemPrompt: form.systemPrompt?.trim() || '',
         demoPrompt: form.demoPrompt?.trim() || undefined,
@@ -425,6 +451,212 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
               </option>
             ))}
           </FormSelect>
+        </FormField>
+        {/* §6：详情页内容配置。字段多，按前台 Tab 分组折叠，默认收起不干扰日常编辑 */}
+        <details className="rounded-xl border border-zinc-200 bg-zinc-50/60 px-3 py-2.5">
+          <summary className="cursor-pointer text-[12px] font-semibold text-zinc-700">
+            详情页内容（概览 / 效果预览 / 适用判断）
+          </summary>
+          <div className="mt-3 space-y-3">
+            <FormField
+              label="一句话价值"
+              hint="用业务语言说明能帮用户完成什么工作；顶部与概览共用，避免技术化描述"
+            >
+              <FormInput
+                value={form.valueProposition ?? ''}
+                placeholder="例：帮助审核员解析一单一包材料，识别缺失、异常与不一致项"
+                onChange={(e) => setForm({ ...form, valueProposition: e.target.value })}
+              />
+            </FormField>
+            <FormField label="核心能力（每行一条）" hint="3-5 项，如材料解析、规则匹配、内容生成">
+              <FormTextarea
+                rows={3}
+                value={(form.capabilities ?? []).join('\n')}
+                onChange={(e) => setForm({ ...form, capabilities: splitLines(e.target.value) })}
+              />
+            </FormField>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="适用对象（每行一条）" hint="如营销人员、审核专员、运营人员">
+                <FormTextarea
+                  rows={3}
+                  value={(form.targetUsers ?? []).join('\n')}
+                  onChange={(e) => setForm({ ...form, targetUsers: splitLines(e.target.value) })}
+                />
+              </FormField>
+              <FormField label="能力边界（每行一条）" hint="不能覆盖或不能替代人工的范围">
+                <FormTextarea
+                  rows={3}
+                  value={(form.capabilityBoundaries ?? []).join('\n')}
+                  onChange={(e) =>
+                    setForm({ ...form, capabilityBoundaries: splitLines(e.target.value) })
+                  }
+                />
+              </FormField>
+            </div>
+
+            <p className="border-t border-zinc-200 pt-2.5 text-[11px] font-semibold text-zinc-500">
+              效果预览 · 输入 → 处理 → 输出
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="输入说明" hint="用户需要提供什么">
+                <FormTextarea
+                  rows={2}
+                  value={form.inputOutput?.inputFormat ?? ''}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      inputOutput: { ...form.inputOutput, inputFormat: e.target.value },
+                    })
+                  }
+                />
+              </FormField>
+              <FormField label="输出说明" hint="最终产出什么结果">
+                <FormTextarea
+                  rows={2}
+                  value={form.inputOutput?.outputFormat ?? ''}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      inputOutput: { ...form.inputOutput, outputFormat: e.target.value },
+                    })
+                  }
+                />
+              </FormField>
+            </div>
+            <FormField label="处理过程（每行一步）" hint="用业务语言说明会做哪些处理，如识别、抽取、匹配、汇总">
+              <FormTextarea
+                rows={3}
+                value={(form.inputOutput?.processSteps ?? []).join('\n')}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    inputOutput: { ...form.inputOutput, processSteps: splitLines(e.target.value) },
+                  })
+                }
+              />
+            </FormField>
+            <FormField label="样例结果" hint="贴近真实业务的样例输出，不要用无意义占位">
+              <FormTextarea
+                rows={3}
+                value={form.inputOutput?.outputExample ?? ''}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    inputOutput: { ...form.inputOutput, outputExample: e.target.value },
+                  })
+                }
+              />
+            </FormField>
+            <FormField label="输出用途" hint="结果可以如何用于业务">
+              <FormInput
+                value={form.inputOutput?.resultUsage ?? ''}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    inputOutput: { ...form.inputOutput, resultUsage: e.target.value },
+                  })
+                }
+              />
+            </FormField>
+
+            <p className="border-t border-zinc-200 pt-2.5 text-[11px] font-semibold text-zinc-500">
+              适用判断
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="适合你，如果（每行一条）">
+                <FormTextarea
+                  rows={3}
+                  value={(form.suitableFor ?? []).join('\n')}
+                  onChange={(e) => setForm({ ...form, suitableFor: splitLines(e.target.value) })}
+                />
+              </FormField>
+              <FormField label="暂不适合，如果（每行一条）">
+                <FormTextarea
+                  rows={3}
+                  value={(form.notSuitableFor ?? []).join('\n')}
+                  onChange={(e) => setForm({ ...form, notSuitableFor: splitLines(e.target.value) })}
+                />
+              </FormField>
+            </div>
+            <FormField label="使用前需要准备（每行一条）" hint="材料、数据、权限或业务背景">
+              <FormTextarea
+                rows={2}
+                value={(form.quickStart?.prerequisites ?? []).join('\n')}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    quickStart: { ...form.quickStart, prerequisites: splitLines(e.target.value) },
+                  })
+                }
+              />
+            </FormField>
+            <label className="flex cursor-pointer items-center gap-2 text-[12px] text-zinc-700">
+              <input
+                type="checkbox"
+                className="accent-zinc-800"
+                checked={Boolean(form.requiresHumanReview)}
+                onChange={(e) => setForm({ ...form, requiresHumanReview: e.target.checked })}
+              />
+              输出需要人工复核后才能用于对外决策
+            </label>
+
+            <p className="border-t border-zinc-200 pt-2.5 text-[11px] font-semibold text-zinc-500">
+              维护信息
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="当前版本">
+                <FormInput
+                  value={form.version ?? ''}
+                  placeholder="V1.0"
+                  onChange={(e) => setForm({ ...form, version: e.target.value })}
+                />
+              </FormField>
+              <FormField label="维护团队">
+                <FormInput
+                  value={form.maintainer ?? ''}
+                  placeholder="如 MSS 质量与运营"
+                  onChange={(e) => setForm({ ...form, maintainer: e.target.value })}
+                />
+              </FormField>
+            </div>
+          </div>
+        </details>
+        <FormField
+          label="成熟度状态"
+          hint="决定详情页顶部状态标签与主按钮；「可运行」为立即体验，「建设中」为查看 Demo"
+        >
+          <FormSelect
+            value={resolveAgentLifecycle(form)}
+            onChange={(e) =>
+              setForm({ ...form, lifecycleStatus: e.target.value as AgentLifecycleStatus })
+            }
+          >
+            {AGENT_LIFECYCLE_OPTIONS.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label} — {opt.hint}
+              </option>
+            ))}
+          </FormSelect>
+        </FormField>
+        <FormField
+          label="Demo 入口"
+          hint="建设中 Agent 的主按钮「查看 Demo」指向该链接；留空则降级为方案文档"
+        >
+          <FormInput
+            value={form.demoUrl ?? ''}
+            placeholder="https://"
+            onChange={(e) => setForm({ ...form, demoUrl: e.target.value })}
+          />
+        </FormField>
+        <FormField
+          label="方案文档入口"
+          hint="解决方案 PPT / Word 链接；无 Demo 时作为主按钮兜底"
+        >
+          <FormInput
+            value={form.solutionDocUrl ?? ''}
+            placeholder="https://"
+            onChange={(e) => setForm({ ...form, solutionDocUrl: e.target.value })}
+          />
         </FormField>
         <FormField
           label="挂载 Skill"

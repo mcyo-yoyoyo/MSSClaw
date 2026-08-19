@@ -1,6 +1,7 @@
 /** 与根目录 index.html 设计稿对齐的原始种子类型（单一数据源） */
 
 import type { AgentCapabilityTypeId } from '@/domain/agentHubFilters';
+import type { AgentLifecycleStatus } from '@/domain/agentLifecycle';
 import type { BusinessScenarioId } from '@/domain/businessScenarios';
 import type { ToolDeliveryForm } from '@/domain/externalToolDelivery';
 import type { PortalCasePreviewFile } from '@/domain/prototype/portalContent';
@@ -21,6 +22,8 @@ export type EfficiencyCategory = 'office' | 'manage' | 'process' | 'experience';
 export type HomeCategory = DeptId;
 
 export interface AgentInputOutputInfo {
+  /** §4.2 三段式中间环节：用业务语言说明 Agent 会做哪些处理（识别/抽取/匹配/生成…） */
+  processSteps?: string[];
   inputTypes?: string[];
   inputFormat?: string;
   inputFields?: string[];
@@ -109,10 +112,16 @@ export interface PrototypeAgentSeed {
   demoPrompt?: string;
   /** 多 Skill 编排计划步骤 */
   planSteps?: string[];
+  /** §6.1 一句话价值：用业务语言说明能帮用户完成什么工作，顶部与概览共用 */
+  valueProposition?: string;
   /** 前台详情页核心能力、适用对象与边界 */
   capabilities?: string[];
   targetUsers?: string[];
   capabilityBoundaries?: string[];
+  /** §6.4 适用判断：适合 / 不适合 / 是否需人工复核 */
+  suitableFor?: string[];
+  notSuitableFor?: string[];
+  requiresHumanReview?: boolean;
   /** 详情页结构化输入输出、快速上手与案例 */
   inputOutput?: AgentInputOutputInfo;
   quickStart?: AgentQuickStartInfo;
@@ -123,6 +132,16 @@ export interface PrototypeAgentSeed {
   createdAt?: string;
   updatedAt?: string;
   maintainer?: string;
+  /**
+   * 成熟度状态（可运行 / 建设中）：驱动顶部状态标签与右侧主按钮。
+   * 与运行时的 canRun 是两个维度，缺省按「已上架且挂了 Skill」推断，
+   * 见 domain/agentLifecycle。
+   */
+  lifecycleStatus?: AgentLifecycleStatus;
+  /** 建设中 Agent 的 Demo 入口；有则主按钮为「查看 Demo」 */
+  demoUrl?: string;
+  /** 解决方案文档（PPT / Word）入口；无 Demo 时主按钮降级到它 */
+  solutionDocUrl?: string;
   /** 环境、安装与反馈入口 */
   environment?: AgentEnvironmentInfo;
   installCommand?: string;
@@ -207,6 +226,18 @@ export interface PrototypeSkillSeed extends AssetOwnershipFields {
    * 视频类体积普遍超限，暂不开放。
    */
   caseAttachments?: PortalCasePreviewFile[];
+  /**
+   * 上传的 Skill 压缩包：只存 blob 引用，不把解压内容塞进这条 JSON——
+   * 包内可能有几十个文件，展开后会把 CenterRecord 撑爆。
+   * 详情页「文件」按需拉取并在浏览器内解压成文件树。
+   */
+  packageBlob?: {
+    id: string;
+    url: string;
+    name: string;
+    size: number;
+    uploadedAt: string;
+  };
   /** 环境与适配信息 */
   envInfo?: SkillEnvInfo;
   /** 版本清单（完整产品；当前版本仍以 version 字段为准） */

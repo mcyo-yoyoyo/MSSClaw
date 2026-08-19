@@ -10,10 +10,11 @@ import {
 import { SKILL_VISIBILITY_SCOPE_OPTIONS } from '@/domain/assetFilters';
 import {
   resolveSkillLifecycleStatus,
-  skillMatchesLifecycleFilter,
-  SKILL_LIFECYCLE_FILTER_OPTIONS,
+  SKILL_LIFECYCLE_BADGE_CLASS,
   SKILL_LIFECYCLE_LABELS,
-  type SkillLifecycleFilter,
+  SKILL_LIFECYCLE_STATUSES,
+  skillMatchesLifecycleSelection,
+  type SkillLifecycleStatus,
 } from '@/domain/skillLifecycleStatus';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 import {
@@ -53,7 +54,7 @@ import { useSkillReviewStore } from '@/stores/skillReviewStore';
 import { useAppViewStore } from '@/stores/appViewStore';
 
 type DistTab = 'dept' | 'region' | 'scene' | 'homo';
-type DistSort = 'original' | 'asc' | 'desc';
+type DistSort = 'desc' | 'asc';
 
 interface SkillCenterPageProps {
   onInvoke: (skill: PrototypeSkillSeed) => void;
@@ -69,6 +70,12 @@ function skillMonthStamp(s: PrototypeSkillSeed): string | null {
   const m = String(raw).match(/^(\d{4}-\d{2})/);
   return m?.[1] ?? null;
 }
+
+/** 看板排序的图标与文案；沿用 FA6 的排序图标，避免 ▲▼ 字形对不齐 */
+const DIST_SORT_META: Record<DistSort, { label: string; icon: string }> = {
+  desc: { label: '降序', icon: 'fa-arrow-down-wide-short' },
+  asc: { label: '升序', icon: 'fa-arrow-up-short-wide' },
+};
 
 export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
   const {
@@ -105,9 +112,10 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
     skill: PrototypeSkillSeed;
     kind: SkillOpsRequestKind;
   } | null>(null);
-  const [lifecycleFilter, setLifecycleFilter] = useState<SkillLifecycleFilter>('all');
+  /** 空数组 = 不筛（等价「全部」），与职能 / 区域的多选语义一致 */
+  const [lifecycleSelection, setLifecycleSelection] = useState<SkillLifecycleStatus[]>([]);
   const [distTab, setDistTab] = useState<DistTab>('dept');
-  const [distSort, setDistSort] = useState<DistSort>('original');
+  const [distSort, setDistSort] = useState<DistSort>('desc');
   const [scanGate, setScanGate] = useState<SkillSecurityScanGateMode>(() => getSecurityScanGateMode());
   useEffect(() => {
     setScanGate(getSecurityScanGateMode());
@@ -118,9 +126,13 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
     hydrateApprovals();
   }, [hydrateApprovals]);
 
-  const list = useMemo(
-    () => filteredSkills().filter((s) => skillMatchesLifecycleFilter(s, approvals, lifecycleFilter)),
-    [filteredSkills, approvals, lifecycleFilter],
+  /**
+   * 不要包 useMemo：filteredSkills 是 store 里定义一次的函数，引用恒定，
+   * 职能 / 区域 / 场景 / 范围 / 搜索变化都不会进依赖数组，memo 会一直返回旧结果。
+   * 组件本就订阅整个 store，筛选变化必然重渲染，直接算即可（量级 ~25 条）。
+   */
+  const list = filteredSkills().filter((s) =>
+    skillMatchesLifecycleSelection(s, approvals, lifecycleSelection),
   );
 
   const stats = useMemo(() => {
@@ -165,12 +177,13 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
   }, [distTab, skills]);
 
   const maxDist = Math.max(1, 0, ...distRows.map((r) => r.count));
-  const sortedDistRows = useMemo(() => {
-    if (distSort === 'original') return distRows;
-    return [...distRows].sort((a, b) =>
-      distSort === 'asc' ? a.count - b.count : b.count - a.count,
-    );
-  }, [distRows, distSort]);
+  const sortedDistRows = useMemo(
+    () =>
+      [...distRows].sort((a, b) =>
+        distSort === 'asc' ? a.count - b.count : b.count - a.count,
+      ),
+    [distRows, distSort],
+  );
 
   const listCards = useMemo((): { skill: PrototypeSkillSeed; card: MarketShelfCardModel }[] => {
     return list.map((s) => {
@@ -185,7 +198,11 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
       }
       if (bizLabel) badges.push({ label: bizLabel, tone: 'type' });
       // 上架状态放首位：筛选后需要一眼看出每张卡属于哪一档
-      badges.unshift({ label: SKILL_LIFECYCLE_LABELS[resolveSkillLifecycleStatus(s, approvals)] });
+      const lifecycle = resolveSkillLifecycleStatus(s, approvals);
+      badges.unshift({
+        label: SKILL_LIFECYCLE_LABELS[lifecycle],
+        className: SKILL_LIFECYCLE_BADGE_CLASS[lifecycle],
+      });
       return {
         skill: s,
         card: {
@@ -272,7 +289,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
                 className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white transition"
               >
                 <i className="fa-solid fa-plus mr-1" />
-                创建 Skill
+                提报 Skill
               </button>
             </>
           }
@@ -287,13 +304,17 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
               {distTab !== 'homo' ? (
                 <button
                   type="button"
-                  onClick={() => setDistSort((value) => value === 'original' ? 'asc' : value === 'asc' ? 'desc' : 'original')}
-                  className="flex flex-col items-center rounded-md px-1.5 py-0.5 leading-none hover:bg-zinc-100"
-                  title="切换排序：原排序 → 升序 → 降序"
-                  aria-label="切换看板排序"
+                  onClick={() => setDistSort((value) => (value === 'desc' ? 'asc' : 'desc'))}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2 py-1',
+                    'text-[11px] font-semibold text-zinc-600 transition',
+                    'hover:border-zinc-300 hover:text-zinc-800',
+                  )}
+                  title="切换排序：降序 / 升序"
+                  aria-label={`切换看板排序，当前${DIST_SORT_META[distSort].label}`}
                 >
-                  <span className={distSort === 'asc' ? 'text-sky-600' : 'text-zinc-300'}>▲</span>
-                  <span className={distSort === 'desc' ? 'text-sky-600' : 'text-zinc-300'}>▼</span>
+                  <i className={cn('fa-solid text-[10px]', DIST_SORT_META[distSort].icon)} />
+                  {DIST_SORT_META[distSort].label}
                 </button>
               ) : null}
               <div className="flex flex-wrap gap-1 rounded-lg bg-zinc-100/80 p-0.5">
@@ -426,20 +447,45 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
           onScopeChange={setSkillScopeFilter}
           showScope
           extra={
-            <label className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5">
               <span className="shrink-0 text-[11px] text-zinc-500">上架状态</span>
-              <select
-                value={lifecycleFilter}
-                onChange={(e) => setLifecycleFilter(e.target.value as SkillLifecycleFilter)}
-                className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-[12px] text-zinc-700 outline-none transition hover:border-zinc-300 focus:border-zinc-400"
-              >
-                {SKILL_LIFECYCLE_FILTER_OPTIONS.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <div className="flex flex-wrap gap-1" role="group" aria-label="上架状态">
+                {SKILL_LIFECYCLE_STATUSES.map((id) => {
+                  const active = lifecycleSelection.includes(id);
+                  const count = skills.filter(
+                    (s) => resolveSkillLifecycleStatus(s, approvals) === id,
+                  ).length;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() =>
+                        setLifecycleSelection((prev) =>
+                          prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                        )
+                      }
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition',
+                        active
+                          ? 'border-zinc-900 bg-zinc-900 text-white'
+                          : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300',
+                      )}
+                    >
+                      {SKILL_LIFECYCLE_LABELS[id]}
+                      <span
+                        className={cn(
+                          'tabular-nums',
+                          active ? 'text-white/70' : 'text-zinc-400',
+                        )}
+                      >
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           }
         />
 

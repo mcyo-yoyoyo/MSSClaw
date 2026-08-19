@@ -56,7 +56,7 @@ export function MarketSkillSubmitModal({
   const [desc, setDesc] = useState('');
   const [command, setCommand] = useState('');
   const [instructions, setInstructions] = useState('');
-  const [businessId, setBusinessId] = useState<BusinessScenarioId>('S1');
+  const [businessId, setBusinessId] = useState<BusinessScenarioId | ''>('');
   const [ownerDeptIds, setOwnerDeptIds] = useState<DeptId[]>([]);
   const [ownerRegionId, setOwnerRegionId] = useState<RegionId | null>(null);
   const [visibility, setVisibility] = useState<AssetVisibility>('org');
@@ -70,7 +70,7 @@ export function MarketSkillSubmitModal({
     setDesc('');
     setCommand('');
     setInstructions('');
-    setBusinessId(businessFilter === 'all' ? 'S1' : businessFilter);
+    setBusinessId(businessFilter === 'all' ? '' : businessFilter);
     // 归属职能 / 区域不再按登录人预填：提报的技能未必属于本人所在职能，
     // 预填会被当成已确认的选择而直接提交
     setOwnerDeptIds([]);
@@ -278,8 +278,9 @@ export function MarketSkillSubmitModal({
         <FormField label="业务场景">
           <FormSelect
             value={businessId}
-            onChange={(e) => setBusinessId(e.target.value as BusinessScenarioId)}
+            onChange={(e) => setBusinessId(e.target.value as BusinessScenarioId | '')}
           >
+            <option value="">—请选择业务场景—</option>
             {listVisibleBusinessScenarioCategories().map((c) => (
               <option key={c.id} value={c.id}>
                 {c.label}
