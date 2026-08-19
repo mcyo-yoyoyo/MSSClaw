@@ -54,7 +54,7 @@ import { useSkillReviewStore } from '@/stores/skillReviewStore';
 import { useAppViewStore } from '@/stores/appViewStore';
 
 type DistTab = 'dept' | 'region' | 'scene' | 'homo';
-type DistSort = 'original' | 'asc' | 'desc';
+type DistSort = 'desc' | 'asc';
 
 interface SkillCenterPageProps {
   onInvoke: (skill: PrototypeSkillSeed) => void;
@@ -71,11 +71,10 @@ function skillMonthStamp(s: PrototypeSkillSeed): string | null {
   return m?.[1] ?? null;
 }
 
-/** 看板排序三态的图标与文案；沿用 FA6 的排序图标，避免 ▲▼ 字形对不齐 */
+/** 看板排序的图标与文案；沿用 FA6 的排序图标，避免 ▲▼ 字形对不齐 */
 const DIST_SORT_META: Record<DistSort, { label: string; icon: string }> = {
-  original: { label: '默认', icon: 'fa-arrow-up-arrow-down' },
-  asc: { label: '升序', icon: 'fa-arrow-up-short-wide' },
   desc: { label: '降序', icon: 'fa-arrow-down-wide-short' },
+  asc: { label: '升序', icon: 'fa-arrow-up-short-wide' },
 };
 
 export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
@@ -116,7 +115,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
   /** 空数组 = 不筛（等价「全部」），与职能 / 区域的多选语义一致 */
   const [lifecycleSelection, setLifecycleSelection] = useState<SkillLifecycleStatus[]>([]);
   const [distTab, setDistTab] = useState<DistTab>('dept');
-  const [distSort, setDistSort] = useState<DistSort>('original');
+  const [distSort, setDistSort] = useState<DistSort>('desc');
   const [scanGate, setScanGate] = useState<SkillSecurityScanGateMode>(() => getSecurityScanGateMode());
   useEffect(() => {
     setScanGate(getSecurityScanGateMode());
@@ -178,12 +177,13 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
   }, [distTab, skills]);
 
   const maxDist = Math.max(1, 0, ...distRows.map((r) => r.count));
-  const sortedDistRows = useMemo(() => {
-    if (distSort === 'original') return distRows;
-    return [...distRows].sort((a, b) =>
-      distSort === 'asc' ? a.count - b.count : b.count - a.count,
-    );
-  }, [distRows, distSort]);
+  const sortedDistRows = useMemo(
+    () =>
+      [...distRows].sort((a, b) =>
+        distSort === 'asc' ? a.count - b.count : b.count - a.count,
+      ),
+    [distRows, distSort],
+  );
 
   const listCards = useMemo((): { skill: PrototypeSkillSeed; card: MarketShelfCardModel }[] => {
     return list.map((s) => {
@@ -304,14 +304,13 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
               {distTab !== 'homo' ? (
                 <button
                   type="button"
-                  onClick={() => setDistSort((value) => value === 'original' ? 'asc' : value === 'asc' ? 'desc' : 'original')}
+                  onClick={() => setDistSort((value) => (value === 'desc' ? 'asc' : 'desc'))}
                   className={cn(
-                    'inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-semibold transition',
-                    distSort === 'original'
-                      ? 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:text-zinc-800'
-                      : 'border-zinc-900 bg-zinc-900 text-white',
+                    'inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2 py-1',
+                    'text-[11px] font-semibold text-zinc-600 transition',
+                    'hover:border-zinc-300 hover:text-zinc-800',
                   )}
-                  title="切换排序：原排序 → 升序 → 降序"
+                  title="切换排序：降序 / 升序"
                   aria-label={`切换看板排序，当前${DIST_SORT_META[distSort].label}`}
                 >
                   <i className={cn('fa-solid text-[10px]', DIST_SORT_META[distSort].icon)} />
