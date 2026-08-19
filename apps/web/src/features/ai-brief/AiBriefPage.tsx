@@ -85,29 +85,42 @@ function calendarDays(year: number, month: number) {
   });
 }
 
+function formatCalendarRangeLabel(startDate: string, endDate: string) {
+  const start = parseCalendarDateKey(startDate);
+  const end = parseCalendarDateKey(endDate);
+  if (!start) return '选择时间段';
+  const startLabel = `${start.year}/${String(start.month).padStart(2, '0')}/${String(start.day).padStart(2, '0')}`;
+  if (!end) return `${startLabel} – 请选择`;
+  const endLabel =
+    start.year === end.year
+      ? `${String(end.month).padStart(2, '0')}/${String(end.day).padStart(2, '0')}`
+      : `${end.year}/${String(end.month).padStart(2, '0')}/${String(end.day).padStart(2, '0')}`;
+  return `${startLabel} – ${endLabel}`;
+}
+
 function DateCalendarFilter({
-  value,
+  startDate,
+  endDate,
   initialMonthKey,
   onChange,
 }: {
-  value: string;
+  startDate: string;
+  endDate: string;
   initialMonthKey?: string;
-  onChange: (value: string) => void;
+  onChange: (startDate: string, endDate: string) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [selectingEnd, setSelectingEnd] = useState(Boolean(startDate && !endDate));
   const [visibleMonth, setVisibleMonth] = useState<CalendarMonth>(() =>
-    calendarMonthFromKey(value || initialMonthKey),
+    calendarMonthFromKey(startDate || initialMonthKey),
   );
   const days = useMemo(
     () => calendarDays(visibleMonth.year, visibleMonth.month),
     [visibleMonth.year, visibleMonth.month],
   );
   const todayKey = shanghaiTodayKey();
-  const selectedDate = parseCalendarDateKey(value);
-  const selectedLabel = selectedDate
-    ? `${selectedDate.year}/${String(selectedDate.month).padStart(2, '0')}/${String(selectedDate.day).padStart(2, '0')}`
-    : '全部日期';
+  const selectedLabel = formatCalendarRangeLabel(startDate, endDate);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -132,27 +145,35 @@ function DateCalendarFilter({
     });
   };
 
+  const clearRange = () => {
+    onChange('', '');
+    setSelectingEnd(false);
+  };
+
   return (
-    <div ref={rootRef} className="relative shrink-0 sm:w-44">
+    <div ref={rootRef} className="relative shrink-0 sm:w-64">
       <button
         type="button"
         onClick={() => {
-          if (!open) setVisibleMonth(calendarMonthFromKey(value || initialMonthKey));
+          if (!open) {
+            setVisibleMonth(calendarMonthFromKey(startDate || initialMonthKey));
+            setSelectingEnd(Boolean(startDate && !endDate));
+          }
           setOpen((current) => !current);
         }}
-        aria-label="按日期筛选"
+        aria-label="按时间段筛选"
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls="ai-brief-date-calendar"
-        title="打开日期筛选"
+        title="打开时间段筛选"
         className={cn(
           'flex h-10 w-full items-center gap-2 rounded-xl border bg-white px-3 text-[12px] font-medium outline-none transition hover:border-zinc-300 focus:ring-2 focus:ring-[#0071e3]/10',
           open ? 'border-[#0071e3]/50' : 'border-zinc-200',
-          value ? 'pr-16 text-zinc-700' : 'text-zinc-500',
+          startDate ? 'pr-16 text-zinc-700' : 'text-zinc-500',
         )}
       >
         <i className="fa-regular fa-calendar text-[12px] text-zinc-400" />
-        <span className="min-w-0 flex-1 text-left tabular-nums">{selectedLabel}</span>
+        <span className="min-w-0 flex-1 truncate text-left tabular-nums">{selectedLabel}</span>
         <i
           className={cn(
             'fa-solid fa-chevron-down text-[9px] text-zinc-400 transition-transform',
@@ -161,12 +182,12 @@ function DateCalendarFilter({
         />
       </button>
 
-      {value ? (
+      {startDate ? (
         <button
           type="button"
-          onClick={() => onChange('')}
-          aria-label="清除日期筛选，显示全部日期"
-          title="清除日期筛选"
+          onClick={clearRange}
+          aria-label="清除时间段筛选"
+          title="清除时间段筛选"
           className="absolute right-8 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20"
         >
           <i className="fa-solid fa-xmark text-[10px]" />
@@ -177,10 +198,10 @@ function DateCalendarFilter({
         <div
           id="ai-brief-date-calendar"
           role="dialog"
-          aria-label="选择筛选日期"
-          className="absolute right-0 top-[calc(100%+8px)] z-40 w-[280px] rounded-2xl border border-zinc-200 bg-white p-3 shadow-[0_16px_40px_rgba(0,0,0,0.14)]"
+          aria-label="选择筛选时间段"
+          className="absolute right-0 top-[calc(100%+8px)] z-40 w-[292px] rounded-2xl border border-zinc-200 bg-white p-3 shadow-[0_16px_40px_rgba(0,0,0,0.14)]"
         >
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-1 flex items-center justify-between">
             <button
               type="button"
               onClick={() => moveMonth(-1)}
@@ -202,6 +223,10 @@ function DateCalendarFilter({
             </button>
           </div>
 
+          <p className="mb-1.5 text-center text-[10px] font-medium text-[#0071e3]">
+            {selectingEnd ? '请选择结束日期' : '请选择开始日期'}
+          </p>
+
           <div className="grid grid-cols-7 text-center">
             {CALENDAR_WEEKDAYS.map((weekday) => (
               <span key={weekday} className="py-1 text-[10px] font-medium text-zinc-400">
@@ -209,23 +234,37 @@ function DateCalendarFilter({
               </span>
             ))}
             {days.map((day) => {
-              const selected = day.key === value;
+              const rangeEdge = day.key === startDate || day.key === endDate;
+              const inRange = Boolean(
+                startDate && endDate && day.key > startDate && day.key < endDate,
+              );
               const today = day.key === todayKey;
               return (
                 <button
                   key={day.key}
                   type="button"
                   onClick={() => {
-                    onChange(day.key);
+                    if (!selectingEnd || !startDate) {
+                      onChange(day.key, '');
+                      setSelectingEnd(true);
+                      setVisibleMonth({ year: day.year, month: day.month });
+                      return;
+                    }
+                    const nextStart = day.key < startDate ? day.key : startDate;
+                    const nextEnd = day.key < startDate ? startDate : day.key;
+                    onChange(nextStart, nextEnd);
+                    setSelectingEnd(false);
                     setOpen(false);
                   }}
                   aria-label={`${day.year}年${day.month + 1}月${day.day}日`}
-                  aria-pressed={selected}
+                  aria-pressed={rangeEdge}
                   className={cn(
                     'mx-auto my-0.5 flex h-8 w-8 items-center justify-center rounded-lg text-[11px] tabular-nums transition',
                     day.inCurrentMonth ? 'text-zinc-700 hover:bg-zinc-100' : 'text-zinc-300 hover:bg-zinc-50',
-                    today && !selected && 'font-semibold text-[#0071e3] ring-1 ring-[#0071e3]/20',
-                    selected && 'bg-[#0071e3] font-semibold text-white hover:bg-[#0064c8]',
+                    today && !rangeEdge && !inRange &&
+                      'font-semibold text-[#0071e3] ring-1 ring-[#0071e3]/20',
+                    inRange && 'bg-[#0071e3]/10 font-medium text-[#0071e3]',
+                    rangeEdge && 'bg-[#0071e3] font-semibold text-white hover:bg-[#0064c8]',
                   )}
                 >
                   {day.day}
@@ -238,12 +277,12 @@ function DateCalendarFilter({
             <button
               type="button"
               onClick={() => {
-                onChange('');
+                clearRange();
                 setOpen(false);
               }}
               className="rounded-lg px-2 py-1.5 text-[11px] font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900"
             >
-              全部日期
+              清除筛选
             </button>
             <button
               type="button"
@@ -274,7 +313,7 @@ export function AiBriefPage() {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [emailDraft, setEmailDraft] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<AiBriefCategoryId | 'all'>('all');
-  const [dateFilter, setDateFilter] = useState('');
+  const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
   const [searchDraft, setSearchDraft] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -314,7 +353,12 @@ export function AiBriefPage() {
   const visibleGroups = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
     return payload.groups
-      .filter((group) => !dateFilter || group.dateKey === dateFilter)
+      .filter((group) => {
+        if (!dateRange.startDate) return true;
+        if (!group.dateKey) return false;
+        const endDate = dateRange.endDate || dateRange.startDate;
+        return group.dateKey >= dateRange.startDate && group.dateKey <= endDate;
+      })
       .map((g) => ({
         ...g,
         items: g.items.filter((item) => {
@@ -331,7 +375,7 @@ export function AiBriefPage() {
         }),
       }))
       .filter((g) => g.items.length > 0);
-  }, [payload.groups, categoryFilter, dateFilter, searchQuery]);
+  }, [payload.groups, categoryFilter, dateRange.endDate, dateRange.startDate, searchQuery]);
 
   useEffect(() => {
     if (!highlightId) return;
@@ -467,9 +511,10 @@ export function AiBriefPage() {
           </div>
           <div className="flex w-full shrink-0 flex-col gap-2 sm:flex-row lg:w-auto">
             <DateCalendarFilter
-              value={dateFilter}
+              startDate={dateRange.startDate}
+              endDate={dateRange.endDate}
               initialMonthKey={payload.groups[0]?.dateKey}
-              onChange={setDateFilter}
+              onChange={(startDate, endDate) => setDateRange({ startDate, endDate })}
             />
             <form
               className="flex min-w-0 flex-1 gap-2 lg:flex-none"
