@@ -44,7 +44,10 @@ function emptyMarketplace(): MarketplaceSnapshot {
   };
 }
 
-export async function loadMarketplace(workspaceId: string): Promise<MarketplaceSnapshot> {
+export async function loadMarketplace(
+  workspaceId: string,
+  options?: { throwOnRemoteError?: boolean },
+): Promise<MarketplaceSnapshot> {
   const apiOnline = useWorkspaceStore.getState().apiConnected;
   if (apiOnline) {
     try {
@@ -60,7 +63,8 @@ export async function loadMarketplace(workspaceId: string): Promise<MarketplaceS
           kbDocs: Array.isArray(remote.kbDocs) ? (remote.kbDocs as PrototypeKbDocument[]) : [],
         };
       }
-    } catch {
+    } catch (error) {
+      if (options?.throwOnRemoteError) throw error;
       /* fall through to local */
     }
   }

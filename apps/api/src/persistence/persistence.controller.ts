@@ -271,14 +271,21 @@ export class PersistenceController {
   async deleteBlob(
     @Param('workspaceId') workspaceId: string,
     @Param('blobId') blobId: string,
+    @Req() req: Request,
   ) {
     try {
-      await this.blobs.delete(workspaceId, blobId);
+      await this.blobs.delete(
+        workspaceId,
+        blobId,
+        req.header('x-blob-delete-token')?.trim(),
+      );
       return { ok: true, id: blobId };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'blob_delete_failed';
       if (msg === 'invalid_blob_id') throw new BadRequestException(msg);
-      if (msg === 'blob_not_found') throw new NotFoundException(msg);
+      if (msg === 'blob_not_found' || msg === 'blob_delete_denied') {
+        throw new NotFoundException('blob_not_found');
+      }
       this.logger.error(
         'Blob deletion failed',
         err instanceof Error ? err.stack : String(err),

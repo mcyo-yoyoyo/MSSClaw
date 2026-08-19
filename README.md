@@ -124,6 +124,7 @@ API 地址和密钥也可以在应用的运行时设置中覆盖。
 | `JSON_BODY_LIMIT` | `20mb` | JSON 请求体大小限制（不包含二进制流式能力包） |
 | `BLOB_MAX_BYTES` | `12582912` | 普通附件最大字节数（默认 12 MiB） |
 | `PACKAGE_BLOB_MAX_BYTES` | `209715200` | Skill / Agent 原始包最大字节数（默认 200 MiB） |
+| `HTTP_REQUEST_TIMEOUT_MS` | `600000` | Node 接收完整请求的超时；覆盖 200 MiB 慢速上传所需时间 |
 | `BLOB_ROOT` | 应用默认目录 | 上传文件存储目录 |
 | `MAX_CONCURRENT_SSE` | `200` | SSE 执行流并发上限 |
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | 空 | OpenAI 兼容模型配置 |

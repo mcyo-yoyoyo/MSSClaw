@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { createHash, randomUUID } from 'crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import { createReadStream, promises as fs, type ReadStream } from 'fs';
 import * as path from 'path';
 import type { Readable } from 'stream';
@@ -12,14 +12,29 @@ export type BlobMeta = {
   size: number;
   sha256: string;
   createdAt: string;
+  deleteCapabilityHash?: string;
 };
+
+export type UploadedBlob = Omit<BlobMeta, 'deleteCapabilityHash'> & { url: string };
+export type UploadedPackageBlob = UploadedBlob & { deleteToken: string };
 
 const DEFAULT_BLOB_MAX_BYTES = 12 * 1024 * 1024;
 const DEFAULT_PACKAGE_BLOB_MAX_BYTES = 200 * 1024 * 1024;
 const GENERATED_BLOB_ID = /^[0-9a-f]{32}$/;
+const GENERATED_DELETE_TOKEN = /^[A-Za-z0-9_-]{43}$/;
+const STORED_CAPABILITY_HASH = /^[0-9a-f]{64}$/;
+const INVALID_CAPABILITY_HASH = Buffer.alloc(32);
 
 function isFileSystemError(err: unknown, code: string): boolean {
   return typeof err === 'object' && err !== null && 'code' in err && err.code === code;
+}
+
+function uploadedBlob(meta: BlobMeta): UploadedBlob {
+  const { deleteCapabilityHash: _privateCapability, ...publicMeta } = meta;
+  return {
+    ...publicMeta,
+    url: `/api/v1/workspaces/${meta.workspaceId}/blobs/${meta.id}`,
+  };
 }
 
 export function packageArchiveMimeType(name: string): string | undefined {
@@ -63,7 +78,7 @@ export class BlobStoreService {
   async putBase64(
     workspaceId: string,
     input: { name: string; mimeType?: string; dataBase64: string },
-  ): Promise<BlobMeta & { url: string }> {
+  ): Promise<UploadedBlob> {
     const raw = Buffer.from(input.dataBase64, 'base64');
     if (!raw.length) throw new Error('empty_blob');
     const maxBytes = configuredPositiveBytes('BLOB_MAX_BYTES', DEFAULT_BLOB_MAX_BYTES);
@@ -86,10 +101,7 @@ export class BlobStoreService {
     await fs.writeFile(this.binPath(workspaceId, id), raw);
     await fs.writeFile(this.metaPath(workspaceId, id), JSON.stringify(meta, null, 2), 'utf8');
     this.logger.log(`blob stored ${workspaceId}/${id} (${meta.size}B)`);
-    return {
-      ...meta,
-      url: `/api/v1/workspaces/${workspaceId}/blobs/${id}`,
-    };
+    return uploadedBlob(meta);
   }
 
   async putPackageStream(
@@ -99,7 +111,7 @@ export class BlobStoreService {
       stream: Readable;
       contentLength?: number;
     },
-  ): Promise<BlobMeta & { url: string }> {
+  ): Promise<UploadedPackageBlob> {
     const mimeType = packageArchiveMimeType(input.name);
     if (!mimeType) throw new Error('unsupported_package_type');
 
@@ -109,6 +121,8 @@ export class BlobStoreService {
     }
 
     const id = randomUUID().replace(/-/g, '');
+    const deleteToken = randomBytes(32).toString('base64url');
+    const deleteCapabilityHash = createHash('sha256').update(deleteToken).digest('hex');
     const dir = this.workspaceDir(workspaceId);
     const binPath = this.binPath(workspaceId, id);
     const metaPath = this.metaPath(workspaceId, id);
@@ -158,6 +172,7 @@ export class BlobStoreService {
         size,
         sha256: hash.digest('hex'),
         createdAt: new Date().toISOString(),
+        deleteCapabilityHash,
       };
       await fs.writeFile(tempMetaPath, JSON.stringify(meta, null, 2), {
         encoding: 'utf8',
@@ -171,10 +186,7 @@ export class BlobStoreService {
       committedMeta = true;
 
       this.logger.log(`package blob stored ${workspaceId}/${id} (${meta.size}B)`);
-      return {
-        ...meta,
-        url: `/api/v1/workspaces/${workspaceId}/blobs/${id}`,
-      };
+      return { ...uploadedBlob(meta), deleteToken };
     } catch (err) {
       await Promise.allSettled([
         fs.unlink(tempBinPath),
@@ -202,24 +214,48 @@ export class BlobStoreService {
     }
   }
 
-  async delete(workspaceId: string, id: string): Promise<void> {
+  async delete(workspaceId: string, id: string, deleteToken?: string): Promise<void> {
     if (!GENERATED_BLOB_ID.test(id)) throw new Error('invalid_blob_id');
 
     const dir = this.workspaceDir(workspaceId);
     const binPath = this.binPath(workspaceId, id);
     const metaPath = this.metaPath(workspaceId, id);
+    let meta: BlobMeta;
     try {
-      const [binStat, metaStat] = await Promise.all([fs.lstat(binPath), fs.lstat(metaPath)]);
+      const [binStat, metaStat, metaRaw] = await Promise.all([
+        fs.lstat(binPath),
+        fs.lstat(metaPath),
+        fs.readFile(metaPath, 'utf8'),
+      ]);
       if (!binStat.isFile() || !metaStat.isFile()) throw new Error('blob_not_found');
+      meta = JSON.parse(metaRaw) as BlobMeta;
     } catch (err) {
       if (err instanceof Error && err.message === 'blob_not_found') throw err;
       if (isFileSystemError(err, 'ENOENT')) throw new Error('blob_not_found');
       throw err;
     }
 
-    const deleteToken = randomUUID().replace(/-/g, '');
-    const stagedBinPath = path.join(dir, `.${id}.${deleteToken}.delete.bin.tmp`);
-    const stagedMetaPath = path.join(dir, `.${id}.${deleteToken}.delete.json.tmp`);
+    const providedHash = createHash('sha256').update(deleteToken ?? '').digest();
+    const storedCapabilityHash =
+      typeof meta.deleteCapabilityHash === 'string' &&
+      STORED_CAPABILITY_HASH.test(meta.deleteCapabilityHash)
+        ? meta.deleteCapabilityHash
+        : undefined;
+    const expectedHash = storedCapabilityHash
+      ? Buffer.from(storedCapabilityHash, 'hex')
+      : INVALID_CAPABILITY_HASH;
+    const capabilityMatches = timingSafeEqual(providedHash, expectedHash);
+    if (
+      !storedCapabilityHash ||
+      !GENERATED_DELETE_TOKEN.test(deleteToken ?? '') ||
+      !capabilityMatches
+    ) {
+      throw new Error('blob_delete_denied');
+    }
+
+    const stagingToken = randomUUID().replace(/-/g, '');
+    const stagedBinPath = path.join(dir, `.${id}.${stagingToken}.delete.bin.tmp`);
+    const stagedMetaPath = path.join(dir, `.${id}.${stagingToken}.delete.json.tmp`);
     let binStaged = false;
     let metaStaged = false;
 

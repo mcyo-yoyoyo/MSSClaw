@@ -13,7 +13,11 @@ import { kbDocFromFile, readKbFileAsText } from '@/domain/kbUtils';
 import { parseSkillUpload } from '@/domain/skillExport';
 import { parseAgentUpload } from '@/domain/agentExport';
 import { parseKbDocument } from '@/api/kbClient';
-import { uploadWorkspacePackage } from '@/api/blobApi';
+import {
+  deleteWorkspaceBlob,
+  isPackageUploadContextCurrent,
+  uploadWorkspacePackage,
+} from '@/api/blobApi';
 import { currentWorkspaceId } from '@/api/platformDocsApi';
 import { packageUploadSizeError } from '@/domain/packageUpload';
 import { packageZipErrorMessage } from '@/domain/safeZip';
@@ -38,6 +42,7 @@ type BusinessFilter = BusinessScenarioId | 'all';
 
 interface MarketplaceState {
   ready: boolean;
+  loadError: string | null;
   agents: PrototypeAgentSeed[];
   skills: PrototypeSkillSeed[];
   tools: PrototypeToolSeed[];
@@ -123,8 +128,13 @@ interface MarketplaceState {
 async function retainImportedPackage(file: File) {
   if (!file.name.toLowerCase().endsWith('.zip')) return undefined;
   if (packageUploadSizeError(file)) return undefined;
+  const workspaceId = currentWorkspaceId();
   try {
-    const uploaded = await uploadWorkspacePackage(currentWorkspaceId(), file);
+    const uploaded = await uploadWorkspacePackage(workspaceId, file);
+    if (!isPackageUploadContextCurrent(uploaded, currentWorkspaceId())) {
+      await deleteWorkspaceBlob(workspaceId, uploaded).catch(() => undefined);
+      return undefined;
+    }
     return {
       id: uploaded.id,
       url: uploaded.url,
@@ -137,8 +147,11 @@ async function retainImportedPackage(file: File) {
   }
 }
 
+let marketplaceBootstrapGeneration = 0;
+
 export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   ready: false,
+  loadError: null,
   agents: [],
   skills: [],
   tools: [],
@@ -169,13 +182,46 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   toast: null,
 
   bootstrap: async (workspaceId) => {
-    const snapshot = await loadMarketplace(workspaceId);
+    const generation = ++marketplaceBootstrapGeneration;
     set({
-      ...snapshot,
-      agents: backfillAgentSeedMetadata(snapshot.agents ?? []),
-      tools: pruneRetiredDemoTools(snapshot.tools ?? []),
-      ready: true,
+      ready: false,
+      loadError: null,
+      agents: [],
+      skills: [],
+      tools: [],
+      automations: [],
+      kbDocs: [],
     });
+    try {
+      const snapshot = await loadMarketplace(workspaceId, {
+        throwOnRemoteError: true,
+      });
+      if (
+        generation !== marketplaceBootstrapGeneration ||
+        useWorkspaceStore.getState().workspaceId !== workspaceId
+      ) {
+        return;
+      }
+      set({
+        ...snapshot,
+        agents: backfillAgentSeedMetadata(snapshot.agents ?? []),
+        tools: pruneRetiredDemoTools(snapshot.tools ?? []),
+        ready: true,
+        loadError: null,
+      });
+    } catch (error) {
+      if (
+        generation !== marketplaceBootstrapGeneration ||
+        useWorkspaceStore.getState().workspaceId !== workspaceId
+      ) {
+        return;
+      }
+      set({
+        ready: true,
+        loadError:
+          error instanceof Error ? error.message : '市场数据加载失败',
+      });
+    }
   },
 
   persist: () => {
@@ -266,7 +312,10 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
       const importedSkills: PrototypeSkillSeed[] = [];
       const userName = getCurrentUserName() || 'Imported';
       const userId = getCurrentUserId();
-      const packageBlob = await retainImportedPackage(file);
+      const packageBlob =
+        items.length > 0 && items.some((item) => !item.packageBlob)
+          ? await retainImportedPackage(file)
+          : undefined;
 
       for (const parsed of items) {
         const idTaken = get().skills.some((s) => s.id === parsed.id);
@@ -321,7 +370,10 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
       const imported: PrototypeAgentSeed[] = [];
       const userName = getCurrentUserName() || 'Imported';
       const userId = getCurrentUserId();
-      const packageBlob = await retainImportedPackage(file);
+      const packageBlob =
+        items.length > 0 && items.some((item) => !item.packageBlob)
+          ? await retainImportedPackage(file)
+          : undefined;
 
       for (const parsed of items) {
         const idTaken = get().agents.some((a) => a.id === parsed.id);

@@ -36,6 +36,8 @@ export const SEED_EXTERNAL_TAXONOMY = {
 
 export const SEED_INTERNAL_OFFICE_SCENES = {
   version: 2,
+  /** 首次写入数据库的基线版本；客户端首次修改需提交 expectedRevision: 0。 */
+  revision: 0,
   entries: [
   {
     id: 'capture', label: '录音及纪要用云笔记', english: 'CAPTURE',

@@ -29,7 +29,11 @@ import {
   packageUploadSizeError,
 } from '@/domain/packageUpload';
 import { packageZipErrorMessage } from '@/domain/safeZip';
-import { uploadWorkspacePackage } from '@/api/blobApi';
+import {
+  deleteWorkspaceBlob,
+  isPackageUploadContextCurrent,
+  uploadWorkspacePackage,
+} from '@/api/blobApi';
 import { currentWorkspaceId } from '@/api/platformDocsApi';
 
 function slugCommand(name: string): string {
@@ -162,11 +166,22 @@ export function MarketSkillSubmitModal({
     const cmd = (command.trim() || slugCommand(nameZh)).replace(/^\//, '');
     const descZh = desc.trim() || '业务提报场景技能（待运营完善）';
     let packageBlob: PrototypeSkillSeed['packageBlob'];
+    let uploadedPackage: Awaited<ReturnType<typeof uploadWorkspacePackage>> | undefined;
+    let packageWorkspaceId: string | undefined;
 
     if (packageFile) {
       setSubmitting(true);
       try {
-        const uploaded = await uploadWorkspacePackage(currentWorkspaceId(), packageFile);
+        packageWorkspaceId = currentWorkspaceId();
+        const uploaded = await uploadWorkspacePackage(packageWorkspaceId, packageFile);
+        uploadedPackage = uploaded;
+        if (!isPackageUploadContextCurrent(uploaded, currentWorkspaceId())) {
+          void deleteWorkspaceBlob(packageWorkspaceId, uploaded).catch(() => undefined);
+          uploadedPackage = undefined;
+          showToast('工作区或 API 配置已变更，请重新提交');
+          setSubmitting(false);
+          return;
+        }
         packageBlob = {
           id: uploaded.id,
           url: uploaded.url,
@@ -181,58 +196,68 @@ export function MarketSkillSubmitModal({
       }
     }
 
-    let draft = syncSkillZhPrimary({
-      id,
-      name: nameZh,
-      nameZh,
-      nameEn: parsedExtra?.nameEn?.trim() || '',
-      desc: descZh,
-      descZh,
-      descEn: parsedExtra?.descEn?.trim() || '',
-      category: 'office',
-      command: cmd,
-      version: parsedExtra?.version?.trim() || '1.0.0',
-      connector: '',
-      author: userName,
-      publisher: userName,
-      publisherUserId: userId || undefined,
-      published: false,
-      invokes: 0,
-      icon: parsedExtra?.icon || 'fa-cube',
-      accentColor: parsedExtra?.accentColor || DEFAULT_SKILL_ACCENT,
-      tags: [...(parsedExtra?.tags ?? []), '提报'].filter(Boolean),
-      searchKeywords: parsedExtra?.searchKeywords?.length
-        ? parsedExtra.searchKeywords
-        : suggestSkillSearchKeywords({
-            nameZh,
-            descZh,
-            instructions,
-            command: cmd,
-          }),
-      instructions: instructions.trim() || undefined,
-      planSteps: parsedExtra?.planSteps ?? [],
-      packageBlob,
-      sourceType: 'internal',
-      visibility,
-      ownerDeptIds: ownerDeptIds.slice(0, 1),
-      ownerRegionId,
-      homepageUrl: undefined,
-      businessScenarioId: businessId,
-      // 提报至 MSS 场景技能：审批通过后露出
-      featuredInDoTask: true,
-      featuredInMssMarket: true,
-    } as PrototypeSkillSeed);
+    try {
+      let draft = syncSkillZhPrimary({
+        id,
+        name: nameZh,
+        nameZh,
+        nameEn: parsedExtra?.nameEn?.trim() || '',
+        desc: descZh,
+        descZh,
+        descEn: parsedExtra?.descEn?.trim() || '',
+        category: 'office',
+        command: cmd,
+        version: parsedExtra?.version?.trim() || '1.0.0',
+        connector: '',
+        author: userName,
+        publisher: userName,
+        publisherUserId: userId || undefined,
+        published: false,
+        invokes: 0,
+        icon: parsedExtra?.icon || 'fa-cube',
+        accentColor: parsedExtra?.accentColor || DEFAULT_SKILL_ACCENT,
+        tags: [...(parsedExtra?.tags ?? []), '提报'].filter(Boolean),
+        searchKeywords: parsedExtra?.searchKeywords?.length
+          ? parsedExtra.searchKeywords
+          : suggestSkillSearchKeywords({
+              nameZh,
+              descZh,
+              instructions,
+              command: cmd,
+            }),
+        instructions: instructions.trim() || undefined,
+        planSteps: parsedExtra?.planSteps ?? [],
+        packageBlob,
+        sourceType: 'internal',
+        visibility,
+        ownerDeptIds: ownerDeptIds.slice(0, 1),
+        ownerRegionId,
+        homepageUrl: undefined,
+        businessScenarioId: businessId,
+        // 提报至 MSS 场景技能：审批通过后露出
+        featuredInDoTask: true,
+        featuredInMssMarket: true,
+      } as PrototypeSkillSeed);
 
-    draft = syncSkillZhPrimary(draft);
-    upsertSkill(draft, true);
-    onClose();
-    useAssetApprovalStore.getState().openApproval({
-      kind: 'skill',
-      assetId: id,
-      assetName: skillDisplayName(draft),
-      reasons: ['publish_executable'],
-    });
-    showToast('技能已提报，进入上架审批');
+      draft = syncSkillZhPrimary(draft);
+      upsertSkill(draft, true);
+      // upsert 成功后 packageBlob 已被新 Skill 引用，不再属于临时资源。
+      uploadedPackage = undefined;
+      onClose();
+      useAssetApprovalStore.getState().openApproval({
+        kind: 'skill',
+        assetId: id,
+        assetName: skillDisplayName(draft),
+        reasons: ['publish_executable'],
+      });
+      showToast('技能已提报，进入上架审批');
+    } catch {
+      if (uploadedPackage && packageWorkspaceId) {
+        void deleteWorkspaceBlob(packageWorkspaceId, uploadedPackage).catch(() => undefined);
+      }
+      setSubmitting(false);
+      showToast('技能提报失败，请重试');
+    }
   };
 
   const handleClose = () => {

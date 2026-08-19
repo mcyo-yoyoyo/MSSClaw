@@ -4,7 +4,15 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import compression from 'compression';
 import helmet from 'helmet';
 import { json, urlencoded } from 'express';
+import type { Server } from 'http';
 import { AppModule } from './app.module';
+
+const DEFAULT_HTTP_REQUEST_TIMEOUT_MS = 600_000;
+
+function positiveInteger(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -36,10 +44,16 @@ async function bootstrap() {
   app.enableShutdownHooks();
 
   const port = Number(process.env.PORT ?? 3000);
+  const requestTimeoutMs = positiveInteger(
+    process.env.HTTP_REQUEST_TIMEOUT_MS,
+    DEFAULT_HTTP_REQUEST_TIMEOUT_MS,
+  );
+  const httpServer = app.getHttpServer() as Server;
+  httpServer.requestTimeout = requestTimeoutMs;
   await app.listen(port);
   logger.log(`MSS Claw API listening on http://localhost:${port}/api/v1`);
   logger.log(
-    `JSON body limit=${bodyLimit}; API_KEY=${process.env.API_KEY ? 'on' : 'off'}; MAX_CONCURRENT_SSE=${process.env.MAX_CONCURRENT_SSE ?? 200}`,
+    `JSON body limit=${bodyLimit}; HTTP request timeout=${requestTimeoutMs}ms; API_KEY=${process.env.API_KEY ? 'on' : 'off'}; MAX_CONCURRENT_SSE=${process.env.MAX_CONCURRENT_SSE ?? 200}`,
   );
 }
 

@@ -7,7 +7,11 @@ import { assertSkillScanAllowsApproval } from '@/domain/skillSecurityScan';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { shareSyncSaveHint } from '@/domain/shareSync';
-import { uploadWorkspacePackage } from '@/api/blobApi';
+import {
+  deleteWorkspaceBlob,
+  isPackageUploadContextCurrent,
+  uploadWorkspacePackage,
+} from '@/api/blobApi';
 import { currentWorkspaceId } from '@/api/platformDocsApi';
 import {
   PACKAGE_UPLOAD_MAX_LABEL,
@@ -44,6 +48,7 @@ export function SkillOpsRequestModal({
     setPackageFile(null);
     setUnpublishMode('all');
     setUnpublishVersions([]);
+    setSubmitting(false);
   }, [skill, kind]);
 
   if (!skill || !kind) return null;
@@ -77,26 +82,40 @@ export function SkillOpsRequestModal({
         return;
       }
       setSubmitting(true);
+      const workspaceId = currentWorkspaceId();
       let uploaded: Awaited<ReturnType<typeof uploadWorkspacePackage>>;
       try {
-        uploaded = await uploadWorkspacePackage(currentWorkspaceId(), packageFile);
+        uploaded = await uploadWorkspacePackage(workspaceId, packageFile);
       } catch {
         showToast('完整包上传失败，请检查后端连接后重试');
         setSubmitting(false);
         return;
       }
-      openApproval({
-        kind: 'skill',
-        assetId: skill.id,
-        assetName: skillDisplayName(skill),
-        reasons: ['update_version'],
-        targetVersion: targetVersion.trim(),
-        note: note.trim(),
-        packageName: uploaded.name,
-        packageBlobId: uploaded.id,
-        packageUrl: uploaded.url,
-        packageSize: uploaded.size,
-      });
+      if (!isPackageUploadContextCurrent(uploaded, currentWorkspaceId())) {
+        void deleteWorkspaceBlob(workspaceId, uploaded).catch(() => undefined);
+        showToast('工作区或 API 配置已变更，请重新提交');
+        setSubmitting(false);
+        return;
+      }
+      try {
+        openApproval({
+          kind: 'skill',
+          assetId: skill.id,
+          assetName: skillDisplayName(skill),
+          reasons: ['update_version'],
+          targetVersion: targetVersion.trim(),
+          note: note.trim(),
+          packageName: uploaded.name,
+          packageBlobId: uploaded.id,
+          packageUrl: uploaded.url,
+          packageSize: uploaded.size,
+        });
+      } catch {
+        void deleteWorkspaceBlob(workspaceId, uploaded).catch(() => undefined);
+        showToast('更新申请创建失败，请重试');
+        setSubmitting(false);
+        return;
+      }
       showToast('已提交更新上架申请，待业务主管与 MSS 质量运营审批' + shareSyncSaveHint());
       onClose();
       return;
@@ -123,18 +142,26 @@ export function SkillOpsRequestModal({
     onClose();
   };
 
+  const handleClose = () => {
+    if (submitting) {
+      showToast('完整 Skill 包正在上传，请稍候');
+      return;
+    }
+    onClose();
+  };
+
   return (
     <CenterModal
       open
       elevate
       size="md"
       title={title}
-      onClose={onClose}
+      onClose={handleClose}
       actions={
         <>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium text-zinc-600"
           >
             取消

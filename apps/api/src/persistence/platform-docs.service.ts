@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -42,6 +42,185 @@ export const PLATFORM_DOC_KINDS = [
 ] as const;
 
 export type PlatformDocKind = (typeof PLATFORM_DOC_KINDS)[number];
+
+const OFFICE_SCENE_LIMITS = {
+  entries: 100,
+  id: 48,
+  label: 120,
+  english: 80,
+  description: 4_000,
+  icon: 100,
+  toolId: 128,
+  toolBlurb: 500,
+} as const;
+
+const OFFICE_SCENE_ID_RE = /^[a-z0-9][a-z0-9-]{0,47}$/;
+const OFFICE_SCENE_TOOL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const OFFICE_SCENE_ICON_RE = /^[A-Za-z0-9_-]+(?:\s+[A-Za-z0-9_-]+)*$/;
+
+type JsonObject = Record<string, unknown>;
+
+interface CanonicalOfficeSceneEntry {
+  id: string;
+  label: string;
+  english: string;
+  description: string;
+  icon: string;
+  visible: boolean;
+  toolIds: string[];
+  toolBlurbs: Record<string, string>;
+}
+
+interface CanonicalOfficeSceneInput {
+  expectedRevision: number;
+  entries: CanonicalOfficeSceneEntry[];
+}
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function invalidOfficeScenes(path: string, reason: string): never {
+  throw new BadRequestException(`invalid_internal_office_scenes:${path}:${reason}`);
+}
+
+function boundedString(
+  value: unknown,
+  path: string,
+  maxLength: number,
+  options: { allowEmpty?: boolean } = {},
+): string {
+  if (typeof value !== 'string') invalidOfficeScenes(path, 'string_required');
+  const normalized = value.trim();
+  if (!options.allowEmpty && !normalized) invalidOfficeScenes(path, 'required');
+  if (normalized.length > maxLength) invalidOfficeScenes(path, `max_length_${maxLength}`);
+  return normalized;
+}
+
+function canonicalToolId(value: unknown, path: string): string {
+  const id = boundedString(value, path, OFFICE_SCENE_LIMITS.toolId);
+  if (!OFFICE_SCENE_TOOL_ID_RE.test(id)) invalidOfficeScenes(path, 'invalid_id');
+  return id;
+}
+
+/**
+ * `internal-office-scenes` 是管理后台可写配置，不能把任意 JSON 原样放进数据库。
+ * 这里同时做运行时校验和白名单化，未知字段（包括客户端传来的 revision）不会落库。
+ */
+function canonicalizeOfficeSceneInput(payload: unknown): CanonicalOfficeSceneInput {
+  if (!isJsonObject(payload)) invalidOfficeScenes('payload', 'object_required');
+
+  const expectedRevision = payload.expectedRevision;
+  if (
+    typeof expectedRevision !== 'number' ||
+    !Number.isSafeInteger(expectedRevision) ||
+    expectedRevision < 0
+  ) {
+    invalidOfficeScenes('expectedRevision', 'non_negative_integer_required');
+  }
+
+  if (!Array.isArray(payload.entries)) invalidOfficeScenes('entries', 'array_required');
+  if (payload.entries.length > OFFICE_SCENE_LIMITS.entries) {
+    invalidOfficeScenes('entries', `max_items_${OFFICE_SCENE_LIMITS.entries}`);
+  }
+
+  const seenIds = new Set<string>();
+  const entries = payload.entries.map((rawEntry, index): CanonicalOfficeSceneEntry => {
+    const path = `entries[${index}]`;
+    if (!isJsonObject(rawEntry)) invalidOfficeScenes(path, 'object_required');
+
+    const id = boundedString(rawEntry.id, `${path}.id`, OFFICE_SCENE_LIMITS.id).toLowerCase();
+    if (!OFFICE_SCENE_ID_RE.test(id)) invalidOfficeScenes(`${path}.id`, 'invalid_id');
+    if (seenIds.has(id)) invalidOfficeScenes(`${path}.id`, 'duplicate');
+    seenIds.add(id);
+
+    const label = boundedString(rawEntry.label, `${path}.label`, OFFICE_SCENE_LIMITS.label);
+    const english = boundedString(
+      rawEntry.english,
+      `${path}.english`,
+      OFFICE_SCENE_LIMITS.english,
+      { allowEmpty: true },
+    );
+    const description = boundedString(
+      rawEntry.description,
+      `${path}.description`,
+      OFFICE_SCENE_LIMITS.description,
+      { allowEmpty: true },
+    );
+    const icon = boundedString(rawEntry.icon, `${path}.icon`, OFFICE_SCENE_LIMITS.icon, {
+      allowEmpty: true,
+    }) || 'fa-cube';
+    if (!OFFICE_SCENE_ICON_RE.test(icon)) invalidOfficeScenes(`${path}.icon`, 'invalid_icon');
+    if (typeof rawEntry.visible !== 'boolean') {
+      invalidOfficeScenes(`${path}.visible`, 'boolean_required');
+    }
+
+    if (!Array.isArray(rawEntry.toolIds)) {
+      invalidOfficeScenes(`${path}.toolIds`, 'array_required');
+    }
+    if (rawEntry.toolIds.length > 1) {
+      invalidOfficeScenes(`${path}.toolIds`, 'max_items_1');
+    }
+    const toolIds = rawEntry.toolIds.map((toolId, toolIndex) =>
+      canonicalToolId(toolId, `${path}.toolIds[${toolIndex}]`),
+    );
+    if (new Set(toolIds).size !== toolIds.length) {
+      invalidOfficeScenes(`${path}.toolIds`, 'duplicate');
+    }
+
+    const rawToolBlurbs = rawEntry.toolBlurbs === undefined ? {} : rawEntry.toolBlurbs;
+    if (!isJsonObject(rawToolBlurbs)) {
+      invalidOfficeScenes(`${path}.toolBlurbs`, 'object_required');
+    }
+    const toolBlurbs: Record<string, string> = {};
+    for (const [rawToolId, rawBlurb] of Object.entries(rawToolBlurbs)) {
+      const toolId = canonicalToolId(rawToolId, `${path}.toolBlurbs.key`);
+      if (Object.prototype.hasOwnProperty.call(toolBlurbs, toolId)) {
+        invalidOfficeScenes(`${path}.toolBlurbs.${toolId}`, 'duplicate');
+      }
+      if (!toolIds.includes(toolId)) {
+        invalidOfficeScenes(`${path}.toolBlurbs.${toolId}`, 'tool_not_bound');
+      }
+      toolBlurbs[toolId] = boundedString(
+        rawBlurb,
+        `${path}.toolBlurbs.${toolId}`,
+        OFFICE_SCENE_LIMITS.toolBlurb,
+        { allowEmpty: true },
+      );
+    }
+
+    return {
+      id,
+      label,
+      english,
+      description,
+      icon,
+      visible: rawEntry.visible,
+      toolIds,
+      toolBlurbs,
+    };
+  });
+
+  return { expectedRevision, entries };
+}
+
+/** 旧数据没有 revision 时按 0 处理；不在 GET 时回写或替换其业务内容。 */
+function storedOfficeSceneRevision(payload: unknown): number {
+  if (!isJsonObject(payload)) return 0;
+  const revision = payload.revision;
+  return typeof revision === 'number' && Number.isSafeInteger(revision) && revision >= 0
+    ? revision
+    : 0;
+}
+
+function officeScenePayloadForRead(payload: unknown): unknown {
+  if (Array.isArray(payload)) {
+    return { version: 1, revision: 0, entries: payload };
+  }
+  if (!isJsonObject(payload)) return payload;
+  const { expectedRevision: _discarded, ...stored } = payload;
+  return { ...stored, revision: storedOfficeSceneRevision(payload) };
+}
 
 const SEED_MEMBERS = [
   {
@@ -108,20 +287,13 @@ function initialMarketDoc(kind: PlatformDocKind): unknown | undefined {
 
 function shouldUpgradeMarketDoc(kind: PlatformDocKind, payload: unknown): boolean {
   if (initialMarketDoc(kind) === undefined) return false;
+  // 办公场景一旦存在即以数据库为准。版本迁移必须显式完成，GET 绝不能用种子覆盖运营数据。
+  if (kind === 'internal-office-scenes') return false;
   if (
     kind === 'external-taxonomy' &&
     (!payload ||
       typeof payload !== 'object' ||
       Number((payload as { version?: unknown }).version) !== SEED_EXTERNAL_TAXONOMY.version)
-  ) {
-    return true;
-  }
-  if (
-    kind === 'internal-office-scenes' &&
-    (!payload ||
-      Array.isArray(payload) ||
-      typeof payload !== 'object' ||
-      Number((payload as { version?: unknown }).version) !== SEED_INTERNAL_OFFICE_SCENES.version)
   ) {
     return true;
   }
@@ -145,6 +317,9 @@ export class PlatformDocsService {
       where: { id: docId(workspaceId, kind) },
     });
     if (row) {
+      if (kind === 'internal-office-scenes') {
+        return { kind, payload: officeScenePayloadForRead(row.payload) };
+      }
       if (shouldUpgradeMarketDoc(kind, row.payload)) {
         const payload = initialMarketDoc(kind)!;
         await this.prisma.centerRecord.update({
@@ -160,9 +335,16 @@ export class PlatformDocsService {
     return { kind, payload: seeded };
   }
 
-  async putDoc(workspaceId: string, kind: string, payload: unknown) {
+  async putDoc(
+    workspaceId: string,
+    kind: string,
+    payload: unknown,
+  ): Promise<{ kind: string; payload: unknown }> {
     if (!isDocKind(kind)) throw new BadRequestException(`unsupported_doc_kind:${kind}`);
     await this.ensureWorkspace(workspaceId);
+    if (kind === 'internal-office-scenes') {
+      return this.putInternalOfficeScenesDoc(workspaceId, payload);
+    }
     const id = docId(workspaceId, kind);
     await this.prisma.centerRecord.upsert({
       where: { id },
@@ -187,7 +369,9 @@ export class PlatformDocsService {
     const byKind: Record<string, unknown> = {};
     for (const kind of PLATFORM_DOC_KINDS) {
       const row = rows.find((r) => r.id === docId(workspaceId, kind));
-      if (row && shouldUpgradeMarketDoc(kind, row.payload)) {
+      if (row && kind === 'internal-office-scenes') {
+        byKind[kind] = officeScenePayloadForRead(row.payload);
+      } else if (row && shouldUpgradeMarketDoc(kind, row.payload)) {
         const payload = initialMarketDoc(kind)!;
         await this.prisma.centerRecord.update({
           where: { id: row.id },
@@ -199,6 +383,76 @@ export class PlatformDocsService {
       }
     }
     return { docs: byKind };
+  }
+
+  private async putInternalOfficeScenesDoc(workspaceId: string, payload: unknown) {
+    const { expectedRevision, entries } = canonicalizeOfficeSceneInput(payload);
+    const id = docId(workspaceId, 'internal-office-scenes');
+    const existing = await this.prisma.centerRecord.findUnique({ where: { id } });
+    const currentRevision = existing ? storedOfficeSceneRevision(existing.payload) : 0;
+
+    if (expectedRevision !== currentRevision) {
+      throw new ConflictException({
+        error: 'internal_office_scenes_revision_conflict',
+        expectedRevision,
+        currentRevision,
+      });
+    }
+
+    const nextPayload = {
+      version: SEED_INTERNAL_OFFICE_SCENES.version,
+      revision: currentRevision + 1,
+      entries,
+    };
+
+    if (!existing) {
+      try {
+        await this.prisma.centerRecord.create({
+          data: {
+            id,
+            workspaceId,
+            kind: 'doc:internal-office-scenes',
+            payload: nextPayload as unknown as Prisma.InputJsonValue,
+          },
+        });
+      } catch (error) {
+        // 两个首次写请求并发时，唯一键失败的一方必须表现为 revision 冲突。
+        const raced = await this.prisma.centerRecord.findUnique({ where: { id } });
+        if (raced) {
+          throw new ConflictException({
+            error: 'internal_office_scenes_revision_conflict',
+            expectedRevision,
+            currentRevision: storedOfficeSceneRevision(raced.payload),
+          });
+        }
+        throw error;
+      }
+      return { kind: 'internal-office-scenes', payload: nextPayload };
+    }
+
+    // revision 位于 JSON payload 内。用数据库条件更新完成 compare-and-swap，避免两个进程
+    // 同时读到相同 revision 后彼此覆盖；无 revision 的旧记录在 SQL 中按 0 处理。
+    const changed = await this.prisma.$executeRaw`
+      UPDATE "CenterRecord"
+      SET "payload" = ${JSON.stringify(nextPayload)}, "updatedAt" = ${Date.now()}
+      WHERE "id" = ${id}
+        AND CASE
+          WHEN json_type("payload", '$.revision') = 'integer'
+          THEN json_extract("payload", '$.revision')
+          ELSE 0
+        END = ${expectedRevision}
+    `;
+
+    if (changed !== 1) {
+      const raced = await this.prisma.centerRecord.findUnique({ where: { id } });
+      throw new ConflictException({
+        error: 'internal_office_scenes_revision_conflict',
+        expectedRevision,
+        currentRevision: raced ? storedOfficeSceneRevision(raced.payload) : 0,
+      });
+    }
+
+    return { kind: 'internal-office-scenes', payload: nextPayload };
   }
 
   async login(body: { email?: string; password?: string; workspaceId?: string }) {

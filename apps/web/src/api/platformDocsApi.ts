@@ -102,7 +102,6 @@ export async function savePlatformDoc(
   kind: PlatformDocKind,
   payload: unknown,
 ): Promise<void> {
-  setPlatformDocMemory(workspaceId, kind, payload);
   if (!canUsePlatformDocsApi()) {
     throw new Error('shared_api_required');
   }
@@ -112,6 +111,22 @@ export async function savePlatformDoc(
     body: JSON.stringify({ payload }),
   });
   if (!res.ok) throw new Error(`docs_put_${kind}_${res.status}`);
+
+  // 只有服务端确认写入后，才能让会话缓存代表数据库状态。服务端可能会补 revision
+  // 等规范化字段，优先缓存响应里的 canonical payload；旧服务端无响应 payload 时
+  // 再回退到本次已成功写入的请求值。
+  let savedPayload = payload;
+  if ((res.headers.get('content-type') ?? '').includes('application/json')) {
+    try {
+      const body = (await res.json()) as { payload?: unknown };
+      if (body && Object.prototype.hasOwnProperty.call(body, 'payload')) {
+        savedPayload = body.payload;
+      }
+    } catch {
+      // 写入已经是 2xx；响应体解析失败不应把一次成功写入伪装成失败。
+    }
+  }
+  setPlatformDocMemory(workspaceId, kind, savedPayload);
 }
 
 export async function loginWithApi(params: {
@@ -246,8 +261,13 @@ export async function logoutWithApi(workspaceId?: string): Promise<void> {
   }
 }
 
-/** 防抖写文档，减少连续编辑打爆 API */
-const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+/** 防抖写文档，减少连续编辑打爆 API。被合并调用的 Promise 随最终写入一起结算。 */
+interface PendingDocSave {
+  timer: ReturnType<typeof setTimeout>;
+  waiters: Array<{ resolve: () => void; reject: (reason?: unknown) => void }>;
+}
+
+const saveTimers = new Map<string, PendingDocSave>();
 
 export function scheduleSavePlatformDoc(
   workspaceId: string,
@@ -256,16 +276,17 @@ export function scheduleSavePlatformDoc(
   ms = 500,
 ): Promise<void> {
   const key = memKey(workspaceId, kind);
-  setPlatformDocMemory(workspaceId, kind, payload);
   return new Promise((resolve, reject) => {
     const prev = saveTimers.get(key);
-    if (prev) clearTimeout(prev);
-    saveTimers.set(
-      key,
-      setTimeout(() => {
-        saveTimers.delete(key);
-        void savePlatformDoc(workspaceId, kind, payload).then(resolve).catch(reject);
-      }, ms),
-    );
+    if (prev) clearTimeout(prev.timer);
+    const waiters = [...(prev?.waiters ?? []), { resolve, reject }];
+    const timer = setTimeout(() => {
+      saveTimers.delete(key);
+      void savePlatformDoc(workspaceId, kind, payload).then(
+        () => waiters.forEach((waiter) => waiter.resolve()),
+        (reason) => waiters.forEach((waiter) => waiter.reject(reason)),
+      );
+    }, ms);
+    saveTimers.set(key, { timer, waiters });
   });
 }

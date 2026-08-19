@@ -57,6 +57,7 @@ import {
 } from '@/domain/agentAvatars';
 import { AgentPortrait } from '@/components/brand/AgentPortrait';
 import { cn } from '@/lib/utils';
+import { useTemporaryWorkspaceBlobs } from '@/hooks/useTemporaryWorkspaceBlobs';
 
 export type AgentEditorTarget = string | 'new' | null;
 
@@ -153,6 +154,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
   const skills = useMarketplaceStore((s) => s.skills);
   const upsertAgent = useMarketplaceStore((s) => s.upsertAgent);
   const showToast = useMarketplaceStore((s) => s.showToast);
+  const temporaryPackageBlobs = useTemporaryWorkspaceBlobs(target);
 
   /**
    * 执行包原样存进 blob，详情页据此展示目录树并下发真实原包。
@@ -168,9 +170,16 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
       showToast(sizeError);
       return;
     }
+    const replacedPackageBlob = form.packageBlob;
     setUploadingPackage(true);
+    const workspaceId = currentWorkspaceId();
+    const uploadGeneration = temporaryPackageBlobs.currentGeneration();
     try {
-      const uploaded = await uploadWorkspacePackage(currentWorkspaceId(), file);
+      const uploaded = await uploadWorkspacePackage(workspaceId, file);
+      if (!temporaryPackageBlobs.trackUploaded(workspaceId, uploaded, uploadGeneration)) {
+        return;
+      }
+      temporaryPackageBlobs.discard(replacedPackageBlob);
       setForm((f) => ({
         ...f,
         packageBlob: {
@@ -183,9 +192,13 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
       }));
       showToast(`已上传执行包：${uploaded.name}`);
     } catch {
-      showToast('执行包上传失败，请检查后端连接后重试');
+      if (temporaryPackageBlobs.isCurrent(uploadGeneration)) {
+        showToast('执行包上传失败，请检查后端连接后重试');
+      }
     } finally {
-      setUploadingPackage(false);
+      if (temporaryPackageBlobs.isCurrent(uploadGeneration)) {
+        setUploadingPackage(false);
+      }
     }
   };
   const setAppView = useAppViewStore((s) => s.setAppView);
@@ -200,6 +213,10 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
   useEffect(() => {
     hydrateBusinessCatalog();
   }, [hydrateBusinessCatalog]);
+
+  useEffect(() => {
+    setUploadingPackage(false);
+  }, [target]);
 
   useEffect(() => {
     if (!target) return;
@@ -271,6 +288,16 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
     });
   };
 
+  const handleClose = () => {
+    temporaryPackageBlobs.finish();
+    onClose();
+  };
+
+  const removePackageBlob = () => {
+    temporaryPackageBlobs.discard(form.packageBlob);
+    setForm((current) => ({ ...current, packageBlob: undefined }));
+  };
+
   const toggleCapabilityType = (capabilityTypeId: AgentCapabilityTypeId) => {
     setForm((current) => {
       const selected = current.capabilityTypeIds ?? [];
@@ -329,6 +356,15 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
   };
 
   const handleSave = () => {
+    if (uploadingPackage) {
+      showToast('执行包正在上传，请稍候');
+      return;
+    }
+    if (!temporaryPackageBlobs.canCommit(form.packageBlob)) {
+      setForm((current) => ({ ...current, packageBlob: undefined }));
+      showToast('工作区或 API 配置已变更，请重新上传执行包');
+      return;
+    }
     const name = form.name.trim();
     if (!name) {
       showToast('请填写 Agent 名称');
@@ -488,6 +524,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
       },
       isNew,
     );
+    temporaryPackageBlobs.finish(form.packageBlob);
     onClose();
     if (needsApproval) {
       useAssetApprovalStore.getState().openApproval({
@@ -507,8 +544,8 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
       elevate
       size="lg"
       title={title}
-      onClose={onClose}
-      actions={<ModalActions onCancel={onClose} onSave={handleSave} />}
+      onClose={handleClose}
+      actions={<ModalActions onCancel={handleClose} onSave={handleSave} />}
     >
       <div className="space-y-3 text-left">
         <div>
@@ -1481,7 +1518,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
                 </span>
                 <button
                   type="button"
-                  onClick={() => setForm((f) => ({ ...f, packageBlob: undefined }))}
+                  onClick={removePackageBlob}
                   className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-zinc-500 transition hover:bg-rose-50 hover:text-rose-600"
                 >
                   移除
@@ -1519,7 +1556,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
               <button
                 type="button"
                 onClick={() => {
-                  onClose();
+                  handleClose();
                   setAppView('skills');
                 }}
                 className="shrink-0 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50"
@@ -1600,7 +1637,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
                     <button
                       type="button"
                       onClick={() => {
-                        onClose();
+                        handleClose();
                         setAppView('skills');
                       }}
                       className="rounded-lg bg-zinc-900 px-3 py-1.5 text-[11px] font-semibold text-white"

@@ -77,6 +77,7 @@ cp ../../deploy/api.env.example .env
 #   CORS_ORIGIN=https://你们的访问地址   （与浏览器地址一致，可逗号分隔多源）
 #   JSON_BODY_LIMIT=20mb
 #   PACKAGE_BLOB_MAX_BYTES=209715200     （Skill / Agent 原始包最大 200 MiB）
+#   HTTP_REQUEST_TIMEOUT_MS=600000       （接收完整请求最多 10 分钟）
 #   THROTTLE_LIMIT=6000                 （内网 NAT 共享出口 IP，勿用过小默认）
 #   MAX_CONCURRENT_SSE=200
 #   BLOB_ROOT=/var/lib/mssclaw/blobs    （建议放到大磁盘）

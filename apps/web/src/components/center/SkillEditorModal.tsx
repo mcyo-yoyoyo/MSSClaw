@@ -44,6 +44,7 @@ import {
   packageUploadSizeError,
 } from '@/domain/packageUpload';
 import { packageZipErrorMessage } from '@/domain/safeZip';
+import { useTemporaryWorkspaceBlobs } from '@/hooks/useTemporaryWorkspaceBlobs';
 
 const ICON_MAX_BYTES = 512 * 1024;
 
@@ -166,6 +167,7 @@ interface SkillEditorModalProps {
 
 export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   const { skills, upsertSkill, showToast } = useMarketplaceStore();
+  const temporaryPackageBlobs = useTemporaryWorkspaceBlobs(target);
   const [form, setForm] = useState<PrototypeSkillSeed>(emptySkill());
   const [uploadingCase, setUploadingCase] = useState(false);
   const [uploadingPackage, setUploadingPackage] = useState(false);
@@ -189,6 +191,11 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   );
 
   useEffect(() => {
+    setParsing(false);
+    setUploadingPackage(false);
+  }, [target]);
+
+  useEffect(() => {
     if (!target) return;
     if (target === 'new') {
       setForm(emptySkill());
@@ -210,6 +217,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   if (!target) return null;
 
   const applyParsed = (parsed: PrototypeSkillSeed, fileLabel: string) => {
+    temporaryPackageBlobs.discard(form.packageBlob);
     const merged = normalizeSkillForm({
       ...emptySkill(),
       ...parsed,
@@ -243,15 +251,24 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
    * 把 zip 原包存进 blob 并写入 packageBlob，供详情页「文件」解压成目录树。
    * 返回是否成功，调用方据此决定提示文案。
    */
-  const storePackageBlob = async (file: File): Promise<boolean> => {
+  const storePackageBlob = async (
+    file: File,
+    expectedGeneration = temporaryPackageBlobs.currentGeneration(),
+  ): Promise<boolean> => {
     const sizeError = packageUploadSizeError(file);
     if (sizeError) {
       showToast(sizeError);
       return false;
     }
+    const replacedPackageBlob = form.packageBlob;
     setUploadingPackage(true);
+    const workspaceId = currentWorkspaceId();
     try {
-      const uploaded = await uploadWorkspacePackage(currentWorkspaceId(), file);
+      const uploaded = await uploadWorkspacePackage(workspaceId, file);
+      if (!temporaryPackageBlobs.trackUploaded(workspaceId, uploaded, expectedGeneration)) {
+        return false;
+      }
+      temporaryPackageBlobs.discard(replacedPackageBlob);
       setForm((f) => ({
         ...f,
         packageBlob: {
@@ -266,7 +283,9 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     } catch {
       return false;
     } finally {
-      setUploadingPackage(false);
+      if (temporaryPackageBlobs.isCurrent(expectedGeneration)) {
+        setUploadingPackage(false);
+      }
     }
   };
 
@@ -278,9 +297,11 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       if (fileRef.current) fileRef.current.value = '';
       return;
     }
+    const uploadGeneration = temporaryPackageBlobs.currentGeneration();
     setParsing(true);
     try {
       const items = await parseSkillUpload(file);
+      if (!temporaryPackageBlobs.isCurrent(uploadGeneration)) return;
       if (!items[0]) {
         showToast('未能识别标准 Skill 包（支持 .skill.zip / SKILL.md / JSON）');
         return;
@@ -288,14 +309,19 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       applyParsed(items[0], file.name);
       // 提报时上传的 zip 同时留档为原包，用户不必到高级项里再传一次
       if (file.name.toLowerCase().endsWith('.zip')) {
-        const ok = await storePackageBlob(file);
+        const ok = await storePackageBlob(file, uploadGeneration);
+        if (!temporaryPackageBlobs.isCurrent(uploadGeneration)) return;
         showToast(ok ? '已解析并留档 Skill 原包' : '已解析，但原包留档失败（详情页将无文件树）');
       }
     } catch (error) {
-      showToast(packageZipErrorMessage(error, 'Skill 包解析失败，请检查格式'));
+      if (temporaryPackageBlobs.isCurrent(uploadGeneration)) {
+        showToast(packageZipErrorMessage(error, 'Skill 包解析失败，请检查格式'));
+      }
     } finally {
-      setParsing(false);
-      if (fileRef.current) fileRef.current.value = '';
+      if (temporaryPackageBlobs.isCurrent(uploadGeneration)) {
+        setParsing(false);
+        if (fileRef.current) fileRef.current.value = '';
+      }
     }
   };
 
@@ -311,6 +337,16 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     });
     setForm({ ...form, searchKeywords: keywords });
     showToast('已根据名称与正文生成搜索关键词');
+  };
+
+  const handleClose = () => {
+    temporaryPackageBlobs.finish();
+    onClose();
+  };
+
+  const removePackageBlob = () => {
+    temporaryPackageBlobs.discard(form.packageBlob);
+    setForm((current) => ({ ...current, packageBlob: undefined }));
   };
 
   const validateStep = (s: WizardStep): boolean => {
@@ -353,6 +389,15 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   };
 
   const handleSave = () => {
+    if (uploadingPackage || parsing) {
+      showToast('技能包正在解析或上传，请稍候');
+      return;
+    }
+    if (!temporaryPackageBlobs.canCommit(form.packageBlob)) {
+      setForm((current) => ({ ...current, packageBlob: undefined }));
+      showToast('工作区或 API 配置已变更，请重新上传 Skill 包');
+      return;
+    }
     if (!validateStep(1) || !validateStep(2) || !validateStep(3)) {
       if (!(form.nameZh || form.name || '').trim()) setStep(1);
       else setStep(2);
@@ -463,6 +508,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     }
 
     upsertSkill(draft, isNew);
+    temporaryPackageBlobs.finish(form.packageBlob);
     onClose();
 
     if (needsApproval) {
@@ -504,14 +550,14 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       elevate
       size="lg"
       title={isNew ? '提报 Skill' : '编辑 Skill'}
-      onClose={onClose}
+      onClose={handleClose}
       actions={
         <div className="flex w-full items-center justify-between gap-2">
           <p className="hidden text-[11px] text-zinc-500 sm:block">{stepHint}</p>
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="rounded-xl border border-zinc-200 px-3 py-1.5 text-[13px] text-zinc-600 hover:bg-zinc-50"
             >
               取消
@@ -610,6 +656,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
             <button
               type="button"
               onClick={() => {
+                temporaryPackageBlobs.discard(form.packageBlob);
                 setForm(emptySkill());
                 setPackName(null);
                 setStep(1);
@@ -823,7 +870,9 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                         showToast(sizeError);
                         return;
                       }
-                      const ok = await storePackageBlob(file);
+                      const uploadGeneration = temporaryPackageBlobs.currentGeneration();
+                      const ok = await storePackageBlob(file, uploadGeneration);
+                      if (!temporaryPackageBlobs.isCurrent(uploadGeneration)) return;
                       showToast(
                         ok
                           ? `已上传 Skill 包：${file.name}`
@@ -849,7 +898,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                       </span>
                       <button
                         type="button"
-                        onClick={() => setForm((f) => ({ ...f, packageBlob: undefined }))}
+                        onClick={removePackageBlob}
                         className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-zinc-500 transition hover:bg-rose-50 hover:text-rose-600"
                       >
                         移除
