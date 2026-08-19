@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { flattenAiBotNews } from '@/domain/aiBotDailyNews';
 import {
@@ -20,6 +20,244 @@ import { resolveAiBriefPlatformUrl } from '@/domain/aiBriefEmailCopy';
 import { useAiBriefEmailCopyStore } from '@/stores/aiBriefEmailCopyStore';
 import { PageCanvas } from '@/components/layout/PageCanvas';
 import { PageStageHero } from '@/components/layout/PageStageHero';
+
+type CalendarMonth = { year: number; month: number };
+
+const CALENDAR_WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'] as const;
+
+function parseCalendarDateKey(value?: string) {
+  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return { year, month, day };
+}
+
+function shanghaiTodayKey() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+  return year && month && day ? `${year}-${month}-${day}` : '';
+}
+
+function calendarMonthFromKey(value?: string): CalendarMonth {
+  const parsed = parseCalendarDateKey(value) ?? parseCalendarDateKey(shanghaiTodayKey());
+  if (parsed) return { year: parsed.year, month: parsed.month - 1 };
+  const now = new Date();
+  return { year: now.getFullYear(), month: now.getMonth() };
+}
+
+function calendarDateKey(year: number, month: number, day: number) {
+  return `${String(year).padStart(4, '0')}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function calendarDays(year: number, month: number) {
+  const firstWeekday = (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7;
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const cellCount = Math.ceil((firstWeekday + daysInMonth) / 7) * 7;
+  return Array.from({ length: cellCount }, (_, index) => {
+    const date = new Date(Date.UTC(year, month, index - firstWeekday + 1));
+    const cellYear = date.getUTCFullYear();
+    const cellMonth = date.getUTCMonth();
+    const day = date.getUTCDate();
+    return {
+      key: calendarDateKey(cellYear, cellMonth, day),
+      year: cellYear,
+      month: cellMonth,
+      day,
+      inCurrentMonth: cellMonth === month,
+    };
+  });
+}
+
+function DateCalendarFilter({
+  value,
+  initialMonthKey,
+  onChange,
+}: {
+  value: string;
+  initialMonthKey?: string;
+  onChange: (value: string) => void;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [visibleMonth, setVisibleMonth] = useState<CalendarMonth>(() =>
+    calendarMonthFromKey(value || initialMonthKey),
+  );
+  const days = useMemo(
+    () => calendarDays(visibleMonth.year, visibleMonth.month),
+    [visibleMonth.year, visibleMonth.month],
+  );
+  const todayKey = shanghaiTodayKey();
+  const selectedDate = parseCalendarDateKey(value);
+  const selectedLabel = selectedDate
+    ? `${selectedDate.year}/${String(selectedDate.month).padStart(2, '0')}/${String(selectedDate.day).padStart(2, '0')}`
+    : '全部日期';
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
+
+  const moveMonth = (offset: number) => {
+    setVisibleMonth((current) => {
+      const next = new Date(Date.UTC(current.year, current.month + offset, 1));
+      return { year: next.getUTCFullYear(), month: next.getUTCMonth() };
+    });
+  };
+
+  return (
+    <div ref={rootRef} className="relative shrink-0 sm:w-44">
+      <button
+        type="button"
+        onClick={() => {
+          if (!open) setVisibleMonth(calendarMonthFromKey(value || initialMonthKey));
+          setOpen((current) => !current);
+        }}
+        aria-label="按日期筛选"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls="ai-brief-date-calendar"
+        title="打开日期筛选"
+        className={cn(
+          'flex h-10 w-full items-center gap-2 rounded-xl border bg-white px-3 text-[12px] font-medium outline-none transition hover:border-zinc-300 focus:ring-2 focus:ring-[#0071e3]/10',
+          open ? 'border-[#0071e3]/50' : 'border-zinc-200',
+          value ? 'pr-16 text-zinc-700' : 'text-zinc-500',
+        )}
+      >
+        <i className="fa-regular fa-calendar text-[12px] text-zinc-400" />
+        <span className="min-w-0 flex-1 text-left tabular-nums">{selectedLabel}</span>
+        <i
+          className={cn(
+            'fa-solid fa-chevron-down text-[9px] text-zinc-400 transition-transform',
+            open && 'rotate-180',
+          )}
+        />
+      </button>
+
+      {value ? (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          aria-label="清除日期筛选，显示全部日期"
+          title="清除日期筛选"
+          className="absolute right-8 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20"
+        >
+          <i className="fa-solid fa-xmark text-[10px]" />
+        </button>
+      ) : null}
+
+      {open ? (
+        <div
+          id="ai-brief-date-calendar"
+          role="dialog"
+          aria-label="选择筛选日期"
+          className="absolute right-0 top-[calc(100%+8px)] z-40 w-[280px] rounded-2xl border border-zinc-200 bg-white p-3 shadow-[0_16px_40px_rgba(0,0,0,0.14)]"
+        >
+          <div className="mb-2 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => moveMonth(-1)}
+              aria-label="上个月"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900"
+            >
+              <i className="fa-solid fa-chevron-left text-[10px]" />
+            </button>
+            <p className="text-[13px] font-semibold tabular-nums text-zinc-900">
+              {visibleMonth.year}年{visibleMonth.month + 1}月
+            </p>
+            <button
+              type="button"
+              onClick={() => moveMonth(1)}
+              aria-label="下个月"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900"
+            >
+              <i className="fa-solid fa-chevron-right text-[10px]" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-7 text-center">
+            {CALENDAR_WEEKDAYS.map((weekday) => (
+              <span key={weekday} className="py-1 text-[10px] font-medium text-zinc-400">
+                {weekday}
+              </span>
+            ))}
+            {days.map((day) => {
+              const selected = day.key === value;
+              const today = day.key === todayKey;
+              return (
+                <button
+                  key={day.key}
+                  type="button"
+                  onClick={() => {
+                    onChange(day.key);
+                    setOpen(false);
+                  }}
+                  aria-label={`${day.year}年${day.month + 1}月${day.day}日`}
+                  aria-pressed={selected}
+                  className={cn(
+                    'mx-auto my-0.5 flex h-8 w-8 items-center justify-center rounded-lg text-[11px] tabular-nums transition',
+                    day.inCurrentMonth ? 'text-zinc-700 hover:bg-zinc-100' : 'text-zinc-300 hover:bg-zinc-50',
+                    today && !selected && 'font-semibold text-[#0071e3] ring-1 ring-[#0071e3]/20',
+                    selected && 'bg-[#0071e3] font-semibold text-white hover:bg-[#0064c8]',
+                  )}
+                >
+                  {day.day}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-2 flex items-center justify-between border-t border-zinc-100 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                onChange('');
+                setOpen(false);
+              }}
+              className="rounded-lg px-2 py-1.5 text-[11px] font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900"
+            >
+              全部日期
+            </button>
+            <button
+              type="button"
+              onClick={() => setVisibleMonth(calendarMonthFromKey(todayKey))}
+              className="rounded-lg px-2 py-1.5 text-[11px] font-semibold text-[#0071e3] transition hover:bg-[#0071e3]/5"
+            >
+              回到今天
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export function AiBriefPage() {
   const payload = useAiBotDailyNewsStore((s) => s.payload);
@@ -68,16 +306,6 @@ export function AiBriefPage() {
     [flat],
   );
 
-  const recentGroups = useMemo(() => payload.groups.slice(0, 7), [payload.groups]);
-
-  const dateBounds = useMemo(() => {
-    const keys = recentGroups
-      .map((group) => group.dateKey)
-      .filter((key): key is string => Boolean(key))
-      .sort();
-    return { min: keys[0], max: keys[keys.length - 1] };
-  }, [recentGroups]);
-
   const mssBoard = useMemo(
     () => classified.filter((x) => x.mssFit).slice(0, 6),
     [classified],
@@ -85,7 +313,7 @@ export function AiBriefPage() {
 
   const visibleGroups = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
-    return recentGroups
+    return payload.groups
       .filter((group) => !dateFilter || group.dateKey === dateFilter)
       .map((g) => ({
         ...g,
@@ -103,7 +331,7 @@ export function AiBriefPage() {
         }),
       }))
       .filter((g) => g.items.length > 0);
-  }, [recentGroups, categoryFilter, dateFilter, searchQuery]);
+  }, [payload.groups, categoryFilter, dateFilter, searchQuery]);
 
   useEffect(() => {
     if (!highlightId) return;
@@ -238,35 +466,11 @@ export function AiBriefPage() {
             ))}
           </div>
           <div className="flex w-full shrink-0 flex-col gap-2 sm:flex-row lg:w-auto">
-            <div className="relative shrink-0 sm:w-44">
-              <label className="block">
-                <span className="sr-only">按日期筛选</span>
-                <input
-                  type="date"
-                  value={dateFilter}
-                  min={dateBounds.min}
-                  max={dateBounds.max}
-                  onChange={(event) => setDateFilter(event.target.value)}
-                  aria-label="按日期筛选"
-                  title={dateFilter ? `当前筛选：${dateFilter}` : '选择日期；留空显示最近 7 天'}
-                  className={cn(
-                    'h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-[12px] font-medium text-zinc-700 outline-none transition [color-scheme:light] hover:border-zinc-300 focus:border-[#0071e3]/50 focus:ring-2 focus:ring-[#0071e3]/10 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60',
-                    dateFilter && 'pr-16',
-                  )}
-                />
-              </label>
-              {dateFilter ? (
-                <button
-                  type="button"
-                  onClick={() => setDateFilter('')}
-                  aria-label="清除日期筛选，显示最近 7 天"
-                  title="清除日期筛选"
-                  className="absolute right-8 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20"
-                >
-                  <i className="fa-solid fa-xmark text-[10px]" />
-                </button>
-              ) : null}
-            </div>
+            <DateCalendarFilter
+              value={dateFilter}
+              initialMonthKey={payload.groups[0]?.dateKey}
+              onChange={setDateFilter}
+            />
             <form
               className="flex min-w-0 flex-1 gap-2 lg:flex-none"
               onSubmit={(event) => {
@@ -310,14 +514,15 @@ export function AiBriefPage() {
               </div>
             ) : (
               <div className="space-y-8">
-                {visibleGroups.map((group, gi) => (
+                {visibleGroups.map((group) => (
                   <section key={group.dateLabel} className="scroll-mt-4">
                     <div className="mb-3 flex items-baseline gap-2 px-1">
                       <h2 className="text-[18px] font-bold tracking-tight text-zinc-900">
                         {group.dateLabel}
                       </h2>
                       <span className="text-[11px] text-zinc-500">
-                        {gi === 0 ? '最新一日 · ' : ''}{group.items.length} 条
+                        {group.dateKey === payload.groups[0]?.dateKey ? '最新一日 · ' : ''}
+                        {group.items.length} 条
                       </span>
                     </div>
                     <div className="ml-4 space-y-3 border-l border-zinc-300/80 pl-7">
@@ -345,7 +550,9 @@ export function AiBriefPage() {
                                       {item.source}
                                     </span>
                                   ) : null}
-                                  {gi === 0 && index === 0 && categoryFilter === 'all' ? (
+                                  {group.dateKey === payload.groups[0]?.dateKey &&
+                                  index === 0 &&
+                                  categoryFilter === 'all' ? (
                                     <span className="rounded-md bg-[#0071e3] px-1.5 py-0.5 text-[10px] font-semibold text-white">
                                       ✦ 精选
                                     </span>

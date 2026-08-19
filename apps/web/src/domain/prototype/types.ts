@@ -21,6 +21,19 @@ export type EfficiencyCategory = 'office' | 'manage' | 'process' | 'experience';
 /** @deprecated 请优先使用 DeptId（domain/orgTaxonomy）；保持兼容首页既有命名 */
 export type HomeCategory = DeptId;
 
+/**
+ * 上传的资源包（Skill 文件包 / Agent 执行包）：只存 blob 引用，
+ * 不把解压内容塞进 CenterRecord 那条 JSON——包内可能有几十个文件，展开会撑爆它。
+ * 详情页按需拉取并在浏览器内解压成文件树，原始 zip 供「下载原包」直接复用。
+ */
+export interface UploadedPackageRef {
+  id: string;
+  url: string;
+  name: string;
+  size: number;
+  uploadedAt: string;
+}
+
 export interface AgentInputOutputInfo {
   /** §4.2 三段式中间环节：用业务语言说明 Agent 会做哪些处理（识别/抽取/匹配/生成…） */
   processSteps?: string[];
@@ -142,6 +155,11 @@ export interface PrototypeAgentSeed {
   demoUrl?: string;
   /** 解决方案文档（PPT / Word）入口；无 Demo 时主按钮降级到它 */
   solutionDocUrl?: string;
+  /**
+   * 上传的 Agent 执行包：有则详情页「案例与方案包」解压展示目录树，
+   * 且「下载执行包」下发真实原包，而不是前端即时生成的资源包。
+   */
+  packageBlob?: UploadedPackageRef;
   /** 环境、安装与反馈入口 */
   environment?: AgentEnvironmentInfo;
   installCommand?: string;
@@ -226,18 +244,8 @@ export interface PrototypeSkillSeed extends AssetOwnershipFields {
    * 视频类体积普遍超限，暂不开放。
    */
   caseAttachments?: PortalCasePreviewFile[];
-  /**
-   * 上传的 Skill 压缩包：只存 blob 引用，不把解压内容塞进这条 JSON——
-   * 包内可能有几十个文件，展开后会把 CenterRecord 撑爆。
-   * 详情页「文件」按需拉取并在浏览器内解压成文件树。
-   */
-  packageBlob?: {
-    id: string;
-    url: string;
-    name: string;
-    size: number;
-    uploadedAt: string;
-  };
+  /** 上传的 Skill 文件包，见 UploadedPackageRef */
+  packageBlob?: UploadedPackageRef;
   /** 环境与适配信息 */
   envInfo?: SkillEnvInfo;
   /** 版本清单（完整产品；当前版本仍以 version 字段为准） */

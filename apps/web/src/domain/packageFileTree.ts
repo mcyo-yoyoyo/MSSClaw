@@ -1,14 +1,14 @@
 import { strFromU8, unzipSync } from 'fflate';
 
 /**
- * Skill 压缩包 → 文件树
+ * 资源包（zip）→ 分层文件树。Skill 文件包与 Agent 执行包共用。
  *
  * 只存 blob 引用、按需在浏览器内解压：包内可能有几十个文件，把解压结果写进
  * CenterRecord 那条 JSON 会迅速撑爆（SQLite 单条 JSON 读写要整体反序列化）。
  * 原始 zip 保留在 blob 中，下载功能可直接复用。
  */
 
-export interface SkillPackageFile {
+export interface PackageFile {
   /** 包内完整路径，如 prompts/review.md */
   path: string;
   name: string;
@@ -18,11 +18,11 @@ export interface SkillPackageFile {
   isBinary: boolean;
 }
 
-export interface SkillPackageDir {
+export interface PackageDir {
   name: string;
   path: string;
-  dirs: SkillPackageDir[];
-  files: SkillPackageFile[];
+  dirs: PackageDir[];
+  files: PackageFile[];
 }
 
 /** 可直接预览的文本类扩展名；其余按二进制处理，只显示大小与类型 */
@@ -45,15 +45,15 @@ export function formatBytes(size: number): string {
 }
 
 /** 解压并构建分层目录树；zip 里没有显式目录项时按路径推断层级 */
-export function buildSkillPackageTree(bytes: Uint8Array): {
-  root: SkillPackageDir;
+export function buildPackageFileTree(bytes: Uint8Array): {
+  root: PackageDir;
   fileCount: number;
 } {
   const entries = unzipSync(bytes);
-  const root: SkillPackageDir = { name: '', path: '', dirs: [], files: [] };
+  const root: PackageDir = { name: '', path: '', dirs: [], files: [] };
   let fileCount = 0;
 
-  const ensureDir = (segments: string[]): SkillPackageDir => {
+  const ensureDir = (segments: string[]): PackageDir => {
     let cur = root;
     const walked: string[] = [];
     for (const seg of segments) {
@@ -106,20 +106,20 @@ function safeDecode(data: Uint8Array): string | undefined {
 }
 
 /** 目录在前、文件在后，各自按名称排序，保证展示顺序稳定 */
-function sortDir(dir: SkillPackageDir) {
+function sortDir(dir: PackageDir) {
   dir.dirs.sort((a, b) => a.name.localeCompare(b.name, 'zh'));
   dir.files.sort((a, b) => a.name.localeCompare(b.name, 'zh'));
   dir.dirs.forEach(sortDir);
 }
 
-/** SKILL.md / README 是 Skill 包的说明入口，优先于按名称排序的第一个文件 */
-const ENTRY_FILE_NAMES = ['skill.md', 'readme.md', 'readme'];
+/** 说明入口文件优先于按名称排序的第一个文件 */
+const ENTRY_FILE_NAMES = ['skill.md', 'agent.md', 'readme.md', 'readme'];
 
 /**
  * 打开「文件」Tab 时默认选中的文件，避免右侧空白。
  * 优先根目录说明文件 → 任意文本文件 → 兜底第一个文件。
  */
-export function firstPreviewableFile(dir: SkillPackageDir): SkillPackageFile | null {
+export function firstPreviewableFile(dir: PackageDir): PackageFile | null {
   const entry = dir.files.find(
     (f) => !f.isBinary && ENTRY_FILE_NAMES.includes(f.name.toLowerCase()),
   );

@@ -123,7 +123,7 @@ ${folder}/
 }
 
 /** 组装 Skill 包内文件（相对路径 → 文本） */
-export function buildSkillPackageFiles(skill: PrototypeSkillSeed): Record<string, string> {
+export function buildPackageFiles(skill: PrototypeSkillSeed): Record<string, string> {
   const folder = skillSlug(skill);
   return {
     [`${folder}/SKILL.md`]: buildSkillMd(skill),
@@ -149,7 +149,7 @@ function downloadBinary(filename: string, data: Uint8Array, mime: string) {
 
 /** 下载单个 Skill 为 ZIP 包（SKILL.md + reference/templates/assets） */
 export function downloadSkillFile(skill: PrototypeSkillSeed) {
-  const files = buildSkillPackageFiles(skill);
+  const files = buildPackageFiles(skill);
   const zipped: Record<string, Uint8Array> = {};
   for (const [path, content] of Object.entries(files)) {
     zipped[path] = strToU8(content);

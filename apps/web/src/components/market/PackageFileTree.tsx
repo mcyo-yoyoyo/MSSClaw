@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
-  buildSkillPackageTree,
+  buildPackageFileTree,
   firstPreviewableFile,
   formatBytes,
-  type SkillPackageDir,
-  type SkillPackageFile,
-} from '@/domain/skillPackageTree';
+  type PackageDir,
+  type PackageFile,
+} from '@/domain/packageFileTree';
 
 interface PackageSource {
   url: string;
@@ -21,10 +21,10 @@ function DirNode({
   selectedPath,
   onSelect,
 }: {
-  dir: SkillPackageDir;
+  dir: PackageDir;
   depth: number;
   selectedPath: string | null;
-  onSelect: (file: SkillPackageFile) => void;
+  onSelect: (file: PackageFile) => void;
 }) {
   const [open, setOpen] = useState(depth < 1);
   const indent = { paddingLeft: `${depth * 12 + 8}px` };
@@ -95,13 +95,13 @@ function DirNode({
 }
 
 /**
- * Skill 压缩包文件树：按需拉取 blob 并在浏览器内解压。
+ * 资源包文件树：按需拉取 blob 并在浏览器内解压。Skill / Agent 共用。
  * 解压放在前端而非上传时入库，是为了不把几十个文件的内容塞进 CenterRecord 那条 JSON。
  */
-export function SkillPackageTree({ source }: { source: PackageSource }) {
+export function PackageFileTree({ source }: { source: PackageSource }) {
   const [bytes, setBytes] = useState<Uint8Array | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<SkillPackageFile | null>(null);
+  const [selected, setSelected] = useState<PackageFile | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -126,7 +126,7 @@ export function SkillPackageTree({ source }: { source: PackageSource }) {
   const parsed = useMemo(() => {
     if (!bytes) return null;
     try {
-      return buildSkillPackageTree(bytes);
+      return buildPackageFileTree(bytes);
     } catch {
       return 'invalid' as const;
     }
@@ -141,7 +141,7 @@ export function SkillPackageTree({ source }: { source: PackageSource }) {
   if (error) {
     return (
       <div className="rounded-2xl border border-dashed border-rose-200 bg-rose-50/60 px-4 py-8 text-center text-[12px] text-rose-700">
-        Skill 包读取失败（{error}）。请确认后端可访问，或在「配置 Skill」中重新上传。
+        资源包读取失败（{error}）。请确认后端可访问，或在后台重新上传。
       </div>
     );
   }
@@ -149,7 +149,7 @@ export function SkillPackageTree({ source }: { source: PackageSource }) {
     return (
       <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-4 py-8 text-center text-[12px] text-zinc-400">
         <i className="fa-solid fa-spinner fa-spin mr-1.5" />
-        正在读取 Skill 包…
+        正在读取资源包…
       </div>
     );
   }

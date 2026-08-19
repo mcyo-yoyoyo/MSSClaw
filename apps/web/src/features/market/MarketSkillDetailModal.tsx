@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { SkillAvatar } from '@/components/brand/SkillAvatar';
 import { CenterModal } from '@/components/center/CenterShell';
 import { CaseDocumentPreview } from '@/components/content/CaseDocumentPreview';
-import { SkillPackageTree } from '@/components/market/SkillPackageTree';
+import { PackageFileTree } from '@/components/market/PackageFileTree';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
 import { getSkillBusinessLabel } from '@/domain/skillBusinessScenarios';
@@ -482,7 +482,7 @@ export function MarketSkillDetailModal({
             ) : null}
 
             {tab === 'files' && skill.packageBlob ? (
-              <SkillPackageTree source={skill.packageBlob} />
+              <PackageFileTree source={skill.packageBlob} />
             ) : null}
 
             {tab === 'files' && !skill.packageBlob ? (

@@ -21,6 +21,8 @@ import {
 } from '@/domain/agentLifecycle';
 import type { PrototypeAgentSeed, PrototypeSkillSeed } from '@/domain/prototype/types';
 import { downloadAgentFile } from '@/domain/agentExport';
+import { PackageFileTree } from '@/components/market/PackageFileTree';
+import { formatBytes } from '@/domain/packageFileTree';
 import { skillDisplayName } from '@/domain/skillDisplay';
 import {
   ASSET_VISIBILITY_LABELS,
@@ -413,8 +415,21 @@ export function CatalogAgentDetailModal({
   );
   const activeTab = visibleTabs.some((item) => item.id === tab) ? tab : 'overview';
 
+  const packageBlob = agent.packageBlob;
+
+  /** 有运营上传的执行包就下发原包；没有才回落到前端即时生成的资源包 */
   const handleDownload = () => {
     bumpDownload(agent.id);
+    if (packageBlob) {
+      const link = document.createElement('a');
+      link.href = packageBlob.url;
+      link.download = packageBlob.name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      onToast(`已下载执行包：${packageBlob.name}`);
+      return;
+    }
     downloadAgentFile(agent);
     onToast(`已下载 Agent 资源包：${agent.name}`);
   };
@@ -828,11 +843,27 @@ export function CatalogAgentDetailModal({
                     />
                     <PathRow
                       icon="fa-box-archive"
-                      label="执行包"
-                      desc={`资源更新时间：${updatedAt}`}
+                      label={packageBlob ? `执行包 · ${packageBlob.name}` : '执行包'}
+                      desc={
+                        packageBlob
+                          ? `${formatBytes(packageBlob.size)} · 上传于 ${packageBlob.uploadedAt.slice(0, 10)}`
+                          : `资源更新时间：${updatedAt}`
+                      }
                       onClick={handleDownload}
                     />
                   </div>
+                  {packageBlob ? (
+                    <div className="mt-3">
+                      <p className="mb-2 text-[11px] font-semibold text-zinc-500">包内文件</p>
+                      <PackageFileTree
+                        source={{
+                          url: packageBlob.url,
+                          name: packageBlob.name,
+                          size: packageBlob.size,
+                        }}
+                      />
+                    </div>
+                  ) : null}
                   {environment?.packageGuide ? (
                     <>
                       <p className="mb-2 mt-4 border-t border-zinc-100 pt-3 text-[11px] font-semibold text-zinc-500">复用说明</p>

@@ -13,6 +13,8 @@ import { kbDocFromFile, readKbFileAsText } from '@/domain/kbUtils';
 import { parseSkillUpload } from '@/domain/skillExport';
 import { parseAgentUpload } from '@/domain/agentExport';
 import { parseKbDocument } from '@/api/kbClient';
+import { uploadWorkspaceBlob } from '@/api/blobApi';
+import { currentWorkspaceId } from '@/api/platformDocsApi';
 import { rebuildKbVectorIndex } from '@/api/kbClient';
 import { loadMarketplace, scheduleSaveMarketplace } from '@/domain/persistence/storage';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -110,6 +112,38 @@ interface MarketplaceState {
   markAutomationRun: (id: string) => void;
   dismissToast: () => void;
   showToast: (msg: string) => void;
+}
+
+/**
+ * 导入的 zip 同时留档为原包：解析只取元信息，详情页的文件树与「下载原包」
+ * 都需要原始字节。失败不阻断导入——元信息已经解析出来了，缺的只是文件树。
+ */
+async function retainImportedPackage(file: File) {
+  if (!file.name.toLowerCase().endsWith('.zip')) return undefined;
+  // blob 走 JSON base64，膨胀约 33%；与编辑器上传同一上限
+  if (file.size > 12 * 1024 * 1024) return undefined;
+  try {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ''));
+      reader.onerror = () => reject(reader.error ?? new Error('read_failed'));
+      reader.readAsDataURL(file);
+    });
+    const uploaded = await uploadWorkspaceBlob(currentWorkspaceId(), {
+      name: file.name,
+      mimeType: file.type || 'application/zip',
+      dataUrl,
+    });
+    return {
+      id: uploaded.id,
+      url: uploaded.url,
+      name: uploaded.name,
+      size: uploaded.size,
+      uploadedAt: new Date().toISOString(),
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
@@ -236,6 +270,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
       const importedSkills: PrototypeSkillSeed[] = [];
       const userName = getCurrentUserName() || 'Imported';
       const userId = getCurrentUserId();
+      const packageBlob = await retainImportedPackage(file);
 
       for (const parsed of items) {
         const idTaken = get().skills.some((s) => s.id === parsed.id);
@@ -250,6 +285,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
           visibility: parsed.visibility === 'org' || parsed.visibility === 'private'
             ? parsed.visibility
             : 'public',
+          packageBlob: parsed.packageBlob ?? packageBlob,
         };
 
         get().upsertSkill(skill, true);
@@ -279,6 +315,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
       const imported: PrototypeAgentSeed[] = [];
       const userName = getCurrentUserName() || 'Imported';
       const userId = getCurrentUserId();
+      const packageBlob = await retainImportedPackage(file);
 
       for (const parsed of items) {
         const idTaken = get().agents.some((a) => a.id === parsed.id);
@@ -289,6 +326,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
           publisher: userName,
           publisherUserId: userId || parsed.publisherUserId,
           author: parsed.author || userName,
+          packageBlob: parsed.packageBlob ?? packageBlob,
         };
         get().upsertAgent(agent, true);
         imported.push(agent);

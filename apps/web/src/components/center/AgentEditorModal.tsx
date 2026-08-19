@@ -18,6 +18,8 @@ import {
   type AgentLifecycleStatus,
 } from '@/domain/agentLifecycle';
 import type { PrototypeAgentSeed } from '@/domain/prototype/types';
+import { uploadWorkspaceBlob } from '@/api/blobApi';
+import { currentWorkspaceId } from '@/api/platformDocsApi';
 import { ASSET_VISIBILITY_LABELS, type AssetVisibility } from '@/domain/orgTaxonomy';
 import {
   chatIdForBusinessScenario,
@@ -125,11 +127,56 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
   const skills = useMarketplaceStore((s) => s.skills);
   const upsertAgent = useMarketplaceStore((s) => s.upsertAgent);
   const showToast = useMarketplaceStore((s) => s.showToast);
+
+  /**
+   * 执行包原样存进 blob，详情页据此展示目录树并下发真实原包。
+   * 体积上限与 Skill 文件包一致：blob 走 JSON base64 会膨胀约 33%，后端 body 上限 20MB。
+   */
+  const uploadPackage = async (file: File) => {
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+      showToast('请上传 .zip 格式的执行包');
+      return;
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      showToast('包体积超过 12MB，请精简后再上传');
+      return;
+    }
+    setUploadingPackage(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ''));
+        reader.onerror = () => reject(reader.error ?? new Error('read_failed'));
+        reader.readAsDataURL(file);
+      });
+      const uploaded = await uploadWorkspaceBlob(currentWorkspaceId(), {
+        name: file.name,
+        mimeType: file.type || 'application/zip',
+        dataUrl,
+      });
+      setForm((f) => ({
+        ...f,
+        packageBlob: {
+          id: uploaded.id,
+          url: uploaded.url,
+          name: uploaded.name,
+          size: uploaded.size,
+          uploadedAt: new Date().toISOString(),
+        },
+      }));
+      showToast(`已上传执行包：${uploaded.name}`);
+    } catch {
+      showToast('执行包上传失败，请检查后端连接后重试');
+    } finally {
+      setUploadingPackage(false);
+    }
+  };
   const setAppView = useAppViewStore((s) => s.setAppView);
   const hydrateBusinessCatalog = useBusinessScenarioCatalogStore((s) => s.hydrate);
   const [form, setForm] = useState<PrototypeAgentSeed>(emptyAgent());
   const [skillQuery, setSkillQuery] = useState('');
   const [onlyPublishedSkills, setOnlyPublishedSkills] = useState(false);
+  const [uploadingPackage, setUploadingPackage] = useState(false);
   const businessOptions = useMemo(() => listVisibleBusinessScenarioCategories(), []);
 
   useEffect(() => {
@@ -244,6 +291,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
         maintainer: clean(form.maintainer),
         demoUrl: clean(form.demoUrl),
         solutionDocUrl: clean(form.solutionDocUrl),
+        packageBlob: form.packageBlob,
         // 运营改过内容就刷新更新时间，右侧操作栏与 Agent Hub「更新时间」排序都读它
         updatedAt: new Date().toISOString().slice(0, 10),
         desc: form.desc.trim(),
@@ -657,6 +705,52 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
             placeholder="https://"
             onChange={(e) => setForm({ ...form, solutionDocUrl: e.target.value })}
           />
+        </FormField>
+        <FormField
+          label="Agent 执行包"
+          hint="上传 .zip；详情页「案例与方案包」将解压展示完整目录树，「下载执行包」下发该原包"
+        >
+          <div className="space-y-2">
+            <input
+              type="file"
+              accept=".zip,application/zip"
+              disabled={uploadingPackage}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (file) void uploadPackage(file);
+              }}
+              className="block w-full text-[12px] file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-[12px] file:font-medium file:text-white"
+            />
+            {uploadingPackage ? (
+              <p className="text-[11px] text-zinc-500">
+                <i className="fa-solid fa-spinner fa-spin mr-1" />
+                上传中…
+              </p>
+            ) : null}
+            {form.packageBlob ? (
+              <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50/80 px-2.5 py-1.5">
+                <i className="fa-solid fa-file-zipper text-[12px] text-zinc-500" />
+                <span className="min-w-0 flex-1 truncate text-[12px] text-zinc-700">
+                  {form.packageBlob.name}
+                </span>
+                <span className="shrink-0 text-[11px] tabular-nums text-zinc-400">
+                  {(form.packageBlob.size / 1024).toFixed(0)} KB
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, packageBlob: undefined }))}
+                  className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-zinc-500 transition hover:bg-rose-50 hover:text-rose-600"
+                >
+                  移除
+                </button>
+              </div>
+            ) : (
+              <p className="text-[11px] text-zinc-400">
+                未上传时，「下载执行包」下发前端即时生成的资源包（AGENT.md、编排计划、演示提示词）。
+              </p>
+            )}
+          </div>
         </FormField>
         <FormField
           label="挂载 Skill"
