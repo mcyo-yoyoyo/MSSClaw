@@ -11,6 +11,7 @@ import {
   scheduleSavePlatformDoc,
   setPlatformDocMemory,
 } from '@/api/platformDocsApi';
+import { sha256 } from '@noble/hashes/sha2.js';
 
 export type AccountCredential = {
   salt: string;
@@ -42,8 +43,9 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase().replace(/@company\.com$/i, '@huawei.com');
 }
 
-function bytesToHex(buf: ArrayBuffer): string {
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+function bytesToHex(value: ArrayBuffer | Uint8Array): string {
+  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 function randomSalt(): string {
@@ -54,8 +56,14 @@ function randomSalt(): string {
 
 async function sha256Hex(text: string): Promise<string> {
   const data = new TextEncoder().encode(text);
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return bytesToHex(digest);
+  const subtle = globalThis.crypto?.subtle;
+  if (subtle) {
+    const digest = await subtle.digest('SHA-256', data);
+    return bytesToHex(digest);
+  }
+  // 普通内网 HTTP 不是 secure context，浏览器会隐藏 crypto.subtle。
+  // 兼容路径保持与 WebCrypto / Nest createHash 完全相同的 SHA-256 字节结果。
+  return bytesToHex(sha256(data));
 }
 
 export async function hashPassword(password: string, salt: string): Promise<string> {
@@ -133,10 +141,12 @@ export async function setAccountPassword(
   if (!password || password.length < 6) {
     return { ok: false, error: '密码至少 6 位' };
   }
+  let previous: CredPayload | null = null;
   try {
     await hydrateAccountCredentials();
     const salt = randomSalt();
     const hash = await hashPassword(password, salt);
+    previous = memory;
     memory = {
       ...memory,
       credentials: {
@@ -147,6 +157,10 @@ export async function setAccountPassword(
     await flush();
     return { ok: true };
   } catch (err) {
+    if (previous) {
+      memory = previous;
+      setPlatformDocMemory(currentWorkspaceId(), 'auth-credentials', previous);
+    }
     return {
       ok: false,
       error: err instanceof Error ? err.message : '保存密码失败',

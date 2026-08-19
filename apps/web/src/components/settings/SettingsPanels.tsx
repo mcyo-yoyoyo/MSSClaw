@@ -123,6 +123,9 @@ function MembersAndOrgPanel({
   const [addMode, setAddMode] = useState<'single' | 'batch'>('single');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
+  const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
   const [role, setRole] = useState<PlatformRole>('business_user');
   const [deptId, setDeptId] = useState<DeptId | ''>('');
   const [regionId, setRegionId] = useState<RegionId | ''>('');
@@ -218,9 +221,18 @@ function MembersAndOrgPanel({
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(event) => {
+                    setEmail(event.target.value);
+                    if (addError) setAddError(null);
+                  }}
                   placeholder="邮箱 name@huawei.com"
-                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-[13px]"
+                  aria-invalid={addError === '请输入有效邮箱' || addError === '该成员已在工作区中'}
+                  className={cn(
+                    'rounded-lg border bg-white px-3 py-2 text-[13px]',
+                    addError === '请输入有效邮箱' || addError === '该成员已在工作区中'
+                      ? 'border-red-300'
+                      : 'border-zinc-200',
+                  )}
                 />
                 <input
                   type="text"
@@ -229,7 +241,40 @@ function MembersAndOrgPanel({
                   placeholder="姓名（可选）"
                   className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-[13px]"
                 />
+                <label className="relative sm:col-span-2">
+                  <span className="sr-only">初始密码</span>
+                  <input
+                    type={passwordVisible ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => {
+                      setPassword(event.target.value);
+                      if (addError) setAddError(null);
+                    }}
+                    autoComplete="new-password"
+                    minLength={6}
+                    placeholder="初始密码（至少 6 位）"
+                    aria-invalid={addError === '初始密码至少 6 位'}
+                    className={cn(
+                      'w-full rounded-lg border bg-white px-3 py-2 pr-10 text-[13px]',
+                      addError === '初始密码至少 6 位' ? 'border-red-300' : 'border-zinc-200',
+                    )}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPasswordVisible((visible) => !visible)}
+                    aria-label={passwordVisible ? '隐藏初始密码' : '显示初始密码'}
+                    aria-pressed={passwordVisible}
+                    className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-zinc-400 hover:text-zinc-700"
+                  >
+                    <i className={cn('fa-regular text-[12px]', passwordVisible ? 'fa-eye-slash' : 'fa-eye')} />
+                  </button>
+                </label>
               </div>
+              {addError ? (
+                <p role="alert" className="text-[11px] text-red-600">{addError}</p>
+              ) : (
+                <p className="text-[11px] text-zinc-400">密码将直接设置给新成员，不再生成随机临时密码。</p>
+              )}
               <div className="flex flex-wrap gap-2">
                 <select
                   value={role}
@@ -269,17 +314,34 @@ function MembersAndOrgPanel({
                 <button
                   type="button"
                   onClick={() => {
-                    if (!email.trim()) return;
+                    const nextEmail = email.trim();
+                    const nextPassword = password.trim();
+                    if (!nextEmail || !nextEmail.includes('@')) {
+                      setAddError('请输入有效邮箱');
+                      return;
+                    }
+                    if (members.some((member) => member.email.toLowerCase() === nextEmail.toLowerCase())) {
+                      setAddError('该成员已在工作区中');
+                      return;
+                    }
+                    if (nextPassword.length < 6) {
+                      setAddError('初始密码至少 6 位');
+                      return;
+                    }
+                    setAddError(null);
                     onInvite({
-                      email: email.trim(),
+                      email: nextEmail,
                       role,
                       name: name.trim() || undefined,
                       deptIds: deptId ? [deptId] : [],
                       regionId: regionId || null,
                       activateNow: true,
+                      password: nextPassword,
                     });
                     setEmail('');
                     setName('');
+                    setPassword('');
+                    setPasswordVisible(false);
                   }}
                   className="rounded-lg bg-claw-600 px-4 py-2 text-[13px] font-semibold text-white hover:bg-zinc-800"
                 >
