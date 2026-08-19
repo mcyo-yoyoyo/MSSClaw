@@ -22,11 +22,12 @@
 
 ## 已做的代码侧加固（API）
 
-- JSON body 上限默认 `8mb`（`JSON_BODY_LIMIT`）
+- JSON body 上限默认 `20mb`（`JSON_BODY_LIMIT`）
+- Skill / Agent 原始包走二进制流式上传，默认上限 200 MiB（`PACKAGE_BLOB_MAX_BYTES`）；普通附件仍默认 12 MiB
 - `helmet` + `compression`
 - 全局限流 `@nestjs/throttler`（`THROTTLE_LIMIT` / `THROTTLE_TTL_MS`）
 - 可选 `API_KEY`（请求头 `X-API-Key`；健康检查豁免）
-- SSE 并发上限 `MAX_CONCURRENT_SSE`（默认 80）
+- SSE 并发上限 `MAX_CONCURRENT_SSE`（默认 200）
 - SQLite `WAL` + `busy_timeout`（缓解锁；**仍非 500 写并发方案**）
 
 示例环境变量见 `deploy/api.env.example`。

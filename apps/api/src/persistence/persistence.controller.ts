@@ -5,19 +5,24 @@ import {
   Delete,
   Get,
   Header,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
   Param,
+  PayloadTooLargeException,
   Post,
   Put,
   Query,
+  Req,
   Res,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import {
   PersistenceService,
   type MarketplacePayload,
   type PortalContentPayload,
 } from './persistence.service';
-import { BlobStoreService } from './blob-store.service';
+import { BlobStoreService, packageArchiveMimeType } from './blob-store.service';
 
 const MARKET_ENGAGEMENT_ACTIONS = new Set([
   'view',
@@ -28,8 +33,27 @@ const MARKET_ENGAGEMENT_ACTIONS = new Set([
   'dislike',
 ]);
 
+const UNSAFE_INLINE_MIME_TYPES = new Set([
+  'application/ecmascript',
+  'application/javascript',
+  'application/xhtml+xml',
+  'application/xml',
+  'image/svg+xml',
+  'text/ecmascript',
+  'text/html',
+  'text/javascript',
+  'text/xml',
+]);
+
+function isUnsafeInlineMimeType(value: string): boolean {
+  const mimeType = value.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+  return UNSAFE_INLINE_MIME_TYPES.has(mimeType);
+}
+
 @Controller('workspaces/:workspaceId')
 export class PersistenceController {
+  private readonly logger = new Logger(PersistenceController.name);
+
   constructor(
     private readonly persistence: PersistenceService,
     private readonly blobs: BlobStoreService,
@@ -192,6 +216,77 @@ export class PersistenceController {
     }
   }
 
+  /** Skill / Agent 原包：直接流式写盘，避免 200MiB 文件的 base64 膨胀与内存复制。 */
+  @Post('blobs/packages')
+  async putPackageBlob(
+    @Param('workspaceId') workspaceId: string,
+    @Req() req: Request,
+  ) {
+    const encodedName = req.header('x-file-name')?.trim();
+    if (!encodedName) throw new BadRequestException('x_file_name_required');
+
+    let name: string;
+    try {
+      name = decodeURIComponent(encodedName);
+    } catch {
+      throw new BadRequestException('invalid_x_file_name');
+    }
+    if (!name.trim()) throw new BadRequestException('x_file_name_required');
+
+    const contentLengthHeader = req.header('content-length');
+    let contentLength: number | undefined;
+    if (contentLengthHeader !== undefined) {
+      if (!/^\d+$/.test(contentLengthHeader)) {
+        throw new BadRequestException('invalid_content_length');
+      }
+      contentLength = Number(contentLengthHeader);
+      if (!Number.isSafeInteger(contentLength)) {
+        throw new BadRequestException('invalid_content_length');
+      }
+    }
+
+    try {
+      return await this.blobs.putPackageStream(workspaceId, {
+        name,
+        stream: req,
+        contentLength,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'package_blob_failed';
+      if (msg.startsWith('package_blob_too_large:')) {
+        throw new PayloadTooLargeException(msg);
+      }
+      if (msg === 'empty_blob' || msg === 'unsupported_package_type') {
+        throw new BadRequestException(msg);
+      }
+      this.logger.error(
+        'Package blob upload failed',
+        err instanceof Error ? err.stack : String(err),
+      );
+      throw new InternalServerErrorException('package_blob_failed');
+    }
+  }
+
+  @Delete('blobs/:blobId')
+  async deleteBlob(
+    @Param('workspaceId') workspaceId: string,
+    @Param('blobId') blobId: string,
+  ) {
+    try {
+      await this.blobs.delete(workspaceId, blobId);
+      return { ok: true, id: blobId };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'blob_delete_failed';
+      if (msg === 'invalid_blob_id') throw new BadRequestException(msg);
+      if (msg === 'blob_not_found') throw new NotFoundException(msg);
+      this.logger.error(
+        'Blob deletion failed',
+        err instanceof Error ? err.stack : String(err),
+      );
+      throw new InternalServerErrorException('blob_delete_failed');
+    }
+  }
+
   @Get('blobs/:blobId')
   @Header('Cache-Control', 'private, max-age=3600')
   async getBlob(
@@ -199,13 +294,22 @@ export class PersistenceController {
     @Param('blobId') blobId: string,
     @Res() res: Response,
   ) {
-    const { meta, buffer } = await this.blobs.get(workspaceId, blobId);
-    res.setHeader('Content-Type', meta.mimeType || 'application/octet-stream');
+    const { meta, size, stream } = await this.blobs.get(workspaceId, blobId);
+    const storedMimeType = meta.mimeType || 'application/octet-stream';
+    const archiveMimeType = packageArchiveMimeType(meta.name);
+    const unsafeInline = isUnsafeInlineMimeType(storedMimeType);
+    const forceDownload = Boolean(archiveMimeType) || unsafeInline;
+    res.setHeader(
+      'Content-Type',
+      archiveMimeType || (unsafeInline ? 'application/octet-stream' : storedMimeType),
+    );
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader(
       'Content-Disposition',
-      `inline; filename*=UTF-8''${encodeURIComponent(meta.name)}`,
+      `${forceDownload ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(meta.name)}`,
     );
-    res.setHeader('Content-Length', String(buffer.length));
-    res.send(buffer);
+    res.setHeader('Content-Length', String(size));
+    stream.on('error', (err) => res.destroy(err));
+    stream.pipe(res);
   }
 }

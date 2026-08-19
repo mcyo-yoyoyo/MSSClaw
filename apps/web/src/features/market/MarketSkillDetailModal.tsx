@@ -4,7 +4,7 @@ import { SkillAvatar } from '@/components/brand/SkillAvatar';
 import { CenterModal } from '@/components/center/CenterShell';
 import { CaseDocumentPreview } from '@/components/content/CaseDocumentPreview';
 import { PackageFileTree } from '@/components/market/PackageFileTree';
-import { downloadPackageBlob } from '@/domain/packageFileTree';
+import { downloadPackageBlob } from '@/api/blobApi';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
 import type { PrototypeSkillSeed, SkillVersionRecord } from '@/domain/prototype/types';
 import { getSkillBusinessLabel } from '@/domain/skillBusinessScenarios';
@@ -137,11 +137,15 @@ export function MarketSkillDetailModal({
     },
   ];
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     bumpDownload(skill.id);
     if (skill.packageBlob) {
-      downloadPackageBlob(skill.packageBlob);
-      onToast(`已下载：${skill.packageBlob.name}`);
+      try {
+        await downloadPackageBlob(skill.packageBlob);
+        onToast(`已下载：${skill.packageBlob.name}`);
+      } catch {
+        onToast('Skill 包下载失败，请检查登录状态或后端连接');
+      }
       return;
     }
     downloadSkillFile(skill);
@@ -149,14 +153,18 @@ export function MarketSkillDetailModal({
   };
 
   /** 历史版本各下各自归档的包；此前所有行都调 handleDownload，下到的都是当前包 */
-  const downloadVersion = (row: SkillVersionRecord) => {
+  const downloadVersion = async (row: SkillVersionRecord) => {
     if (!row.packageBlob) {
       onToast(`v${row.version} 未归档安装包，无法下载`);
       return;
     }
     bumpDownload(skill.id);
-    downloadPackageBlob(row.packageBlob);
-    onToast(`已下载 v${row.version}：${row.packageBlob.name}`);
+    try {
+      await downloadPackageBlob(row.packageBlob);
+      onToast(`已下载 v${row.version}：${row.packageBlob.name}`);
+    } catch {
+      onToast(`v${row.version} 包下载失败，请检查登录状态或后端连接`);
+    }
   };
 
   const tabs: { id: DetailTab; label: string; badge?: string }[] = [
@@ -402,18 +410,20 @@ export function MarketSkillDetailModal({
 
             {tab === 'guide' ? (
               <div className="space-y-5">
-                {usageNotes ? (
-                  <section className="rounded-2xl border border-amber-100 bg-amber-50/50 p-4">
-                    <h4 className="mb-2 text-[12px] font-semibold text-amber-900">运营录入 · 使用须知</h4>
-                    <pre className="whitespace-pre-wrap text-[12px] leading-relaxed text-amber-950/80">
-                      {usageNotes}
-                    </pre>
-                  </section>
-                ) : (
-                  <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-4 py-6 text-center text-[12px] text-zinc-400">
-                    管理员尚未录入使用须知。可在「配置 Skill → 编辑 → 高级项」中补充。
-                  </div>
-                )}
+                <section>
+                  <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">使用须知</h4>
+                  {usageNotes ? (
+                    <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-4">
+                      <pre className="whitespace-pre-wrap text-[12px] leading-relaxed text-amber-950/80">
+                        {usageNotes}
+                      </pre>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-4 py-6 text-center text-[12px] text-zinc-400">
+                      管理员尚未录入使用须知。可在「配置 Skill → 编辑 → 高级项」中补充。
+                    </div>
+                  )}
+                </section>
                 <section>
                   <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">使用案例</h4>
                   {cases.length ? (
@@ -581,7 +591,7 @@ export function MarketSkillDetailModal({
                         <td className="px-2 py-2.5">
                           <button
                             type="button"
-                            onClick={() => downloadVersion(v)}
+                            onClick={() => void downloadVersion(v)}
                             disabled={!v.packageBlob}
                             title={v.packageBlob ? v.packageBlob.name : '该版本未归档安装包'}
                             className={cn(

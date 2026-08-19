@@ -1,5 +1,6 @@
 import type { PortalCasePreviewFile, PortalContentItem } from '@/domain/prototype/portalContent';
 import { apiUrl, isApiEnabled, apiAuthHeaders } from '@/api/client';
+import { packageUploadSizeError } from '@/domain/packageUpload';
 
 export type UploadedBlob = {
   id: string;
@@ -8,6 +9,14 @@ export type UploadedBlob = {
   mimeType: string;
   size: number;
 };
+
+export type DownloadableBlob = Pick<UploadedBlob, 'url' | 'name'>;
+
+/** 兼容存量相对路径与跨域 API 基址；绝对 URL / blob URL 保持原样。 */
+export function resolveWorkspaceBlobUrl(url: string): string {
+  if (/^[a-z][a-z\d+.-]*:/i.test(url) || url.startsWith('//')) return url;
+  return apiUrl(url);
+}
 
 export async function uploadWorkspaceBlob(
   workspaceId: string,
@@ -34,7 +43,65 @@ export async function uploadWorkspaceBlob(
     const text = await res.text().catch(() => '');
     throw new Error(`blob_upload_failed:${res.status}:${text.slice(0, 120)}`);
   }
-  return (await res.json()) as UploadedBlob;
+  const uploaded = (await res.json()) as UploadedBlob;
+  return { ...uploaded, url: resolveWorkspaceBlobUrl(uploaded.url) };
+}
+
+/** package blob 为受保护资源，读取时统一携带 API key / 会话鉴权。 */
+export async function fetchPackageBlob(url: string, signal?: AbortSignal): Promise<Response> {
+  const res = await fetch(resolveWorkspaceBlobUrl(url), {
+    headers: apiAuthHeaders(),
+    signal,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`package_download_failed:${res.status}:${text.slice(0, 120)}`);
+  }
+  return res;
+}
+
+/** 鉴权拉取后通过临时 blob URL 下载；点击触发后释放 URL，避免大包长期占用内存。 */
+export async function downloadPackageBlob(pkg: DownloadableBlob): Promise<void> {
+  const res = await fetchPackageBlob(pkg.url);
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  try {
+    link.href = objectUrl;
+    link.download = pkg.name;
+    document.body.appendChild(link);
+    link.click();
+  } finally {
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
+  }
+}
+
+/**
+ * Skill / Agent 原始包使用二进制请求上传，避免大文件转 data URL / base64 时的体积与内存膨胀。
+ */
+export async function uploadWorkspacePackage(
+  workspaceId: string,
+  file: File,
+): Promise<UploadedBlob> {
+  const sizeError = packageUploadSizeError(file);
+  if (sizeError) throw new Error(`package_too_large:${sizeError}`);
+
+  const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/blobs/packages`), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      'X-File-Name': encodeURIComponent(file.name),
+      ...apiAuthHeaders(),
+    },
+    body: file,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`package_upload_failed:${res.status}:${text.slice(0, 120)}`);
+  }
+  const uploaded = (await res.json()) as UploadedBlob;
+  return { ...uploaded, url: resolveWorkspaceBlobUrl(uploaded.url) };
 }
 
 async function externalizeOne(

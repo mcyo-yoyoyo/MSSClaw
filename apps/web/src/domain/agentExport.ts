@@ -2,6 +2,7 @@ import { strToU8, zipSync, unzipSync, strFromU8 } from 'fflate';
 import type { EfficiencyCategory, PrototypeAgentSeed } from '@/domain/prototype/types';
 import { getAgentPack } from '@/domain/agents/catalog';
 import { buildAgentDemoPrompt, getAgentSystemPrompt } from '@/domain/agents/runtime';
+import { readPackageZipMetadata } from '@/domain/safeZip';
 
 const VALID_CATEGORIES: EfficiencyCategory[] = ['office', 'manage', 'process', 'experience'];
 
@@ -179,6 +180,19 @@ export function parseAgentZip(bytes: Uint8Array): PrototypeAgentSeed | null {
   } catch {
     return null;
   }
+  return parseAgentZipFiles(files);
+}
+
+/** 上传导入专用：只异步解压受限大小的 manifest。 */
+export async function parseAgentZipAsync(bytes: Uint8Array): Promise<PrototypeAgentSeed | null> {
+  const files = await readPackageZipMetadata(
+    bytes,
+    (path) => path.replace(/\\/g, '/').endsWith('mssclaw.manifest.json'),
+  );
+  return parseAgentZipFiles(files);
+}
+
+function parseAgentZipFiles(files: Record<string, Uint8Array>): PrototypeAgentSeed | null {
   const manifest = findZipText(files, 'mssclaw.manifest.json');
   if (manifest) {
     try {
@@ -193,8 +207,8 @@ export function parseAgentZip(bytes: Uint8Array): PrototypeAgentSeed | null {
 export async function parseAgentUpload(file: File): Promise<PrototypeAgentSeed[]> {
   const name = file.name.toLowerCase();
   if (name.endsWith('.zip') || name.endsWith('.agent.zip')) {
-    const skill = parseAgentZip(new Uint8Array(await file.arrayBuffer()));
-    return skill ? [skill] : [];
+    const agent = await parseAgentZipAsync(new Uint8Array(await file.arrayBuffer()));
+    return agent ? [agent] : [];
   }
   const json = JSON.parse(await file.text()) as unknown;
   const items = Array.isArray(json) ? json : [json];

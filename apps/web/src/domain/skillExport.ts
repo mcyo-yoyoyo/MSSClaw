@@ -4,6 +4,7 @@ import type { EfficiencyCategory, PrototypeSkillSeed } from '@/domain/prototype/
 import { getSkillPack } from '@/domain/skills/catalog';
 import { ASSET_VISIBILITY_LABELS, getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
 import type { AssetVisibility, DeptId, RegionId } from '@/domain/orgTaxonomy';
+import { readPackageZipMetadata } from '@/domain/safeZip';
 
 const VALID_CATEGORIES: EfficiencyCategory[] = ['office', 'manage', 'process', 'experience'];
 
@@ -468,6 +469,25 @@ export function parseSkillZip(bytes: Uint8Array): PrototypeSkillSeed | null {
     return null;
   }
 
+  return parseSkillZipFiles(files);
+}
+
+/** 上传导入专用：只异步解压有限的 manifest / SKILL.md / plan.md。 */
+export async function parseSkillZipAsync(bytes: Uint8Array): Promise<PrototypeSkillSeed | null> {
+  const files = await readPackageZipMetadata(bytes, (path) => {
+    const normalized = path.replace(/\\/g, '/');
+    return (
+      normalized.endsWith('mssclaw.manifest.json') ||
+      normalized.endsWith('/SKILL.md') ||
+      normalized === 'SKILL.md' ||
+      normalized.endsWith('reference/plan.md')
+    );
+  });
+  return parseSkillZipFiles(files);
+}
+
+function parseSkillZipFiles(files: Record<string, Uint8Array>): PrototypeSkillSeed | null {
+
   const manifestText = findZipText(
     files,
     (p) => p.replace(/\\/g, '/').endsWith('mssclaw.manifest.json'),
@@ -519,7 +539,7 @@ export async function parseSkillUpload(file: File): Promise<PrototypeSkillSeed[]
 
   if (name.endsWith('.zip') || name.endsWith('.skill.zip')) {
     const buf = new Uint8Array(await file.arrayBuffer());
-    const skill = parseSkillZip(buf);
+    const skill = await parseSkillZipAsync(buf);
     return skill ? [skill] : [];
   }
 

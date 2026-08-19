@@ -13,14 +13,26 @@ import {
   type BusinessScenarioId,
 } from '@/domain/businessScenarios';
 import {
+  AGENT_CAPABILITY_TYPES,
+  AGENT_PLATFORM_PRESETS,
+  type AgentCapabilityTypeId,
+} from '@/domain/agentHubFilters';
+import {
   AGENT_LIFECYCLE_OPTIONS,
   resolveAgentLifecycle,
   type AgentLifecycleStatus,
 } from '@/domain/agentLifecycle';
-import type { PrototypeAgentSeed } from '@/domain/prototype/types';
-import { uploadWorkspaceBlob } from '@/api/blobApi';
+import type { AgentCaseItem, PrototypeAgentSeed } from '@/domain/prototype/types';
+import { uploadWorkspacePackage } from '@/api/blobApi';
 import { currentWorkspaceId } from '@/api/platformDocsApi';
-import { ASSET_VISIBILITY_LABELS, type AssetVisibility } from '@/domain/orgTaxonomy';
+import {
+  ASSET_VISIBILITY_LABELS,
+  HQ_DEPTS,
+  REGIONS,
+  type AssetVisibility,
+  type DeptId,
+  type RegionId,
+} from '@/domain/orgTaxonomy';
 import {
   chatIdForBusinessScenario,
   resolveAgentBusinessScenario,
@@ -32,6 +44,11 @@ import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useBusinessScenarioCatalogStore } from '@/stores/businessScenarioCatalogStore';
+import {
+  formatPackageSize,
+  PACKAGE_UPLOAD_MAX_LABEL,
+  packageUploadSizeError,
+} from '@/domain/packageUpload';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
 import { shareSyncSaveHint } from '@/domain/shareSync';
 import {
@@ -117,9 +134,18 @@ interface AgentEditorModalProps {
   onClose: () => void;
 }
 
-/** 多行文本 → 去空白数组：详情页多个字段都用「每行一条」录入 */
+/** 多行文本 → 草稿数组：保存时再统一去空白，避免输入回车后空行被立即吞掉。 */
 function splitLines(value: string): string[] {
-  return value.split('\n').map((line) => line.trim()).filter(Boolean);
+  return value.split('\n');
+}
+
+type AgentFaqItem = NonNullable<
+  NonNullable<PrototypeAgentSeed['quickStart']>['faqs']
+>[number];
+
+/** 空字符串和空数组清理后，仅在至少有一个有效字段时保留嵌套对象。 */
+function compactObject<T extends object>(value: T): T | undefined {
+  return Object.values(value).some((item) => item !== undefined) ? value : undefined;
 }
 
 export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
@@ -130,30 +156,21 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
 
   /**
    * 执行包原样存进 blob，详情页据此展示目录树并下发真实原包。
-   * 体积上限与 Skill 文件包一致：blob 走 JSON base64 会膨胀约 33%，后端 body 上限 20MB。
+   * 使用专用二进制接口上传，体积上限与 Skill 文件包一致。
    */
   const uploadPackage = async (file: File) => {
     if (!file.name.toLowerCase().endsWith('.zip')) {
       showToast('请上传 .zip 格式的执行包');
       return;
     }
-    if (file.size > 12 * 1024 * 1024) {
-      showToast('包体积超过 12MB，请精简后再上传');
+    const sizeError = packageUploadSizeError(file);
+    if (sizeError) {
+      showToast(sizeError);
       return;
     }
     setUploadingPackage(true);
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result ?? ''));
-        reader.onerror = () => reject(reader.error ?? new Error('read_failed'));
-        reader.readAsDataURL(file);
-      });
-      const uploaded = await uploadWorkspaceBlob(currentWorkspaceId(), {
-        name: file.name,
-        mimeType: file.type || 'application/zip',
-        dataUrl,
-      });
+      const uploaded = await uploadWorkspacePackage(currentWorkspaceId(), file);
       setForm((f) => ({
         ...f,
         packageBlob: {
@@ -176,6 +193,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
   const [form, setForm] = useState<PrototypeAgentSeed>(emptyAgent());
   const [skillQuery, setSkillQuery] = useState('');
   const [onlyPublishedSkills, setOnlyPublishedSkills] = useState(false);
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [uploadingPackage, setUploadingPackage] = useState(false);
   const businessOptions = useMemo(() => listVisibleBusinessScenarioCategories(), []);
 
@@ -187,6 +205,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
     if (!target) return;
     setSkillQuery('');
     setOnlyPublishedSkills(false);
+    setAvatarPickerOpen(false);
     if (target === 'new') {
       setForm(emptyAgent());
       return;
@@ -235,7 +254,9 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
   if (!target) return null;
 
   const isNew = target === 'new';
-  const title = isNew ? '创建 Agent' : '编辑 Agent';
+  const title = isNew
+    ? '创建 Agent'
+    : agents.find((agent) => agent.id === target)?.name.trim() || 'Agent';
 
   const toggleSkill = (skillId: string) => {
     setForm((f) => {
@@ -248,6 +269,63 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
           : nextIds[0];
       return { ...f, skillIds: nextIds, primarySkillId };
     });
+  };
+
+  const toggleCapabilityType = (capabilityTypeId: AgentCapabilityTypeId) => {
+    setForm((current) => {
+      const selected = current.capabilityTypeIds ?? [];
+      return {
+        ...current,
+        capabilityTypeIds: selected.includes(capabilityTypeId)
+          ? selected.filter((id) => id !== capabilityTypeId)
+          : [...selected, capabilityTypeId],
+      };
+    });
+  };
+
+  const toggleOwnerDept = (deptId: DeptId) => {
+    setForm((current) => {
+      const selected = current.ownerDeptIds ?? [];
+      return {
+        ...current,
+        ownerDeptIds: selected.includes(deptId)
+          ? selected.filter((id) => id !== deptId)
+          : [...selected, deptId],
+      };
+    });
+  };
+
+  const toggleOwnerRegion = (regionId: RegionId) => {
+    setForm((current) => {
+      const selected = current.ownerRegionIds ?? [];
+      return {
+        ...current,
+        ownerRegionIds: selected.includes(regionId)
+          ? selected.filter((id) => id !== regionId)
+          : [...selected, regionId],
+      };
+    });
+  };
+
+  const updateCase = (index: number, patch: Partial<AgentCaseItem>) => {
+    setForm((current) => ({
+      ...current,
+      cases: (current.cases ?? []).map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item,
+      ),
+    }));
+  };
+
+  const updateFaq = (index: number, patch: Partial<AgentFaqItem>) => {
+    setForm((current) => ({
+      ...current,
+      quickStart: {
+        ...current.quickStart,
+        faqs: (current.quickStart?.faqs ?? []).map((item, itemIndex) =>
+          itemIndex === index ? { ...item, ...patch } : item,
+        ),
+      },
+    }));
   };
 
   const handleSave = () => {
@@ -264,6 +342,31 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
       showToast('请选择业务场景分类');
       return;
     }
+    const incompleteFaqIndex = (form.quickStart?.faqs ?? []).findIndex((item) => {
+      const hasQuestion = Boolean(item.question.trim());
+      const hasAnswer = Boolean(item.answer.trim());
+      return hasQuestion !== hasAnswer;
+    });
+    if (incompleteFaqIndex >= 0) {
+      showToast(`请完整填写常见问题 ${incompleteFaqIndex + 1} 的问题和答案`);
+      return;
+    }
+    const incompleteCaseIndex = (form.cases ?? []).findIndex((item) => {
+      const hasDetail = [
+        item.scenario,
+        item.audience,
+        item.problem,
+        item.input,
+        item.output,
+        item.outcome,
+        item.resourceUrl,
+      ].some((value) => Boolean(value?.trim()));
+      return hasDetail && !item.title.trim();
+    });
+    if (incompleteCaseIndex >= 0) {
+      showToast(`请填写案例 ${incompleteCaseIndex + 1} 的标题`);
+      return;
+    }
     const prev = !isNew ? agents.find((a) => a.id === target) : null;
     const id = isNew ? `agent-${Date.now()}` : (target as string);
     const needsApproval = isNew || (form.published && !prev?.published);
@@ -274,7 +377,59 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
     const scenarioLabel = getBusinessScenarioMeta(businessScenarioId).label;
     // 空字符串 / 空数组不落库，避免前台把"已配置但为空"当成有内容而不再走兜底
     const clean = (v?: string) => v?.trim() || undefined;
-    const cleanList = (v?: string[]) => (v?.length ? v : undefined);
+    const cleanList = (values?: string[]) => {
+      const result = Array.from(
+        new Set((values ?? []).map((value) => value.trim()).filter(Boolean)),
+      );
+      return result.length ? result : undefined;
+    };
+    const inputOutput = compactObject({
+      processSteps: cleanList(form.inputOutput?.processSteps),
+      inputTypes: cleanList(form.inputOutput?.inputTypes),
+      inputFormat: clean(form.inputOutput?.inputFormat),
+      inputFields: cleanList(form.inputOutput?.inputFields),
+      inputExample: clean(form.inputOutput?.inputExample),
+      supportedFiles: cleanList(form.inputOutput?.supportedFiles),
+      outputFormat: clean(form.inputOutput?.outputFormat),
+      outputFields: cleanList(form.inputOutput?.outputFields),
+      outputExample: clean(form.inputOutput?.outputExample),
+      resultUsage: clean(form.inputOutput?.resultUsage),
+    });
+    const faqs = (form.quickStart?.faqs ?? [])
+      .map((item) => ({
+        question: item.question.trim(),
+        answer: item.answer.trim(),
+      }))
+      .filter((item) => item.question && item.answer);
+    const quickStart = compactObject({
+      prerequisites: cleanList(form.quickStart?.prerequisites),
+      inputRequirements: cleanList(form.quickStart?.inputRequirements),
+      steps: cleanList(form.quickStart?.steps),
+      installGuide: clean(form.quickStart?.installGuide),
+      faqs: faqs.length ? faqs : undefined,
+    });
+    const cases = (form.cases ?? [])
+      .map((item) => ({
+        title: item.title.trim(),
+        scenario: clean(item.scenario),
+        audience: clean(item.audience),
+        problem: clean(item.problem),
+        input: clean(item.input),
+        output: clean(item.output),
+        outcome: clean(item.outcome),
+        resourceUrl: clean(item.resourceUrl),
+      }))
+      .filter((item) => item.title);
+    const environment = compactObject({
+      platforms: cleanList(form.environment?.platforms),
+      usageModes: cleanList(form.environment?.usageModes),
+      requirements: cleanList(form.environment?.requirements),
+      configuration: cleanList(form.environment?.configuration),
+      packageGuide: clean(form.environment?.packageGuide),
+      requiresCode: form.environment?.requiresCode,
+      supportsAssistantImport: form.environment?.supportsAssistantImport,
+    });
+    const now = new Date().toISOString().slice(0, 10);
 
     upsertAgent(
       {
@@ -287,13 +442,27 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
         capabilityBoundaries: cleanList(form.capabilityBoundaries),
         suitableFor: cleanList(form.suitableFor),
         notSuitableFor: cleanList(form.notSuitableFor),
+        inputOutput,
+        quickStart,
+        cases: cases.length ? cases : undefined,
         version: clean(form.version),
+        versionSummary: clean(form.versionSummary),
         maintainer: clean(form.maintainer),
         demoUrl: clean(form.demoUrl),
         solutionDocUrl: clean(form.solutionDocUrl),
+        installCommand: clean(form.installCommand),
+        feedbackUrl: clean(form.feedbackUrl),
+        environment,
+        scenarioTags: cleanList(form.scenarioTags),
+        ownerDeptIds: cleanList(form.ownerDeptIds) as DeptId[] | undefined,
+        ownerRegionIds: cleanList(form.ownerRegionIds) as RegionId[] | undefined,
+        capabilityTypeIds: form.capabilityTypeIds?.length
+          ? Array.from(new Set(form.capabilityTypeIds))
+          : undefined,
         packageBlob: form.packageBlob,
         // 运营改过内容就刷新更新时间，右侧操作栏与 Agent Hub「更新时间」排序都读它
-        updatedAt: new Date().toISOString().slice(0, 10),
+        createdAt: isNew ? now : (prev?.createdAt || form.createdAt),
+        updatedAt: now,
         desc: form.desc.trim(),
         systemPrompt: form.systemPrompt?.trim() || '',
         demoPrompt: form.demoPrompt?.trim() || undefined,
@@ -342,12 +511,20 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
       actions={<ModalActions onCancel={onClose} onSave={handleSave} />}
     >
       <div className="space-y-3 text-left">
-        <FormField
-          label="数字员工形象"
-          hint="系统提供 20 套真人卡通数字员工形象；也可上传自定义头像（PNG/JPG/WebP，≤512KB）"
-        >
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
+        <div>
+          <p className="text-[11px] font-semibold text-[#86868b]">数字员工形象</p>
+          <p className="mb-1 text-[10px] text-[#86868b]">
+            点击当前头像后选择系统形象，或上传自定义头像（PNG/JPG/WebP，≤512KB）
+          </p>
+          <div className="space-y-2">
+            <button
+              type="button"
+              aria-label="更换数字员工形象"
+              aria-expanded={avatarPickerOpen}
+              aria-controls="agent-avatar-picker"
+              onClick={() => setAvatarPickerOpen((open) => !open)}
+              className="flex w-full items-center gap-3 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-left transition hover:border-zinc-300 hover:bg-zinc-50/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900/20"
+            >
               <AgentPortrait
                 agentId={form.id || 'new'}
                 name={form.name || 'Agent'}
@@ -357,78 +534,111 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
                 size={52}
                 className="rounded-2xl ring-1 ring-zinc-200"
               />
-              <div className="min-w-0 flex-1 space-y-2">
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                  className="block w-full text-[12px] text-zinc-600 file:mr-2 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-[11px] file:font-semibold file:text-white"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = '';
-                    if (!file) return;
-                    void readAvatarFile(file)
-                      .then((dataUrl) => {
-                        setForm({
-                          ...form,
-                          avatarUrl: dataUrl,
-                          avatarPresetId: undefined,
-                        });
-                        showToast('自定义头像已上传');
-                      })
-                      .catch((err: Error) => showToast(err.message || '上传失败'));
-                  }}
-                />
-                {form.avatarUrl ? (
-                  <button
-                    type="button"
-                    className="text-[11px] font-medium text-zinc-500 hover:text-zinc-800"
-                    onClick={() =>
-                      setForm({
-                        ...form,
-                        avatarUrl: undefined,
-                        avatarPresetId: form.avatarPresetId || DEFAULT_AGENT_AVATAR_PRESET_ID,
-                      })
-                    }
-                  >
-                    清除上传，改用系统预设
-                  </button>
-                ) : null}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[12px] font-semibold text-zinc-800">
+                  {form.avatarUrl
+                    ? '自定义头像'
+                    : AGENT_AVATAR_PRESETS.find((preset) => preset.id === form.avatarPresetId)
+                        ?.label || '系统头像'}
+                </span>
+                <span className="mt-0.5 block text-[10px] text-zinc-500">
+                  点击头像{avatarPickerOpen ? '收起选择' : '更换形象'}
+                </span>
+              </span>
+              <i
+                className={cn(
+                  'fa-solid fa-chevron-down text-[10px] text-zinc-400 transition-transform',
+                  avatarPickerOpen && 'rotate-180',
+                )}
+              />
+            </button>
+            {avatarPickerOpen ? (
+              <div
+                id="agent-avatar-picker"
+                className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/70 p-3"
+              >
+                <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
+                  {AGENT_AVATAR_PRESETS.map((p) => {
+                    const active = !form.avatarUrl && form.avatarPresetId === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        title={`${p.label} · ${p.hint}`}
+                        aria-label={`选择${p.label}头像`}
+                        aria-pressed={active}
+                        onClick={() => {
+                          setForm((current) => ({
+                            ...current,
+                            avatarPresetId: p.id,
+                            avatarUrl: undefined,
+                          }));
+                          setAvatarPickerOpen(false);
+                        }}
+                        className={cn(
+                          'flex flex-col items-center gap-1 rounded-xl border bg-white p-1.5 transition',
+                          active
+                            ? 'border-zinc-900 ring-1 ring-zinc-900'
+                            : 'border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50',
+                        )}
+                      >
+                        <img
+                          src={p.src}
+                          alt={p.label}
+                          className="h-9 w-9 rounded-full object-cover"
+                        />
+                        <span className="w-full truncate text-[9px] font-medium text-zinc-600">
+                          {p.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="border-t border-zinc-200 pt-3">
+                  <p className="mb-1.5 text-[10px] font-semibold text-zinc-500">上传自定义头像</p>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="block w-full text-[12px] text-zinc-600 file:mr-2 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-[11px] file:font-semibold file:text-white"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (!file) return;
+                      void readAvatarFile(file)
+                        .then((dataUrl) => {
+                          setForm((current) => ({
+                            ...current,
+                            avatarUrl: dataUrl,
+                            avatarPresetId: undefined,
+                          }));
+                          setAvatarPickerOpen(false);
+                          showToast('自定义头像已上传');
+                        })
+                        .catch((err: Error) => showToast(err.message || '上传失败'));
+                    }}
+                  />
+                  {form.avatarUrl ? (
+                    <button
+                      type="button"
+                      className="mt-2 text-[11px] font-medium text-zinc-500 hover:text-zinc-800"
+                      onClick={() => {
+                        setForm((current) => ({
+                          ...current,
+                          avatarUrl: undefined,
+                          avatarPresetId:
+                            current.avatarPresetId || DEFAULT_AGENT_AVATAR_PRESET_ID,
+                        }));
+                        setAvatarPickerOpen(false);
+                      }}
+                    >
+                      清除上传，改用系统预设
+                    </button>
+                  ) : null}
+                </div>
               </div>
-            </div>
-            <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
-              {AGENT_AVATAR_PRESETS.map((p) => {
-                const active = !form.avatarUrl && form.avatarPresetId === p.id;
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    title={`${p.label} · ${p.hint}`}
-                    onClick={() =>
-                      setForm({
-                        ...form,
-                        avatarPresetId: p.id,
-                        avatarUrl: undefined,
-                      })
-                    }
-                    className={cn(
-                      'flex flex-col items-center gap-1 rounded-xl border p-1.5 transition',
-                      active
-                        ? 'border-zinc-900 bg-zinc-50 ring-1 ring-zinc-900'
-                        : 'border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50',
-                    )}
-                  >
-                    <img
-                      src={p.src}
-                      alt={p.label}
-                      className="h-9 w-9 rounded-full object-cover"
-                    />
-                    <span className="truncate text-[9px] font-medium text-zinc-600">{p.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+            ) : null}
           </div>
-        </FormField>
+        </div>
         <FormField label="名称">
           <FormInput value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </FormField>
@@ -469,10 +679,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
             onChange={(e) =>
               setForm({
                 ...form,
-                planSteps: e.target.value
-                  .split('\n')
-                  .map((s) => s.trimEnd())
-                  .filter((s) => s.trim().length > 0),
+                planSteps: e.target.value.split('\n'),
               })
             }
           />
@@ -500,10 +707,97 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
             ))}
           </FormSelect>
         </FormField>
+        <details className="rounded-xl border border-zinc-200 bg-zinc-50/60 px-3 py-2.5">
+          <summary className="cursor-pointer text-[12px] font-semibold text-zinc-700">
+            Agent Hub 顶部与筛选
+          </summary>
+          <div className="mt-3 space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <p className="text-[11px] font-semibold text-[#86868b]">所属职能（可多选）</p>
+                <p className="mb-1 text-[10px] text-[#86868b]">
+                  详情顶部展示首项；Agent Hub 筛选匹配全部归属
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {HQ_DEPTS.map((dept) => (
+                    <label
+                      key={dept.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2.5 py-2 text-[12px] text-zinc-700"
+                    >
+                      <input
+                        type="checkbox"
+                        className="accent-claw-600"
+                        checked={(form.ownerDeptIds ?? []).includes(dept.id)}
+                        onChange={() => toggleOwnerDept(dept.id)}
+                      />
+                      {dept.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold text-[#86868b]">所属区域（可多选）</p>
+                <p className="mb-1 text-[10px] text-[#86868b]">
+                  详情顶部展示首项；Agent Hub 筛选匹配全部归属
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {REGIONS.map((region) => (
+                    <label
+                      key={region.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2.5 py-2 text-[12px] text-zinc-700"
+                    >
+                      <input
+                        type="checkbox"
+                        className="accent-claw-600"
+                        checked={(form.ownerRegionIds ?? []).includes(region.id)}
+                        onChange={() => toggleOwnerRegion(region.id)}
+                      />
+                      {region.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-[#86868b]">能力类型</p>
+              <p className="mb-1 text-[10px] text-[#86868b]">
+                显示在详情顶部并参与筛选；可多选，未选择时按名称、描述和标签自动推断
+              </p>
+              <div className="mt-1 grid gap-2 sm:grid-cols-2">
+                {AGENT_CAPABILITY_TYPES.map((type) => (
+                  <label
+                    key={type.id}
+                    className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2.5 py-2 text-[12px] text-zinc-700"
+                  >
+                    <input
+                      type="checkbox"
+                      className="accent-claw-600"
+                      checked={(form.capabilityTypeIds ?? []).includes(type.id)}
+                      onChange={() => toggleCapabilityType(type.id)}
+                    />
+                    <i className={cn('fa-solid w-3.5 text-[10px] text-zinc-400', type.icon)} />
+                    {type.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <FormField
+              label="适用场景标签（每行一条）"
+              hint="与业务场景分类一起展示在详情「概览 · 适用场景」"
+            >
+              <FormTextarea
+                rows={3}
+                placeholder={'新品上市\n渠道洞察\n经营分析'}
+                value={(form.scenarioTags ?? []).join('\n')}
+                onChange={(e) => setForm({ ...form, scenarioTags: splitLines(e.target.value) })}
+              />
+            </FormField>
+          </div>
+        </details>
         {/* §6：详情页内容配置。字段多，按前台 Tab 分组折叠，默认收起不干扰日常编辑 */}
         <details className="rounded-xl border border-zinc-200 bg-zinc-50/60 px-3 py-2.5">
           <summary className="cursor-pointer text-[12px] font-semibold text-zinc-700">
-            详情页内容（概览 / 效果预览 / 适用判断）
+            详情页 · 概览 / 效果预览 / 适用判断 / 怎么使用 / 版本
           </summary>
           <div className="mt-3 space-y-3">
             <FormField
@@ -546,6 +840,35 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
               效果预览 · 输入 → 处理 → 输出
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="输入类型（每行一条）" hint="详情「你提供」中的输入清单">
+                <FormTextarea
+                  rows={3}
+                  placeholder={'任务目标\n业务数据\n参考材料'}
+                  value={(form.inputOutput?.inputTypes ?? []).join('\n')}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      inputOutput: { ...form.inputOutput, inputTypes: splitLines(e.target.value) },
+                    })
+                  }
+                />
+              </FormField>
+              <FormField label="支持文件（每行一条）" hint="如 Excel、PDF、PPTX">
+                <FormTextarea
+                  rows={3}
+                  placeholder={'Excel\nPDF\nPPTX'}
+                  value={(form.inputOutput?.supportedFiles ?? []).join('\n')}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      inputOutput: {
+                        ...form.inputOutput,
+                        supportedFiles: splitLines(e.target.value),
+                      },
+                    })
+                  }
+                />
+              </FormField>
               <FormField label="输入说明" hint="用户需要提供什么">
                 <FormTextarea
                   rows={2}
@@ -571,6 +894,32 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
                 />
               </FormField>
             </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="输入关键字段（每行一条）">
+                <FormTextarea
+                  rows={3}
+                  value={(form.inputOutput?.inputFields ?? []).join('\n')}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      inputOutput: { ...form.inputOutput, inputFields: splitLines(e.target.value) },
+                    })
+                  }
+                />
+              </FormField>
+              <FormField label="输出关键字段（每行一条）">
+                <FormTextarea
+                  rows={3}
+                  value={(form.inputOutput?.outputFields ?? []).join('\n')}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      inputOutput: { ...form.inputOutput, outputFields: splitLines(e.target.value) },
+                    })
+                  }
+                />
+              </FormField>
+            </div>
             <FormField label="处理过程（每行一步）" hint="用业务语言说明会做哪些处理，如识别、抽取、匹配、汇总">
               <FormTextarea
                 rows={3}
@@ -583,18 +932,32 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
                 }
               />
             </FormField>
-            <FormField label="样例结果" hint="贴近真实业务的样例输出，不要用无意义占位">
-              <FormTextarea
-                rows={3}
-                value={form.inputOutput?.outputExample ?? ''}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    inputOutput: { ...form.inputOutput, outputExample: e.target.value },
-                  })
-                }
-              />
-            </FormField>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="样例输入" hint="留空时回退上方演示任务">
+                <FormTextarea
+                  rows={3}
+                  value={form.inputOutput?.inputExample ?? ''}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      inputOutput: { ...form.inputOutput, inputExample: e.target.value },
+                    })
+                  }
+                />
+              </FormField>
+              <FormField label="样例输出" hint="贴近真实业务结果，不要用无意义占位">
+                <FormTextarea
+                  rows={3}
+                  value={form.inputOutput?.outputExample ?? ''}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      inputOutput: { ...form.inputOutput, outputExample: e.target.value },
+                    })
+                  }
+                />
+              </FormField>
+            </div>
             <FormField label="输出用途" hint="结果可以如何用于业务">
               <FormInput
                 value={form.inputOutput?.resultUsage ?? ''}
@@ -638,6 +1001,21 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
                 }
               />
             </FormField>
+            <FormField label="输入要求（每行一条）" hint="同时展示在「适用判断」与「怎么使用」">
+              <FormTextarea
+                rows={2}
+                value={(form.quickStart?.inputRequirements ?? []).join('\n')}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    quickStart: {
+                      ...form.quickStart,
+                      inputRequirements: splitLines(e.target.value),
+                    },
+                  })
+                }
+              />
+            </FormField>
             <label className="flex cursor-pointer items-center gap-2 text-[12px] text-zinc-700">
               <input
                 type="checkbox"
@@ -647,6 +1025,105 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
               />
               输出需要人工复核后才能用于对外决策
             </label>
+
+            <p className="border-t border-zinc-200 pt-2.5 text-[11px] font-semibold text-zinc-500">
+              怎么使用
+            </p>
+            <FormField
+              label="用户操作步骤（每行一步）"
+              hint="面向普通用户；留空时详情页回退上方编排计划"
+            >
+              <FormTextarea
+                rows={4}
+                value={(form.quickStart?.steps ?? []).join('\n')}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    quickStart: { ...form.quickStart, steps: splitLines(e.target.value) },
+                  })
+                }
+              />
+            </FormField>
+            <FormField label="导入 / 安装说明" hint="展示在详情「怎么使用」">
+              <FormTextarea
+                rows={3}
+                value={form.quickStart?.installGuide ?? ''}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    quickStart: { ...form.quickStart, installGuide: e.target.value },
+                  })
+                }
+              />
+            </FormField>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-[11px] font-semibold text-[#86868b]">常见问题</p>
+                  <p className="text-[10px] text-[#86868b]">问题与答案成对展示在「怎么使用」</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm((current) => ({
+                      ...current,
+                      quickStart: {
+                        ...current.quickStart,
+                        faqs: [...(current.quickStart?.faqs ?? []), { question: '', answer: '' }],
+                      },
+                    }))
+                  }
+                  className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50"
+                >
+                  <i className="fa-solid fa-plus mr-1 text-[9px]" />
+                  添加问题
+                </button>
+              </div>
+              {(form.quickStart?.faqs ?? []).map((faq, index) => (
+                <div key={index} className="rounded-xl border border-zinc-200 bg-white p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold text-zinc-500">问题 {index + 1}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm((current) => ({
+                          ...current,
+                          quickStart: {
+                            ...current.quickStart,
+                            faqs: (current.quickStart?.faqs ?? []).filter(
+                              (_, itemIndex) => itemIndex !== index,
+                            ),
+                          },
+                        }))
+                      }
+                      className="text-[10px] font-medium text-zinc-400 hover:text-rose-600"
+                    >
+                      删除
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    <FormInput
+                      aria-label={`常见问题 ${index + 1}`}
+                      placeholder="问题"
+                      value={faq.question}
+                      onChange={(e) => updateFaq(index, { question: e.target.value })}
+                    />
+                    <FormTextarea
+                      aria-label={`常见问题 ${index + 1} 的答案`}
+                      rows={2}
+                      placeholder="答案"
+                      value={faq.answer}
+                      onChange={(e) => updateFaq(index, { answer: e.target.value })}
+                    />
+                  </div>
+                </div>
+              ))}
+              {form.quickStart?.faqs?.length ? null : (
+                <p className="rounded-lg border border-dashed border-zinc-200 bg-white px-3 py-3 text-center text-[11px] text-zinc-400">
+                  暂未配置常见问题
+                </p>
+              )}
+            </div>
 
             <p className="border-t border-zinc-200 pt-2.5 text-[11px] font-semibold text-zinc-500">
               维护信息
@@ -667,6 +1144,271 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
                 />
               </FormField>
             </div>
+            <FormField label="版本说明" hint="展示在详情「版本」与右侧关键状态">
+              <FormTextarea
+                rows={2}
+                placeholder="本版本新增能力、修复与适用范围变化"
+                value={form.versionSummary ?? ''}
+                onChange={(e) => setForm({ ...form, versionSummary: e.target.value })}
+              />
+            </FormField>
+          </div>
+        </details>
+        <details className="rounded-xl border border-zinc-200 bg-zinc-50/60 px-3 py-2.5">
+          <summary className="cursor-pointer text-[12px] font-semibold text-zinc-700">
+            详情页 · 案例与方案包
+          </summary>
+          <div className="mt-3 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-[11px] font-semibold text-zinc-600">案例列表</p>
+                <p className="text-[10px] text-zinc-400">对应 Agent Hub「案例与方案包」中的业务案例</p>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setForm((current) => ({
+                    ...current,
+                    cases: [...(current.cases ?? []), { title: '' }],
+                  }))
+                }
+                className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50"
+              >
+                <i className="fa-solid fa-plus mr-1 text-[9px]" />
+                添加案例
+              </button>
+            </div>
+            {(form.cases ?? []).map((item, index) => (
+              <div key={index} className="space-y-3 rounded-xl border border-zinc-200 bg-white p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold text-zinc-500">案例 {index + 1}</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm((current) => ({
+                        ...current,
+                        cases: (current.cases ?? []).filter(
+                          (_, itemIndex) => itemIndex !== index,
+                        ),
+                      }))
+                    }
+                    className="text-[10px] font-medium text-zinc-400 hover:text-rose-600"
+                  >
+                    删除
+                  </button>
+                </div>
+                <FormField label="案例标题">
+                  <FormInput
+                    value={item.title}
+                    placeholder="例：区域经营数据周报生成"
+                    onChange={(e) => updateCase(index, { title: e.target.value })}
+                  />
+                </FormField>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <FormField label="案例场景">
+                    <FormInput
+                      value={item.scenario ?? ''}
+                      placeholder="例：经营分析"
+                      onChange={(e) => updateCase(index, { scenario: e.target.value })}
+                    />
+                  </FormField>
+                  <FormField label="适用对象">
+                    <FormInput
+                      value={item.audience ?? ''}
+                      placeholder="例：区域运营经理"
+                      onChange={(e) => updateCase(index, { audience: e.target.value })}
+                    />
+                  </FormField>
+                </div>
+                <FormField label="使用前问题">
+                  <FormTextarea
+                    rows={2}
+                    value={item.problem ?? ''}
+                    onChange={(e) => updateCase(index, { problem: e.target.value })}
+                  />
+                </FormField>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <FormField label="样例输入">
+                    <FormTextarea
+                      rows={3}
+                      value={item.input ?? ''}
+                      onChange={(e) => updateCase(index, { input: e.target.value })}
+                    />
+                  </FormField>
+                  <FormField label="样例输出">
+                    <FormTextarea
+                      rows={3}
+                      value={item.output ?? ''}
+                      onChange={(e) => updateCase(index, { output: e.target.value })}
+                    />
+                  </FormField>
+                </div>
+                <FormField label="效果说明">
+                  <FormTextarea
+                    rows={2}
+                    value={item.outcome ?? ''}
+                    onChange={(e) => updateCase(index, { outcome: e.target.value })}
+                  />
+                </FormField>
+                <FormField label="关联资源链接">
+                  <FormInput
+                    value={item.resourceUrl ?? ''}
+                    placeholder="https:// 或站内相对地址"
+                    onChange={(e) => updateCase(index, { resourceUrl: e.target.value })}
+                  />
+                </FormField>
+              </div>
+            ))}
+            {form.cases?.length ? null : (
+              <p className="rounded-lg border border-dashed border-zinc-200 bg-white px-3 py-4 text-center text-[11px] text-zinc-400">
+                暂未配置业务案例
+              </p>
+            )}
+          </div>
+        </details>
+        <details className="rounded-xl border border-zinc-200 bg-zinc-50/60 px-3 py-2.5">
+          <summary className="cursor-pointer text-[12px] font-semibold text-zinc-700">
+            详情页 · 运行环境与入口
+          </summary>
+          <div className="mt-3 space-y-3">
+            <FormField
+              label="适配平台（每行一个）"
+              hint={`Agent Hub 顶部筛选与关键状态使用；建议：${AGENT_PLATFORM_PRESETS.join('、')}`}
+            >
+              <FormTextarea
+                rows={3}
+                value={(form.environment?.platforms ?? []).join('\n')}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    environment: { ...form.environment, platforms: splitLines(e.target.value) },
+                  })
+                }
+              />
+            </FormField>
+            <FormField label="使用方式（每行一个）" hint="如平台在线使用、员工助手导入、本地执行包">
+              <FormTextarea
+                rows={3}
+                value={(form.environment?.usageModes ?? []).join('\n')}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    environment: { ...form.environment, usageModes: splitLines(e.target.value) },
+                  })
+                }
+              />
+            </FormField>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="是否需要代码能力">
+                <FormSelect
+                  value={
+                    form.environment?.requiresCode === undefined
+                      ? ''
+                      : form.environment.requiresCode
+                        ? 'yes'
+                        : 'no'
+                  }
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      environment: {
+                        ...form.environment,
+                        requiresCode:
+                          e.target.value === '' ? undefined : e.target.value === 'yes',
+                      },
+                    })
+                  }
+                >
+                  <option value="">— 未配置 —</option>
+                  <option value="no">不需要</option>
+                  <option value="yes">需要</option>
+                </FormSelect>
+              </FormField>
+              <FormField label="是否支持员工助手导入">
+                <FormSelect
+                  value={
+                    form.environment?.supportsAssistantImport === undefined
+                      ? ''
+                      : form.environment.supportsAssistantImport
+                        ? 'yes'
+                        : 'no'
+                  }
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      environment: {
+                        ...form.environment,
+                        supportsAssistantImport:
+                          e.target.value === '' ? undefined : e.target.value === 'yes',
+                      },
+                    })
+                  }
+                >
+                  <option value="">— 未配置 —</option>
+                  <option value="yes">支持</option>
+                  <option value="no">暂不支持</option>
+                </FormSelect>
+              </FormField>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="环境要求（每行一条）">
+                <FormTextarea
+                  rows={3}
+                  value={(form.environment?.requirements ?? []).join('\n')}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      environment: {
+                        ...form.environment,
+                        requirements: splitLines(e.target.value),
+                      },
+                    })
+                  }
+                />
+              </FormField>
+              <FormField label="配置要求（每行一条）">
+                <FormTextarea
+                  rows={3}
+                  value={(form.environment?.configuration ?? []).join('\n')}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      environment: {
+                        ...form.environment,
+                        configuration: splitLines(e.target.value),
+                      },
+                    })
+                  }
+                />
+              </FormField>
+            </div>
+            <FormField label="执行包复用说明" hint="展示在「案例与方案包」，也作为安装说明兜底">
+              <FormTextarea
+                rows={3}
+                value={form.environment?.packageGuide ?? ''}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    environment: { ...form.environment, packageGuide: e.target.value },
+                  })
+                }
+              />
+            </FormField>
+            <FormField label="安装命令" hint="配置后详情右侧可一键复制">
+              <FormInput
+                className="font-mono text-[12px]"
+                value={form.installCommand ?? ''}
+                placeholder="npm install ..."
+                onChange={(e) => setForm({ ...form, installCommand: e.target.value })}
+              />
+            </FormField>
+            <FormField label="反馈入口" hint="留空时详情页复制反馈模板；配置后打开该链接">
+              <FormInput
+                value={form.feedbackUrl ?? ''}
+                placeholder="https://"
+                onChange={(e) => setForm({ ...form, feedbackUrl: e.target.value })}
+              />
+            </FormField>
           </div>
         </details>
         <FormField
@@ -708,7 +1450,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
         </FormField>
         <FormField
           label="Agent 执行包"
-          hint="上传 .zip；详情页「案例与方案包」将解压展示完整目录树，「下载执行包」下发该原包"
+          hint={`上传 .zip（≤${PACKAGE_UPLOAD_MAX_LABEL}）；详情页「案例与方案包」将解压展示完整目录树，「下载执行包」下发该原包`}
         >
           <div className="space-y-2">
             <input
@@ -735,7 +1477,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
                   {form.packageBlob.name}
                 </span>
                 <span className="shrink-0 text-[11px] tabular-nums text-zinc-400">
-                  {(form.packageBlob.size / 1024).toFixed(0)} KB
+                  {formatPackageSize(form.packageBlob.size)}
                 </span>
                 <button
                   type="button"
@@ -891,7 +1633,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
         <div className="rounded-xl border border-zinc-200 px-3 py-2.5 space-y-2">
           <p className="text-[13px] font-semibold text-zinc-800">发布权限范围</p>
           <p className="text-[11px] text-zinc-500">
-            默认公开可见。组织内：后续按观众归属匹配；公开可见：全领域全区域可看。短期两者浏览效果相同。
+            默认公开可见；组织内按成员归属控制；仅发布方用于个人草稿或受限资产。
           </p>
           <label className="flex cursor-pointer items-center gap-2">
             <input
@@ -916,6 +1658,18 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
             />
             <span className="text-[13px] font-medium text-zinc-800">
               {ASSET_VISIBILITY_LABELS.org}
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="radio"
+              name="agent-vis"
+              className="accent-claw-600"
+              checked={form.visibility === 'private'}
+              onChange={() => setForm({ ...form, visibility: 'private' })}
+            />
+            <span className="text-[13px] font-medium text-zinc-800">
+              {ASSET_VISIBILITY_LABELS.private}
             </span>
           </label>
         </div>

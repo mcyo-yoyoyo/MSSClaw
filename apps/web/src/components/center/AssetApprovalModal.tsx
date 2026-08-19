@@ -9,6 +9,8 @@ import {
   type ApprovalNodeStatus,
 } from '@/domain/assetApproval';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
+import { useMarketplaceStore } from '@/stores/marketplaceStore';
+import { downloadPackageBlob } from '@/api/blobApi';
 
 function statusMeta(status: ApprovalNodeStatus) {
   if (status === 'done') {
@@ -29,6 +31,7 @@ export function AssetApprovalModal() {
   const advance = useAssetApprovalStore((s) => s.advance);
   const reject = useAssetApprovalStore((s) => s.reject);
   const close = useAssetApprovalStore((s) => s.close);
+  const showToast = useMarketplaceStore((s) => s.showToast);
 
   if (!current) return null;
 
@@ -68,15 +71,23 @@ export function AssetApprovalModal() {
               </p>
             ) : null}
             {current.packageName ? (
-              <a
-                href={current.packageUrl || undefined}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                disabled={!current.packageUrl}
+                onClick={() => {
+                  if (!current.packageUrl || !current.packageName) return;
+                  void downloadPackageBlob({
+                    url: current.packageUrl,
+                    name: current.packageName,
+                  })
+                    .then(() => showToast(`已下载完整包：${current.packageName}`))
+                    .catch(() => showToast('完整包下载失败，请检查登录状态或后端连接'));
+                }}
                 className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-medium text-blue-600 hover:text-blue-700"
               >
                 <i className="fa-solid fa-file-zipper" />
                 完整包：{current.packageName}
-              </a>
+              </button>
             ) : null}
             {current.note ? (
               <p className="mt-1.5 rounded-lg bg-zinc-50 px-2.5 py-1.5 text-[11px] leading-relaxed text-zinc-600">

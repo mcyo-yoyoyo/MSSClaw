@@ -13,8 +13,10 @@ import { kbDocFromFile, readKbFileAsText } from '@/domain/kbUtils';
 import { parseSkillUpload } from '@/domain/skillExport';
 import { parseAgentUpload } from '@/domain/agentExport';
 import { parseKbDocument } from '@/api/kbClient';
-import { uploadWorkspaceBlob } from '@/api/blobApi';
+import { uploadWorkspacePackage } from '@/api/blobApi';
 import { currentWorkspaceId } from '@/api/platformDocsApi';
+import { packageUploadSizeError } from '@/domain/packageUpload';
+import { packageZipErrorMessage } from '@/domain/safeZip';
 import { rebuildKbVectorIndex } from '@/api/kbClient';
 import { loadMarketplace, scheduleSaveMarketplace } from '@/domain/persistence/storage';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -120,20 +122,9 @@ interface MarketplaceState {
  */
 async function retainImportedPackage(file: File) {
   if (!file.name.toLowerCase().endsWith('.zip')) return undefined;
-  // blob 走 JSON base64，膨胀约 33%；与编辑器上传同一上限
-  if (file.size > 12 * 1024 * 1024) return undefined;
+  if (packageUploadSizeError(file)) return undefined;
   try {
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result ?? ''));
-      reader.onerror = () => reject(reader.error ?? new Error('read_failed'));
-      reader.readAsDataURL(file);
-    });
-    const uploaded = await uploadWorkspaceBlob(currentWorkspaceId(), {
-      name: file.name,
-      mimeType: file.type || 'application/zip',
-      dataUrl,
-    });
+    const uploaded = await uploadWorkspacePackage(currentWorkspaceId(), file);
     return {
       id: uploaded.id,
       url: uploaded.url,
@@ -265,6 +256,11 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   },
 
   importSkillFile: async (file) => {
+    const sizeError = packageUploadSizeError(file);
+    if (sizeError) {
+      get().showToast(sizeError);
+      return [];
+    }
     try {
       const items = await parseSkillUpload(file);
       const importedSkills: PrototypeSkillSeed[] = [];
@@ -303,13 +299,23 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
         get().showToast('未能识别有效的 Skill 包（支持 .skill.zip / SKILL.md / JSON）');
       }
       return importedSkills;
-    } catch {
-      get().showToast('Skill 包解析失败，请检查 ZIP / SKILL.md / JSON 格式');
+    } catch (error) {
+      get().showToast(
+        packageZipErrorMessage(
+          error,
+          'Skill 包解析失败，请检查 ZIP / SKILL.md / JSON 格式',
+        ),
+      );
       return [];
     }
   },
 
   importAgentFile: async (file) => {
+    const sizeError = packageUploadSizeError(file);
+    if (sizeError) {
+      get().showToast(sizeError);
+      return [];
+    }
     try {
       const items = await parseAgentUpload(file);
       const imported: PrototypeAgentSeed[] = [];
@@ -343,8 +349,10 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
         get().showToast('未能识别有效的专家包（支持 .agent.zip / JSON）');
       }
       return imported;
-    } catch {
-      get().showToast('专家包解析失败，请检查 ZIP / JSON 格式');
+    } catch (error) {
+      get().showToast(
+        packageZipErrorMessage(error, '专家包解析失败，请检查 ZIP / JSON 格式'),
+      );
       return [];
     }
   },

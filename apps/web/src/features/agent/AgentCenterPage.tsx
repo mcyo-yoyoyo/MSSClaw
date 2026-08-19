@@ -17,6 +17,7 @@ import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { downloadAgentFile, downloadAllAgentsFile } from '@/domain/agentExport';
 import { getAgentPack } from '@/domain/agents/catalog';
 import { useBusinessScenarioCatalogStore } from '@/stores/businessScenarioCatalogStore';
+import { PACKAGE_UPLOAD_MAX_LABEL } from '@/domain/packageUpload';
 
 interface AgentCenterPageProps {
   onInvoke: (agent: PrototypeAgentSeed, prompt?: string) => void;
@@ -89,7 +90,7 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
           tip={
             <>
               「执行」将发送演示任务并进入 AI 任务（完整产品）或任务记录。请配置服务端 LLM_* 或工作区模型密钥；可下载/导入
-              .agent.zip。详情弹层与集市用户视角一致。
+              .agent.zip（≤{PACKAGE_UPLOAD_MAX_LABEL}）。详情弹层与集市用户视角一致。
             </>
           }
           actions={
@@ -113,7 +114,7 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
                         setMoreOpen(false);
                       }}
                       className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-zinc-700 hover:bg-zinc-50"
-                      title="导入为新专家"
+                      title={`导入为新专家（≤${PACKAGE_UPLOAD_MAX_LABEL}）`}
                     >
                       <i className="fa-solid fa-file-import w-3.5 text-[10px] text-zinc-400" />
                       导入 Agent 包
@@ -167,7 +168,12 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
                   key={a.id}
                   className="market-card apple-card flex flex-col px-3 py-2.5"
                 >
-                  <div className="flex items-start gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setDetail(a)}
+                    className="flex w-full flex-1 items-start gap-2.5 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-claw-500/40"
+                    aria-label={`查看 ${a.name} 详情`}
+                  >
                     <AgentPortrait
                       agentId={a.id}
                       name={a.name}
@@ -228,11 +234,8 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
                         </div>
                       ) : null}
                     </div>
-                  </div>
+                  </button>
                   <div className="mt-2 flex flex-wrap gap-1.5 border-t border-black/[0.04] pt-2">
-                    <button type="button" onClick={() => setDetail(a)} className={cardBtn}>
-                      详情
-                    </button>
                     <button
                       type="button"
                       onClick={() => setEditorTarget(a.id)}

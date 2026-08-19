@@ -76,6 +76,7 @@ cp ../../deploy/api.env.example .env
 #   PORT=3000
 #   CORS_ORIGIN=https://你们的访问地址   （与浏览器地址一致，可逗号分隔多源）
 #   JSON_BODY_LIMIT=20mb
+#   PACKAGE_BLOB_MAX_BYTES=209715200     （Skill / Agent 原始包最大 200 MiB）
 #   THROTTLE_LIMIT=6000                 （内网 NAT 共享出口 IP，勿用过小默认）
 #   MAX_CONCURRENT_SSE=200
 #   BLOB_ROOT=/var/lib/mssclaw/blobs    （建议放到大磁盘）
@@ -94,7 +95,7 @@ npm run start:prod
 
 - `server_name`、证书、`root` 指到 `apps/web/dist`
 - **必须**有 `location /api/` 反代到 `127.0.0.1:3000`（不要让 SPA 的 `try_files` 吃掉 `/api`）
-- 上传相关建议：`client_max_body_size 25m;`
+- 上传相关建议：`client_max_body_size 210m;`、`proxy_request_buffering off;`，并为大包上传设置至少 600 秒代理超时
 
 ### 4. 健康检查（必须过）
 
@@ -135,7 +136,7 @@ npm run start:prod
 |------|------|
 | 试点 / 部门内少人编辑 | SQLite + 本机 `BLOB_ROOT` 可先上 |
 | 百人以上、多人同时改门户/货架 | **换 Postgres**；SQLite 单写者会锁等待 |
-| 附件 | API 在线时落盘 blob（默认 ≤12MB），JSON 只存 `url`/`blobId`；离线仍 ≤3MB dataUrl |
+| 附件与能力包 | 普通附件仍默认 ≤12MB；Skill / Agent 原始包使用独立流式上传，默认 ≤200MiB；JSON 只存 `url`/`blobId` |
 | 限流 | 默认 6000/IP/分钟（应对公司 NAT）；过严会出现集体 429 |
 | How to | 部分仍偏本机 localStorage；核心案例 / 货架走共享 API |
 | 会话 | 当前仍为工作区级 chats 快照；大规模多用户请勿依赖其作为每人私有聊天真相源 |

@@ -1,4 +1,10 @@
 import { strFromU8, unzipSync } from 'fflate';
+import {
+  extractInspectedZipEntries,
+  inspectPackageZip,
+  PACKAGE_ZIP_LIMITS,
+  type SafeZipEntry,
+} from '@/domain/safeZip';
 
 /**
  * 资源包（zip）→ 分层文件树。Skill 文件包与 Agent 执行包共用。
@@ -16,6 +22,8 @@ export interface PackageFile {
   /** 文本类文件的内容；二进制文件为 undefined，只展示元信息 */
   text?: string;
   isBinary: boolean;
+  /** 文本未预览时的明确原因，例如超过单文件或总预览预算。 */
+  previewMessage?: string;
 }
 
 export interface PackageDir {
@@ -44,12 +52,105 @@ export function formatBytes(size: number): string {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-/** 解压并构建分层目录树；zip 里没有显式目录项时按路径推断层级 */
+interface TreeEntry {
+  path: string;
+  size: number;
+  isDirectory: boolean;
+  data?: Uint8Array;
+  previewMessage?: string;
+}
+
+/** 解压并构建分层目录树；仅供可信的小型同步调用，UI 与上传解析走异步安全版本。 */
 export function buildPackageFileTree(bytes: Uint8Array): {
   root: PackageDir;
   fileCount: number;
 } {
   const entries = unzipSync(bytes);
+  return buildTree(
+    Object.entries(entries).map(([path, data]) => ({
+      path: path.replace(/\\/g, '/'),
+      size: data.length,
+      isDirectory: path.endsWith('/'),
+      data,
+    })),
+  );
+}
+
+function ignoredPath(path: string): boolean {
+  return path.startsWith('__MACOSX/') || path.split('/').pop() === '.DS_Store';
+}
+
+function previewPriority(entry: SafeZipEntry): number {
+  const name = entry.path.split('/').pop()?.toLowerCase() ?? '';
+  if (name === 'skill.md' || name === 'agent.md') return 0;
+  if (name === 'mssclaw.manifest.json') return 1;
+  if (name === 'readme.md' || name === 'readme') return 2;
+  return 3;
+}
+
+/**
+ * 安全异步目录树：先校验中央目录，再只异步解压有限的文本预览。
+ * 二进制内容和超出预览预算的文本不会解压进浏览器内存。
+ */
+export async function buildPackageFileTreeAsync(
+  bytes: Uint8Array,
+  signal?: AbortSignal,
+): Promise<{ root: PackageDir; fileCount: number; totalUncompressedBytes: number }> {
+  const inspection = await inspectPackageZip(bytes);
+  const previewMessages = new Map<string, string>();
+  const selected = new Set<string>();
+  let previewTotal = 0;
+
+  const candidates = inspection.entries
+    .filter(
+      (entry) =>
+        !entry.isDirectory && !ignoredPath(entry.path) && isTextPath(entry.path),
+    )
+    .sort((a, b) => previewPriority(a) - previewPriority(b));
+
+  for (const entry of candidates) {
+    if (entry.uncompressedSize > PACKAGE_ZIP_LIMITS.maxTextPreviewFileBytes) {
+      previewMessages.set(
+        entry.path,
+        `文本文件超过 ${formatBytes(PACKAGE_ZIP_LIMITS.maxTextPreviewFileBytes)} 预览上限，请下载原包查看。`,
+      );
+      continue;
+    }
+    if (
+      previewTotal + entry.uncompressedSize >
+      PACKAGE_ZIP_LIMITS.maxTextPreviewTotalBytes
+    ) {
+      previewMessages.set(
+        entry.path,
+        `包内文本预览合计超过 ${formatBytes(PACKAGE_ZIP_LIMITS.maxTextPreviewTotalBytes)}，请下载原包查看。`,
+      );
+      continue;
+    }
+    selected.add(entry.path);
+    previewTotal += entry.uncompressedSize;
+  }
+
+  const extracted = await extractInspectedZipEntries(bytes, inspection, selected, {
+    maxSelectedFileBytes: PACKAGE_ZIP_LIMITS.maxTextPreviewFileBytes,
+    maxSelectedTotalBytes: PACKAGE_ZIP_LIMITS.maxTextPreviewTotalBytes,
+    signal,
+  });
+  const tree = buildTree(
+    inspection.entries.map((entry) => ({
+      path: entry.path,
+      size: entry.uncompressedSize,
+      isDirectory: entry.isDirectory,
+      data: extracted[entry.path],
+      previewMessage: previewMessages.get(entry.path),
+    })),
+  );
+  return { ...tree, totalUncompressedBytes: inspection.totalUncompressedBytes };
+}
+
+function buildTree(entries: TreeEntry[]): {
+  root: PackageDir;
+  fileCount: number;
+} {
   const root: PackageDir = { name: '', path: '', dirs: [], files: [] };
   let fileCount = 0;
 
@@ -68,26 +169,29 @@ export function buildPackageFileTree(bytes: Uint8Array): {
     return cur;
   };
 
-  for (const [rawPath, data] of Object.entries(entries)) {
-    const path = rawPath.replace(/\\/g, '/');
+  for (const entry of entries) {
+    const path = entry.path.replace(/\\/g, '/');
     // zip 里的目录项以 / 结尾且长度为 0，建空目录即可
-    if (path.endsWith('/')) {
+    if (entry.isDirectory || path.endsWith('/')) {
       ensureDir(path.split('/').filter(Boolean));
       continue;
     }
     // macOS 打包残留，展示出来只会干扰
-    if (path.startsWith('__MACOSX/') || path.split('/').pop() === '.DS_Store') continue;
+    if (ignoredPath(path)) continue;
 
     const segments = path.split('/').filter(Boolean);
     const name = segments.pop()!;
     const dir = ensureDir(segments);
-    const isBinary = !isTextPath(path);
+    let isBinary = !isTextPath(path);
+    const text = !isBinary && entry.data ? safeDecode(entry.data) : undefined;
+    if (!isBinary && entry.data && text === undefined) isBinary = true;
     dir.files.push({
       path,
       name,
-      size: data.length,
+      size: entry.size,
       isBinary,
-      text: isBinary ? undefined : safeDecode(data),
+      text,
+      previewMessage: isBinary ? undefined : entry.previewMessage,
     });
     fileCount += 1;
   }
@@ -131,14 +235,4 @@ export function firstPreviewableFile(dir: PackageDir): PackageFile | null {
     if (found) return found;
   }
   return dir.files[0] ?? null;
-}
-
-/** 触发浏览器下载某个已归档的资源包 */
-export function downloadPackageBlob(pkg: { url: string; name: string }): void {
-  const link = document.createElement('a');
-  link.href = pkg.url;
-  link.download = pkg.name;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
 }

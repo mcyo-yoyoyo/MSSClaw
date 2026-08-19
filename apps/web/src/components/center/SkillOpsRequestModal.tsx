@@ -7,8 +7,12 @@ import { assertSkillScanAllowsApproval } from '@/domain/skillSecurityScan';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { shareSyncSaveHint } from '@/domain/shareSync';
-import { uploadWorkspaceBlob } from '@/api/blobApi';
+import { uploadWorkspacePackage } from '@/api/blobApi';
 import { currentWorkspaceId } from '@/api/platformDocsApi';
+import {
+  PACKAGE_UPLOAD_MAX_LABEL,
+  packageUploadSizeError,
+} from '@/domain/packageUpload';
 
 export type SkillOpsRequestKind = 'update' | 'unpublish';
 
@@ -67,20 +71,15 @@ export function SkillOpsRequestModal({
         showToast('请上传完整 Skill 包');
         return;
       }
+      const sizeError = packageUploadSizeError(packageFile);
+      if (sizeError) {
+        showToast(sizeError);
+        return;
+      }
       setSubmitting(true);
-      let uploaded: Awaited<ReturnType<typeof uploadWorkspaceBlob>>;
+      let uploaded: Awaited<ReturnType<typeof uploadWorkspacePackage>>;
       try {
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result ?? ''));
-          reader.onerror = () => reject(reader.error ?? new Error('file_read_failed'));
-          reader.readAsDataURL(packageFile);
-        });
-        uploaded = await uploadWorkspaceBlob(currentWorkspaceId(), {
-          name: packageFile.name,
-          mimeType: packageFile.type || 'application/octet-stream',
-          dataUrl,
-        });
+        uploaded = await uploadWorkspacePackage(currentWorkspaceId(), packageFile);
       } catch {
         showToast('完整包上传失败，请检查后端连接后重试');
         setSubmitting(false);
@@ -175,11 +174,28 @@ export function SkillOpsRequestModal({
                 placeholder="说明本次更新内容、影响范围与验证情况…"
               />
             </FormField>
-            <FormField label="完整 Skill 包" hint="必填；随审批单归档，支持 zip / tar.gz">
+            <FormField
+              label="完整 Skill 包"
+              hint={`必填；随审批单归档，支持 zip / tar.gz（≤${PACKAGE_UPLOAD_MAX_LABEL}）`}
+            >
               <input
                 type="file"
                 accept=".zip,.tar,.gz,.tgz,application/zip,application/gzip"
-                onChange={(event) => setPackageFile(event.target.files?.[0] ?? null)}
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  if (!file) {
+                    setPackageFile(null);
+                    return;
+                  }
+                  const sizeError = packageUploadSizeError(file);
+                  if (sizeError) {
+                    event.target.value = '';
+                    setPackageFile(null);
+                    showToast(sizeError);
+                    return;
+                  }
+                  setPackageFile(file);
+                }}
                 className="block w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[12px] text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-[11px] file:font-semibold file:text-white"
               />
             </FormField>

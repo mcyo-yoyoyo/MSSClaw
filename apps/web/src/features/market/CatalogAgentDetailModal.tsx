@@ -22,6 +22,7 @@ import type { PrototypeAgentSeed, PrototypeSkillSeed } from '@/domain/prototype/
 import { downloadAgentFile } from '@/domain/agentExport';
 import { PackageFileTree } from '@/components/market/PackageFileTree';
 import { formatBytes } from '@/domain/packageFileTree';
+import { downloadPackageBlob } from '@/api/blobApi';
 import { skillDisplayName } from '@/domain/skillDisplay';
 import {
   ASSET_VISIBILITY_LABELS,
@@ -399,6 +400,11 @@ export function CatalogAgentDetailModal({
   const usageModes = nonEmpty(environment?.usageModes);
   const environmentRequirements = nonEmpty(environment?.requirements);
   const configuration = nonEmpty(environment?.configuration);
+  const hasEnvironmentMeta = Boolean(
+    usageModes.length ||
+      environment?.requiresCode !== undefined ||
+      environment?.supportsAssistantImport !== undefined,
+  );
 
   /**
    * §6.7 决策 A：没有内容的 Tab 直接不出现，而不是进去看到一片兜底文案。
@@ -431,16 +437,15 @@ export function CatalogAgentDetailModal({
   const packageBlob = agent.packageBlob;
 
   /** 有运营上传的执行包就下发原包；没有才回落到前端即时生成的资源包 */
-  const handleDownload = () => {
+  const handleDownload = async () => {
     bumpDownload(agent.id);
     if (packageBlob) {
-      const link = document.createElement('a');
-      link.href = packageBlob.url;
-      link.download = packageBlob.name;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      onToast(`已下载执行包：${packageBlob.name}`);
+      try {
+        await downloadPackageBlob(packageBlob);
+        onToast(`已下载执行包：${packageBlob.name}`);
+      } catch {
+        onToast('执行包下载失败，请检查登录状态或后端连接');
+      }
       return;
     }
     downloadAgentFile(agent);
@@ -1036,15 +1041,15 @@ export function CatalogAgentDetailModal({
               ) : null}
             </section>
 
-            {usageModes.length || environmentRequirements.length || configuration.length ? (
+            {hasEnvironmentMeta || environmentRequirements.length || configuration.length ? (
               <details className="rounded-2xl border border-zinc-200/80 bg-white p-3">
                 <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
                   运行环境
                 </summary>
                 <div className="mt-2 space-y-3">
-                  {usageModes.length ? (
+                  {hasEnvironmentMeta ? (
                     <dl className="divide-y divide-zinc-100">
-                      <MetaRow label="使用方式" value={usageModes.join('、')} />
+                      <MetaRow label="使用方式" value={usageModes.join('、') || null} />
                       <MetaRow
                         label="代码能力"
                         value={environment?.requiresCode === undefined ? null : environment.requiresCode ? '需要' : '不需要'}

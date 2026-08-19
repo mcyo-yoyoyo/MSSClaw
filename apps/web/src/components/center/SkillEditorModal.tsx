@@ -16,7 +16,7 @@ import {
   type BusinessScenarioId,
 } from '@/domain/businessScenarios';
 import { DO_TASK_FEATURED_HINT } from '@/domain/capabilityShelf';
-import { uploadWorkspaceBlob } from '@/api/blobApi';
+import { uploadWorkspaceBlob, uploadWorkspacePackage } from '@/api/blobApi';
 import { currentWorkspaceId } from '@/api/platformDocsApi';
 import type { PortalCasePreviewFile } from '@/domain/prototype/portalContent';
 import { resolveSkillBusinessScenario, resolveSkillFeaturedInDoTask } from '@/domain/skillBusinessScenarios';
@@ -38,6 +38,12 @@ import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 import { shareSyncSaveHint } from '@/domain/shareSync';
 import { SkillAvatar } from '@/components/brand/SkillAvatar';
+import {
+  formatPackageSize,
+  PACKAGE_UPLOAD_MAX_LABEL,
+  packageUploadSizeError,
+} from '@/domain/packageUpload';
+import { packageZipErrorMessage } from '@/domain/safeZip';
 
 const ICON_MAX_BYTES = 512 * 1024;
 
@@ -238,24 +244,14 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
    * 返回是否成功，调用方据此决定提示文案。
    */
   const storePackageBlob = async (file: File): Promise<boolean> => {
-    // blob 走 JSON base64，膨胀约 33%；提前拦住必然失败的大包
-    if (file.size > 12 * 1024 * 1024) {
-      showToast('包体积超过 12MB，请精简后再上传');
+    const sizeError = packageUploadSizeError(file);
+    if (sizeError) {
+      showToast(sizeError);
       return false;
     }
     setUploadingPackage(true);
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result ?? ''));
-        reader.onerror = () => reject(reader.error ?? new Error('read_failed'));
-        reader.readAsDataURL(file);
-      });
-      const uploaded = await uploadWorkspaceBlob(currentWorkspaceId(), {
-        name: file.name,
-        mimeType: file.type || 'application/zip',
-        dataUrl,
-      });
+      const uploaded = await uploadWorkspacePackage(currentWorkspaceId(), file);
       setForm((f) => ({
         ...f,
         packageBlob: {
@@ -276,6 +272,12 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
 
   const handleUpload = async (file: File | null) => {
     if (!file) return;
+    const sizeError = packageUploadSizeError(file);
+    if (sizeError) {
+      showToast(sizeError);
+      if (fileRef.current) fileRef.current.value = '';
+      return;
+    }
     setParsing(true);
     try {
       const items = await parseSkillUpload(file);
@@ -289,8 +291,8 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
         const ok = await storePackageBlob(file);
         showToast(ok ? '已解析并留档 Skill 原包' : '已解析，但原包留档失败（详情页将无文件树）');
       }
-    } catch {
-      showToast('Skill 包解析失败，请检查格式');
+    } catch (error) {
+      showToast(packageZipErrorMessage(error, 'Skill 包解析失败，请检查格式'));
     } finally {
       setParsing(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -583,7 +585,8 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
               <p className="text-[15px] font-semibold text-zinc-900">一键上传 Skill 包</p>
               <p className="mx-auto mt-1 max-w-md text-[12px] leading-relaxed text-zinc-500">
                 支持业界常见 <code className="text-zinc-700">.skill.zip</code> /
-                <code className="text-zinc-700"> SKILL.md</code> / 清单 JSON。自动解析名称、描述与正文。
+                <code className="text-zinc-700"> SKILL.md</code> / 清单 JSON（≤{PACKAGE_UPLOAD_MAX_LABEL}）。
+                自动解析名称、描述与正文。
               </p>
               <input
                 ref={fileRef}
@@ -800,7 +803,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
               </FormField>
               <FormField
                 label="Skill 压缩包"
-                hint="上传 .zip；详情页「文件」将解压展示完整目录树，并可下载原包"
+                hint={`上传 .zip（≤${PACKAGE_UPLOAD_MAX_LABEL}）；详情页「文件」将解压展示完整目录树，并可下载原包`}
               >
                 <div className="space-y-2">
                   <input
@@ -813,6 +816,11 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                       if (!file) return;
                       if (!file.name.toLowerCase().endsWith('.zip')) {
                         showToast('请上传 .zip 格式的 Skill 包');
+                        return;
+                      }
+                      const sizeError = packageUploadSizeError(file);
+                      if (sizeError) {
+                        showToast(sizeError);
                         return;
                       }
                       const ok = await storePackageBlob(file);
@@ -837,7 +845,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                         {form.packageBlob.name}
                       </span>
                       <span className="shrink-0 text-[11px] tabular-nums text-zinc-400">
-                        {(form.packageBlob.size / 1024).toFixed(0)} KB
+                        {formatPackageSize(form.packageBlob.size)}
                       </span>
                       <button
                         type="button"

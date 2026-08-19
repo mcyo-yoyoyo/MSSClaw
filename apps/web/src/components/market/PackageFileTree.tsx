@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
-  buildPackageFileTree,
+  buildPackageFileTreeAsync,
   firstPreviewableFile,
   formatBytes,
   type PackageDir,
   type PackageFile,
 } from '@/domain/packageFileTree';
+import { downloadPackageBlob, fetchPackageBlob } from '@/api/blobApi';
+import { PACKAGE_UPLOAD_MAX_BYTES } from '@/domain/packageUpload';
+import { packageZipErrorMessage } from '@/domain/safeZip';
 
 interface PackageSource {
   url: string;
@@ -99,44 +102,63 @@ function DirNode({
  * 解压放在前端而非上传时入库，是为了不把几十个文件的内容塞进 CenterRecord 那条 JSON。
  */
 export function PackageFileTree({ source }: { source: PackageSource }) {
-  const [bytes, setBytes] = useState<Uint8Array | null>(null);
+  const [parsed, setParsed] = useState<Awaited<ReturnType<typeof buildPackageFileTreeAsync>> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<PackageFile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    setBytes(null);
+    const controller = new AbortController();
+    setParsed(null);
     setError(null);
     setSelected(null);
+    setLoading(true);
+    setDownloadError(null);
     (async () => {
       try {
-        const res = await fetch(source.url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (source.size > PACKAGE_UPLOAD_MAX_BYTES) {
+          throw new Error('资源包超过 200MB，已拒绝读取');
+        }
+        const res = await fetchPackageBlob(source.url, controller.signal);
+        const contentLength = Number(res.headers.get('Content-Length') || 0);
+        if (contentLength > PACKAGE_UPLOAD_MAX_BYTES) {
+          throw new Error('资源包超过 200MB，已拒绝读取');
+        }
         const buf = new Uint8Array(await res.arrayBuffer());
-        if (!cancelled) setBytes(buf);
+        const next = await buildPackageFileTreeAsync(buf, controller.signal);
+        if (!controller.signal.aborted) setParsed(next);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : '读取失败');
+        if (!controller.signal.aborted) {
+          setError(packageZipErrorMessage(e, e instanceof Error ? e.message : '读取失败'));
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
       }
     })();
     return () => {
-      cancelled = true;
+      controller.abort();
     };
-  }, [source.url]);
-
-  const parsed = useMemo(() => {
-    if (!bytes) return null;
-    try {
-      return buildPackageFileTree(bytes);
-    } catch {
-      return 'invalid' as const;
-    }
-  }, [bytes]);
+  }, [source.size, source.url]);
 
   useEffect(() => {
-    if (parsed && parsed !== 'invalid' && !selected) {
+    if (parsed && !selected) {
       setSelected(firstPreviewableFile(parsed.root));
     }
   }, [parsed, selected]);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    setDownloadError(null);
+    try {
+      await downloadPackageBlob(source);
+    } catch {
+      setDownloadError('原包下载失败，请检查登录状态或后端连接。');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   if (error) {
     return (
@@ -145,7 +167,7 @@ export function PackageFileTree({ source }: { source: PackageSource }) {
       </div>
     );
   }
-  if (!bytes) {
+  if (loading) {
     return (
       <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-4 py-8 text-center text-[12px] text-zinc-400">
         <i className="fa-solid fa-spinner fa-spin mr-1.5" />
@@ -153,7 +175,7 @@ export function PackageFileTree({ source }: { source: PackageSource }) {
       </div>
     );
   }
-  if (!parsed || parsed === 'invalid') {
+  if (!parsed) {
     return (
       <div className="rounded-2xl border border-dashed border-amber-200 bg-amber-50/60 px-4 py-8 text-center text-[12px] text-amber-800">
         无法解压该文件，可能不是有效的 zip 包。可在「配置 Skill」中重新上传。
@@ -171,14 +193,20 @@ export function PackageFileTree({ source }: { source: PackageSource }) {
             {parsed.fileCount} 个文件 · {formatBytes(source.size)}
           </span>
         </p>
-        <a
-          href={source.url}
-          download={source.name}
+        <button
+          type="button"
+          disabled={downloading}
+          onClick={() => void handleDownload()}
           className="rounded-lg border border-zinc-200 px-2 py-1 text-[11px] font-medium text-zinc-600 transition hover:bg-zinc-50"
         >
-          下载原包
-        </a>
+          {downloading ? '下载中…' : '下载原包'}
+        </button>
       </div>
+      {downloadError ? (
+        <p className="border-b border-rose-100 bg-rose-50 px-3 py-1.5 text-[11px] text-rose-700">
+          {downloadError}
+        </p>
+      ) : null}
       <div className="grid min-h-[320px] sm:grid-cols-[240px_minmax(0,1fr)]">
         <div className="max-h-[440px] overflow-auto border-b border-zinc-100 bg-zinc-50/70 p-2 sm:border-b-0 sm:border-r">
           <DirNode dir={parsed.root} depth={0} selectedPath={selected?.path ?? null} onSelect={setSelected} />
@@ -192,7 +220,11 @@ export function PackageFileTree({ source }: { source: PackageSource }) {
               {selected ? (selected.isBinary ? '二进制文件' : '在线预览') : ''}
             </span>
           </div>
-          {selected?.isBinary ? (
+          {selected?.previewMessage ? (
+            <div className="px-4 py-10 text-center text-[12px] text-amber-700">
+              {selected.previewMessage}
+            </div>
+          ) : selected?.isBinary ? (
             <div className="px-4 py-10 text-center text-[12px] text-zinc-400">
               该文件为二进制格式，暂不支持在线预览（{formatBytes(selected.size)}）。
               <br />

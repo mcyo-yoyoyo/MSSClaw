@@ -19,3 +19,6 @@ apps/web/dist/
 .gstack/
 *.tsbuildinfo
 .claude/settings.local.json
+
+# 清理脚本的数据库备份，不入库
+deploy/windows/backup/

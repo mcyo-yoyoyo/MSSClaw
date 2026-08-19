@@ -24,6 +24,13 @@ import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useMarketFilterStore } from '@/stores/marketFilterStore';
 import { cn } from '@/lib/utils';
+import {
+  PACKAGE_UPLOAD_MAX_LABEL,
+  packageUploadSizeError,
+} from '@/domain/packageUpload';
+import { packageZipErrorMessage } from '@/domain/safeZip';
+import { uploadWorkspacePackage } from '@/api/blobApi';
+import { currentWorkspaceId } from '@/api/platformDocsApi';
 
 function slugCommand(name: string): string {
   const base = name
@@ -61,7 +68,9 @@ export function MarketSkillSubmitModal({
   const [ownerRegionId, setOwnerRegionId] = useState<RegionId | null>(null);
   const [visibility, setVisibility] = useState<AssetVisibility>('org');
   const [packName, setPackName] = useState<string | null>(null);
+  const [packageFile, setPackageFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [parsedExtra, setParsedExtra] = useState<Partial<PrototypeSkillSeed> | null>(null);
 
   useEffect(() => {
@@ -77,8 +86,10 @@ export function MarketSkillSubmitModal({
     setOwnerRegionId(null);
     setVisibility('org');
     setPackName(null);
+    setPackageFile(null);
     setParsedExtra(null);
     setParsing(false);
+    setSubmitting(false);
   }, [open, user, businessFilter]);
 
   if (!open) return null;
@@ -105,6 +116,13 @@ export function MarketSkillSubmitModal({
 
   const handleUpload = async (file: File | null) => {
     if (!file) return;
+    setPackageFile(null);
+    const sizeError = packageUploadSizeError(file);
+    if (sizeError) {
+      showToast(sizeError);
+      if (fileRef.current) fileRef.current.value = '';
+      return;
+    }
     setParsing(true);
     try {
       const items = await parseSkillUpload(file);
@@ -113,15 +131,21 @@ export function MarketSkillSubmitModal({
         return;
       }
       applyParsed(items[0], file.name);
-    } catch {
-      showToast('Skill 包解析失败，请检查格式');
+      setPackageFile(file.name.toLowerCase().endsWith('.zip') ? file : null);
+    } catch (error) {
+      showToast(packageZipErrorMessage(error, 'Skill 包解析失败，请检查格式'));
     } finally {
       setParsing(false);
       if (fileRef.current) fileRef.current.value = '';
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (submitting) return;
+    if (parsing) {
+      showToast('Skill 包仍在解析，请稍候');
+      return;
+    }
     const nameZh = name.trim();
     if (!nameZh) {
       showToast('请填写技能名称，或先上传 Skill 包');
@@ -137,6 +161,25 @@ export function MarketSkillSubmitModal({
     const id = `skill-submit-${Date.now()}`;
     const cmd = (command.trim() || slugCommand(nameZh)).replace(/^\//, '');
     const descZh = desc.trim() || '业务提报场景技能（待运营完善）';
+    let packageBlob: PrototypeSkillSeed['packageBlob'];
+
+    if (packageFile) {
+      setSubmitting(true);
+      try {
+        const uploaded = await uploadWorkspacePackage(currentWorkspaceId(), packageFile);
+        packageBlob = {
+          id: uploaded.id,
+          url: uploaded.url,
+          name: uploaded.name,
+          size: uploaded.size,
+          uploadedAt: new Date().toISOString(),
+        };
+      } catch {
+        showToast('Skill 原包留档失败，请检查登录状态或后端连接后重试');
+        setSubmitting(false);
+        return;
+      }
+    }
 
     let draft = syncSkillZhPrimary({
       id,
@@ -168,6 +211,7 @@ export function MarketSkillSubmitModal({
           }),
       instructions: instructions.trim() || undefined,
       planSteps: parsedExtra?.planSteps ?? [],
+      packageBlob,
       sourceType: 'internal',
       visibility,
       ownerDeptIds: ownerDeptIds.slice(0, 1),
@@ -191,14 +235,26 @@ export function MarketSkillSubmitModal({
     showToast('技能已提报，进入上架审批');
   };
 
+  const handleClose = () => {
+    if (submitting) {
+      showToast('Skill 原包正在上传，请稍候');
+      return;
+    }
+    onClose();
+  };
+
   return (
     <CenterModal
       open
       title="提报场景技能"
-      onClose={onClose}
+      onClose={handleClose}
       size="lg"
       actions={
-        <ModalActions onCancel={onClose} onSave={handleSubmit} saveLabel="提交审批" />
+        <ModalActions
+          onCancel={handleClose}
+          onSave={() => void handleSubmit()}
+          saveLabel={submitting ? '正在上传…' : '提交审批'}
+        />
       }
     >
       <div className="space-y-3 text-left">
@@ -217,7 +273,7 @@ export function MarketSkillSubmitModal({
             <div className="min-w-0">
               <p className="text-[12px] font-semibold text-zinc-800">上传 Skill 包（推荐）</p>
               <p className="mt-0.5 text-[11px] text-zinc-500">
-                支持 .skill.zip / SKILL.md / JSON，与能力开发「配置Skill」一致
+                支持 .skill.zip / SKILL.md / JSON（≤{PACKAGE_UPLOAD_MAX_LABEL}），与能力开发「配置Skill」一致
               </p>
               {packName ? (
                 <p className="mt-1 truncate text-[11px] font-medium text-emerald-700">
@@ -235,7 +291,7 @@ export function MarketSkillSubmitModal({
               />
               <button
                 type="button"
-                disabled={parsing}
+                disabled={parsing || submitting}
                 onClick={() => fileRef.current?.click()}
                 className="rounded-xl bg-zinc-900 px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
               >
