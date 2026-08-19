@@ -17,8 +17,5 @@
     "preview": "npm run preview --workspace @mss-claw/web",
     "preview:react": "npm run preview:react --workspace @mss-claw/web",
     "smoke": "npm run smoke --workspace @mss-claw/web"
-  },
-  "devDependencies": {
-    "better-sqlite3": "^13.0.3"
   }
 }
