@@ -7,7 +7,6 @@ import {
   buildAgentDemoPrompt,
   buildAgentOrchestrationSteps,
   getAgentMockReport,
-  getAgentSystemPrompt,
 } from '@/domain/agents/runtime';
 import { getAgentBusinessLabel } from '@/domain/agentBusinessScenarios';
 import {
@@ -33,11 +32,9 @@ import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 
 /**
- * §2.4 五个核心 Tab，顺序即普通员工的理解路径：
- * 这是什么 → 能产出什么 → 我适不适合 → 下一步怎么做 → 完整案例与材料。
- * 「版本」「环境信息」按 §2.5 并入右侧栏，不再占主 Tab。
+ * 核心业务 Tab 保持普通员工的理解路径，版本与评论作为补充信息放在末尾。
  */
-type DetailTab = 'overview' | 'preview' | 'fit' | 'howto' | 'cases';
+type DetailTab = 'overview' | 'preview' | 'fit' | 'howto' | 'cases' | 'versions' | 'comments';
 
 const DETAIL_TABS: Array<{ id: DetailTab; label: string; icon: string }> = [
   { id: 'overview', label: '概览', icon: 'fa-compass' },
@@ -45,10 +42,27 @@ const DETAIL_TABS: Array<{ id: DetailTab; label: string; icon: string }> = [
   { id: 'fit', label: '适用判断', icon: 'fa-bullseye' },
   { id: 'howto', label: '怎么使用', icon: 'fa-route' },
   { id: 'cases', label: '案例与方案包', icon: 'fa-briefcase' },
+  { id: 'versions', label: '版本', icon: 'fa-code-branch' },
+  { id: 'comments', label: '评论', icon: 'fa-comment-dots' },
 ];
 
 function nonEmpty(items?: Array<string | null | undefined>): string[] {
   return Array.from(new Set((items ?? []).map((item) => item?.trim()).filter(Boolean) as string[]));
+}
+
+function formatVersionLabel(value: string): string {
+  return /^v/i.test(value) ? value : `v${value}`;
+}
+
+function formatVersionTime(value?: string): string {
+  const raw = value?.trim();
+  if (!raw) return '—';
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(raw);
+  const pad = (number: number) => String(number).padStart(2, '0');
+  const ymd = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return dateOnly ? `${ymd} 00:00` : `${ymd} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function MetaRow({ label, value }: { label: string; value?: string | null }) {
@@ -344,7 +358,6 @@ export function CatalogAgentDetailModal({
   );
   const primarySkill = mountedSkills.find((skill) => skill.id === primaryId) ?? mountedSkills[0] ?? null;
   const skillNames = mountedSkills.map(skillDisplayName);
-  const persona = getAgentSystemPrompt(agent)?.trim() || '';
   const demoPrompt = agent.inputOutput?.inputExample?.trim() || buildAgentDemoPrompt(agent).trim();
   const outputExample = agent.inputOutput?.outputExample?.trim() || getAgentMockReport(agent.id) || '';
   const orchestrationSteps =
@@ -389,7 +402,7 @@ export function CatalogAgentDetailModal({
 
   /**
    * §6.7 决策 A：没有内容的 Tab 直接不出现，而不是进去看到一片兜底文案。
-   * 概览 / 怎么使用 / 案例与方案包 恒在——它们至少有挂载能力、状态路径和执行包。
+   * 概览 / 怎么使用 / 案例与方案包 / 版本 / 评论恒在；预览和适用判断按内容显示。
    */
   const hasPreview = Boolean(
     processSteps.length ||
@@ -612,12 +625,6 @@ export function CatalogAgentDetailModal({
                   </p>
                   <TagList items={skillNames} empty="当前未挂载 Skill" />
                 </SectionCard>
-                {persona ? (
-                  <details className="rounded-2xl border border-zinc-200/80 bg-white px-4 py-3">
-                    <summary className="cursor-pointer text-[12px] font-semibold text-zinc-700">查看工作方式说明</summary>
-                    <p className="mt-3 whitespace-pre-wrap text-[12px] leading-relaxed text-zinc-600">{persona}</p>
-                  </details>
-                ) : null}
                 {!valueProposition && !capabilities.length && !targetUsers.length ? (
                   <EmptyHint text="该 Agent 尚未配置概览说明，可联系维护团队补充。" />
                 ) : null}
@@ -652,7 +659,7 @@ export function CatalogAgentDetailModal({
                   </PipelineCard>
                 </div>
                 {demoPrompt || outputExample ? (
-                  <SectionCard title="样例结果" icon="fa-eye">
+                  <SectionCard title="样例演示" icon="fa-eye">
                     <div className="grid gap-3 xl:grid-cols-2">
                       {demoPrompt ? <ExampleBlock label="样例输入" value={demoPrompt} /> : null}
                       {outputExample ? <ExampleBlock label="样例输出" value={outputExample} /> : null}
@@ -875,6 +882,64 @@ export function CatalogAgentDetailModal({
                 {!cases.length ? (
                   <EmptyHint text="该 Agent 尚未配置 Demo 案例，可先查看上方方案与执行材料。" />
                 ) : null}
+              </div>
+            ) : null}
+
+            {activeTab === 'versions' ? (
+              <div className="overflow-x-auto rounded-2xl border border-zinc-200/80 bg-white p-4">
+                <table className="w-full min-w-[520px] text-left text-[12px]">
+                  <thead>
+                    <tr className="border-b border-zinc-100 text-[11px] text-zinc-400">
+                      <th className="px-2 py-2 font-semibold">版本号</th>
+                      <th className="px-2 py-2 font-semibold">版本说明</th>
+                      <th className="px-2 py-2 font-semibold">更新时间</th>
+                      <th className="px-2 py-2 font-semibold">状态</th>
+                      <th className="px-2 py-2 font-semibold">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="px-2 py-2.5 font-mono font-semibold text-zinc-800">
+                        {formatVersionLabel(version)}
+                      </td>
+                      <td className="px-2 py-2.5 text-zinc-600">
+                        {agent.versionSummary?.trim() || '当前线上版本'}
+                      </td>
+                      <td className="px-2 py-2.5 tabular-nums text-zinc-500">
+                        {formatVersionTime(agent.updatedAt || agent.createdAt)}
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">
+                          生效
+                        </span>
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <button
+                          type="button"
+                          onClick={handleDownload}
+                          className="text-[11px] font-semibold text-sky-700 hover:underline"
+                        >
+                          下载
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+
+            {activeTab === 'comments' ? (
+              <div className="flex min-h-[240px] flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-200 bg-zinc-50/60 px-6 py-12 text-center">
+                <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-zinc-100 text-zinc-400">
+                  <i className="fa-solid fa-comment-dots text-[18px]" />
+                </span>
+                <p className="text-[14px] font-semibold text-zinc-800">评论功能即将开放</p>
+                <p className="mt-1.5 max-w-sm text-[12px] leading-relaxed text-zinc-500">
+                  当前暂不提供评分与留言；上线后可在此查看使用反馈。
+                </p>
+                <span className="mt-3 rounded-md bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
+                  即将开放
+                </span>
               </div>
             ) : null}
           </div>
