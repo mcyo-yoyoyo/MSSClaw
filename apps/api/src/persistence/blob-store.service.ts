@@ -189,6 +189,7 @@ export class BlobStoreService {
     workspaceId: string,
     id: string,
   ): Promise<{ meta: BlobMeta; size: number; stream: ReadStream }> {
+    if (!GENERATED_BLOB_ID.test(id)) throw new NotFoundException('blob_not_found');
     try {
       const metaRaw = await fs.readFile(this.metaPath(workspaceId, id), 'utf8');
       const meta = JSON.parse(metaRaw) as BlobMeta;
