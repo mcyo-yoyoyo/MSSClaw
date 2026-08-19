@@ -11,15 +11,15 @@ import {
 } from '@/domain/agents/runtime';
 import { getAgentBusinessLabel } from '@/domain/agentBusinessScenarios';
 import {
+  getAgentCapabilityTypeLabel,
+  resolveAgentCapabilityTypes,
+} from '@/domain/agentHubFilters';
+import {
   AGENT_LIFECYCLE_META,
   resolveAgentLifecycle,
   resolveAgentPrimaryAction,
 } from '@/domain/agentLifecycle';
-import type {
-  AgentCaseItem,
-  PrototypeAgentSeed,
-  PrototypeSkillSeed,
-} from '@/domain/prototype/types';
+import type { PrototypeAgentSeed, PrototypeSkillSeed } from '@/domain/prototype/types';
 import { downloadAgentFile } from '@/domain/agentExport';
 import { skillDisplayName } from '@/domain/skillDisplay';
 import {
@@ -30,23 +30,19 @@ import {
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 
-type DetailTab =
-  | 'overview'
-  | 'scenarios'
-  | 'input-output'
-  | 'guide'
-  | 'cases'
-  | 'version'
-  | 'environment';
+/**
+ * §2.4 五个核心 Tab，顺序即普通员工的理解路径：
+ * 这是什么 → 能产出什么 → 我适不适合 → 下一步怎么做 → 完整案例与材料。
+ * 「版本」「环境信息」按 §2.5 并入右侧栏，不再占主 Tab。
+ */
+type DetailTab = 'overview' | 'preview' | 'fit' | 'howto' | 'cases';
 
 const DETAIL_TABS: Array<{ id: DetailTab; label: string; icon: string }> = [
   { id: 'overview', label: '概览', icon: 'fa-compass' },
-  { id: 'scenarios', label: '适用场景', icon: 'fa-bullseye' },
-  { id: 'input-output', label: '输入输出', icon: 'fa-arrow-right-arrow-left' },
-  { id: 'guide', label: '快速上手', icon: 'fa-wand-magic-sparkles' },
-  { id: 'cases', label: '案例', icon: 'fa-briefcase' },
-  { id: 'version', label: '版本', icon: 'fa-code-branch' },
-  { id: 'environment', label: '环境信息', icon: 'fa-laptop-code' },
+  { id: 'preview', label: '效果预览', icon: 'fa-wand-magic-sparkles' },
+  { id: 'fit', label: '适用判断', icon: 'fa-bullseye' },
+  { id: 'howto', label: '怎么使用', icon: 'fa-route' },
+  { id: 'cases', label: '案例与方案包', icon: 'fa-briefcase' },
 ];
 
 function nonEmpty(items?: Array<string | null | undefined>): string[] {
@@ -89,12 +85,27 @@ function SectionCard({
   );
 }
 
-function BulletList({ items }: { items: string[] }) {
+const BULLET_TONES = {
+  sky: 'bg-sky-500',
+  emerald: 'bg-emerald-500',
+  rose: 'bg-rose-400',
+  amber: 'bg-amber-500',
+} as const;
+
+function BulletList({
+  items,
+  tone = 'sky',
+}: {
+  items: string[];
+  /** 圆点跟随所在卡片的色调，避免绿色 / 红色卡片里出现蓝点 */
+  tone?: keyof typeof BULLET_TONES;
+}) {
+  if (!items.length) return null;
   return (
     <ul className="space-y-2">
       {items.map((item, index) => (
         <li key={`${item}-${index}`} className="flex items-start gap-2 text-[12px] leading-relaxed text-zinc-600">
-          <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" />
+          <span className={cn('mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full', BULLET_TONES[tone])} />
           <span>{item}</span>
         </li>
       ))}
@@ -118,6 +129,119 @@ function TagList({ items, empty = '暂未配置' }: { items: string[]; empty?: s
   );
 }
 
+/** §6.7 决策 A：整块无内容时给一句明确说明，而不是拿模板句充数 */
+function EmptyHint({ text }: { text: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-4 py-8 text-center text-[12px] text-zinc-400">
+      {text}
+    </div>
+  );
+}
+
+/** §4.2 效果预览的三段式卡片：输入 → 处理 → 输出 */
+function PipelineCard({
+  step,
+  title,
+  icon,
+  accent,
+  children,
+}: {
+  step: string;
+  title: string;
+  icon: string;
+  accent?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      className={cn(
+        'rounded-2xl border p-4',
+        accent ? 'border-sky-100 bg-sky-50/40' : 'border-zinc-200/80 bg-white',
+      )}
+    >
+      <div className="mb-3 flex items-center gap-2">
+        <span
+          className={cn(
+            'flex h-7 w-7 items-center justify-center rounded-lg text-[11px]',
+            accent ? 'bg-sky-100 text-sky-700' : 'bg-zinc-100 text-zinc-500',
+          )}
+        >
+          <i className={cn('fa-solid', icon)} />
+        </span>
+        <div>
+          <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-zinc-400">{step}</p>
+          <h4 className="text-[13px] font-semibold tracking-tight text-zinc-900">{title}</h4>
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * 一条可走的路径：有链接就是可点的行，没有就置灰并说明原因。
+ * §6.7 要求没有资源时不展示空链接，所以这里不渲染成可点按钮。
+ */
+function PathRow({
+  icon,
+  label,
+  desc,
+  href,
+  onClick,
+  missing,
+}: {
+  icon: string;
+  label: string;
+  desc?: string;
+  href?: string;
+  onClick?: () => void;
+  missing?: string;
+}) {
+  const available = Boolean(href || onClick);
+  const body = (
+    <>
+      <span
+        className={cn(
+          'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+          available ? 'bg-zinc-100 text-zinc-600' : 'bg-zinc-50 text-zinc-300',
+        )}
+      >
+        <i className={cn('fa-solid text-[11px]', icon)} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className={cn('block text-[12px] font-semibold', available ? 'text-zinc-800' : 'text-zinc-400')}>
+          {label}
+        </span>
+        <span className="block text-[11px] text-zinc-400">{available ? desc : missing}</span>
+      </span>
+      {available ? <i className="fa-solid fa-chevron-right text-[9px] text-zinc-300" /> : null}
+    </>
+  );
+
+  const className = cn(
+    'flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition',
+    available
+      ? 'border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50'
+      : 'border-dashed border-zinc-200 bg-zinc-50/60',
+  );
+
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noreferrer" className={className}>
+        {body}
+      </a>
+    );
+  }
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        {body}
+      </button>
+    );
+  }
+  return <div className={className}>{body}</div>;
+}
+
 function ExampleBlock({ label, value }: { label: string; value?: string | null }) {
   return (
     <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-3.5">
@@ -132,10 +256,13 @@ function ExampleBlock({ label, value }: { label: string; value?: string | null }
 function GuideStep({
   index,
   title,
+  last,
   children,
 }: {
   index: number;
   title: string;
+  /** 最后一步不画竖直连线 */
+  last?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -147,27 +274,9 @@ function GuideStep({
         <h4 className="text-[12px] font-semibold text-zinc-900">{title}</h4>
         <div className="mt-1.5 text-[12px] leading-relaxed text-zinc-600">{children}</div>
       </div>
-      {index < 7 ? <span className="absolute left-[13px] top-7 h-[calc(100%-20px)] w-px bg-zinc-200" /> : null}
+      {last ? null : <span className="absolute left-[13px] top-7 h-[calc(100%-20px)] w-px bg-zinc-200" />}
     </div>
   );
-}
-
-function caseFallback(params: {
-  agent: PrototypeAgentSeed;
-  scenario: string;
-  audience: string;
-  input: string;
-  output: string;
-}): AgentCaseItem {
-  return {
-    title: `${params.scenario}演示案例`,
-    scenario: params.scenario,
-    audience: params.audience,
-    problem: `需要将分散的业务材料转化为结构清晰、可继续执行的${params.scenario}结果。`,
-    input: params.input,
-    output: params.output || `由 ${params.agent.name} 生成结构化结果，并给出结论和下一步行动建议。`,
-    outcome: '通过标准任务流程降低上手门槛，并提升结果结构的一致性。',
-  };
 }
 
 /**
@@ -241,68 +350,68 @@ export function CatalogAgentDetailModal({
       ? nonEmpty(agent.quickStart.steps)
       : buildAgentOrchestrationSteps(agent, primarySkill) ?? [];
 
-  const capabilities = nonEmpty(
-    agent.capabilities?.length
-      ? agent.capabilities
-      : [
-          agent.desc,
-          ...skillNames.slice(0, 3).map((name) => `编排「${name}」完成对应单点能力`),
-          orchestrationSteps.length ? '按完整流程汇总结果并给出下一步行动建议' : null,
-        ],
-  ).slice(0, 5);
-  const targetUsers = nonEmpty(
-    agent.targetUsers?.length
-      ? agent.targetUsers
-      : [deptLabel ? `${deptLabel}相关人员` : null, `${businessLabel}相关人员`, '需要完成多步骤业务任务的使用者'],
-  );
-  const boundaries = nonEmpty(
-    agent.capabilityBoundaries?.length
-      ? agent.capabilityBoundaries
-      : [
-          '生成结果用于辅助判断，正式业务使用前建议人工复核。',
-          agent.visibility && agent.visibility !== 'public'
-            ? `仅限${scopeLabel}范围内的授权用户使用。`
-            : '使用时需遵循平台数据与安全规范。',
-          canRun ? null : '当前不支持平台内在线体验，请下载资源包后按快速上手说明使用。',
-        ],
-  );
+  /**
+   * §6.7 决策 A：新字段一律「有则显示、无则整块隐藏」，不再用代码拼兜底文案。
+   * 页面可能因此变短，但不会出现看似配置过、实则是模板句的内容。
+   */
+  const capabilities = nonEmpty(agent.capabilities).slice(0, 5);
+  const targetUsers = nonEmpty(agent.targetUsers);
+  const boundaries = nonEmpty(agent.capabilityBoundaries);
+  const suitableFor = nonEmpty(agent.suitableFor);
+  const notSuitableFor = nonEmpty(agent.notSuitableFor);
+  const prerequisites = nonEmpty(agent.quickStart?.prerequisites);
+  const inputRequirements = nonEmpty(agent.quickStart?.inputRequirements);
+  const processSteps = nonEmpty(agent.inputOutput?.processSteps);
   const scenarios = nonEmpty([businessLabel, ...(agent.scenarioTags ?? [])]).slice(0, 5);
-  const audienceFallback = targetUsers[0] || '业务人员';
-  const cases = agent.cases?.length
-    ? agent.cases
-    : [
-        caseFallback({
-          agent,
-          scenario: businessLabel,
-          audience: audienceFallback,
-          input: demoPrompt,
-          output: outputExample,
-        }),
-      ];
+  /**
+   * §2.2 顶部标签口径：业务场景 / 适用对象 / 能力类型，复用 1.4 已有的 capabilityTypeIds。
+   * 三类之间会撞词（如业务场景与能力类型都叫「数据分析」），nonEmpty 去重后截到 5 个。
+   */
+  const capabilityTypeLabels = resolveAgentCapabilityTypes(agent).map(getAgentCapabilityTypeLabel);
+  const headerTags = nonEmpty([
+    businessLabel,
+    targetUsers[0],
+    ...capabilityTypeLabels,
+  ]).slice(0, 5);
+  const cases = agent.cases ?? [];
+  const valueProposition = agent.valueProposition?.trim() || '';
 
   const environment = agent.environment;
+  // 适配平台是顶部标签与右侧栏都要用的，缺省回退平台自身尚属事实陈述，保留
   const platforms = nonEmpty(
     environment?.platforms?.length ? environment.platforms : ['MSS AI提效平台'],
   );
-  const usageModes = nonEmpty(
-    environment?.usageModes?.length
-      ? environment.usageModes
-      : [canRun ? '在线体验' : null, '下载资源包'],
+  const usageModes = nonEmpty(environment?.usageModes);
+  const environmentRequirements = nonEmpty(environment?.requirements);
+  const configuration = nonEmpty(environment?.configuration);
+
+  /**
+   * §6.7 决策 A：没有内容的 Tab 直接不出现，而不是进去看到一片兜底文案。
+   * 概览 / 怎么使用 / 案例与方案包 恒在——它们至少有挂载能力、状态路径和执行包。
+   */
+  const hasPreview = Boolean(
+    processSteps.length ||
+      skillNames.length ||
+      demoPrompt ||
+      outputExample ||
+      agent.inputOutput?.inputFormat ||
+      agent.inputOutput?.outputFormat ||
+      nonEmpty(agent.inputOutput?.inputTypes).length ||
+      nonEmpty(agent.inputOutput?.outputFields).length,
   );
-  const environmentRequirements = nonEmpty(
-    environment?.requirements?.length
-      ? environment.requirements
-      : [
-          '登录平台并具备对应内容访问权限',
-          mountedSkills.length ? `已挂载 ${mountedSkills.length} 个 Skill` : '按资源包说明配置所需 Skill',
-          '工作区已配置可用模型',
-        ],
+  const hasFit = Boolean(
+    suitableFor.length ||
+      notSuitableFor.length ||
+      boundaries.length ||
+      prerequisites.length ||
+      inputRequirements.length ||
+      agent.requiresHumanReview,
   );
-  const configuration = nonEmpty(
-    environment?.configuration?.length
-      ? environment.configuration
-      : [primarySkill ? `主 Skill：${skillDisplayName(primarySkill)}` : null, '运行前请确认输入材料不包含未授权敏感信息'],
+  const visibleTabs = DETAIL_TABS.filter(
+    (item) =>
+      (item.id !== 'preview' || hasPreview) && (item.id !== 'fit' || hasFit),
   );
+  const activeTab = visibleTabs.some((item) => item.id === tab) ? tab : 'overview';
 
   const handleDownload = () => {
     bumpDownload(agent.id);
@@ -379,8 +488,9 @@ export function CatalogAgentDetailModal({
                       {version}
                     </span>
                   </div>
+                  {/* §3 顶部一句话价值：用户不点任何 Tab 也能看懂这个 Agent 干什么 */}
                   <p className="mt-1.5 max-w-3xl text-[13px] leading-relaxed text-zinc-600">
-                    {agent.desc || '暂无功能简介'}
+                    {valueProposition || agent.desc || '暂无功能简介'}
                   </p>
                 </div>
                 <button
@@ -400,12 +510,19 @@ export function CatalogAgentDetailModal({
                 {regionLabel ? (
                   <span className="rounded-md bg-teal-50 px-1.5 py-0.5 text-[10px] font-medium text-teal-800">{regionLabel}</span>
                 ) : null}
-                <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
-                  {businessLabel}
-                </span>
-                {platforms.slice(0, 2).map((platform) => (
-                  <span key={platform} className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600">
-                    {platform}
+                {headerTags.map((tag, index) => (
+                  <span
+                    key={tag}
+                    className={cn(
+                      'rounded-md px-1.5 py-0.5 text-[10px] font-medium',
+                      index === 0
+                        ? 'bg-amber-50 text-amber-800'
+                        : index === 1 && targetUsers.length
+                          ? 'bg-sky-50 text-sky-800'
+                          : 'bg-zinc-100 text-zinc-600',
+                    )}
+                  >
+                    {tag}
                   </span>
                 ))}
               </div>
@@ -425,18 +542,18 @@ export function CatalogAgentDetailModal({
       <div className="grid min-h-full grid-cols-1 md:grid-cols-[minmax(0,1fr)_248px]">
         <main className="min-w-0 md:border-r md:border-zinc-100">
           <nav className="sticky top-0 z-20 flex gap-1 overflow-x-auto border-b border-zinc-100 bg-white/95 px-4 pt-2 backdrop-blur md:px-5" aria-label="Agent 详情导航">
-            {DETAIL_TABS.map((item) => (
+            {visibleTabs.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => setTab(item.id)}
                 className={cn(
                   'inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-[11px] font-semibold transition',
-                  tab === item.id
+                  activeTab === item.id
                     ? 'border-zinc-900 text-zinc-900'
                     : 'border-transparent text-zinc-400 hover:text-zinc-700',
                 )}
-                aria-current={tab === item.id ? 'page' : undefined}
+                aria-current={activeTab === item.id ? 'page' : undefined}
               >
                 <i className={cn('fa-solid text-[10px]', item.icon)} />
                 {item.label}
@@ -445,19 +562,35 @@ export function CatalogAgentDetailModal({
           </nav>
 
           <div className="min-h-[520px] bg-zinc-50/40 px-4 py-4 md:px-5 md:py-5">
-            {tab === 'overview' ? (
+            {activeTab === 'overview' ? (
               <div className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <SectionCard title="核心能力" icon="fa-sparkles">
-                    <BulletList items={capabilities.length ? capabilities : ['暂无核心能力说明']} />
+                {valueProposition ? (
+                  <section className="rounded-2xl border border-sky-100 bg-sky-50/50 p-4">
+                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-sky-700">
+                      这个 Agent 帮你做什么
+                    </p>
+                    <p className="text-[13px] leading-relaxed text-zinc-800">{valueProposition}</p>
+                  </section>
+                ) : null}
+                {capabilities.length || targetUsers.length ? (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {capabilities.length ? (
+                      <SectionCard title="核心能力" icon="fa-bolt">
+                        <BulletList items={capabilities} />
+                      </SectionCard>
+                    ) : null}
+                    {targetUsers.length ? (
+                      <SectionCard title="适用对象" icon="fa-users">
+                        <TagList items={targetUsers} />
+                      </SectionCard>
+                    ) : null}
+                  </div>
+                ) : null}
+                {scenarios.length ? (
+                  <SectionCard title="适用场景" icon="fa-bullseye">
+                    <TagList items={scenarios} />
                   </SectionCard>
-                  <SectionCard title="适用对象" icon="fa-users">
-                    <TagList items={targetUsers} />
-                  </SectionCard>
-                </div>
-                <SectionCard title="能力边界" icon="fa-shield-halved" className="border-amber-100 bg-amber-50/35">
-                  <BulletList items={boundaries} />
-                </SectionCard>
+                ) : null}
                 <SectionCard title="能力组成" icon="fa-cubes-stacked">
                   <p className="mb-3 text-[12px] leading-relaxed text-zinc-500">
                     Agent 通过编排多个 Skill 完成相对完整的业务任务；以下为当前挂载能力。
@@ -470,103 +603,175 @@ export function CatalogAgentDetailModal({
                     <p className="mt-3 whitespace-pre-wrap text-[12px] leading-relaxed text-zinc-600">{persona}</p>
                   </details>
                 ) : null}
+                {!valueProposition && !capabilities.length && !targetUsers.length ? (
+                  <EmptyHint text="该 Agent 尚未配置概览说明，可联系维护团队补充。" />
+                ) : null}
               </div>
             ) : null}
 
-            {tab === 'scenarios' ? (
-              <div className="space-y-3">
-                <div className="mb-4">
-                  <h4 className="text-[15px] font-semibold tracking-tight text-zinc-900">适用场景</h4>
-                  <p className="mt-1 text-[12px] text-zinc-500">选择与当前工作最接近的场景，再进入体验或下载资源包。</p>
-                </div>
-                {scenarios.map((scenario, index) => (
-                  <section key={scenario} className="flex gap-3 rounded-2xl border border-zinc-200/80 bg-white p-4">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-[12px] font-semibold text-sky-700">
-                      {String(index + 1).padStart(2, '0')}
-                    </span>
-                    <div>
-                      <h5 className="text-[13px] font-semibold text-zinc-900">{scenario}</h5>
-                      <p className="mt-1 text-[12px] leading-relaxed text-zinc-600">
-                        当你需要完成{scenario}相关的多步骤任务时，可使用本 Agent 理解材料、编排能力并汇总可执行结果。
-                      </p>
-                    </div>
-                  </section>
-                ))}
-              </div>
-            ) : null}
-
-            {tab === 'input-output' ? (
+            {activeTab === 'preview' ? (
               <div className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <SectionCard title="输入要求" icon="fa-arrow-up-from-bracket">
-                    <dl className="divide-y divide-zinc-100">
-                      <MetaRow label="输入类型" value={nonEmpty(agent.inputOutput?.inputTypes).join('、') || '文本、文档或业务资料'} />
-                      <MetaRow label="输入格式" value={agent.inputOutput?.inputFormat || '清晰说明任务目标、背景和约束条件'} />
-                      <MetaRow label="输入字段" value={nonEmpty(agent.inputOutput?.inputFields).join('、') || '任务目标、业务背景、材料内容、期望结果'} />
-                      <MetaRow label="支持文件" value={nonEmpty(agent.inputOutput?.supportedFiles).join('、') || '以快速上手与运行页面提示为准'} />
-                    </dl>
-                  </SectionCard>
-                  <SectionCard title="输出说明" icon="fa-file-circle-check">
-                    <dl className="divide-y divide-zinc-100">
-                      <MetaRow label="输出格式" value={agent.inputOutput?.outputFormat || '结构化文本结果'} />
-                      <MetaRow label="关键字段" value={nonEmpty(agent.inputOutput?.outputFields).join('、') || '结论、依据、风险、下一步行动'} />
-                      <MetaRow label="业务使用" value={agent.inputOutput?.resultUsage || '复核后用于汇报、决策或后续任务执行'} />
-                    </dl>
-                  </SectionCard>
+                {/* §4.2 三段式：输入什么 → Agent 做什么 → 输出什么 */}
+                <div className="grid gap-3 lg:grid-cols-3">
+                  <PipelineCard step="01" title="你提供" icon="fa-arrow-up-from-bracket">
+                    <BulletList items={nonEmpty(agent.inputOutput?.inputTypes)} />
+                    <MetaRow label="输入格式" value={agent.inputOutput?.inputFormat} />
+                    <MetaRow label="关键字段" value={nonEmpty(agent.inputOutput?.inputFields).join('、') || null} />
+                    <MetaRow label="支持文件" value={nonEmpty(agent.inputOutput?.supportedFiles).join('、') || null} />
+                  </PipelineCard>
+                  <PipelineCard step="02" title="Agent 处理" icon="fa-gears" accent>
+                    {processSteps.length ? (
+                      <BulletList items={processSteps} />
+                    ) : skillNames.length ? (
+                      <p className="text-[12px] leading-relaxed text-zinc-600">
+                        依次编排 {skillNames.join(' → ')}，逐步完成任务。
+                      </p>
+                    ) : (
+                      <p className="text-[12px] text-zinc-400">暂未配置处理环节说明。</p>
+                    )}
+                  </PipelineCard>
+                  <PipelineCard step="03" title="你得到" icon="fa-file-circle-check">
+                    <MetaRow label="输出格式" value={agent.inputOutput?.outputFormat} />
+                    <MetaRow label="关键字段" value={nonEmpty(agent.inputOutput?.outputFields).join('、') || null} />
+                    <MetaRow label="业务使用" value={agent.inputOutput?.resultUsage} />
+                  </PipelineCard>
                 </div>
-                <div className="grid gap-4 xl:grid-cols-2">
-                  <ExampleBlock label="输入示例" value={demoPrompt} />
-                  <ExampleBlock label="输出示例" value={outputExample || '运行 Agent 后将在任务中心生成结构化结果。'} />
-                </div>
+                {demoPrompt || outputExample ? (
+                  <SectionCard title="样例结果" icon="fa-eye">
+                    <div className="grid gap-3 xl:grid-cols-2">
+                      {demoPrompt ? <ExampleBlock label="样例输入" value={demoPrompt} /> : null}
+                      {outputExample ? <ExampleBlock label="样例输出" value={outputExample} /> : null}
+                    </div>
+                  </SectionCard>
+                ) : null}
               </div>
             ) : null}
 
-            {tab === 'guide' ? (
-              <SectionCard title="七步快速上手" icon="fa-route">
-                <div className="mt-1">
-                  <GuideStep index={1} title="适用场景">
-                    适合处理{businessLabel}相关任务，尤其是需要多个步骤或多个 Skill 协同完成的工作。
-                  </GuideStep>
-                  <GuideStep index={2} title="使用前准备">
-                    <BulletList items={nonEmpty(agent.quickStart?.prerequisites).length ? nonEmpty(agent.quickStart?.prerequisites) : environmentRequirements} />
-                  </GuideStep>
-                  <GuideStep index={3} title="输入要求">
-                    <BulletList
-                      items={
-                        nonEmpty(agent.quickStart?.inputRequirements).length
-                          ? nonEmpty(agent.quickStart?.inputRequirements)
-                          : ['说明任务目标与业务背景', '提供必要材料并标注数据口径', '明确期望输出格式与使用场景']
-                      }
-                    />
-                  </GuideStep>
-                  <GuideStep index={4} title="操作步骤">
-                    {orchestrationSteps.length ? <BulletList items={orchestrationSteps} /> : '进入详情后点击立即体验，提交材料并按页面提示查看结果。'}
-                  </GuideStep>
-                  <GuideStep index={5} title="输出示例">
-                    <ExampleBlock label="样例结果" value={outputExample || '运行后将生成结论、依据、风险与行动建议。'} />
-                  </GuideStep>
-                  <GuideStep index={6} title="导入 / 安装说明">
-                    {agent.quickStart?.installGuide || environment?.packageGuide || '下载 Agent 资源包后，按包内 README 与 AGENT.md 完成导入和配置。'}
-                  </GuideStep>
-                  <GuideStep index={7} title="常见问题">
-                    {agent.quickStart?.faqs?.length ? (
-                      <div className="space-y-2">
-                        {agent.quickStart.faqs.map((faq) => (
-                          <details key={faq.question} className="rounded-xl border border-zinc-200 bg-white px-3 py-2">
-                            <summary className="cursor-pointer font-medium text-zinc-700">{faq.question}</summary>
-                            <p className="mt-2 text-zinc-500">{faq.answer}</p>
-                          </details>
-                        ))}
-                      </div>
-                    ) : (
-                      <BulletList items={['无法运行：确认是否有访问权限及可用模型。', '结果不符合预期：补充业务背景、数据口径和输出要求。', '仍有问题：使用右侧“反馈建议”生成反馈模板。']} />
-                    )}
-                  </GuideStep>
-                </div>
-              </SectionCard>
+            {activeTab === 'fit' ? (
+              <div className="space-y-4">
+                {suitableFor.length ? (
+                  <SectionCard title="适合你，如果" icon="fa-circle-check" className="border-emerald-100 bg-emerald-50/35">
+                    <BulletList items={suitableFor} tone="emerald" />
+                  </SectionCard>
+                ) : null}
+                {prerequisites.length || inputRequirements.length ? (
+                  <SectionCard title="使用前准备" icon="fa-list-check">
+                    <BulletList items={prerequisites} />
+                    {inputRequirements.length ? (
+                      <>
+                        <p className="mb-2 mt-3 border-t border-zinc-100 pt-3 text-[11px] font-semibold text-zinc-500">
+                          输入要求
+                        </p>
+                        <BulletList items={inputRequirements} />
+                      </>
+                    ) : null}
+                  </SectionCard>
+                ) : null}
+                {notSuitableFor.length ? (
+                  <SectionCard title="暂不适合，如果" icon="fa-circle-xmark" className="border-rose-100 bg-rose-50/35">
+                    <BulletList items={notSuitableFor} tone="rose" />
+                  </SectionCard>
+                ) : null}
+                {boundaries.length ? (
+                  <SectionCard title="能力边界" icon="fa-shield-halved" className="border-amber-100 bg-amber-50/35">
+                    <BulletList items={boundaries} tone="amber" />
+                  </SectionCard>
+                ) : null}
+                {agent.requiresHumanReview ? (
+                  <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-[12px] leading-relaxed text-amber-900">
+                    <i className="fa-solid fa-triangle-exclamation mt-0.5 text-[11px]" />
+                    该 Agent 的产出需人工复核后再用于正式业务。
+                  </p>
+                ) : null}
+              </div>
             ) : null}
 
-            {tab === 'cases' ? (
+            {activeTab === 'howto' ? (
+              <div className="space-y-4">
+                {/* §5.4 可运行走在线路径；建设中走 Demo / 方案文档 / 执行包 / 反馈 */}
+                {lifecycle === 'runnable' ? (
+                  <SectionCard title="在线使用路径" icon="fa-route">
+                    <div className="mt-1">
+                      <GuideStep index={1} title="确认可用">
+                        当前 Agent 已支持在平台内直接运行，点击右侧「{primaryAction.label}」进入任务。
+                      </GuideStep>
+                      <GuideStep index={2} title="准备输入">
+                        {inputRequirements.length ? (
+                          <BulletList items={inputRequirements} />
+                        ) : (
+                          '按运行页面提示提交任务目标、业务背景与所需材料。'
+                        )}
+                      </GuideStep>
+                      <GuideStep index={3} title="执行步骤" last={!agent.quickStart?.faqs?.length}>
+                        {orchestrationSteps.length ? (
+                          <BulletList items={orchestrationSteps} />
+                        ) : (
+                          '提交后按页面提示查看分步结果。'
+                        )}
+                      </GuideStep>
+                      {agent.quickStart?.faqs?.length ? (
+                        <GuideStep index={4} title="常见问题" last>
+                          <div className="space-y-2">
+                            {agent.quickStart.faqs.map((faq) => (
+                              <details key={faq.question} className="rounded-xl border border-zinc-200 bg-white px-3 py-2">
+                                <summary className="cursor-pointer font-medium text-zinc-700">{faq.question}</summary>
+                                <p className="mt-2 text-zinc-500">{faq.answer}</p>
+                              </details>
+                            ))}
+                          </div>
+                        </GuideStep>
+                      ) : null}
+                    </div>
+                  </SectionCard>
+                ) : (
+                  <>
+                    <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-[12px] leading-relaxed text-amber-900">
+                      <i className="fa-solid fa-circle-info mt-0.5 text-[11px]" />
+                      该 Agent 暂不支持在线运行，可先查看 Demo 与方案材料，或下载执行包在本地复用。
+                    </p>
+                    <SectionCard title="当前可走的路径" icon="fa-signs-post">
+                      <div className="space-y-2">
+                        <PathRow
+                          icon="fa-play"
+                          label="查看 Demo"
+                          desc="了解实际运行效果"
+                          href={agent.demoUrl}
+                          missing="维护团队尚未提供 Demo 入口"
+                        />
+                        <PathRow
+                          icon="fa-file-lines"
+                          label="查看方案文档"
+                          desc="了解方案设计与落地路径"
+                          href={agent.solutionDocUrl}
+                          missing="维护团队尚未提供方案文档"
+                        />
+                        <PathRow
+                          icon="fa-download"
+                          label="下载执行包"
+                          desc="获取可在本地复用的材料"
+                          onClick={handleDownload}
+                        />
+                        <PathRow
+                          icon="fa-comment-dots"
+                          label="反馈建议"
+                          desc="告诉维护团队你的场景与诉求"
+                          onClick={handleFeedback}
+                        />
+                      </div>
+                    </SectionCard>
+                  </>
+                )}
+                {agent.quickStart?.installGuide || environment?.packageGuide ? (
+                  <SectionCard title="导入 / 安装说明" icon="fa-box-open">
+                    <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-zinc-600">
+                      {agent.quickStart?.installGuide || environment?.packageGuide}
+                    </p>
+                  </SectionCard>
+                ) : null}
+              </div>
+            ) : null}
+
+            {activeTab === 'cases' ? (
               <div className="space-y-4">
                 {cases.map((item, index) => (
                   <section key={`${item.title}-${index}`} className="rounded-2xl border border-zinc-200/80 bg-white p-4">
@@ -585,10 +790,12 @@ export function CatalogAgentDetailModal({
                         <span className="font-semibold text-zinc-800">使用前问题：</span>{item.problem}
                       </div>
                     ) : null}
-                    <div className="mt-3 grid gap-3 xl:grid-cols-2">
-                      <ExampleBlock label="样例输入" value={item.input} />
-                      <ExampleBlock label="样例输出" value={item.output} />
-                    </div>
+                    {item.input || item.output ? (
+                      <div className="mt-3 grid gap-3 xl:grid-cols-2">
+                        {item.input ? <ExampleBlock label="样例输入" value={item.input} /> : null}
+                        {item.output ? <ExampleBlock label="样例输出" value={item.output} /> : null}
+                      </div>
+                    ) : null}
                     {item.outcome ? (
                       <p className="mt-3 border-l-2 border-sky-400 pl-3 text-[12px] leading-relaxed text-sky-900">
                         <span className="font-semibold">效果说明：</span>{item.outcome}
@@ -601,70 +808,42 @@ export function CatalogAgentDetailModal({
                     ) : null}
                   </section>
                 ))}
-              </div>
-            ) : null}
 
-            {tab === 'version' ? (
-              <div className="space-y-4">
-                <SectionCard title="当前版本" icon="fa-code-branch">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="text-[24px] font-semibold tracking-tight text-zinc-900">{version}</p>
-                      <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-zinc-600">
-                        {agent.versionSummary || `当前版本支持${businessLabel}相关任务，并可编排 ${mountedSkills.length} 个 Skill。`}
-                      </p>
-                    </div>
-                    <span className={cn('w-fit rounded-full px-2.5 py-1 text-[10px] font-semibold', agent.published ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800')}>
-                      {agent.published ? '当前可用' : '试用状态'}
-                    </span>
+                {/* §6.5 方案包：文档类资源标出文件类型，避免用户不知道点开是什么 */}
+                <SectionCard title="方案与执行材料" icon="fa-folder-open">
+                  <div className="space-y-2">
+                    <PathRow
+                      icon="fa-file-powerpoint"
+                      label="解决方案文档"
+                      desc="方案设计与落地路径"
+                      href={agent.solutionDocUrl}
+                      missing="尚未上传解决方案文档"
+                    />
+                    <PathRow
+                      icon="fa-play"
+                      label="Demo 入口"
+                      desc="实际运行效果演示"
+                      href={agent.demoUrl}
+                      missing="尚未提供 Demo 入口"
+                    />
+                    <PathRow
+                      icon="fa-box-archive"
+                      label="执行包"
+                      desc={`资源更新时间：${updatedAt}`}
+                      onClick={handleDownload}
+                    />
                   </div>
-                  <dl className="mt-4 grid gap-x-6 border-t border-zinc-100 pt-2 sm:grid-cols-2">
-                    <MetaRow label="更新时间" value={updatedAt} />
-                    <MetaRow label="创建时间" value={createdAt} />
-                    <MetaRow label="维护团队" value={maintainer} />
-                    <MetaRow label="发布方" value={agent.publisher || agent.author} />
-                  </dl>
-                </SectionCard>
-                <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-4 py-8 text-center">
-                  <i className="fa-solid fa-clock-rotate-left text-[16px] text-zinc-300" />
-                  <p className="mt-2 text-[12px] font-medium text-zinc-600">历史版本将在完整产品版开放</p>
-                  <p className="mt-1 text-[11px] text-zinc-400">当前 MVP 仅展示正在使用的版本。</p>
-                </div>
-              </div>
-            ) : null}
-
-            {tab === 'environment' ? (
-              <div className="grid gap-4 md:grid-cols-2">
-                <SectionCard title="平台与使用方式" icon="fa-laptop">
-                  <dl className="divide-y divide-zinc-100">
-                    <MetaRow label="适配平台" value={platforms.join('、')} />
-                    <MetaRow label="使用方式" value={usageModes.join('、')} />
-                    <MetaRow label="权限要求" value={scopeLabel} />
-                    <MetaRow
-                      label="代码能力"
-                      value={environment?.requiresCode === undefined ? '以资源包说明为准' : environment.requiresCode ? '需要' : '不需要'}
-                    />
-                    <MetaRow
-                      label="员工助手导入"
-                      value={environment?.supportsAssistantImport === undefined ? '以资源包说明为准' : environment.supportsAssistantImport ? '支持' : '暂不支持'}
-                    />
-                  </dl>
-                </SectionCard>
-                <SectionCard title="环境与配置要求" icon="fa-sliders">
-                  <p className="mb-2 text-[11px] font-semibold text-zinc-500">环境要求</p>
-                  <BulletList items={environmentRequirements} />
-                  {configuration.length ? (
+                  {environment?.packageGuide ? (
                     <>
-                      <p className="mb-2 mt-4 border-t border-zinc-100 pt-3 text-[11px] font-semibold text-zinc-500">配置要求</p>
-                      <BulletList items={configuration} />
+                      <p className="mb-2 mt-4 border-t border-zinc-100 pt-3 text-[11px] font-semibold text-zinc-500">复用说明</p>
+                      <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-zinc-600">{environment.packageGuide}</p>
                     </>
                   ) : null}
                 </SectionCard>
-                <SectionCard title="资源包说明" icon="fa-box-open" className="md:col-span-2">
-                  <p className="text-[12px] leading-relaxed text-zinc-600">
-                    {environment?.packageGuide || '资源包包含 AGENT.md、编排计划、演示提示词和清单文件。下载后请先阅读 README，再按目标平台的导入方式完成配置。'}
-                  </p>
-                </SectionCard>
+
+                {!cases.length ? (
+                  <EmptyHint text="该 Agent 尚未配置 Demo 案例，可先查看上方方案与执行材料。" />
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -712,9 +891,9 @@ export function CatalogAgentDetailModal({
                 <i className="fa-solid fa-download text-[10px] text-zinc-400" />
                 下载资源包
               </button>
-              <button type="button" onClick={() => setTab('guide')} className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-50">
+              <button type="button" onClick={() => setTab('howto')} className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-50">
                 <i className="fa-solid fa-book-open text-[10px] text-zinc-400" />
-                查看快速上手
+                怎么使用
               </button>
               <button
                 type="button"
@@ -742,16 +921,65 @@ export function CatalogAgentDetailModal({
               ) : null}
             </div>
 
+            {/* §2.5：版本与环境不再占主 Tab，收进右侧栏，任意 Tab 下都能看到 */}
             <section className="rounded-2xl border border-zinc-200/80 bg-zinc-50/60 p-3">
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-400">关键状态</p>
               <dl className="divide-y divide-zinc-200/70">
+                <MetaRow label="当前状态" value={lifecycleMeta.badgeText({ hasDemo, hasSolutionDoc })} />
                 <MetaRow label="当前版本" value={version} />
                 <MetaRow label="更新时间" value={updatedAt} />
+                <MetaRow label="创建时间" value={createdAt} />
                 <MetaRow label="适配平台" value={platforms.join('、')} />
                 <MetaRow label="开放范围" value={scopeLabel} />
                 <MetaRow label="维护团队" value={maintainer} />
               </dl>
+              {agent.versionSummary?.trim() ? (
+                <p className="mt-2 border-t border-zinc-200/70 pt-2 text-[11px] leading-relaxed text-zinc-500">
+                  {agent.versionSummary}
+                </p>
+              ) : null}
             </section>
+
+            {usageModes.length || environmentRequirements.length || configuration.length ? (
+              <details className="rounded-2xl border border-zinc-200/80 bg-white p-3">
+                <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
+                  运行环境
+                </summary>
+                <div className="mt-2 space-y-3">
+                  {usageModes.length ? (
+                    <dl className="divide-y divide-zinc-100">
+                      <MetaRow label="使用方式" value={usageModes.join('、')} />
+                      <MetaRow
+                        label="代码能力"
+                        value={environment?.requiresCode === undefined ? null : environment.requiresCode ? '需要' : '不需要'}
+                      />
+                      <MetaRow
+                        label="员工助手导入"
+                        value={
+                          environment?.supportsAssistantImport === undefined
+                            ? null
+                            : environment.supportsAssistantImport
+                              ? '支持'
+                              : '暂不支持'
+                        }
+                      />
+                    </dl>
+                  ) : null}
+                  {environmentRequirements.length ? (
+                    <div>
+                      <p className="mb-1.5 text-[11px] font-semibold text-zinc-500">环境要求</p>
+                      <BulletList items={environmentRequirements} />
+                    </div>
+                  ) : null}
+                  {configuration.length ? (
+                    <div>
+                      <p className="mb-1.5 text-[11px] font-semibold text-zinc-500">配置要求</p>
+                      <BulletList items={configuration} />
+                    </div>
+                  ) : null}
+                </div>
+              </details>
+            ) : null}
 
             <section className="rounded-2xl border border-zinc-200/80 bg-white p-3">
               <div className="grid grid-cols-3 gap-2 text-center">

@@ -65,6 +65,22 @@ function dateLabel(value?: string): string {
     .replace(/日周/, '·周');
 }
 
+/** 稳定的上海自然日键，供日历筛选使用；dateLabel 仅用于展示。 */
+function dateKey(value?: string): string {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+  return year && month && day ? `${year}-${month}-${day}` : '';
+}
+
 function toArchived(item: AihotItem): ArchivedNewsItem | null {
   const title = item.title?.trim();
   if (!item.id || !title) return null;
@@ -190,9 +206,16 @@ export class AiNewsArchiveService implements OnModuleInit {
   /** 供接口读取：按日期分组，结构与原实时代理保持一致 */
   async readGrouped() {
     const archive = await this.readArchive();
-    const grouped = new Map<string, ArchivedNewsItem[]>();
+    const grouped = new Map<
+      string,
+      { dateLabel: string; items: ArchivedNewsItem[] }
+    >();
     for (const item of archive.items) {
-      grouped.set(item.dateLabel, [...(grouped.get(item.dateLabel) ?? []), item]);
+      // 旧归档没有 dateKey；读取时由 publishedAt 现算，无需数据迁移。
+      const key = dateKey(item.publishedAt);
+      const group = grouped.get(key);
+      if (group) group.items.push(item);
+      else grouped.set(key, { dateLabel: item.dateLabel, items: [item] });
     }
     return {
       sourceUrl: AI_NEWS_SOURCE,
@@ -200,7 +223,11 @@ export class AiNewsArchiveService implements OnModuleInit {
       fetchedAt: archive.updatedAt,
       lastSyncAt: archive.lastSyncAt,
       lastSyncError: archive.lastSyncError,
-      groups: [...grouped].map(([label, items]) => ({ dateLabel: label, items })),
+      groups: [...grouped].map(([key, group]) => ({
+        dateKey: key,
+        dateLabel: group.dateLabel,
+        items: group.items,
+      })),
     };
   }
 
@@ -228,4 +255,3 @@ export class AiNewsArchiveService implements OnModuleInit {
     });
   }
 }
-

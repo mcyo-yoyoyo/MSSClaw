@@ -10,6 +10,7 @@ export const AI_BOT_DAILY_NEWS_URL = 'https://aihot.virxact.com';
 export type AiBotNewsItem = {
   id: string;
   dateLabel: string;
+  publishedAt?: string;
   title: string;
   summary: string;
   url: string;
@@ -21,6 +22,8 @@ export type AiBotNewsItem = {
 };
 
 export type AiBotNewsGroup = {
+  /** Asia/Shanghai 自然日，供日期控件筛选；dateLabel 仅用于展示。 */
+  dateKey?: string;
   dateLabel: string;
   items: AiBotNewsItem[];
 };
@@ -34,9 +37,84 @@ export type AiBotDailyNewsPayload = {
   fromFallback?: boolean;
 };
 
+const SHANGHAI_TIME_ZONE = 'Asia/Shanghai';
+
+function dateKeyFromParts(year: number, month: number, day: number): string | undefined {
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+  if (
+    candidate.getUTCFullYear() !== year ||
+    candidate.getUTCMonth() !== month - 1 ||
+    candidate.getUTCDate() !== day
+  ) {
+    return undefined;
+  }
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function normalizeDateKey(value?: string): string | undefined {
+  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return undefined;
+  const normalized = dateKeyFromParts(Number(match[1]), Number(match[2]), Number(match[3]));
+  return normalized === value ? normalized : undefined;
+}
+
+function shanghaiDateKey(value?: string): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: SHANGHAI_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+  return year && month && day ? `${year}-${month}-${day}` : undefined;
+}
+
+function inferDateKeyFromLabel(dateLabel: string, referenceKey?: string): string | undefined {
+  const labelMatch = dateLabel.match(/(\d{1,2})(?:月|\/)(\d{1,2})/);
+  const referenceMatch = referenceKey?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!labelMatch || !referenceMatch) return undefined;
+
+  const month = Number(labelMatch[1]);
+  const day = Number(labelMatch[2]);
+  const referenceYear = Number(referenceMatch[1]);
+  const referenceTime = Date.UTC(
+    referenceYear,
+    Number(referenceMatch[2]) - 1,
+    Number(referenceMatch[3]),
+  );
+
+  return [referenceYear - 1, referenceYear, referenceYear + 1]
+    .map((year) => dateKeyFromParts(year, month, day))
+    .filter((key): key is string => Boolean(key))
+    .sort((left, right) => {
+      const leftTime = Date.UTC(Number(left.slice(0, 4)), month - 1, day);
+      const rightTime = Date.UTC(Number(right.slice(0, 4)), month - 1, day);
+      return Math.abs(leftTime - referenceTime) - Math.abs(rightTime - referenceTime);
+    })[0];
+}
+
+function withStableDateKeys(payload: AiBotDailyNewsPayload): AiBotDailyNewsPayload {
+  const referenceKey = shanghaiDateKey(payload.fetchedAt);
+  return {
+    ...payload,
+    groups: payload.groups.map((group) => {
+      const dateKey =
+        normalizeDateKey(group.dateKey) ||
+        shanghaiDateKey(group.items[0]?.publishedAt) ||
+        inferDateKeyFromLabel(group.dateLabel, referenceKey);
+      return dateKey ? { ...group, dateKey } : group;
+    }),
+  };
+}
+
 /** 离线兜底（接口不可用时仍可演示）；由 scripts/refresh-ai-bot-fallback.mjs 刷新 */
 export const AI_BOT_DAILY_NEWS_FALLBACK: AiBotDailyNewsPayload =
-  FALLBACK_SEED as AiBotDailyNewsPayload;
+  withStableDateKeys(FALLBACK_SEED as AiBotDailyNewsPayload);
 
 function stripTags(html: string): string {
   return html
@@ -88,11 +166,11 @@ export function parseAiBotDailyNewsHtml(html: string): AiBotDailyNewsPayload {
     if (items.length) groups.push({ dateLabel, items });
   }
 
-  return {
+  return withStableDateKeys({
     sourceUrl: AI_BOT_DAILY_NEWS_URL,
     fetchedAt: new Date().toISOString(),
     groups,
-  };
+  });
 }
 
 export function flattenAiBotNews(payload: AiBotDailyNewsPayload): AiBotNewsItem[] {
@@ -133,7 +211,7 @@ export async function fetchAiBotDailyNews(signal?: AbortSignal): Promise<AiBotDa
       if (!res.ok) continue;
       const data = (await res.json()) as AiBotDailyNewsPayload;
       if (!data?.groups?.length) continue;
-      return { ...data, fromFallback: false };
+      return withStableDateKeys({ ...data, fromFallback: false });
     } catch {
       /* try next */
     }

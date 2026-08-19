@@ -31,12 +31,32 @@ function aihotDateLabel(value?: string): string {
     .replace(/日周/, '·周');
 }
 
+function aihotDateKey(value?: string): string {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+  return year && month && day ? `${year}-${month}-${day}` : '';
+}
+
 function mapAihotDevPayload(items: AihotDevItem[]) {
-  const grouped = new Map<string, Array<Record<string, unknown>>>();
+  const grouped = new Map<
+    string,
+    { dateLabel: string; items: Array<Record<string, unknown>> }
+  >();
   for (const item of items) {
     const title = item.title?.trim();
     if (!item.id || !title) continue;
-    const dateLabel = aihotDateLabel(item.publishedAt ?? item.discoveredAt);
+    const publishedAt = item.publishedAt ?? item.discoveredAt ?? new Date().toISOString();
+    const dateKey = aihotDateKey(publishedAt);
+    const dateLabel = aihotDateLabel(publishedAt);
     const mapped = {
       id: `aihot-${item.id}`,
       dateLabel,
@@ -49,15 +69,18 @@ function mapAihotDevPayload(items: AihotDevItem[]) {
       score: typeof item.score === 'number' ? item.score : undefined,
       aihotUrl: item.links?.aihot || undefined,
     };
-    grouped.set(dateLabel, [...(grouped.get(dateLabel) ?? []), mapped]);
+    const group = grouped.get(dateKey);
+    if (group) group.items.push(mapped);
+    else grouped.set(dateKey, { dateLabel, items: [mapped] });
   }
   return {
     sourceUrl: 'https://aihot.virxact.com',
     sourceName: 'AIHOT',
     fetchedAt: new Date().toISOString(),
-    groups: [...grouped].map(([dateLabel, groupedItems]) => ({
-      dateLabel,
-      items: groupedItems,
+    groups: [...grouped].map(([dateKey, group]) => ({
+      dateKey,
+      dateLabel: group.dateLabel,
+      items: group.items,
     })),
   };
 }

@@ -68,6 +68,16 @@ export function AiBriefPage() {
     [flat],
   );
 
+  const recentGroups = useMemo(() => payload.groups.slice(0, 7), [payload.groups]);
+
+  const dateBounds = useMemo(() => {
+    const keys = recentGroups
+      .map((group) => group.dateKey)
+      .filter((key): key is string => Boolean(key))
+      .sort();
+    return { min: keys[0], max: keys[keys.length - 1] };
+  }, [recentGroups]);
+
   const mssBoard = useMemo(
     () => classified.filter((x) => x.mssFit).slice(0, 6),
     [classified],
@@ -75,9 +85,8 @@ export function AiBriefPage() {
 
   const visibleGroups = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
-    return payload.groups
-      .slice(0, 7)
-      .filter((group) => !dateFilter || group.dateLabel === dateFilter)
+    return recentGroups
+      .filter((group) => !dateFilter || group.dateKey === dateFilter)
       .map((g) => ({
         ...g,
         items: g.items.filter((item) => {
@@ -94,7 +103,7 @@ export function AiBriefPage() {
         }),
       }))
       .filter((g) => g.items.length > 0);
-  }, [payload.groups, categoryFilter, dateFilter, searchQuery]);
+  }, [recentGroups, categoryFilter, dateFilter, searchQuery]);
 
   useEffect(() => {
     if (!highlightId) return;
@@ -229,23 +238,35 @@ export function AiBriefPage() {
             ))}
           </div>
           <div className="flex w-full shrink-0 flex-col gap-2 sm:flex-row lg:w-auto">
-            <label className="relative shrink-0 sm:w-40">
-              <i className="fa-regular fa-calendar pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[12px] text-zinc-400" />
-              <select
-                value={dateFilter}
-                onChange={(event) => setDateFilter(event.target.value)}
-                aria-label="按日期筛选"
-                className="h-10 w-full appearance-none rounded-xl border border-zinc-200 bg-white pl-8 pr-8 text-[12px] font-medium text-zinc-700 outline-none transition hover:border-zinc-300 focus:border-[#0071e3]/50 focus:ring-2 focus:ring-[#0071e3]/10"
-              >
-                <option value="">最近 7 天</option>
-                {payload.groups.slice(0, 7).map((group) => (
-                  <option key={group.dateLabel} value={group.dateLabel}>
-                    {group.dateLabel}
-                  </option>
-                ))}
-              </select>
-              <i className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-zinc-400" />
-            </label>
+            <div className="relative shrink-0 sm:w-44">
+              <label className="block">
+                <span className="sr-only">按日期筛选</span>
+                <input
+                  type="date"
+                  value={dateFilter}
+                  min={dateBounds.min}
+                  max={dateBounds.max}
+                  onChange={(event) => setDateFilter(event.target.value)}
+                  aria-label="按日期筛选"
+                  title={dateFilter ? `当前筛选：${dateFilter}` : '选择日期；留空显示最近 7 天'}
+                  className={cn(
+                    'h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-[12px] font-medium text-zinc-700 outline-none transition [color-scheme:light] hover:border-zinc-300 focus:border-[#0071e3]/50 focus:ring-2 focus:ring-[#0071e3]/10 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60',
+                    dateFilter && 'pr-16',
+                  )}
+                />
+              </label>
+              {dateFilter ? (
+                <button
+                  type="button"
+                  onClick={() => setDateFilter('')}
+                  aria-label="清除日期筛选，显示最近 7 天"
+                  title="清除日期筛选"
+                  className="absolute right-8 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20"
+                >
+                  <i className="fa-solid fa-xmark text-[10px]" />
+                </button>
+              ) : null}
+            </div>
             <form
               className="flex min-w-0 flex-1 gap-2 lg:flex-none"
               onSubmit={(event) => {
