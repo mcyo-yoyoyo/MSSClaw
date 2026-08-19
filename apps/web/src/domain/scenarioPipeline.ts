@@ -2,7 +2,7 @@ import type { ScenarioBundle } from '@/domain/portalMap';
 import { REVIEW_PIPELINE_STEPS } from '@/domain/reviewPipeline';
 import type { PrototypeAgentSeed, PrototypeSkillSeed } from '@/domain/prototype/types';
 import { buildAgentDemoPrompt } from '@/domain/agents/runtime';
-import { buildSkillDemoPrompt } from '@/domain/skillRuntime';
+import { buildSkillDemoPrompt, isSkillRunnable } from '@/domain/skillRuntime';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { resolveScenarioDemoTarget } from '@/domain/portalCase';
 
@@ -94,7 +94,7 @@ export function resolvePipelineStepTargets(step: ScenarioPipelineStep): {
   const market = useMarketplaceStore.getState();
   const agent = market.agents.find((a) => a.id === step.agentId && a.published);
   const skill = step.skillId
-    ? market.skills.find((s) => s.id === step.skillId && s.published)
+    ? market.skills.find((s) => s.id === step.skillId && s.published && isSkillRunnable(s))
     : undefined;
   return { agent, skill };
 }

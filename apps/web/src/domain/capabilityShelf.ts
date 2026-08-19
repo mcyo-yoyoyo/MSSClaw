@@ -1,14 +1,15 @@
 /**
- * 两层能力模型（全角色口径一致）：
- * 1. 能力上架 `published` — 进入运营目录，可供任务/技能挂载调用
- * 2. 货架露出 `marketShelf` / `featuredIn*` — 出现在业务三货架橱窗
+ * 三层能力模型（全角色口径一致）：
+ * 1. 发布 `published` — 审批通过后进入前台展示
+ * 2. 在线调用 `callable`（Skill）— 发布后的独立运行开关
+ * 3. 精选分组 `marketShelf` / `featuredIn*` — 运营分组与推荐排序
  */
 
 export const CAPABILITY_SHELF_HINT =
-  '能力上架后进入目录；外部工具再配置「上架货架 / 精选置顶」才会出现在外精选橱窗。公司推荐前台为办公场景，请维护工具链接与 How to。';
+  '能力发布后进入前台；Skill 是否允许在线调用由 callable 独立控制。外部工具再配置「上架货架 / 精选置顶」进入运营分组。';
 
 export const DO_TASK_FEATURED_HINT =
-  '精选露出到「AI工具Hub · 场景技能」（须同时已上架可调用并选择业务场景）。未勾选则仅留在配置目录。';
+  '精选用于「AI工具Hub · 场景技能」运营分组；发布展示由 published 控制，在线调用另由 callable 控制。';
 
 export const FIND_CASES_FEATURED_HINT =
   '外精选露出请在「门户运营 · 货架运营」用精选置顶配置；本字段已停用，保留仅兼容旧数据。';

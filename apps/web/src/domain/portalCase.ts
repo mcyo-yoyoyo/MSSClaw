@@ -7,6 +7,7 @@ import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
 import { usePortalContentStore } from '@/stores/portalContentStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import type { PrototypeAgentSeed, PrototypeSkillSeed } from '@/domain/prototype/types';
+import { isSkillRunnable } from '@/domain/skillRuntime';
 
 /** 样板间成效卡（总裁演示用结构化字段） */
 export interface CaseOutcomeCard {
@@ -213,7 +214,7 @@ export function resolveScenarioDemoTarget(bundle: ScenarioBundle): {
   if (gold) {
     const { skillId, agentId } = resolveInvokeIds(gold);
     if (skillId) {
-      const skill = market.skills.find((s) => s.id === skillId);
+      const skill = market.skills.find((s) => s.id === skillId && isSkillRunnable(s));
       if (skill) return { skill, label: gold.title };
     }
     if (agentId) {
@@ -230,7 +231,9 @@ export function resolveScenarioDemoTarget(bundle: ScenarioBundle): {
 
   const skillAction = bundle.skills[0]?.action;
   if (skillAction?.type === 'skill') {
-    const skill = market.skills.find((s) => s.id === skillAction.skillId);
+    const skill = market.skills.find(
+      (s) => s.id === skillAction.skillId && isSkillRunnable(s),
+    );
     if (skill) return { skill, label: bundle.label };
   }
   if (skillAction?.type === 'agent') {

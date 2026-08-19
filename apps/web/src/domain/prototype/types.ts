@@ -204,10 +204,15 @@ export interface PrototypeSkillSeed extends AssetOwnershipFields {
   version: string;
   connector: string;
   /**
-   * 能力上架：通过审批后可供模型/对话调用。
-   * 1.0 默认 false；勾选「申请上架可调用」才进审批。
+   * 发布状态：终审通过后进入前台展示；新建/未发布 Skill 保存时固定提审。
    */
   published: boolean;
+  /**
+   * 「上架可调用」独立运行开关：发布后是否允许在线调用。
+   * 与 published/发布审批相互独立，未开启时仍可前台展示、浏览和下载。
+   * 旧数据未设置时，编辑界面按 published 兼容回填。
+   */
+  callable?: boolean;
   /**
    * 精选露出：出现在「AI工具Hub · 场景技能」。
    * 未设置时回退静态 HOME_BUSINESS_SKILLS 白名单。

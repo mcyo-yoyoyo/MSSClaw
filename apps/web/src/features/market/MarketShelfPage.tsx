@@ -15,6 +15,16 @@ import {
   listVisibleBusinessScenarioCategories,
   type BusinessScenarioId,
 } from '@/domain/businessScenarios';
+import {
+  resolveSkillBusinessScenario,
+  resolveSkillFeaturedInDoTask,
+} from '@/domain/skillBusinessScenarios';
+import { resolveAgentFeaturedInDoTask } from '@/domain/agentBusinessScenarios';
+import {
+  hasSkillExecutionBody,
+  isSkillCallable,
+  isSkillRunnable,
+} from '@/domain/skillRuntime';
 import { useBusinessScenarioCatalogStore } from '@/stores/businessScenarioCatalogStore';
 import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
 import {
@@ -471,10 +481,11 @@ export function MarketShelfPage({
       ? new Set(favoriteItems.filter((f) => f.kind === 'projects').map((f) => f.id))
       : null;
     return skills
-      .filter((skill) => skill.published && skill.featuredInMssMarket !== false)
+      .filter((skill) => skill.published)
       .filter(
         (skill) =>
-          businessFilter === 'all' || skill.businessScenarioId === businessFilter,
+          businessFilter === 'all' ||
+          resolveSkillBusinessScenario(skill) === businessFilter,
       )
       .filter((s) => canViewAsset(s, viewer))
       .filter((s) => skillMatchesOrgPerspectiveSelection(s, orgSelection))
@@ -498,8 +509,8 @@ export function MarketShelfPage({
     if (kind !== 'projects') return [];
     return listVisibleBusinessScenarioCategories().map((cat) => {
       const count = skills
-        .filter((skill) => skill.published && skill.featuredInMssMarket !== false)
-        .filter((skill) => skill.businessScenarioId === cat.id)
+        .filter((skill) => skill.published)
+        .filter((skill) => resolveSkillBusinessScenario(skill) === cat.id)
         .filter((s) => canViewAsset(s, viewer))
         .filter((s) => skillMatchesOrgPerspectiveSelection(s, orgSelection)).length;
       return { ...cat, count };
@@ -523,7 +534,7 @@ export function MarketShelfPage({
 
   const skillCards = useMemo((): MarketShelfCardModel[] => {
     const mapped = mssSkills.map((s) => {
-      const biz = s.businessScenarioId ?? null;
+      const biz = resolveSkillBusinessScenario(s);
       const bizLabel = biz ? getBusinessScenarioMeta(biz).label : null;
       const eng = getEngagement(s.id);
       const badges: MarketShelfCardModel['badges'] = [];
@@ -535,7 +546,7 @@ export function MarketShelfPage({
         badges.push({ label: getRegionLabel(s.ownerRegionId), tone: 'region' });
       }
       if (bizLabel) badges.push({ label: bizLabel, tone: 'type' });
-      const runnable = canRunSkills && Boolean(s.published && (s.instructions || s.command));
+      const runnable = canRunSkills && isSkillRunnable(s);
       return {
         id: s.id,
         kind: 'projects' as const,
@@ -546,7 +557,7 @@ export function MarketShelfPage({
         securityLevel: 'mss' as const,
         icon: s.icon || 'fa-cube',
         badges,
-        featured: true,
+        featured: resolveSkillFeaturedInDoTask(s),
         heat: s.invokes ?? 0,
         likes: eng.likes,
         dislikes: eng.dislikes,
@@ -595,7 +606,7 @@ export function MarketShelfPage({
         securityLevel: 'mss' as const,
         icon: agent.icon || 'fa-robot',
         badges,
-        featured: true,
+        featured: resolveAgentFeaturedInDoTask(agent),
         heat: agent.invokes ?? 0,
         likes: engagement.likes,
         dislikes: engagement.dislikes,
@@ -868,30 +879,42 @@ export function MarketShelfPage({
   };
 
   const runSkill = (skill: PrototypeSkillSeed) => {
-    const can = Boolean(onInvokeSkill && canRunSkills);
+    const currentSkill = useMarketplaceStore
+      .getState()
+      .skills.find((item) => item.id === skill.id);
+    if (!currentSkill) {
+      showToast('该 Skill 已不在当前工作区，请刷新后重试');
+      return;
+    }
+    const can = Boolean(onInvokeSkill && canRunSkills && isSkillRunnable(currentSkill));
     const trust = resolveSkillExecutionTrust(can);
     if (!can) {
-      downloadSkillFile(skill);
-      showToast(executionTrustBlockedMessage(trust, `已下载技能包：${skill.name}`));
+      downloadSkillFile(currentSkill);
+      const reason = !isSkillCallable(currentSkill)
+        ? '该 Skill 已发布展示，但尚未启用在线调用'
+        : !hasSkillExecutionBody(currentSkill)
+          ? '该 Skill 缺少执行正文，暂不可在线调用'
+          : `已下载技能包：${currentSkill.name}`;
+      showToast(executionTrustBlockedMessage(trust, reason));
       return;
     }
     try {
-      onInvokeSkill!(skill);
+      onInvokeSkill!(currentSkill);
       rememberCard({
-        id: skill.id,
+        id: currentSkill.id,
         kind: 'projects',
-        title: skill.name,
-        description: skill.desc,
-        icon: skill.icon || 'fa-cube',
+        title: currentSkill.name,
+        description: currentSkill.desc,
+        icon: currentSkill.icon || 'fa-cube',
         badges: [],
-        featured: true,
-        heat: skill.invokes ?? 0,
+        featured: resolveSkillFeaturedInDoTask(currentSkill),
+        heat: currentSkill.invokes ?? 0,
         hasHowto: true,
         runnable: true,
         executionTrust: trust,
         primaryAction: 'detail',
       });
-      showToast(`已进入 AI 任务试用：${skill.name}`);
+      showToast(`已进入 AI 任务试用：${currentSkill.name}`);
     } catch {
       showToast(executionTrustFailMessage(trust));
     }

@@ -2,6 +2,7 @@ import type { PrototypeAgentSeed, PrototypeSkillSeed } from '@/domain/prototype/
 
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { AgentAvatar } from '@/components/brand/AgentAvatar';
+import { isSkillRunnable } from '@/domain/skillRuntime';
 
 
 
@@ -23,7 +24,7 @@ export function HomePickerModal({ type, onClose, onPickSkill, onPickAgent }: Hom
 
   const { getPublishedAgents, getPublishedSkills } = useMarketplaceStore();
 
-  const skills = getPublishedSkills();
+  const skills = getPublishedSkills().filter(isSkillRunnable);
 
   const agents = getPublishedAgents();
 
@@ -130,5 +131,4 @@ export function HomePickerModal({ type, onClose, onPickSkill, onPickAgent }: Hom
   );
 
 }
-
 

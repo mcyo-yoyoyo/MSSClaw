@@ -59,7 +59,8 @@ export type AssetApprovalReason =
   | 'unpublish_skill';
 
 export const ASSET_APPROVAL_REASON_LABELS: Record<AssetApprovalReason, string> = {
-  publish_executable: '上架可调用（可执行模型任务）',
+  // 保留历史 reason id，当前语义仅表示发布资产，不代表 callable 运营标记。
+  publish_executable: '发布 Skill（终审后前台展示）',
   visibility_public: '公开可见（跨部门/领域）',
   update_version: '版本更新上架',
   unpublish_skill: '下架 Skill（全部版本隐藏）',
@@ -76,7 +77,7 @@ export interface AssetApprovalRequest {
   /** 0=提交人完成，1=待业务主管，2=待质量运营，3=全部通过 */
   stepIndex: number;
   createdAt: number;
-  /** 审批事由；缺省视为上架可调用（兼容旧调用） */
+  /** 审批事由；缺省视为发布资产（兼容旧调用） */
   reasons?: AssetApprovalReason[];
   /** 更新说明 / 下架理由等 */
   note?: string;

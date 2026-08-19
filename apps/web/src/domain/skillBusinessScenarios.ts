@@ -8,9 +8,7 @@ import type { PrototypeSkillSeed } from '@/domain/prototype/types';
 /**
  * Skill → 主业务场景（AI任务推荐 / 广场同词）
  * 与 DISCOVER_TO_BUSINESS_SCENARIO 口径对齐；一 Skill 只挂一个主篮子。
- *
- * Skill Hub 精选侧重「可编排原子能力」；与 Agent Hub 案例包重复的监测/评论链路/
- * 门店陪练/招聘链路默认不进精选（仍 published，配置 Skill / Agent 可调用）。
+ * 该映射仅用于资产未显式填写场景时的分类回退，不参与前台可见性判定。
  */
 export const SKILL_TO_BUSINESS_SCENARIO: Record<string, BusinessScenarioId> = {
   // S1 市场洞察（轻量洞察；价监/评论链路归 Agent Hub）
@@ -64,8 +62,8 @@ export const SKILL_TO_BUSINESS_SCENARIO: Record<string, BusinessScenarioId> = {
 };
 
 /**
- * Skill Hub 精选序：迁入的场景能力 + 营销服/通用办公真实 Skill。
- * 与 Agent Hub 保留案例（价监/评论/陪练/招聘/综履）去重。
+ * Skill Hub 默认排序：静态表只提供已知能力的优先顺序。
+ * 它不是白名单；所有 published Skill 都会进入前台候选集。
  */
 export const HOME_BUSINESS_SKILLS: Record<BusinessScenarioId, string[]> = {
   S1: [
@@ -138,10 +136,12 @@ export function resolveSkillBusinessScenario(
 }
 
 /**
- * 是否精选露出到「AI工具Hub · 场景技能」：
+ * 解析历史「精选」运营字段：
  * - 显式 featuredInMssMarket（优先）
  * - 显式 featuredInDoTask（兼容旧字段）
  * - 未设置时回退 HOME_BUSINESS_SKILLS 静态精选
+ *
+ * 仅供管理端兼容历史配置；业务前台不得据此过滤，只以 published 判定上架。
  */
 export function resolveSkillFeaturedInDoTask(skill: PrototypeSkillSeed): boolean {
   if (typeof skill.featuredInMssMarket === 'boolean') return skill.featuredInMssMarket;
@@ -149,7 +149,7 @@ export function resolveSkillFeaturedInDoTask(skill: PrototypeSkillSeed): boolean
   return Object.values(HOME_BUSINESS_SKILLS).some((ids) => ids.includes(skill.id));
 }
 
-/** @alias resolveSkillFeaturedInDoTask — MSS 场景技能露出 */
+/** @alias resolveSkillFeaturedInDoTask — 仅兼容历史运营字段 */
 export const resolveSkillFeaturedInMssMarket = resolveSkillFeaturedInDoTask;
 
 export function getSkillBusinessLabel(
@@ -187,7 +187,7 @@ function staticFeaturedIdsForBusiness(businessId: BusinessScenarioId | 'all'): s
 }
 
 /**
- * 做任务橱窗技能 ID：已上架 ∩ 精选露出，按静态精选序优先，再追加运营新精选。
+ * 历史静态推荐顺序；不包含上架状态，不能用于业务前台可见性判断。
  * @deprecated 请优先用 listFeaturedDoTaskSkillIds(skills, …)
  */
 export function listRecommendedSkillIdsForBusiness(
@@ -197,15 +197,13 @@ export function listRecommendedSkillIdsForBusiness(
   return staticFeaturedIdsForBusiness(businessId).slice(0, limit);
 }
 
-/** 做任务 / MSS 场景技能：能力上架 + 精选露出 */
+/** 做任务 / MSS 场景技能：published 是唯一上架门槛，静态表仅影响排序。 */
 export function listFeaturedDoTaskSkillIds(
   skills: PrototypeSkillSeed[],
   businessId: BusinessScenarioId | 'all',
   limit = 24,
 ): string[] {
-  const eligible = skills.filter(
-    (s) => s.published && resolveSkillFeaturedInDoTask(s),
-  );
+  const eligible = skills.filter((s) => s.published);
   const byId = new Map(eligible.map((s) => [s.id, s]));
   const ordered: string[] = [];
   const seen = new Set<string>();

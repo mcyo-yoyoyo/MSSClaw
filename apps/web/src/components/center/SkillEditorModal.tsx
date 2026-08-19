@@ -15,11 +15,13 @@ import {
   listVisibleBusinessScenarioCategories,
   type BusinessScenarioId,
 } from '@/domain/businessScenarios';
-import { DO_TASK_FEATURED_HINT } from '@/domain/capabilityShelf';
 import { uploadWorkspaceBlob, uploadWorkspacePackage } from '@/api/blobApi';
 import { currentWorkspaceId } from '@/api/platformDocsApi';
 import type { PortalCasePreviewFile } from '@/domain/prototype/portalContent';
-import { resolveSkillBusinessScenario, resolveSkillFeaturedInDoTask } from '@/domain/skillBusinessScenarios';
+import {
+  resolveSkillBusinessScenario,
+  resolveSkillFeaturedInDoTask,
+} from '@/domain/skillBusinessScenarios';
 import {
   getCurrentDeptIds,
   getCurrentPlatformRole,
@@ -87,6 +89,9 @@ function emptySkill(): PrototypeSkillSeed {
     version: '1.0.0',
     connector: '',
     published: false,
+    callable: false,
+    featuredInDoTask: false,
+    featuredInMssMarket: false,
     invokes: 0,
     icon: 'fa-cube',
     accentColor: DEFAULT_SKILL_ACCENT,
@@ -117,6 +122,7 @@ function emptySkill(): PrototypeSkillSeed {
 
 function normalizeSkillForm(skill: PrototypeSkillSeed): PrototypeSkillSeed {
   const base = { ...emptySkill(), ...skill };
+  const featured = resolveSkillFeaturedInDoTask(skill);
   return {
     ...base,
     nameZh: skill.nameZh || skill.name || '',
@@ -146,7 +152,9 @@ function normalizeSkillForm(skill: PrototypeSkillSeed): PrototypeSkillSeed {
     ownerRegionId: skill.ownerRegionId ?? getCurrentRegionId(),
     visibility: skill.visibility === 'org' || skill.visibility === 'private' ? skill.visibility : 'public',
     published: Boolean(skill.published),
-    featuredInDoTask: resolveSkillFeaturedInDoTask(skill),
+    callable: typeof skill.callable === 'boolean' ? skill.callable : Boolean(skill.published),
+    featuredInDoTask: featured,
+    featuredInMssMarket: featured,
     businessScenarioId: resolveSkillBusinessScenario(skill) ?? undefined,
     accentColor: skill.accentColor || DEFAULT_SKILL_ACCENT,
     iconUrl: skill.iconUrl,
@@ -157,7 +165,7 @@ const STEPS = [
   { id: 0 as const, label: '上传解析' },
   { id: 1 as const, label: '身份信息' },
   { id: 2 as const, label: '范围标签' },
-  { id: 3 as const, label: '门禁发布' },
+  { id: 3 as const, label: '发布审批' },
 ];
 
 interface SkillEditorModalProps {
@@ -172,7 +180,6 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   const [uploadingCase, setUploadingCase] = useState(false);
   const [uploadingPackage, setUploadingPackage] = useState(false);
   const [step, setStep] = useState<WizardStep>(0);
-  const [wantPublish, setWantPublish] = useState(false);
   const [packName, setPackName] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -200,7 +207,6 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     if (target === 'new') {
       setForm(emptySkill());
       setStep(0);
-      setWantPublish(false);
       setPackName(null);
       setShowAdvanced(false);
       return;
@@ -209,7 +215,6 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     const normalized = existing ? normalizeSkillForm(existing) : emptySkill();
     setForm(normalized);
     setStep(1);
-    setWantPublish(Boolean(normalized.published));
     setPackName(null);
     setShowAdvanced(false);
   }, [target, skills]);
@@ -242,7 +247,6 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     });
     setForm({ ...merged, searchKeywords: keywords });
     setPackName(fileLabel);
-    setWantPublish(false);
     setStep(1);
     showToast(`已解析 Skill 包「${fileLabel}」，请确认信息与范围`);
   };
@@ -410,10 +414,9 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     if (!cmd.startsWith('/')) cmd = `/${cmd}`;
 
     const reasons: AssetApprovalReason[] = [];
-    if (wantPublish && !prev?.published) reasons.push('publish_executable');
+    // 新建或尚未上架的 Skill 保存即进入发布审批，不再由提交人决定是否申请上架。
+    if (!prev?.published) reasons.push('publish_executable');
     if (form.visibility === 'public' && prev?.visibility !== 'public') reasons.push('visibility_public');
-    // 已上架后取消勾选：走下架审批，不可直接下架
-    if (prev?.published && !wantPublish) reasons.push('unpublish_skill');
 
     if (reasons.includes('publish_executable') || reasons.includes('update_version')) {
       const gate = assertSkillScanAllowsApproval(form.securityScan ?? prev?.securityScan);
@@ -479,14 +482,13 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       ownerDeptIds: ((form.ownerDeptIds ?? []).slice(0, 1) as DeptId[]),
       ownerRegionId: (form.ownerRegionId ?? null) as RegionId | null,
       homepageUrl: undefined,
-      // 下架审批中保持上架，直至终审通过
-      published: reasons.includes('unpublish_skill')
-        ? true
-        : needsApproval
-          ? false
-          : wantPublish,
-      featuredInDoTask: wantPublish ? form.featuredInDoTask : false,
-      featuredInMssMarket: wantPublish ? form.featuredInDoTask : false,
+      // 新建/未上架 Skill 在终审通过前不可调用；已上架 Skill 编辑时保持上架。
+      published: Boolean(prev?.published),
+      // 可调用/精选不参与是否提审的判断，也不直接改变 published。
+      callable: Boolean(form.callable),
+      // 精选同时双写新旧字段，保持历史读取链路一致。
+      featuredInDoTask: Boolean(form.featuredInMssMarket),
+      featuredInMssMarket: Boolean(form.featuredInMssMarket),
       createdAt: prev?.createdAt || form.createdAt || stamp,
       updatedAt: stamp,
       updatedBy: userName,
@@ -517,21 +519,14 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
         assetId: id,
         assetName: skillDisplayName(draft),
         reasons,
-        note: reasons.includes('unpublish_skill')
-          ? '编辑器取消「上架可调用」，申请下架'
-          : undefined,
-        unpublishMode: reasons.includes('unpublish_skill') ? 'all' : undefined,
       });
       showToast(
-        (reasons.includes('unpublish_skill')
-          ? '已提交下架审批，通过前仍保持集市可见'
-          : '技能已保存为组织内草稿，审批通过后生效申请项') + shareSyncSaveHint(),
+        (reasons.includes('publish_executable')
+          ? '技能已提交发布审批，终审通过后前台展示'
+          : '技能变更已提交审批，审批期间保持现有上架状态') + shareSyncSaveHint(),
       );
     } else {
-      showToast(
-        (wantPublish ? '技能已保存并上架可调用' : '技能已保存（组织内沉淀 · 未上架调用）') +
-          shareSyncSaveHint(),
-      );
+      showToast('技能已保存，保持已发布状态' + shareSyncSaveHint());
     }
   };
 
@@ -542,7 +537,9 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
         ? '中英文名称与描述；默认界面展示中文'
         : step === 2
           ? '默认组织内可见，沉淀部门资产；公开需审批'
-          : '上架可调用默认关闭；开启即触发审批';
+          : form.published
+            ? '已发布 Skill 保存编辑后保持发布状态'
+            : '保存即提交发布审批，终审通过后前台展示';
 
   return (
     <CenterModal
@@ -591,7 +588,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                 onClick={handleSave}
                 className="rounded-xl bg-claw-600 px-3 py-1.5 text-[13px] font-medium text-white hover:bg-claw-700"
               >
-                保存
+                {form.published ? '保存' : '提交审批'}
               </button>
             )}
           </div>
@@ -1211,61 +1208,56 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
         {step === 3 ? (
           <div className="space-y-3">
             <div className="rounded-xl border border-zinc-200 px-3 py-2.5 space-y-2">
-              <p className="text-[13px] font-semibold text-zinc-800">上架可调用（执行模型任务）</p>
+              <p className="text-[13px] font-semibold text-zinc-800">发布与调用状态</p>
               <p className="text-[11px] text-zinc-500">
-                默认关闭：Skill 仅作组织资产沉淀，不可被对话/任务调用。开启即表示可执行模型任务，需审批。
+                {form.published
+                  ? '该 Skill 已发布。保存本次编辑后继续保持前台展示；如申请公开可见，仍需完成对应审批。'
+                  : '保存后自动发起发布审批。终审通过前 Skill 保持未发布，不可被对话或任务调用。'}
               </p>
+              <p className="rounded-lg bg-zinc-50 px-3 py-2 text-[11px] leading-snug text-zinc-600">
+                发布审批只控制前台展示；「上架可调用」控制发布后的在线调用，「精选」控制场景分组露出。
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-3 py-2.5 space-y-3">
               <label className="flex cursor-pointer items-start gap-2">
                 <input
                   type="checkbox"
                   className="mt-0.5 accent-claw-600"
-                  checked={wantPublish}
-                  onChange={(e) => setWantPublish(e.target.checked)}
+                  checked={Boolean(form.callable)}
+                  onChange={(e) => setForm({ ...form, callable: e.target.checked })}
                 />
                 <span>
-                  <span className="block text-[13px] font-medium text-zinc-800">申请上架可调用</span>
+                  <span className="block text-[13px] font-medium text-zinc-800">上架可调用</span>
                   <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500">
-                    审批流：提交人 → 业务主管 → MSS 质量与运营
+                    勾选后，终审发布的 Skill 可在线调用；未勾选仍可在前台浏览和下载。
+                  </span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 accent-claw-600"
+                  checked={Boolean(form.featuredInMssMarket)}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      featuredInDoTask: e.target.checked,
+                      featuredInMssMarket: e.target.checked,
+                    })
+                  }
+                />
+                <span>
+                  <span className="block text-[13px] font-medium text-zinc-800">精选</span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500">
+                    控制场景 Skill 的精选分组露出；不影响发布审批和在线调用。
                   </span>
                 </span>
               </label>
             </div>
 
-            {wantPublish ? (
-              <div className="rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-3 py-2.5 space-y-2">
-                <label className="flex cursor-pointer items-start gap-2">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 accent-claw-600"
-                    checked={Boolean(form.featuredInDoTask)}
-                    onChange={(e) => setForm({ ...form, featuredInDoTask: e.target.checked })}
-                  />
-                  <span>
-                    <span className="block text-[13px] font-medium text-zinc-800">
-                      精选露出到「AI工具Hub · 场景技能」
-                    </span>
-                    <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500">
-                      {DO_TASK_FEATURED_HINT}
-                    </span>
-                  </span>
-                </label>
-                {form.featuredInDoTask ? (
-                  <p className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-[11px] text-zinc-600">
-                    将按第 2 步所选业务场景露出：
-                    <span className="ml-1 font-semibold text-zinc-800">
-                      {form.businessScenarioId
-                        ? listVisibleBusinessScenarioCategories().find(
-                            (c) => c.id === form.businessScenarioId,
-                          )?.label ?? form.businessScenarioId
-                        : '尚未选择'}
-                    </span>
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-
             <div className="rounded-xl bg-zinc-900 px-3 py-2.5 text-[12px] leading-relaxed text-zinc-200">
-              <p className="font-semibold text-white">保存后将生效</p>
+              <p className="font-semibold text-white">{form.published ? '保存后' : '提交后'}</p>
               <ul className="mt-1 list-disc space-y-0.5 pl-4">
                 <li>资产写入：Skill 沉淀</li>
                 <li>
@@ -1274,7 +1266,15 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                     form.visibility === 'org' ? 'org' : 'public'
                   ]}
                 </li>
-                {wantPublish ? <li>触发审批：上架可调用</li> : <li>调用状态：不可执行模型任务</li>}
+                {form.published ? (
+                  <li>发布状态：保持已上架</li>
+                ) : (
+                  <li>触发审批：终审通过后正式上架</li>
+                )}
+                <li>
+                  发布配置：上架可调用{form.callable ? '已选' : '未选'}、精选
+                  {form.featuredInMssMarket ? '已选' : '未选'}
+                </li>
               </ul>
             </div>
           </div>

@@ -4,6 +4,7 @@ import type { PrototypeAgentSeed, PrototypeSkillSeed } from '@/domain/prototype/
 
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { AgentAvatar } from '@/components/brand/AgentAvatar';
+import { isSkillRunnable } from '@/domain/skillRuntime';
 
 
 
@@ -32,6 +33,8 @@ export function HomeSlashMenu({ mode, query = '', onSelectSkill, onSelectAgent, 
 
 
   const skills = getPublishedSkills()
+
+    .filter(isSkillRunnable)
 
     .filter((s) => {
 
@@ -166,5 +169,4 @@ export function HomeSlashMenu({ mode, query = '', onSelectSkill, onSelectAgent, 
   );
 
 }
-
 

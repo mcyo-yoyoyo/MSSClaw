@@ -21,6 +21,7 @@ export function skillSlug(skill: Pick<PrototypeSkillSeed, 'id' | 'name' | 'comma
 /** 平台元数据（放在包内，便于再导入 MSSClaw） */
 export function skillManifest(skill: PrototypeSkillSeed) {
   const pack = getSkillPack(skill.id);
+  const featured = Boolean(skill.featuredInMssMarket ?? skill.featuredInDoTask);
   return {
     manifestVersion: '2.1',
     format: 'mssclaw-skill-package',
@@ -39,6 +40,9 @@ export function skillManifest(skill: PrototypeSkillSeed) {
     tags: skill.tags || [],
     searchKeywords: skill.searchKeywords || [],
     published: !!skill.published,
+    callable: typeof skill.callable === 'boolean' ? skill.callable : !!skill.published,
+    featuredInDoTask: featured,
+    featuredInMssMarket: featured,
     visibility: skill.visibility || 'org',
     icon: skill.icon,
     iconUrl: skill.iconUrl,
@@ -166,6 +170,7 @@ export function skillOpsAnalyticsRow(
 ) {
   const invokeCount = Number(skill.invokes) || 0;
   const published = !!skill.published;
+  const callable = typeof skill.callable === 'boolean' ? skill.callable : published;
   const hasBody = Boolean(skill.instructions?.trim());
   return {
     id: skill.id,
@@ -183,7 +188,7 @@ export function skillOpsAnalyticsRow(
     ownerRegionId: skill.ownerRegionId ?? null,
     visibility: skill.visibility || 'org',
     /** 是否已上架可调用（可执行模型任务） */
-    publishedExecutable: published,
+    publishedExecutable: published && callable,
     /** 是否精选露出到「MSS · 场景技能」 */
     featuredInDoTask: !!(skill.featuredInMssMarket ?? skill.featuredInDoTask),
     businessScenarioId: skill.businessScenarioId ?? null,
@@ -197,7 +202,7 @@ export function skillOpsAnalyticsRow(
     /** 是否具备可注入正文（具备执行内容） */
     hasExecutableBody: hasBody,
     /** 实际上可对话执行：已上架且有正文 */
-    runnableNow: published && hasBody,
+    runnableNow: published && callable && hasBody,
     tags: skill.tags || [],
     searchKeywords: skill.searchKeywords || [],
     sourceType: skill.sourceType || 'internal',
@@ -353,6 +358,13 @@ export function parseSkillImport(raw: unknown): PrototypeSkillSeed | null {
   const searchKeywords = Array.isArray(o.searchKeywords)
     ? o.searchKeywords.filter((t): t is string => typeof t === 'string')
     : [];
+  const callable = typeof o.callable === 'boolean' ? o.callable : undefined;
+  const featured =
+    typeof o.featuredInMssMarket === 'boolean'
+      ? o.featuredInMssMarket
+      : typeof o.featuredInDoTask === 'boolean'
+        ? o.featuredInDoTask
+        : undefined;
 
   return {
     id: typeof o.id === 'string' && o.id.trim() ? o.id.trim() : `skill-import-${Date.now()}`,
@@ -369,6 +381,10 @@ export function parseSkillImport(raw: unknown): PrototypeSkillSeed | null {
     connector: typeof o.connector === 'string' ? o.connector : '',
     // 导入默认草稿：不可调用，组织内可见（需审批后上架/公开）
     published: false,
+    ...(typeof callable === 'boolean' ? { callable } : {}),
+    ...(typeof featured === 'boolean'
+      ? { featuredInDoTask: featured, featuredInMssMarket: featured }
+      : {}),
     visibility: 'org',
     invokes: typeof o.invokes === 'number' ? o.invokes : 0,
     icon: typeof o.icon === 'string' ? o.icon : 'fa-cube',

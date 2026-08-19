@@ -71,6 +71,8 @@ export function MarketSkillSubmitModal({
   const [ownerDeptIds, setOwnerDeptIds] = useState<DeptId[]>([]);
   const [ownerRegionId, setOwnerRegionId] = useState<RegionId | null>(null);
   const [visibility, setVisibility] = useState<AssetVisibility>('org');
+  const [callable, setCallable] = useState(false);
+  const [featured, setFeatured] = useState(false);
   const [packName, setPackName] = useState<string | null>(null);
   const [packageFile, setPackageFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
@@ -89,6 +91,8 @@ export function MarketSkillSubmitModal({
     setOwnerDeptIds([]);
     setOwnerRegionId(null);
     setVisibility('org');
+    setCallable(false);
+    setFeatured(false);
     setPackName(null);
     setPackageFile(null);
     setParsedExtra(null);
@@ -104,6 +108,9 @@ export function MarketSkillSubmitModal({
     setCommand(parsed.command || '');
     setInstructions(parsed.instructions || '');
     if (parsed.businessScenarioId) setBusinessId(parsed.businessScenarioId);
+    if (typeof parsed.callable === 'boolean') setCallable(parsed.callable);
+    const parsedFeatured = parsed.featuredInMssMarket ?? parsed.featuredInDoTask;
+    if (typeof parsedFeatured === 'boolean') setFeatured(parsedFeatured);
     setParsedExtra({
       nameEn: parsed.nameEn,
       descEn: parsed.descEn,
@@ -234,9 +241,10 @@ export function MarketSkillSubmitModal({
         ownerRegionId,
         homepageUrl: undefined,
         businessScenarioId: businessId,
-        // 提报至 MSS 场景技能：审批通过后露出
-        featuredInDoTask: true,
-        featuredInMssMarket: true,
+        callable,
+        // 精选同时双写新旧字段，保持历史读取链路一致。
+        featuredInDoTask: featured,
+        featuredInMssMarket: featured,
       } as PrototypeSkillSeed);
 
       draft = syncSkillZhPrimary(draft);
@@ -250,7 +258,7 @@ export function MarketSkillSubmitModal({
         assetName: skillDisplayName(draft),
         reasons: ['publish_executable'],
       });
-      showToast('技能已提报，进入上架审批');
+      showToast('技能已提报，进入发布审批');
     } catch {
       if (uploadedPackage && packageWorkspaceId) {
         void deleteWorkspaceBlob(packageWorkspaceId, uploadedPackage).catch(() => undefined);
@@ -285,7 +293,7 @@ export function MarketSkillSubmitModal({
       <div className="space-y-3 text-left">
         <p className="text-[11px] leading-relaxed text-zinc-500">
           对齐能力开发「Skill 上传」：可上传标准 Skill 包自动解析，或手工填写。提交后进入「业务主管 →
-          MSS 质量与运营」审批；通过后上架可调用，并露出到 MSS · 场景技能。
+          MSS 质量与运营」审批；终审通过后发布到前台。可调用控制在线运行，精选控制场景分组，均不影响是否提审。
         </p>
 
         <div
@@ -369,6 +377,37 @@ export function MarketSkillSubmitModal({
             ))}
           </FormSelect>
         </FormField>
+        <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2.5 space-y-3">
+          <p className="text-[12px] font-semibold text-zinc-800">发布配置</p>
+          <label className="flex cursor-pointer items-start gap-2">
+            <input
+              type="checkbox"
+              className="mt-0.5 accent-claw-600"
+              checked={callable}
+              onChange={(e) => setCallable(e.target.checked)}
+            />
+            <span>
+              <span className="block text-[13px] font-medium text-zinc-800">上架可调用</span>
+              <span className="mt-0.5 block text-[11px] text-zinc-500">
+                终审发布后允许在线调用；未勾选仍可在前台浏览和下载。
+              </span>
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-2">
+            <input
+              type="checkbox"
+              className="mt-0.5 accent-claw-600"
+              checked={featured}
+              onChange={(e) => setFeatured(e.target.checked)}
+            />
+            <span>
+              <span className="block text-[13px] font-medium text-zinc-800">精选</span>
+              <span className="mt-0.5 block text-[11px] text-zinc-500">
+                控制场景 Skill 的精选分组露出；不影响发布审批和在线调用。
+              </span>
+            </span>
+          </label>
+        </div>
         <OwnershipFormFields
           singleDept
           ownerDeptIds={ownerDeptIds}

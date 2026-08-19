@@ -24,6 +24,11 @@ import {
   EXECUTION_TRUST_META,
   resolveSkillExecutionTrust,
 } from '@/domain/executionTrust';
+import {
+  hasSkillExecutionBody,
+  isSkillCallable,
+  isSkillRunnable,
+} from '@/domain/skillRuntime';
 
 type DetailTab = 'overview' | 'guide' | 'files' | 'versions' | 'reviews' | 'security';
 
@@ -111,7 +116,9 @@ export function MarketSkillDetailModal({
   const cases = skill.cases?.filter((c) => c.title?.trim()) ?? [];
   const caseAttachments = skill.caseAttachments ?? [];
   const env = skill.envInfo;
-  const trust = resolveSkillExecutionTrust(canRun);
+  const skillRunnable = isSkillRunnable(skill);
+  const canRunOnline = canRun && skillRunnable;
+  const trust = resolveSkillExecutionTrust(canRunOnline);
   const trustMeta = EXECUTION_TRUST_META[trust];
   const skillFiles = [
     {
@@ -674,7 +681,7 @@ export function MarketSkillDetailModal({
             <button type="button" onClick={handleDownload} className="w-full rounded-xl bg-zinc-900 px-3 py-2 text-[12px] font-semibold text-white">
               <i className="fa-solid fa-download mr-1.5" />下载 Skill 包
             </button>
-            {canRun ? (
+            {canRunOnline ? (
               <button type="button" onClick={() => onRun(skill)} className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-800">
                 <i className="fa-solid fa-play mr-1.5" />在线试用
               </button>
@@ -724,7 +731,18 @@ export function MarketSkillDetailModal({
             <dl className="divide-y divide-zinc-50">
               <MetaRow label="连接器" value={skill.connector || '平台默认'} />
               <MetaRow label="版本" value={`v${skill.version}`} />
-              <MetaRow label="运行状态" value={skill.published ? '已上架可调用' : '已沉淀 · 未上架'} />
+              <MetaRow
+                label="运行状态"
+                value={
+                  !skill.published
+                    ? '未发布展示'
+                    : !isSkillCallable(skill)
+                      ? '已发布 · 未启用调用'
+                      : !hasSkillExecutionBody(skill)
+                        ? '已发布 · 缺少执行正文'
+                        : '已发布可调用'
+                }
+              />
               <MetaRow label="环境依赖" value={env?.dependencies || '待补充'} />
               <MetaRow label="硬件 / 网络" value={env?.hardwareNetwork || '浏览器端 / 组织网络'} />
               <MetaRow label="适配说明" value={env?.framework || '平台任务对话与本地包预览'} />
@@ -735,7 +753,7 @@ export function MarketSkillDetailModal({
             <span className="font-semibold text-zinc-700">通告：</span>使用前请确认权限范围、数据合规要求及当前运行环境。
           </p>
 
-          {!canRun ? (
+          {!canRunOnline ? (
             <p className="rounded-xl border border-dashed border-zinc-200 bg-white px-3 py-2 text-center text-[11px] text-zinc-400">
               {trustMeta.hint}
             </p>

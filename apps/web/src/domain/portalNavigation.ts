@@ -13,6 +13,7 @@ import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useSessionStore } from '@/stores/sessionStore';
+import { isSkillRunnable } from '@/domain/skillRuntime';
 
 export interface PortalNavHandlers {
   onInvokeAgent: (agent: PrototypeAgentSeed, prompt?: string) => void;
@@ -66,9 +67,11 @@ export function openPortalCard(card: PortalMapCard, handlers: PortalNavHandlers)
 
   if (action.type === 'skill') {
     const skill = market.skills.find((s) => s.id === action.skillId);
-    if (skill) {
+    if (skill && isSkillRunnable(skill)) {
       handlers.onInvokeSkill(skill);
       toast(`已调用技能：${skill.name}（${skill.command}）`);
+    } else if (skill) {
+      toast('该 Skill 可查看，但尚未启用在线调用或缺少执行正文');
     } else toast('未找到对应技能');
     return;
   }

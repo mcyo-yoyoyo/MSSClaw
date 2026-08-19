@@ -20,7 +20,16 @@ import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 import {
   listVisibleBusinessScenarioCategories,
 } from '@/domain/businessScenarios';
-import { resolveSkillBusinessScenario, getSkillBusinessLabel } from '@/domain/skillBusinessScenarios';
+import {
+  resolveSkillBusinessScenario,
+  resolveSkillFeaturedInDoTask,
+  getSkillBusinessLabel,
+} from '@/domain/skillBusinessScenarios';
+import {
+  hasSkillExecutionBody,
+  isSkillCallable,
+  isSkillRunnable,
+} from '@/domain/skillRuntime';
 import {
   CenterPageHeader,
   CenterSearchInput,
@@ -216,14 +225,14 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
           icon: s.icon || 'fa-cube',
           logoUrl: s.iconUrl,
           badges,
-          featured: Boolean(s.published),
+          featured: resolveSkillFeaturedInDoTask(s),
           heat: s.invokes ?? 0,
           likes: eng.likes,
           dislikes: eng.dislikes,
           downloads: eng.downloads,
           scopeBadge: (s.visibility ?? 'public') === 'public' ? 'public' : 'scoped',
           hasHowto: Boolean(s.instructions || s.command),
-          runnable: Boolean(s.published && (s.instructions || s.command)),
+          runnable: isSkillRunnable(s),
           primaryAction: 'detail',
         },
       };
@@ -231,18 +240,31 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
   }, [list, approvals, getEngagement, engagementById]);
 
   const handleInvoke = (skill: PrototypeSkillSeed) => {
-    if (!skill.published) {
-      showToast('该技能尚未上架可调用，请先申请上架审批');
-      setEditorTarget(skill.id);
+    const currentSkill = useMarketplaceStore
+      .getState()
+      .skills.find((item) => item.id === skill.id);
+    if (!currentSkill) {
+      showToast('该 Skill 已不在当前工作区，请刷新后重试');
       return;
     }
-    bumpSkillInvokes(skill.id);
-    if (skill.sourceType === 'external' && skill.homepageUrl) {
-      window.open(skill.homepageUrl, '_blank', 'noopener,noreferrer');
-      showToast(`已打开外部能力：${skillDisplayName(skill)}`);
+    if (!isSkillRunnable(currentSkill)) {
+      showToast(
+        !isSkillCallable(currentSkill)
+          ? '该 Skill 尚未发布或未启用在线调用，可在编辑中调整发布配置'
+          : !hasSkillExecutionBody(currentSkill)
+            ? '该 Skill 缺少执行正文，请先补充后再调用'
+            : '该 Skill 暂不可调用',
+      );
+      setEditorTarget(currentSkill.id);
       return;
     }
-    onInvoke(skill);
+    bumpSkillInvokes(currentSkill.id);
+    if (currentSkill.sourceType === 'external' && currentSkill.homepageUrl) {
+      window.open(currentSkill.homepageUrl, '_blank', 'noopener,noreferrer');
+      showToast(`已打开外部能力：${skillDisplayName(currentSkill)}`);
+      return;
+    }
+    onInvoke(currentSkill);
   };
 
   return (
@@ -250,11 +272,11 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
       <div className="mx-auto max-w-6xl">
         <CenterPageHeader
           title="配置Skill"
-          subtitle="运营看板 · 多维筛选 · 与集市统一的 Skill 卡片 · 上架可调用需审批"
+          subtitle="运营看板 · 多维筛选 · 与集市统一的 Skill 卡片 · 发布展示需审批"
           tip={
             <>
-              上传标准包 → 配置中英文与标签 → 设置发布权限范围。上架可调用模型任务时触发评审。安全扫描模块已预留（待对接
-              IT）。输入 <code className="rounded bg-black/[0.04] px-1">/skill名</code> 调用已上架技能。
+              上传标准包 → 配置中英文与标签 → 设置发布权限范围。终审通过后前台展示；「上架可调用」与「精选」分别控制在线运行和精选分组。安全扫描模块已预留（待对接
+              IT）。输入 <code className="rounded bg-black/[0.04] px-1">/skill名</code> 调用已发布且开启调用的技能。
             </>
           }
           actions={
@@ -519,7 +541,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
       {detail ? (
         <MarketSkillDetailModal
           skill={detail}
-          canRun={Boolean(detail.published)}
+          canRun
           onClose={() => setDetail(null)}
           onRun={(s) => {
             handleInvoke(s);

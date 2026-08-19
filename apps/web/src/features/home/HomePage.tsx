@@ -16,6 +16,16 @@ import {
   type MarketShelfCard as MarketShelfCardModel,
   type MarketShelfKind,
 } from '@/domain/marketShelf';
+import {
+  resolveAgentBusinessScenario,
+  resolveAgentFeaturedInDoTask,
+} from '@/domain/agentBusinessScenarios';
+import {
+  resolveSkillBusinessScenario,
+  resolveSkillFeaturedInDoTask,
+} from '@/domain/skillBusinessScenarios';
+import { skillDisplayDesc, skillDisplayName } from '@/domain/skillDisplay';
+import { isSkillRunnable } from '@/domain/skillRuntime';
 import { openMarketShelf, openMarketToolDetail } from '@/domain/openHomeJourney';
 import { HomeMarketChannels } from '@/components/home/HomeMarketChannels';
 import { StageIntentDock } from '@/components/market/StageIntentDock';
@@ -41,6 +51,7 @@ import { greetingForNow } from '@/domain/timeGreeting';
 import { emptyOrgPerspectiveSelection } from '@/domain/orgAxisTags';
 import { getBusinessScenarioMeta } from '@/domain/businessScenarios';
 import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
+import { sortByRankMode } from '@/domain/contentEngagement';
 
 export function HomePage() {
   const { applyUserOrgDefaults } = useHomeStore();
@@ -139,12 +150,67 @@ export function HomePage() {
       listInternalOfficeMarketCards(tools, eng, howtoToolIds, officeSceneEntries),
       [...HOME_CHANNEL_PINS.internal],
     );
-    const projects = applyMarketFeaturedPins(
+    const featuredSkills = sortByRankMode(
+      skills
+        .filter((skill) => skill.published)
+        .filter((skill) => canViewAsset(skill, viewer))
+        .filter((skill) => resolveSkillFeaturedInDoTask(skill))
+        .map((skill): MarketShelfCardModel => {
+          const engagement = eng(skill.id);
+          const scenarioId = resolveSkillBusinessScenario(skill);
+          const scenarioLabel = scenarioId
+            ? getBusinessScenarioMeta(scenarioId).label
+            : null;
+          const badges: MarketShelfCardModel['badges'] = [];
+          if (skill.ownerDeptIds?.[0]) {
+            badges.push({ label: getDeptLabel(skill.ownerDeptIds[0]), tone: 'dept' });
+          }
+          if (skill.ownerRegionId) {
+            badges.push({ label: getRegionLabel(skill.ownerRegionId), tone: 'region' });
+          }
+          return {
+            id: skill.id,
+            kind: 'projects',
+            title: skillDisplayName(skill),
+            description: skillDisplayDesc(skill).replace(/^【[^】]+】/, '').trim(),
+            outcomeHint: skillDisplayDesc(skill).replace(/^【[^】]+】/, '').trim(),
+            sceneTags: ['Skill', ...(scenarioLabel ? [scenarioLabel] : [])],
+            securityLevel: 'mss',
+            icon: skill.icon || 'fa-cube',
+            logoUrl: skill.iconUrl,
+            badges,
+            featured: true,
+            heat: skill.invokes ?? 0,
+            likes: engagement.likes,
+            dislikes: engagement.dislikes,
+            downloads: engagement.downloads,
+            scopeBadge: (skill.visibility ?? 'public') === 'public' ? 'public' : 'scoped',
+            hasHowto: Boolean(skill.instructions || skill.command),
+            runnable: executeAllowed && isSkillRunnable(skill),
+            primaryAction: 'detail',
+            scenarioId: scenarioId ?? undefined,
+            ownerDeptIds: skill.ownerDeptIds,
+            ownerRegionId: skill.ownerRegionId,
+            updatedAt: skill.updatedAt,
+          };
+        })
+        .filter(qualifiesAsFeaturedContent),
+      // 与 Skill Hub 初始排序一致：查看量高的精选 Skill 优先。
+      'most_viewed',
+      eng,
+    );
+
+    const featuredAgents = sortByRankMode(
       agents
         .filter((agent) => agent.published)
         .filter((agent) => canViewAsset(agent, viewer))
-        .map((agent) => {
+        .filter((agent) => resolveAgentFeaturedInDoTask(agent))
+        .map((agent): MarketShelfCardModel => {
           const engagement = eng(agent.id);
+          const scenarioId = resolveAgentBusinessScenario(agent);
+          const scenarioLabel = scenarioId
+            ? getBusinessScenarioMeta(scenarioId).label
+            : null;
           const badges: MarketShelfCardModel['badges'] = [];
           if (agent.ownerDeptIds?.[0]) {
             badges.push({ label: getDeptLabel(agent.ownerDeptIds[0]), tone: 'dept' });
@@ -152,19 +218,14 @@ export function HomePage() {
           if (agent.ownerRegionIds?.[0]) {
             badges.push({ label: getRegionLabel(agent.ownerRegionIds[0]), tone: 'region' });
           }
-          if (agent.businessScenarioId) {
-            badges.push({
-              label: getBusinessScenarioMeta(agent.businessScenarioId).label,
-              tone: 'type',
-            });
-          }
           return {
             id: agent.id,
-            kind: 'projects' as const,
+            kind: 'projects',
             title: agent.name,
             description: agent.desc,
             outcomeHint: agent.desc,
-            securityLevel: 'mss' as const,
+            sceneTags: ['Agent', ...(scenarioLabel ? [scenarioLabel] : [])],
+            securityLevel: 'mss',
             icon: agent.icon || 'fa-robot',
             badges,
             featured: true,
@@ -172,12 +233,24 @@ export function HomePage() {
             likes: engagement.likes,
             dislikes: engagement.dislikes,
             downloads: engagement.downloads,
+            scopeBadge: (agent.visibility ?? 'public') === 'public' ? 'public' : 'scoped',
             hasHowto: Boolean(agent.systemPrompt || agent.skillIds?.length),
-            primaryAction: 'detail' as const,
+            runnable: executeAllowed && Boolean(agent.skillIds?.length),
+            primaryAction: 'detail',
+            scenarioId: scenarioId ?? undefined,
+            ownerDeptIds: agent.ownerDeptIds,
+            ownerRegionId: agent.ownerRegionIds?.[0] ?? null,
+            updatedAt: agent.updatedAt,
           };
-        }),
-      [...HOME_CHANNEL_PINS.projects],
+        })
+        .filter(qualifiesAsFeaturedContent),
+      // 与 Agent Hub 初始排序一致：精选优先，同级按互动热度。
+      'recommended',
+      eng,
     );
+
+    // 不使用 HOME_CHANNEL_PINS.projects；首页只消费 Hub 真实精选资产。
+    const projects = [...featuredSkills, ...featuredAgents];
 
     return { external, internal, projects } satisfies Record<
       MarketShelfKind,
@@ -185,6 +258,7 @@ export function HomePage() {
     >;
   }, [
     tools,
+    skills,
     agents,
     featuredPins,
     viewer,
@@ -192,6 +266,7 @@ export function HomePage() {
     engagementById,
     howtoToolIds,
     officeSceneEntries,
+    executeAllowed,
   ]);
 
   const favoriteKeys = useMemo(
@@ -205,11 +280,17 @@ export function HomePage() {
         .filter((c) => !hiddenKeys.includes(`${c.kind}:${c.id}`))
         .filter((c) => (favoritesOnly ? favoriteKeys.has(capabilityKey(c)) : true));
     const q = marketSearch.trim();
+    const skillIds = new Set(skills.map((skill) => skill.id));
+    const takeProjectQuota = (list: MarketShelfCardModel[]) => [
+      ...list.filter((card) => skillIds.has(card.id)).slice(0, 2),
+      ...list.filter((card) => !skillIds.has(card.id)).slice(0, 1),
+    ];
     if (!q) {
       return {
         external: applyFav(scopedChannelCards.external),
         internal: applyFav(scopedChannelCards.internal),
-        projects: applyFav(scopedChannelCards.projects),
+        // 先应用个人隐藏/收藏筛选，再按 2 Skill + 1 Agent 补位。
+        projects: takeProjectQuota(applyFav(scopedChannelCards.projects)),
       };
     }
     const all = [
@@ -227,23 +308,9 @@ export function HomePage() {
     return {
       external: applyFav(grouped.external),
       internal: applyFav(grouped.internal),
-      projects: applyFav(grouped.projects),
+      projects: takeProjectQuota(applyFav(grouped.projects)),
     };
-  }, [scopedChannelCards, marketSearch, favoritesOnly, favoriteKeys, hiddenKeys]);
-
-  const projectsBreakdown = useMemo(() => {
-    const skill = skills
-      .filter((item) => item.published && item.featuredInMssMarket !== false)
-      .filter((s) => canViewAsset(s, viewer))
-      .length;
-    const agent = agents
-      .filter((item) => item.published)
-      .filter((item) => canViewAsset(item, viewer)).length;
-    return {
-      skill,
-      agent,
-    };
-  }, [skills, agents, viewer]);
+  }, [scopedChannelCards, marketSearch, favoritesOnly, favoriteKeys, hiddenKeys, skills]);
 
   const rememberCard = (card: MarketShelfCardModel) => {
     pushRecent({
@@ -311,7 +378,6 @@ export function HomePage() {
 
           <HomeMarketChannels
             cardsByKind={channelCards}
-            projectsBreakdown={projectsBreakdown}
             onOpen={openPortalCard}
             searchActive={Boolean(marketSearch.trim())}
           />

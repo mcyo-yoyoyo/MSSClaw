@@ -191,7 +191,8 @@ function applyApproval(kind: AssetApprovalKind, assetId: string, req: AssetAppro
         }
         market.upsertSkill({
           ...skill,
-          ...(wantPublish || wantUpdate ? { published: true } : {}),
+          // Skill 发布终审通过只更新 published；callable/精选沿用提交时保存的值。
+          published: wantPublish || wantUpdate ? true : skill.published,
           ...(wantPublic ? { visibility: 'public' as const } : {}),
           ...(wantUpdate && req.targetVersion ? { version: req.targetVersion } : {}),
           ...(wantUpdate ? { versions } : {}),

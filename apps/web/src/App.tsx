@@ -14,7 +14,12 @@ import { usePortalContentStore } from '@/stores/portalContentStore';
 import { usePlazaToolGuideStore } from '@/stores/plazaToolGuideStore';
 import { useInboxStore } from '@/stores/inboxStore';
 import { getAgentById } from '@/domain/plan';
-import { buildSkillDemoPrompt } from '@/domain/skillRuntime';
+import {
+  buildSkillDemoPrompt,
+  hasSkillExecutionBody,
+  isSkillCallable,
+  isSkillRunnable,
+} from '@/domain/skillRuntime';
 import { buildAgentDemoPrompt } from '@/domain/agents/runtime';
 import { enterTaskChatFocusMode } from '@/domain/taskFocusMode';
 import { PROTOTYPE_AGENTS } from '@/domain/prototype/agents';
@@ -346,28 +351,40 @@ export function App() {
       useConversationStore.setState({ pushToast: '工作区加载中，请稍候再试' });
       return;
     }
+    const currentSkill = useMarketplaceStore.getState().skills.find((item) => item.id === skill.id);
+    if (!currentSkill || !isSkillRunnable(currentSkill)) {
+      const reason = !currentSkill
+        ? '该 Skill 已不在当前工作区'
+        : !isSkillCallable(currentSkill)
+          ? '该 Skill 尚未启用在线调用'
+          : !hasSkillExecutionBody(currentSkill)
+            ? '该 Skill 缺少执行正文，暂不可调用'
+            : '该 Skill 暂不可调用';
+      useConversationStore.setState({ pushToast: reason });
+      return;
+    }
     const reviewAgent = getAgentById('agent-review');
     const marketAgents = useMarketplaceStore.getState().agents;
     const boundAgent =
-      reviewAgent?.skillIds?.includes(skill.id)
+      reviewAgent?.skillIds?.includes(currentSkill.id)
         ? reviewAgent
-        : marketAgents.find((a) => a.skillIds?.includes(skill.id) && a.published) ??
-          PROTOTYPE_AGENTS.find((a) => a.skillIds?.includes(skill.id) && a.published) ??
+        : marketAgents.find((a) => a.skillIds?.includes(currentSkill.id) && a.published) ??
+          PROTOTYPE_AGENTS.find((a) => a.skillIds?.includes(currentSkill.id) && a.published) ??
           reviewAgent;
-    const initialMessage = buildSkillDemoPrompt(skill);
+    const initialMessage = buildSkillDemoPrompt(currentSkill);
     // 进入任务对话并自动发送，使 AI任务链路挂载 Skill 正文后执行
     const chatId = createAgentTaskSession({
-      title: skill.name,
+      title: currentSkill.name,
       agentId: boundAgent?.id,
       agentName: boundAgent?.name,
-      agentIcon: boundAgent?.icon ?? skill.icon,
-      skillId: skill.id,
+      agentIcon: boundAgent?.icon ?? currentSkill.icon,
+      skillId: currentSkill.id,
       taskSource: 'skill',
       initialMessage,
       autoSend: Boolean(initialMessage.trim()),
       switchTo: true,
     });
-    goToTaskWithTransit(skill.name, chatId);
+    goToTaskWithTransit(currentSkill.name, chatId);
   }, [createAgentTaskSession, goToTaskWithTransit, sessionsReady]);
 
   const handleAskKbDocument = useCallback((doc: PrototypeKbDocument) => {

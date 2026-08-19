@@ -19,8 +19,8 @@ import {
 } from '@/domain/plan';
 import {
   buildSystemPromptWithSkill,
-  getSkillById,
   getSkillPlanSteps,
+  isSkillRunnable,
   resolveSkillFromText,
 } from '@/domain/skillRuntime';
 import { getSkillPack } from '@/domain/skills/catalog';
@@ -303,7 +303,18 @@ async function runApprovedPipeline(get: () => ConversationState, set: StoreSet) 
   if (!chat) return;
 
   const agent = getAgentById(pipeline.agentId);
-  const skill = getSkillById(pipeline.skillId);
+  const skill = pipeline.skillId
+    ? useMarketplaceStore.getState().skills.find((item) => item.id === pipeline.skillId) ?? null
+    : null;
+  if (pipeline.skillId && (!skill || !isSkillRunnable(skill))) {
+    set({
+      pendingPipeline: null,
+      isAgentTyping: false,
+      streamStatus: null,
+      pushToast: '该 Skill 已不可运行，请返回前台确认发布、调用开关与执行正文',
+    });
+    return;
+  }
   const systemPrompt = buildSystemPromptWithSkill(
     getAgentSystemPrompt(agent) ?? agent?.systemPrompt,
     skill,

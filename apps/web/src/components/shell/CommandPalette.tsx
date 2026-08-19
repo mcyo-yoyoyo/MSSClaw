@@ -10,6 +10,7 @@ import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { isSkillRunnable } from '@/domain/skillRuntime';
 
 interface CommandPaletteProps {
   handlers: AppCommandHandlers;
@@ -31,7 +32,9 @@ export function CommandPalette({ handlers }: CommandPaletteProps) {
         handlers,
         {
           agents: agents.filter((a) => a.published).map((a) => ({ id: a.id, name: a.name, icon: a.icon })),
-          skills: skills.filter((s) => s.published).map((s) => ({ id: s.id, name: s.name, command: s.command })),
+          skills: skills
+            .filter((s) => s.published && isSkillRunnable(s))
+            .map((s) => ({ id: s.id, name: s.name, command: s.command })),
         },
         { isViewEnabled, canExecute },
       ),

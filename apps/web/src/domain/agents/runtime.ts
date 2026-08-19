@@ -3,13 +3,18 @@ import { PROTOTYPE_SKILLS } from '@/domain/prototype/skills';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { getAgentPack } from '@/domain/agents/catalog';
 import { getSkillPack } from '@/domain/skills/catalog';
-import { buildSkillDemoPrompt, getSkillById } from '@/domain/skillRuntime';
+import {
+  buildSkillDemoPrompt,
+  getSkillById,
+  isSkillRunnable,
+} from '@/domain/skillRuntime';
 import { skillDisplayName } from '@/domain/skillDisplay';
 
 export function getPrimarySkill(agent: PrototypeAgentSeed): PrototypeSkillSeed | null {
   const pack = getAgentPack(agent.id);
   const primaryId = agent.primarySkillId || pack?.primarySkillId || agent.skillIds[0];
-  return getSkillById(primaryId);
+  const skill = getSkillById(primaryId);
+  return skill && isSkillRunnable(skill) ? skill : null;
 }
 
 /** 专家中心「调用」默认演示任务：@专家 + 主 Skill 演示提示 */

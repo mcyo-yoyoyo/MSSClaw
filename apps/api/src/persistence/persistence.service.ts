@@ -619,7 +619,10 @@ export class PersistenceService {
               changed = true;
             }
             if (includeFeatured && typeof item.featuredInMssMarket !== 'boolean') {
-              next = { ...next, featuredInMssMarket: true };
+              // 兼容旧字段的显式选择：历史数据若已设为 false，不能在读取时被反弹成精选。
+              const legacyFeatured =
+                typeof item.featuredInDoTask === 'boolean' ? item.featuredInDoTask : true;
+              next = { ...next, featuredInMssMarket: legacyFeatured };
               changed = true;
             }
             return next;
