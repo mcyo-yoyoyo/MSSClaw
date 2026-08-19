@@ -132,3 +132,13 @@ export function firstPreviewableFile(dir: PackageDir): PackageFile | null {
   }
   return dir.files[0] ?? null;
 }
+
+/** 触发浏览器下载某个已归档的资源包 */
+export function downloadPackageBlob(pkg: { url: string; name: string }): void {
+  const link = document.createElement('a');
+  link.href = pkg.url;
+  link.download = pkg.name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}

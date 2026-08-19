@@ -50,6 +50,7 @@ interface AssetApprovalState {
     packageName?: string;
     packageBlobId?: string;
     packageUrl?: string;
+    packageSize?: number;
     unpublishMode?: AssetApprovalRequest['unpublishMode'];
     unpublishVersions?: string[];
   }) => void;
@@ -130,14 +131,49 @@ function applyApproval(kind: AssetApprovalKind, assetId: string, req: AssetAppro
       } else {
         const nextVersion = req.targetVersion || skill.version;
         const versions = [...(skill.versions ?? [])];
+        /** 申请单里带的新包；没有就沿用当前包（例如仅改版本号说明） */
+        const nextPackage =
+          req.packageBlobId && req.packageUrl
+            ? {
+                id: req.packageBlobId,
+                url: req.packageUrl,
+                name: req.packageName || `${skill.id}-${nextVersion}.zip`,
+                size: req.packageSize ?? 0,
+                uploadedAt: new Date().toISOString(),
+              }
+            : undefined;
+
         if (wantUpdate && nextVersion) {
+          /**
+           * 存量 Skill 的 versions 是空的，直接换版会让旧包彻底消失。
+           * 换版前先给当前线上版本补一行，把它的包一并归档，历史才完整。
+           */
+          if (skill.version && skill.version !== nextVersion && !versions.some((v) => v.version === skill.version)) {
+            versions.unshift({
+              version: skill.version,
+              notes: '更新前的线上版本',
+              publishedAt: skill.updatedAt || skill.createdAt,
+              status: 'active',
+              packageBlob: skill.packageBlob,
+            });
+          }
           const exists = versions.some((v) => v.version === nextVersion);
+          // 换版前先把当前线上包归档到它所属的那一行，历史版本才下载得到当时的 zip
+          const outgoing = versions.find((v) => v.status === 'active' && v.version !== nextVersion);
+          if (outgoing && !outgoing.packageBlob && skill.packageBlob) {
+            outgoing.packageBlob = skill.packageBlob;
+          }
           if (!exists) {
+            // 旧的生效版本一律停用，避免同时存在多个 active
+            versions.forEach((v) => {
+              if (v.status === 'active') v.status = 'retired';
+            });
             versions.unshift({
               version: nextVersion,
               notes: req.note,
               publishedAt: stamp,
               status: 'active',
+              packageBlob: nextPackage ?? skill.packageBlob,
             });
           } else {
             versions.forEach((v) => {
@@ -145,7 +181,9 @@ function applyApproval(kind: AssetApprovalKind, assetId: string, req: AssetAppro
                 v.status = 'active';
                 v.notes = req.note || v.notes;
                 v.publishedAt = stamp;
+                v.packageBlob = nextPackage ?? v.packageBlob ?? skill.packageBlob;
               } else if (v.status === 'active') {
+                if (!v.packageBlob && skill.packageBlob) v.packageBlob = skill.packageBlob;
                 v.status = 'retired';
               }
             });
@@ -157,6 +195,8 @@ function applyApproval(kind: AssetApprovalKind, assetId: string, req: AssetAppro
           ...(wantPublic ? { visibility: 'public' as const } : {}),
           ...(wantUpdate && req.targetVersion ? { version: req.targetVersion } : {}),
           ...(wantUpdate ? { versions } : {}),
+          // 终审通过才把新包写成当前包——此前只改版本号，包始终是旧的
+          ...(wantUpdate && nextPackage ? { packageBlob: nextPackage } : {}),
           updatedAt: stamp,
           updatedBy: actor,
         });
@@ -241,6 +281,10 @@ export const useAssetApprovalStore = create<AssetApprovalState>((set, get) => ({
       note: input.note?.trim() || undefined,
       targetVersion: input.targetVersion?.trim() || undefined,
       packageName: input.packageName?.trim() || undefined,
+      // 这三项此前被漏掉，导致终审时拿不到新包，更新申请通过后 Skill 数据不变
+      packageBlobId: input.packageBlobId || undefined,
+      packageUrl: input.packageUrl || undefined,
+      packageSize: input.packageSize,
       unpublishMode: input.unpublishMode,
       unpublishVersions: input.unpublishVersions,
     };

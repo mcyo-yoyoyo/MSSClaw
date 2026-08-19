@@ -268,6 +268,11 @@ export interface SkillVersionRecord {
   notes?: string;
   publishedAt?: string;
   status?: 'active' | 'retired';
+  /**
+   * 该版本对应的 Skill 包。新版本上架时，上一版的包会归档到它自己那一行，
+   * 这样历史版本才能各自下载到当时的 zip，而不是都指向当前包。
+   */
+  packageBlob?: UploadedPackageRef;
 }
 
 /** Skill 案例条目 */

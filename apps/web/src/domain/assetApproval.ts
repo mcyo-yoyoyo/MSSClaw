@@ -82,10 +82,11 @@ export interface AssetApprovalRequest {
   note?: string;
   /** 目标版本号（更新申请） */
   targetVersion?: string;
-  /** 更新申请上传的完整 Skill 包文件名。 */
+  /** 更新申请上传的完整 Skill 包；终审通过后写入 skill.packageBlob 并归档旧包 */
   packageName?: string;
   packageBlobId?: string;
   packageUrl?: string;
+  packageSize?: number;
   /** 下架范围（MVP 以 all 为主；versions 预留） */
   unpublishMode?: SkillUnpublishMode;
   /** 指定下架的版本号列表（预留） */

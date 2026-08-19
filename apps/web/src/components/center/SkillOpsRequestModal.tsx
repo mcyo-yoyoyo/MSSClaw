@@ -96,6 +96,7 @@ export function SkillOpsRequestModal({
         packageName: uploaded.name,
         packageBlobId: uploaded.id,
         packageUrl: uploaded.url,
+        packageSize: uploaded.size,
       });
       showToast('已提交更新上架申请，待业务主管与 MSS 质量运营审批' + shareSyncSaveHint());
       onClose();

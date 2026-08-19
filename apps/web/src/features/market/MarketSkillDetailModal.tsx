@@ -4,8 +4,9 @@ import { SkillAvatar } from '@/components/brand/SkillAvatar';
 import { CenterModal } from '@/components/center/CenterShell';
 import { CaseDocumentPreview } from '@/components/content/CaseDocumentPreview';
 import { PackageFileTree } from '@/components/market/PackageFileTree';
+import { downloadPackageBlob } from '@/domain/packageFileTree';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
-import type { PrototypeSkillSeed } from '@/domain/prototype/types';
+import type { PrototypeSkillSeed, SkillVersionRecord } from '@/domain/prototype/types';
 import { getSkillBusinessLabel } from '@/domain/skillBusinessScenarios';
 import { skillDisplayDesc, skillDisplayName } from '@/domain/skillDisplay';
 import { downloadSkillFile } from '@/domain/skillExport';
@@ -138,8 +139,24 @@ export function MarketSkillDetailModal({
 
   const handleDownload = () => {
     bumpDownload(skill.id);
+    if (skill.packageBlob) {
+      downloadPackageBlob(skill.packageBlob);
+      onToast(`已下载：${skill.packageBlob.name}`);
+      return;
+    }
     downloadSkillFile(skill);
     onToast(`已下载：${name}`);
+  };
+
+  /** 历史版本各下各自归档的包；此前所有行都调 handleDownload，下到的都是当前包 */
+  const downloadVersion = (row: SkillVersionRecord) => {
+    if (!row.packageBlob) {
+      onToast(`v${row.version} 未归档安装包，无法下载`);
+      return;
+    }
+    bumpDownload(skill.id);
+    downloadPackageBlob(row.packageBlob);
+    onToast(`已下载 v${row.version}：${row.packageBlob.name}`);
   };
 
   const tabs: { id: DetailTab; label: string; badge?: string }[] = [
@@ -155,7 +172,11 @@ export function MarketSkillDetailModal({
     { id: 'security', label: '安全扫描' },
   ];
 
-  const versionRows =
+  /**
+   * 生效版本若没单独归档包，回落到当前 skill.packageBlob——
+   * 存量 Skill 的 versions 是历史遗留数据，行里本来就没有包引用。
+   */
+  const versionRows: SkillVersionRecord[] = (
     skill.versions?.length
       ? skill.versions
       : [
@@ -165,7 +186,12 @@ export function MarketSkillDetailModal({
             publishedAt: skill.updatedAt || skill.createdAt,
             status: 'active' as const,
           },
-        ];
+        ]
+  ).map((row) =>
+    !row.packageBlob && row.status !== 'retired' && skill.packageBlob
+      ? { ...row, packageBlob: skill.packageBlob }
+      : row,
+  );
 
   return (
     <CenterModal
@@ -555,8 +581,15 @@ export function MarketSkillDetailModal({
                         <td className="px-2 py-2.5">
                           <button
                             type="button"
-                            onClick={handleDownload}
-                            className="text-[11px] font-semibold text-sky-700 hover:underline"
+                            onClick={() => downloadVersion(v)}
+                            disabled={!v.packageBlob}
+                            title={v.packageBlob ? v.packageBlob.name : '该版本未归档安装包'}
+                            className={cn(
+                              'text-[11px] font-semibold',
+                              v.packageBlob
+                                ? 'text-sky-700 hover:underline'
+                                : 'cursor-not-allowed text-zinc-300',
+                            )}
                           >
                             下载
                           </button>
