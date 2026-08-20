@@ -1,0 +1,92 @@
+# MSS Claw · 内网 Windows 版 Nginx 配置（HTTP，无证书）
+#
+# 用法：整份替换 C:\nginx\conf\nginx.conf，只改下面标注【改这里】的两处。
+# 有 HTTPS 证书时请改用同目录 nginx.mssclaw.conf.example。
+#
+# 这份配置解决三个内网部署最常撞到的问题：
+#   1. 上传附件报 413      → /api/ 里的 client_max_body_size
+#   2. PDF 预览失败        → .mjs 的 MIME（旧版 Nginx 的 mime.types 不含 mjs，
+#                            浏览器会拒绝执行 PDF.js worker）
+#   3. AI 任务流式输出卡住 → proxy_buffering off
+
+worker_processes auto;
+
+events {
+  worker_connections 4096;
+}
+
+http {
+  include       mime.types;
+  default_type  application/octet-stream;
+  sendfile      on;
+  keepalive_timeout 65;
+  server_tokens off;
+
+  gzip on;
+  gzip_comp_level 5;
+  gzip_min_length 1024;
+  gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+
+  upstream mssclaw_api {
+    server 127.0.0.1:3000;
+    keepalive 32;
+  }
+
+  server {
+    listen 80;
+
+    # 【改这里 1】换成本机内网 IP 或域名；不确定就填 _ 表示匹配所有
+    server_name _;
+
+    # 【改这里 2】前端构建产物目录，必须用正斜杠，Windows 反斜杠 Nginx 不认
+    root C:/Users/j00994097/Desktop/MSSClaw/apps/web/dist;
+    index index.html;
+
+    # PDF.js worker 被 Vite 产出为 .mjs。旧版 Nginx 的 mime.types 没有 mjs，
+    # 会按 octet-stream 返回，浏览器拒绝作为模块脚本执行 → PDF 预览失败。
+    # 这条必须放在 location /assets/ 之前。
+    location ~ ^/assets/.*\.mjs$ {
+      default_type application/javascript;
+      expires 30d;
+      add_header Cache-Control "public, immutable";
+      try_files $uri =404;
+    }
+
+    location /assets/ {
+      expires 30d;
+      add_header Cache-Control "public, immutable";
+      try_files $uri =404;
+    }
+
+    location /brand/ {
+      expires 7d;
+      try_files $uri =404;
+    }
+
+    # 反代后端。注意：不能让 /api 落到下面 SPA 的 try_files 里。
+    location /api/ {
+      # Skill / Agent 包最大 200 MiB，留协议余量；普通附件由后端限制在 12 MiB。
+      # 默认值只有 1m，2MB 的附件就会被拦成 413。
+      client_max_body_size 210m;
+      proxy_request_buffering off;
+
+      proxy_http_version 1.1;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header Connection "";
+
+      # AI 任务用 SSE 推流，缓冲开着会导致整段憋到结束才吐字
+      proxy_buffering off;
+      proxy_send_timeout 600s;
+      proxy_read_timeout 600s;
+
+      proxy_pass http://mssclaw_api;
+    }
+
+    # SPA 路由兜底，必须放在最后
+    location / {
+      try_files $uri $uri/ /index.html;
+    }
+  }
+}
