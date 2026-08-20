@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAiBriefEmailCopyStore } from '@/stores/aiBriefEmailCopyStore';
 import {
   fetchAiBriefSubscriptions,
@@ -21,17 +21,23 @@ export function PortalAiBriefEmailPanel() {
   const [subscriptionsError, setSubscriptionsError] = useState<string | null>(null);
   const [subscriptionSearch, setSubscriptionSearch] = useState('');
   const [exporting, setExporting] = useState(false);
+  const subscriptionLoadGeneration = useRef(0);
 
   const loadSubscriptions = useCallback(async () => {
+    const generation = ++subscriptionLoadGeneration.current;
     setSubscriptionsLoading(true);
     setSubscriptionsError(null);
     try {
       const result = await fetchAiBriefSubscriptions(workspaceId);
+      if (generation !== subscriptionLoadGeneration.current) return;
       setSubscriptions(result.items);
     } catch {
+      if (generation !== subscriptionLoadGeneration.current) return;
       setSubscriptionsError('订阅名单加载失败，请确认后台服务与管理员权限');
     } finally {
-      setSubscriptionsLoading(false);
+      if (generation === subscriptionLoadGeneration.current) {
+        setSubscriptionsLoading(false);
+      }
     }
   }, [workspaceId]);
 
@@ -41,6 +47,9 @@ export function PortalAiBriefEmailPanel() {
 
   useEffect(() => {
     void loadSubscriptions();
+    return () => {
+      subscriptionLoadGeneration.current += 1;
+    };
   }, [loadSubscriptions]);
 
   useEffect(() => {

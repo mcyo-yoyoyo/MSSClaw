@@ -36,6 +36,7 @@ export function isValidEmail(email: string): boolean {
 }
 
 let hydrateGeneration = 0;
+let saveGeneration = 0;
 
 interface AiNewsPreferenceState {
   pref: AiNewsPreference;
@@ -104,11 +105,12 @@ export const useAiNewsPreferenceStore = create<AiNewsPreferenceState>((set, get)
     }
 
     const workspaceId = currentWorkspaceId();
+    const generation = ++saveGeneration;
     set({ saving: true, error: null });
     try {
       if (subscribed) {
         const saved = await subscribeAiBriefEmail(workspaceId, trimmed);
-        if (currentWorkspaceId() !== workspaceId) {
+        if (generation !== saveGeneration || currentWorkspaceId() !== workspaceId) {
           return { ok: false, message: '工作区已切换，请重新订阅' };
         }
         set({
@@ -124,7 +126,7 @@ export const useAiNewsPreferenceStore = create<AiNewsPreferenceState>((set, get)
       }
 
       await unsubscribeAiBriefEmail(workspaceId);
-      if (currentWorkspaceId() !== workspaceId) {
+      if (generation !== saveGeneration || currentWorkspaceId() !== workspaceId) {
         return { ok: false, message: '工作区已切换，请重新操作' };
       }
       set({
@@ -138,12 +140,12 @@ export const useAiNewsPreferenceStore = create<AiNewsPreferenceState>((set, get)
       });
       return { ok: true, message: '已取消邮件订阅' };
     } catch {
-      if (currentWorkspaceId() === workspaceId) {
+      if (generation === saveGeneration && currentWorkspaceId() === workspaceId) {
         set({ saving: false, error: '订阅信息保存失败' });
       }
       return { ok: false, message: '保存失败，请检查后台服务后重试' };
     } finally {
-      if (currentWorkspaceId() === workspaceId) set({ saving: false });
+      if (generation === saveGeneration) set({ saving: false });
     }
   },
 }));
