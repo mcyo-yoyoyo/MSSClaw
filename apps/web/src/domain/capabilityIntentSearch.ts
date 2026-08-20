@@ -8,6 +8,7 @@ import {
   type MarketShelfCard,
   type MarketShelfKind,
 } from '@/domain/marketShelf';
+import { INTERNAL_OFFICE_SEARCH_HINTS } from '@/domain/internalOfficeSceneSearch';
 
 export type IntentMatch = {
   card: MarketShelfCard;
@@ -213,14 +214,7 @@ export function intentSearchHintExamples(scope: IntentSearchScope = 'home'): str
     ];
   }
   if (scope === 'internal') {
-    return [
-      '周报、方案、工作总结',
-      '会后自动成稿',
-      '查制度、找内部资料',
-      '日常提问、总结、润色',
-      '读懂文档提炼观点',
-      '专项业务连续追问',
-    ];
+    return [...INTERNAL_OFFICE_SEARCH_HINTS];
   }
   if (scope === 'projects') {
     return [

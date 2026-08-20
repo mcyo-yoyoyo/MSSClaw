@@ -9,13 +9,6 @@ import { CaseEditorModal } from '@/components/center/CaseEditorModal';
 import { OrgAssetFilterBar } from '@/components/center/OrgAssetFilters';
 import { formatEngagementLine } from '@/components/content/EngagementActions';
 import { isSystemAdmin } from '@/domain/currentUser';
-import {
-  clearDemoContentAndDisable,
-  demoContentStatusLabel,
-  envAllowsDemoContent,
-  isDemoContentEnabled,
-  restoreDemoContentDefaults,
-} from '@/domain/demoContentPolicy';
 import { ASSET_VISIBILITY_LABELS } from '@/domain/orgTaxonomy';
 import type { DeptFilter, RegionFilter } from '@/domain/assetFilters';
 import { heatScore } from '@/domain/contentEngagement';
@@ -88,7 +81,6 @@ export function PortalContentOpsPage() {
   const upsertItem = usePortalContentStore((s) => s.upsertItem);
   const deleteItem = usePortalContentStore((s) => s.deleteItem);
   const togglePublished = usePortalContentStore((s) => s.togglePublished);
-  const resetToSeeds = usePortalContentStore((s) => s.resetToSeeds);
   const showToast = usePortalContentStore((s) => s.showToast);
   const setAppView = useAppViewStore((s) => s.setAppView);
   const engagementOf = useContentEngagementStore((s) => s.get);
@@ -353,107 +345,10 @@ export function PortalContentOpsPage() {
                     }}
                   />
                 </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (
-                      !window.confirm(
-                        '确定恢复为系统自带的示例内容？你改过、新建的门户内容都会被覆盖。',
-                      )
-                    ) {
-                      return;
-                    }
-                    resetToSeeds();
-                    showToast('已恢复为默认示例内容');
-                  }}
-                  className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03]"
-                >
-                  恢复默认示例
-                </button>
-                {isDemoContentEnabled() ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (
-                        !window.confirm(
-                          '确定清空工作区演示数据并关闭示例注入？\n\n将清除门户案例、Agent/Skill/工具示例、How to、站内消息等（共享配置，同事也会受影响）。\n不会清除登录、成员与密码。\n清空后页面将刷新。',
-                        )
-                      ) {
-                        return;
-                      }
-                      const { removed } = clearDemoContentAndDisable();
-                      showToast(`已清空演示数据（${removed} 项），即将刷新…`);
-                      window.setTimeout(() => window.location.reload(), 400);
-                    }}
-                    className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-[12px] font-semibold text-red-700 transition hover:bg-red-100"
-                  >
-                    清空演示数据
-                  </button>
-                ) : null}
               </>
             ) : null
           }
         />
-
-        {!isDemoContentEnabled() ? (
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-4 py-3">
-            <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-emerald-900">
-              演示内容已关闭（{demoContentStatusLabel()}）。可导入真实案例；若要重新做演示，可一键恢复系统自带示例。
-            </p>
-            {envAllowsDemoContent() ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (
-                    !window.confirm(
-                      '确定一键恢复系统自带演示内容？\n\n将重新加载示例案例、Agent/Skill/工具、How to 等，并覆盖本机当前门户相关数据。\n登录与成员不受影响。恢复后页面将刷新。',
-                    )
-                  ) {
-                    return;
-                  }
-                  const result = restoreDemoContentDefaults();
-                  if (!result.ok) {
-                    showToast(result.reason);
-                    return;
-                  }
-                  showToast('已恢复默认演示内容，即将刷新…');
-                  window.setTimeout(() => window.location.reload(), 400);
-                }}
-                className="shrink-0 rounded-xl bg-zinc-900 px-3 py-1.5 text-[12px] font-semibold text-white transition hover:bg-zinc-800"
-              >
-                一键恢复演示内容
-              </button>
-            ) : (
-              <p className="shrink-0 text-[11px] text-emerald-800/80">
-                部署已关闭演示，无法恢复
-              </p>
-            )}
-          </div>
-        ) : (
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200/80 bg-amber-50/60 px-4 py-3">
-            <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-amber-950">
-              当前仍在使用系统自带示例。内网正式使用前请先清空，再导入真实案例。
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                if (
-                  !window.confirm(
-                    '确定清空工作区演示数据并关闭示例注入？\n\n将清除门户案例、Agent/Skill/工具示例、How to、站内消息等（共享配置，同事也会受影响）。\n不会清除登录、成员与密码。\n清空后页面将刷新。',
-                  )
-                ) {
-                  return;
-                }
-                const { removed } = clearDemoContentAndDisable();
-                showToast(`已清空演示数据（${removed} 项），即将刷新…`);
-                window.setTimeout(() => window.location.reload(), 400);
-              }}
-              className="shrink-0 rounded-xl border border-red-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-red-700 transition hover:bg-red-50"
-            >
-              清空演示数据
-            </button>
-          </div>
-        )}
 
         <div className="mb-4 flex flex-wrap gap-1.5">
           {(

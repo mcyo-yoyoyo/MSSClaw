@@ -72,7 +72,6 @@ export function MarketShelfCard({
   const toggleLike = useContentEngagementStore((s) => s.toggleLike);
   const toggleDislike = useContentEngagementStore((s) => s.toggleDislike);
   const bumpDownload = useContentEngagementStore((s) => s.bumpDownload);
-  const bumpFavorite = useContentEngagementStore((s) => s.bumpFavorite);
   const canDownload = card.kind === 'projects';
 
   const outcomeLine =
@@ -93,7 +92,6 @@ export function MarketShelfCard({
       icon: card.icon,
       logoUrl: card.logoUrl,
     });
-    bumpFavorite(card.id, on ? 1 : -1);
     showToast(on ? `已收藏：${card.title}` : `已取消收藏：${card.title}`);
   };
 

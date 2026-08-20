@@ -9,6 +9,7 @@ import {
   scheduleSavePlatformDoc,
   setPlatformDocMemory,
 } from '@/api/platformDocsApi';
+import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 
 const MAX = 40;
 const DOC_KIND = 'market-favorites' as const;
@@ -87,13 +88,27 @@ export const useMarketFavoriteStore = create<MarketFavoriteState>((set, get) => 
 
   toggle: (item) => {
     if (!canUsePlatformDocsApi()) return false;
-    const exists = get().items.some((x) => x.id === item.id && x.kind === item.kind);
+    const previous = get().items;
+    const exists = previous.some((x) => x.id === item.id && x.kind === item.kind);
     const next = exists
-      ? get().items.filter((x) => !(x.id === item.id && x.kind === item.kind))
-      : [{ ...item, at: Date.now() }, ...get().items].slice(0, MAX);
+      ? previous.filter((x) => !(x.id === item.id && x.kind === item.kind))
+      : [{ ...item, at: Date.now() }, ...previous].slice(0, MAX);
     persistForUser(next);
     set({ items: next });
-    return !exists;
+    const favorited = !exists;
+    // 个人收藏清单与门户互动计数是两份持久化数据。统一在 Store 内同步，
+    // 避免详情弹窗、个人中心等入口只更新星标而漏记外层卡片计数。
+    // 后端以 contentId（不含 kind）为唯一口径，集合差分还能正确处理同 id
+    // 跨分类记录，以及超过 MAX 时被淘汰的旧收藏。
+    const previousIds = new Set(previous.map((entry) => entry.id));
+    const nextIds = new Set(next.map((entry) => entry.id));
+    const engagement = useContentEngagementStore.getState();
+    new Set([...previousIds, ...nextIds]).forEach((id) => {
+      if (previousIds.has(id) !== nextIds.has(id)) {
+        engagement.bumpFavorite(id, nextIds.has(id) ? 1 : -1);
+      }
+    });
+    return favorited;
   },
 
   setNote: (id, kind, note) => {

@@ -7,6 +7,7 @@ import {
   type InternalOfficeScene,
   type InternalOfficeSceneTool,
 } from '@/domain/internalOfficeScenes';
+import { filterInternalOfficeScenesBySearch } from '@/domain/internalOfficeSceneSearch';
 import {
   SHELF_RANK_TABS,
   sortByRankMode,
@@ -94,21 +95,9 @@ export function InternalOfficeSceneGrid({
   }, [allScenes, catalogTools]);
 
   const scenes = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const filtered = q
-      ? allScenes.filter(
-          (s) =>
-            s.label.toLowerCase().includes(q) ||
-            s.description.toLowerCase().includes(q) ||
-            s.english.toLowerCase().includes(q) ||
-            s.tools.some(
-              (t) =>
-                t.name.toLowerCase().includes(q) || t.blurb.toLowerCase().includes(q),
-            ),
-        )
-      : allScenes;
+    const filtered = filterInternalOfficeScenesBySearch(allScenes, search, catalogTools);
     return sortByRankMode(filtered, rankMode, (id) => getEngagement(sceneEngagementId(id)));
-  }, [allScenes, search, rankMode, getEngagement, engagementById]);
+  }, [allScenes, search, catalogTools, rankMode, getEngagement, engagementById]);
 
   const runWithTool = (scene: InternalOfficeScene, mode: PickerMode) => {
     if (!scene.tools.length) {
@@ -329,10 +318,12 @@ function SceneCardStats({ scene }: { scene: InternalOfficeScene }) {
   const engagementId = sceneEngagementId(scene.id);
   const primary = scene.tools[0];
   const engagement = useContentEngagementStore((s) => s.byId[engagementId]);
+  const favoriteCount = useContentEngagementStore((s) =>
+    primary ? (s.byId[primary.id]?.favorites ?? 0) : 0,
+  );
   const userVote = useContentEngagementStore((s) => s.userVotes[engagementId] ?? null);
   const toggleLike = useContentEngagementStore((s) => s.toggleLike);
   const toggleDislike = useContentEngagementStore((s) => s.toggleDislike);
-  const bumpFavorite = useContentEngagementStore((s) => s.bumpFavorite);
   const favorited = useMarketFavoriteStore((s) =>
     primary ? s.isFavorite(primary.id, 'internal') : false,
   );
@@ -349,7 +340,6 @@ function SceneCardStats({ scene }: { scene: InternalOfficeScene }) {
       icon: 'fa-cube',
       logoUrl: primary.logoUrl,
     });
-    bumpFavorite(engagementId, on ? 1 : -1);
     showToast(on ? `已收藏：${primary.name}` : `已取消收藏：${primary.name}`);
   };
 
@@ -372,7 +362,7 @@ function SceneCardStats({ scene }: { scene: InternalOfficeScene }) {
         )}
       >
         <i className={cn('text-[9px]', favorited ? 'fa-solid fa-star' : 'fa-regular fa-star')} />
-        {formatToolInvokes(engagement?.favorites ?? 0)}
+        {formatToolInvokes(favoriteCount)}
       </button>
       <button
         type="button"
