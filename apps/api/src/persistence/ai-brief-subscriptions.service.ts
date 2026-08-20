@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { dedupeAiBriefEmailRecipients } from './ai-brief-email-recipients';
 
 const EMAIL_MAX_LENGTH = 254;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -79,9 +80,7 @@ export class AiBriefSubscriptionsService {
       where: { workspaceId },
       orderBy: [{ subscribedAt: 'desc' }, { email: 'asc' }],
     });
-    return {
-      total: rows.length,
-      items: rows.map(serializeSubscription),
-    };
+    const recipients = dedupeAiBriefEmailRecipients(rows);
+    return { total: recipients.length, items: recipients.map(serializeSubscription) };
   }
 }

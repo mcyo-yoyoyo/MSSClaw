@@ -138,6 +138,11 @@ function emptySkill(): PrototypeSkillSeed {
 function normalizeSkillForm(skill: PrototypeSkillSeed): PrototypeSkillSeed {
   const base = { ...emptySkill(), ...skill };
   const featured = resolveSkillFeaturedInMssMarket(skill);
+  const hasSingleRegion = Object.prototype.hasOwnProperty.call(skill, 'ownerRegionId');
+  const legacyRegion = Array.isArray(skill.ownerRegionIds) ? skill.ownerRegionIds[0] : undefined;
+  const rawOwnerRegionId = hasSingleRegion ? skill.ownerRegionId : legacyRegion;
+  const ownerRegionId =
+    rawOwnerRegionId && rawOwnerRegionId !== '不限区域' ? rawOwnerRegionId : null;
   return {
     ...base,
     nameZh: skill.nameZh || skill.name || '',
@@ -164,7 +169,9 @@ function normalizeSkillForm(skill: PrototypeSkillSeed): PrototypeSkillSeed {
     ownerDeptIds: Array.isArray(skill.ownerDeptIds)
       ? skill.ownerDeptIds.slice(0, 1)
       : getCurrentDeptIds().slice(0, 1),
-    ownerRegionId: skill.ownerRegionId ?? getCurrentRegionId(),
+    // 显式 null 表示“不限区域”；仅在单值字段缺失时兼容历史多区域数据。
+    ownerRegionId,
+    ownerRegionIds: ownerRegionId ? [ownerRegionId] : [],
     visibility: normalizeSkillVisibility(skill.visibility, 'public'),
     published: Boolean(skill.published),
     callable: typeof skill.callable === 'boolean' ? skill.callable : Boolean(skill.published),
@@ -261,7 +268,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       ownerDeptIds: form.ownerDeptIds?.length
         ? form.ownerDeptIds.slice(0, 1)
         : getCurrentDeptIds().slice(0, 1),
-      ownerRegionId: form.ownerRegionId ?? getCurrentRegionId(),
+      ownerRegionId: form.ownerRegionId ?? null,
       publisher: getCurrentUserName() || parsed.publisher,
       publisherUserId: getCurrentUserId() || undefined,
     });
@@ -546,6 +553,8 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       visibility,
       ownerDeptIds: ((form.ownerDeptIds ?? []).slice(0, 1) as DeptId[]),
       ownerRegionId: (form.ownerRegionId ?? null) as RegionId | null,
+      // 与历史多区域字段保持同一口径；选择“不限区域”时必须清空旧值。
+      ownerRegionIds: form.ownerRegionId ? [form.ownerRegionId] : [],
       homepageUrl: undefined,
       // 新建/未上架 Skill 在终审通过前不可调用；已上架 Skill 编辑时保持上架。
       published: Boolean(prev?.published),
@@ -1195,8 +1204,8 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                 label="所属区域"
                 hint={
                   isPlatformOps
-                    ? '平台运营可指定任意区域'
-                    : '能力开发仅可归属本人组织区域'
+                    ? '不选表示适用于全部区域；也可指定单一区域'
+                    : '不选表示适用于全部区域；指定时仅可选本人组织区域'
                 }
               >
                 <FormSelect

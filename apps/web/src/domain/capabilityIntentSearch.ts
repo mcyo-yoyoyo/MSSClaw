@@ -9,6 +9,7 @@ import {
   type MarketShelfKind,
 } from '@/domain/marketShelf';
 import { INTERNAL_OFFICE_SEARCH_HINTS } from '@/domain/internalOfficeSceneSearch';
+import { AGENT_HUB_SEARCH_HINTS } from '@/domain/agentHubSearch';
 
 export type IntentMatch = {
   card: MarketShelfCard;
@@ -209,7 +210,6 @@ export function intentSearchHintExamples(scope: IntentSearchScope = 'home'): str
       '出图、剪视频、配音',
       '会议转写',
       '分析表格',
-      '写代码',
       '自动化 Agent',
     ];
   }
@@ -217,18 +217,9 @@ export function intentSearchHintExamples(scope: IntentSearchScope = 'home'): str
     return [...INTERNAL_OFFICE_SEARCH_HINTS];
   }
   if (scope === 'projects') {
-    return [
-      '竞品简报',
-      '客诉 SOP',
-      '价格监测',
-      '渠道洞察',
-      '会议纪要',
-      '知识问答',
-      '内容生成',
-      '数据分析',
-    ];
+    return [...AGENT_HUB_SEARCH_HINTS];
   }
-  return ['找外部 AI 写方案', '写报告用云笔记', '学一个价格监控 Skill', '查制度用 W3'];
+  return ['找 AI 写方案', '写报告用云笔记', '学一个价格监控 Skill', '查制度用 W3'];
 }
 
 export function shelfKindLabel(kind: MarketShelfKind): string {

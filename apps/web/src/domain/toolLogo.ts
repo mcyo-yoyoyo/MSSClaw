@@ -17,12 +17,24 @@ export function faviconUrl(domain: string, size = 128): string {
 }
 
 type LogoToolInput = {
+  id?: string | null;
   logoUrl?: string | null;
   homepageUrl?: string | null;
   sourceType?: string | null;
   tags?: string[] | null;
   marketShelf?: 'external' | 'internal' | 'none' | null;
   published?: boolean | null;
+};
+
+/** 没有独立品牌素材的工具，可复用同品牌产品的官网 favicon。 */
+const EXTERNAL_TOOL_LOGO_HOMEPAGE_ALIASES: Record<string, string> = {
+  'tool-ext-t13eee22e20': 'https://tongyi.aliyun.com/lingma/',
+};
+
+/** 产品名称与品牌库名称不一致时，映射到对应的品牌图标。 */
+const EXTERNAL_TOOL_LOGO_URL_ALIASES: Record<string, string> = {
+  'tool-excel-trae-work':
+    'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/trae-color.svg',
 };
 
 function isCompanyShelfTool(tool: LogoToolInput): boolean {
@@ -42,7 +54,12 @@ export function resolveToolLogoUrl(tool: LogoToolInput): string | undefined {
     return companyToolLogoUrl();
   }
 
-  const home = tool.homepageUrl?.trim();
+  const aliasedLogo = tool.id ? EXTERNAL_TOOL_LOGO_URL_ALIASES[tool.id] : undefined;
+  if (aliasedLogo) return aliasedLogo;
+
+  const home =
+    (tool.id ? EXTERNAL_TOOL_LOGO_HOMEPAGE_ALIASES[tool.id] : undefined) ??
+    tool.homepageUrl?.trim();
   if (!home || home === '#') return undefined;
   try {
     return faviconUrl(new URL(home).hostname);

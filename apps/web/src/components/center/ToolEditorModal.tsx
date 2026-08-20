@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { getLobeIconCDN } from '@lobehub/icons/es/features/getLobeIconCDN/index.js';
+import { toc, type IconToc } from '@lobehub/icons/es/toc.js';
 import { cn } from '@/lib/utils';
 import { CenterModal } from '@/components/center/CenterShell';
 import {
@@ -39,6 +41,43 @@ import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 import { shareSyncSaveHint } from '@/domain/shareSync';
 
 const LOGO_MAX_BYTES = 512 * 1024;
+
+const LOBE_ICON_GROUP_LABEL: Record<IconToc['group'], string> = {
+  application: 'AI 应用',
+  provider: '模型与服务商',
+  model: '模型',
+};
+
+const LOBE_ICON_GROUP_ORDER: IconToc['group'][] = ['application', 'provider', 'model'];
+const LOBE_ICON_OPTIONS = [...toc].sort((a, b) =>
+  a.fullTitle.localeCompare(b.fullTitle, 'zh-CN'),
+);
+const LOBE_ICON_ID_BY_SLUG = new Map(
+  LOBE_ICON_OPTIONS.map((icon) => [icon.id.toLowerCase(), icon.id]),
+);
+
+function resolveLobeIconId(logoUrl: string | null | undefined): string {
+  const raw = (logoUrl ?? '').trim();
+  if (!raw) return '';
+  try {
+    const path = new URL(raw).pathname;
+    if (!path.includes('/@lobehub/icons-static-svg/')) return '';
+    const filename = path.split('/').pop() ?? '';
+    if (!filename.endsWith('.svg')) return '';
+    const slug = filename.slice(0, -4).replace(/-color$/, '');
+    return LOBE_ICON_ID_BY_SLUG.get(slug) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function lobeIconLogoUrl(icon: IconToc): string {
+  return getLobeIconCDN(icon.id, {
+    cdn: 'aliyun',
+    format: 'svg',
+    type: icon.param.hasColor ? 'color' : 'mono',
+  });
+}
 
 function readLogoFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -149,6 +188,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
 
   const shelf = (form.marketShelf ?? 'none') as MarketShelfSlot;
   const scenarioCats = listVisibleBusinessScenarioCategories();
+  const selectedLobeIconId = resolveLobeIconId(form.logoUrl);
 
   const handleSave = () => {
     const name = form.name.trim();
@@ -224,6 +264,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
         ownerDeptIds: (form.ownerDeptIds ?? []) as DeptId[],
         ownerRegionId: (form.ownerRegionId ?? null) as RegionId | null,
         homepageUrl: form.homepageUrl?.trim() || undefined,
+        logoUrl: form.logoUrl?.trim() || undefined,
         published:
           sourceType === 'external' || isNew ? true : needsApproval ? false : form.published,
         marketShelf,
@@ -464,7 +505,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
             hint={
               shelf === 'internal' || form.marketShelf === 'internal'
                 ? '内部办公推荐统一使用华为 Logo，无需单独上传。'
-                : '外精选展示用。可上传；不传则按官网地址自动取 favicon。'
+                : '可从 LobeHub AI 图标库选择或上传文件；不配置则按官网地址自动取 favicon。'
             }
           >
             <div className="flex items-center gap-3">
@@ -485,8 +526,46 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
                 </p>
               ) : (
                 <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <FormSelect
+                      aria-label="LobeHub 品牌 Logo"
+                      value={selectedLobeIconId}
+                      onChange={(e) => {
+                        const icon = LOBE_ICON_OPTIONS.find((item) => item.id === e.target.value);
+                        if (!icon) return;
+                        setForm((current) => ({ ...current, logoUrl: lobeIconLogoUrl(icon) }));
+                      }}
+                      className="mt-0 min-w-0 flex-1"
+                    >
+                      <option value="" disabled>
+                        从 300+ AI 品牌中选择…
+                      </option>
+                      {LOBE_ICON_GROUP_ORDER.map((group) => (
+                        <optgroup key={group} label={LOBE_ICON_GROUP_LABEL[group]}>
+                          {LOBE_ICON_OPTIONS.filter((icon) => icon.group === group).map((icon) => (
+                            <option key={icon.id} value={icon.id}>
+                              {icon.fullTitle}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </FormSelect>
+                    <a
+                      href="https://lobehub.com/icons"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex h-10 shrink-0 items-center rounded-xl border border-zinc-200 bg-white px-3 text-[11px] font-semibold text-zinc-700 transition hover:bg-zinc-50"
+                    >
+                      浏览图标库
+                    </a>
+                  </div>
+                  <p className="text-[10px] leading-relaxed text-zinc-500">
+                    图标来自 @lobehub/icons，选择后会保存国内 CDN 的 SVG 地址；也可在下方上传
+                    PNG / JPEG / WebP / SVG / ICO 覆盖。
+                  </p>
                   <input
                     type="file"
+                    aria-label="上传品牌 Logo 文件"
                     accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon"
                     className="block w-full text-[12px] text-zinc-600 file:mr-2 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-[11px] file:font-semibold file:text-white"
                     onChange={(e) => {
@@ -495,7 +574,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
                       if (!file) return;
                       void readLogoFile(file)
                         .then((dataUrl) => {
-                          setForm({ ...form, logoUrl: dataUrl });
+                          setForm((current) => ({ ...current, logoUrl: dataUrl }));
                           showToast('Logo 已上传');
                         })
                         .catch((err: Error) => showToast(err.message || '上传失败'));
@@ -505,9 +584,11 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
                     <button
                       type="button"
                       className="text-[11px] font-medium text-zinc-500 hover:text-zinc-800"
-                      onClick={() => setForm({ ...form, logoUrl: undefined })}
+                      onClick={() =>
+                        setForm((current) => ({ ...current, logoUrl: undefined }))
+                      }
                     >
-                      清除上传，改用官网自动 Logo
+                      清除自定义 Logo，改用官网 favicon
                     </button>
                   ) : null}
                 </div>

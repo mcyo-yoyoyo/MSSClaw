@@ -96,11 +96,11 @@ export function PortalAiBriefEmailPanel() {
             <div className="flex items-center gap-2">
               <h3 className="text-[13px] font-semibold text-zinc-900">邮件订阅名单</h3>
               <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600">
-                {activeSubscriptions.length} 人
+                {activeSubscriptions.length} 个邮箱
               </span>
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
-              数据来自后台数据库；用户在 AI快讯页订阅、更新或取消后会同步到这里。
+              数据来自后台数据库；用户在 AI快讯页订阅、更新或取消后会同步到这里，同一收件邮箱自动去重。
             </p>
           </div>
           <div className="flex items-center gap-2">

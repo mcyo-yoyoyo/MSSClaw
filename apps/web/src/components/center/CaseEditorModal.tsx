@@ -115,6 +115,8 @@ interface CaseEditorModalProps {
    * submit：业务用户提报 → 草稿 + 同一审批流
    */
   variant?: 'ops' | 'submit';
+  /** Agent Hub 提报案例时可关联的可见 Agent；关联后审批通过即展示在对应详情页 */
+  agentOptions?: Array<{ id: string; name: string }>;
 }
 
 export function CaseEditorModal({
@@ -125,6 +127,7 @@ export function CaseEditorModal({
   defaultScenarioTags,
   defaultBusinessId,
   variant = 'ops',
+  agentOptions = [],
 }: CaseEditorModalProps) {
   const items = usePortalContentStore((s) => s.items);
   const upsertItem = usePortalContentStore((s) => s.upsertItem);
@@ -252,6 +255,10 @@ export function CaseEditorModal({
       showToast('请选择业务场景');
       return;
     }
+    if (isSubmit && agentOptions.length > 0 && !form.agentId?.trim()) {
+      showToast('请选择案例关联的 Agent');
+      return;
+    }
     const mount = featuredScenarioMountHint(tags);
     if (!mount.ok) {
       showToast(mount.hint);
@@ -283,6 +290,7 @@ export function CaseEditorModal({
       published: isSubmit ? false : form.published !== false,
       skillId: form.skillId || form.primarySkillId,
       primarySkillId: form.primarySkillId || form.skillId,
+      agentId: form.agentId?.trim() || undefined,
       previewFile: form.previewFile ?? null,
       layoutPreviewFile: needsLayoutPreviewCompanion(form.previewFile?.kind)
         ? form.layoutPreviewFile ?? null
@@ -325,7 +333,7 @@ export function CaseEditorModal({
       <div className="space-y-4 text-left">
         <p className="rounded-lg bg-zinc-50 px-3 py-2 text-[11px] leading-relaxed text-zinc-500">
           {isSubmit
-            ? '填写与货架画廊一致的材料信息：标题、业务场景、预览附件或文档链接。提交后进入「业务主管 → MSS 质量与运营」审批，通过后出现在对应场景案例画廊。'
+            ? '填写案例标题、业务场景、关联 Agent 与案例文件。提交后进入「业务主管 → MSS 质量与运营」审批，通过后同时出现在场景案例画廊和对应 Agent 的「案例与方案包」。'
             : '主区对齐业务侧「场景卡 → 文档画廊」：标题、业务场景、预览附件/链接与组织可见性。打样挂载与成效补充在进阶区按需填写。'}
         </p>
 
@@ -373,8 +381,32 @@ export function CaseEditorModal({
             </FormSelect>
           </FormField>
 
+          {isSubmit ? (
+            <FormField
+              label="关联 Agent"
+              hint="审批通过后，案例及上传文件会展示在该 Agent 的「案例与方案包」中"
+            >
+              <FormSelect
+                value={form.agentId ?? ''}
+                onChange={(e) =>
+                  setForm({ ...form, agentId: e.target.value || undefined })
+                }
+                disabled={!agentOptions.length}
+              >
+                <option value="">
+                  {agentOptions.length ? '—请选择 Agent—' : '暂无可关联的 Agent'}
+                </option>
+                {agentOptions.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name}
+                  </option>
+                ))}
+              </FormSelect>
+            </FormField>
+          ) : null}
+
           <h5 className="pt-1 text-[10px] font-semibold tracking-wide text-zinc-400">
-            预览附件（PDF / PPT / Word / Excel / 图片 / 视频）
+            案例文件（PDF / PPT / Word / Excel / 图片 / 视频）
           </h5>
           <p className="text-[10px] leading-snug text-zinc-500">
             PPT/Word 作原件时可另传 PDF 或图片作为视觉预览；业务侧将优先展示视觉预览件。
@@ -552,7 +584,7 @@ export function CaseEditorModal({
           />
           {isSubmit ? (
             <p className="rounded-lg border border-amber-200/80 bg-amber-50/70 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
-              提报将保存为草稿并进入审批；审批通过后出现在对应场景的案例画廊。
+              提报将保存为草稿并进入审批；审批通过后展示在场景案例画廊和关联 Agent 详情中。
             </p>
           ) : null}
         </section>

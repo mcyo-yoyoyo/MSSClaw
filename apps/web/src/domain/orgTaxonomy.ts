@@ -222,3 +222,11 @@ export function regionMatchesSelection(
     return ownerRegionId === id;
   });
 }
+
+/** “不限区域”资产在任一区域筛选下均可见；指定区域仍按原规则精确匹配。 */
+export function unrestrictedRegionMatchesSelection(
+  ownerRegionId: RegionId | null | undefined,
+  selected: RegionId[],
+): boolean {
+  return !ownerRegionId || regionMatchesSelection(ownerRegionId, selected);
+}

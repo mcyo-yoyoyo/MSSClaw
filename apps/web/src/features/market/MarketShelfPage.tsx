@@ -29,17 +29,19 @@ import {
 import { useBusinessScenarioCatalogStore } from '@/stores/businessScenarioCatalogStore';
 import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
 import {
-  agentMatchesHubFilters,
-  countAgentHubFilters,
-  emptyAgentHubFilterSelection,
-} from '@/domain/agentHubFilters';
-import { AgentHubFilterRow } from '@/components/market/AgentHubFilterRow';
-import {
   emptyOrgPerspectiveSelection,
   isOrgPerspectiveEmpty,
   skillMatchesOrgPerspectiveSelection,
 } from '@/domain/orgAxisTags';
-import { skillDisplayName } from '@/domain/skillDisplay';
+import { skillDisplayDesc, skillDisplayName } from '@/domain/skillDisplay';
+import {
+  matchesSkillHubSearch,
+  SKILL_HUB_SEARCH_HINTS,
+} from '@/domain/skillHubSearch';
+import {
+  AGENT_HUB_SEARCH_HINTS,
+  matchesAgentHubSearch,
+} from '@/domain/agentHubSearch';
 import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
 import { canViewAsset } from '@/domain/assetVisibility';
 import { downloadSkillFile } from '@/domain/skillExport';
@@ -152,8 +154,6 @@ export function MarketShelfPage({
   const setBusinessFilter = useMarketFilterStore((s) => s.setBusinessFilter);
   const search = useMarketFilterStore((s) => s.search);
   const favoritesOnly = useMarketFilterStore((s) => s.favoritesOnly);
-  const agentHubFilter = useMarketFilterStore((s) => s.agentHubFilter);
-  const setAgentHubFilter = useMarketFilterStore((s) => s.setAgentHubFilter);
   const favoriteItems = useMarketFavoriteStore((s) => s.items);
   const hydrateFavorites = useMarketFavoriteStore((s) => s.hydrate);
   const hiddenKeys = useMarketHiddenStore((s) => s.keys);
@@ -411,11 +411,6 @@ export function MarketShelfPage({
   const setSectionRankMode = isAgentHub ? setAgentRankMode : setRankMode;
   const sectionRankOptions = isAgentHub ? AGENT_HUB_RANK_TABS : undefined;
 
-  /** 离开 Agent Hub 时清掉页内维度，避免筛选态在没有筛选条的面上隐形生效 */
-  useEffect(() => {
-    if (!isAgentHub) setAgentHubFilter(emptyAgentHubFilterSelection());
-  }, [isAgentHub, setAgentHubFilter]);
-
   const showSceneHub = kind === 'projects' && businessFilter === 'all';
   // 场景分类改为 Chip 筛选，页内始终展示精选 + 列表（不再先进入分类枢纽）
   const showMssSceneChips = kind === 'projects';
@@ -439,16 +434,15 @@ export function MarketShelfPage({
         return deptOk && regionOk;
       })
       .filter((agent) => {
-        if (!q) return true;
-        return `${agent.name} ${agent.desc} ${agent.bizLine} ${(agent.scenarioTags ?? []).join(' ')}`
-          .toLowerCase()
-          .includes(q);
+        return matchesAgentHubSearch(
+          { title: agent.name, description: agent.desc },
+          q,
+        );
       })
       .filter((agent) => (favSet ? favSet.has(agent.id) : true));
   }, [kind, agents, viewer, orgSelection, search, favoritesOnly, favoriteItems]);
 
-  /** 页内三维度筛选前的池子：用于统计各筛选项命中数 */
-  const agentHubFacetPool = useMemo(
+  const mssAgents = useMemo(
     () =>
       scopedMssAgents.filter(
         (agent) =>
@@ -457,9 +451,27 @@ export function MarketShelfPage({
     [scopedMssAgents, businessFilter],
   );
 
-  const mssAgents = useMemo(
-    () => agentHubFacetPool.filter((agent) => agentMatchesHubFilters(agent, agentHubFilter)),
-    [agentHubFacetPool, agentHubFilter],
+  const caseAgentOptions = useMemo(
+    () =>
+      agents
+        .filter((agent) => agent.published && canViewAsset(agent, viewer))
+        .map((agent) => ({ id: agent.id, name: agent.name }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
+    [agents, viewer],
+  );
+
+  const submittedAgentCases = useMemo(
+    () =>
+      agentDetail
+        ? portalContent.filter(
+            (item) =>
+              item.type === 'case' &&
+              item.published !== false &&
+              item.agentId === agentDetail.id &&
+              canViewAsset(item, viewer),
+          )
+        : [],
+    [agentDetail, portalContent, viewer],
   );
 
   const sceneCategories = useMemo(() => {
@@ -509,8 +521,18 @@ export function MarketShelfPage({
       .filter((s) => canViewAsset(s, viewer))
       .filter((s) => skillMatchesOrgPerspectiveSelection(s, orgSelection))
       .filter((s) => {
-        if (!q) return true;
-        return `${s.name} ${s.desc} ${s.command ?? ''}`.toLowerCase().includes(q);
+        return matchesSkillHubSearch(
+          {
+            title: [skillDisplayName(s), s.name, s.nameZh, s.nameEn]
+              .filter(Boolean)
+              .join(' '),
+            description: [skillDisplayDesc(s), s.desc, s.descZh, s.descEn]
+              .filter(Boolean)
+              .join(' '),
+            instructions: s.instructions,
+          },
+          q,
+        );
       })
       .filter((s) => (favSet ? favSet.has(s.id) : true));
   }, [
@@ -942,9 +964,8 @@ export function MarketShelfPage({
   const emptyHint =
     search.trim() ||
     !isOrgPerspectiveEmpty(orgSelection) ||
-    businessFilter !== 'all' ||
-    countAgentHubFilters(agentHubFilter) > 0
-      ? '当前筛选下暂无内容。可清除能力类型/开放范围/适配平台筛选、重置左侧领域/区域、切换场景分类，或调整搜索关键词。'
+    businessFilter !== 'all'
+      ? '当前筛选下暂无内容。可重置左侧领域/区域、切换场景分类，或调整搜索关键词。'
       : '权限范围内暂无上架内容。若预期应可见，请联系运营确认可见性与上架状态。';
 
   const gridCards =
@@ -989,7 +1010,7 @@ export function MarketShelfPage({
                 ? '按场景选公司工具'
                 : allowScenarioRun
                   ? '可试用优先进入 AI 任务 · 下载为辅'
-                  : 'Agent偏任务流程助手，可处理相对完整的业务任务；Skill偏单点能力，可被Agent或员工助手调用'
+                  : '暂不支持在线执行，相关能力敬请期待，可下载文件包使用'
           }
           tip={
             kind === 'external'
@@ -1020,14 +1041,21 @@ export function MarketShelfPage({
         >
           <StageIntentDock
             scope={kind}
+            suggestions={
+              kind === 'projects'
+                ? mssSurface === 'skills'
+                  ? SKILL_HUB_SEARCH_HINTS
+                  : AGENT_HUB_SEARCH_HINTS
+                : undefined
+            }
             placeholder={
               kind === 'external'
                 ? 'ChatGPT、Gamma、即梦… 或说要做 PPT / 写方案'
                 : kind === 'internal'
                   ? '云笔记、W3、员工助手… 或说写报告 / 查制度'
                   : mssSurface === 'skills'
-                    ? '竞品简报、客诉 SOP、会议纪要… 或输入 Skill / 场景'
-                    : '渠道洞察、价格监测、知识问答… 或输入 Agent / 案例名'
+                    ? '信息洞察、隐私合规、工作总结、VOC… 或输入 Skill 名称'
+                    : '洞察、VOC、内容生成… 或输入 Agent 名称'
             }
           />
         </PageStageHero>
@@ -1166,15 +1194,6 @@ export function MarketShelfPage({
               ))}
             </div>
           </div>
-        ) : null}
-
-        {isAgentHub ? (
-          <AgentHubFilterRow
-            className="mb-5"
-            agents={agentHubFacetPool}
-            selection={agentHubFilter}
-            onChange={setAgentHubFilter}
-          />
         ) : null}
 
         {kind === 'internal' ? (
@@ -1437,6 +1456,7 @@ export function MarketShelfPage({
         variant="submit"
         defaultType="case"
         defaultBusinessId={caseSubmitDefaultBusinessId}
+        agentOptions={caseAgentOptions}
         onClose={() => setSubmitOpen(false)}
       />
       <MarketSkillSubmitModal
@@ -1460,6 +1480,7 @@ export function MarketShelfPage({
       {agentDetail ? (
         <CatalogAgentDetailModal
           agent={agentDetail}
+          submittedCases={submittedAgentCases}
           canRun={canRunProjects}
           onClose={() => setAgentDetail(null)}
           onRun={(agent) => {

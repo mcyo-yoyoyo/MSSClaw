@@ -6,6 +6,7 @@ import {
   regionMatchesSelection,
   sortDeptIdsByLabel,
   sortRegionIdsByLabel,
+  unrestrictedRegionMatchesSelection,
   type DeptId,
   type OrgAffiliation,
   type RegionId,
@@ -201,7 +202,7 @@ export function skillMatchesOrgPerspectiveSelection(
   if (isOrgPerspectiveEmpty(sel)) return true;
   const role = SKILL_ROLE_BY_ID[skill.id];
   const roleOk = !sel.global.length || (!!role && sel.global.includes(role));
-  const regionOk = regionMatchesSelection(skill.ownerRegionId, sel.region);
+  const regionOk = unrestrictedRegionMatchesSelection(skill.ownerRegionId, sel.region);
   const deptOk =
     !sel.dept.length || (skill.ownerDeptIds ?? []).some((d) => sel.dept.includes(d));
   return roleOk && regionOk && deptOk;

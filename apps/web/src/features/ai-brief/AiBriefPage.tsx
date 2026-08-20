@@ -11,7 +11,6 @@ import { useAiBotDailyNewsStore } from '@/stores/aiBotDailyNewsStore';
 import { useAiNewsPreferenceStore } from '@/stores/aiNewsPreferenceStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
-import { useSessionStore } from '@/stores/sessionStore';
 import {
   buildAiBriefEmailHtml,
   downloadAiBriefEmailTemplate,
@@ -310,7 +309,6 @@ export function AiBriefPage() {
   const emailCopy = useAiBriefEmailCopyStore((s) => s.copy);
   const hydrateEmailCopy = useAiBriefEmailCopyStore((s) => s.hydrate);
   const showToast = useMarketplaceStore((s) => s.showToast);
-  const loginEmail = useSessionStore((s) => s.user?.email ?? '');
 
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [emailDraft, setEmailDraft] = useState('');
@@ -327,9 +325,9 @@ export function AiBriefPage() {
   }, [hydrate, hydratePref, hydrateEmailCopy]);
 
   useEffect(() => {
-    // 已登记邮箱优先；否则默认填入当前登录账号邮箱
-    setEmailDraft(pref.email?.trim() || loginEmail || '');
-  }, [pref.email, loginEmail]);
+    // 仅回显后台已保存的订阅邮箱，未订阅时保持为空。
+    setEmailDraft(pref.emailSubscribed ? pref.email.trim() : '');
+  }, [pref.email, pref.emailSubscribed]);
 
   useEffect(() => {
     const intent = consumeAiNewsOverview();
@@ -439,7 +437,7 @@ export function AiBriefPage() {
                     value={emailDraft}
                     onChange={(e) => setEmailDraft(e.target.value)}
                     disabled={subscriptionSaving}
-                    placeholder={loginEmail || 'name@huawei.com'}
+                    placeholder="name@huawei.com"
                     maxLength={254}
                     className="w-full rounded-lg border-0 bg-white py-2 pl-8 pr-2.5 text-[12px] text-[#1d1d1f] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12)] outline-none transition focus:shadow-[inset_0_0_0_2px_#0071e3] disabled:cursor-wait disabled:bg-zinc-100 disabled:text-zinc-400"
                   />

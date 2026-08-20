@@ -21,17 +21,18 @@ function initial(name: string): string {
 }
 
 /**
- * 外精选 / 公司推荐：品牌 Logo（可上传或由官网初始化）。
+ * 外精选 / 公司推荐：品牌 Logo（可从品牌库选择、上传或由官网初始化）。
  * 无图时回退字标。
  */
 export function ToolLogo({ name, logoUrl, icon, size = 32, className }: ToolLogoProps) {
-  const [failed, setFailed] = useState(false);
+  const src = logoUrl ? publicAssetUrl(logoUrl) : '';
+  const [failedSrc, setFailedSrc] = useState('');
   const px = `${size}px`;
 
-  if (logoUrl && !failed) {
+  if (src && src !== failedSrc) {
     return (
       <img
-        src={publicAssetUrl(logoUrl)}
+        src={src}
         alt={name}
         width={size}
         height={size}
@@ -39,7 +40,7 @@ export function ToolLogo({ name, logoUrl, icon, size = 32, className }: ToolLogo
         style={{ width: px, height: px }}
         loading="lazy"
         referrerPolicy="no-referrer"
-        onError={() => setFailed(true)}
+        onError={() => setFailedSrc(src)}
       />
     );
   }

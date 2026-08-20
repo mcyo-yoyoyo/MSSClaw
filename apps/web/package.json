@@ -14,9 +14,14 @@
     "preview:react": "vite preview --config vite.react.config.ts",
     "test:external-order": "node --experimental-strip-types --test tests/externalFeaturedOrder.test.ts",
     "test:inbox-visibility": "node --experimental-strip-types --test tests/inboxVisibility.test.ts",
+    "test:agent-hub-search": "node --experimental-strip-types --test tests/agentHubSearch.test.ts",
+    "test:skill-hub-search": "node --experimental-strip-types --test tests/skillHubSearch.test.ts",
+    "test:skill-region-visibility": "node --experimental-strip-types --test tests/skillRegionVisibility.test.ts",
+    "test:tool-logo": "node --experimental-strip-types --test tests/toolLogo.test.ts",
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
+    "@lobehub/icons": "5.16.0",
     "@noble/hashes": "^2.3.0",
     "@office-kit/pptx": "0.12.0",
     "@office-kit/pptx-preview": "0.9.1",

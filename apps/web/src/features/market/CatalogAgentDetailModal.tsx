@@ -2,7 +2,10 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { AgentPortrait } from '@/components/brand/AgentPortrait';
 import { CenterModal } from '@/components/center/CenterShell';
-import { CaseDocumentPreviewList } from '@/components/content/CaseDocumentPreview';
+import {
+  CaseDocumentPreview,
+  CaseDocumentPreviewList,
+} from '@/components/content/CaseDocumentPreview';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
 import {
   buildAgentDemoPrompt,
@@ -20,6 +23,11 @@ import {
   resolveAgentPrimaryAction,
 } from '@/domain/agentLifecycle';
 import type { PrototypeAgentSeed, PrototypeSkillSeed } from '@/domain/prototype/types';
+import type { PortalContentItem } from '@/domain/prototype/portalContent';
+import {
+  resolveDownloadOriginalFile,
+  resolveOnlinePreviewFile,
+} from '@/domain/casePreview';
 import { downloadAgentFile } from '@/domain/agentExport';
 import { PackageFileTree } from '@/components/market/PackageFileTree';
 import { formatBytes } from '@/domain/packageFileTree';
@@ -303,6 +311,7 @@ function GuideStep({
  */
 export function CatalogAgentDetailModal({
   agent,
+  submittedCases = [],
   canRun,
   onClose,
   onRun,
@@ -310,6 +319,7 @@ export function CatalogAgentDetailModal({
   adminActions,
 }: {
   agent: PrototypeAgentSeed;
+  submittedCases?: PortalContentItem[];
   canRun: boolean;
   onClose: () => void;
   onRun: (agent: PrototypeAgentSeed) => void;
@@ -838,6 +848,71 @@ export function CatalogAgentDetailModal({
                   </section>
                 ))}
 
+                {submittedCases.map((item, index) => {
+                  const previewFile = resolveOnlinePreviewFile(item);
+                  const originalFile = resolveDownloadOriginalFile(item);
+                  return (
+                    <section
+                      key={item.id}
+                      className="rounded-2xl border border-sky-200/80 bg-sky-50/30 p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-sky-700">
+                            提报案例 {String(index + 1).padStart(2, '0')}
+                          </p>
+                          <h4 className="mt-1 text-[14px] font-semibold tracking-tight text-zinc-900">
+                            {item.title}
+                          </h4>
+                          {item.desc ? (
+                            <p className="mt-1 text-[12px] leading-relaxed text-zinc-600">
+                              {item.desc}
+                            </p>
+                          ) : null}
+                        </div>
+                        {item.isGold ? (
+                          <span className="rounded-md bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-800">
+                            金案例
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {item.painPoint ? (
+                        <div className="mt-3 rounded-xl bg-white/80 px-3 py-2.5 text-[12px] leading-relaxed text-zinc-600">
+                          <span className="font-semibold text-zinc-800">业务痛点：</span>
+                          {item.painPoint}
+                        </div>
+                      ) : null}
+                      {item.impactMetric ? (
+                        <p className="mt-3 border-l-2 border-emerald-400 pl-3 text-[12px] leading-relaxed text-emerald-900">
+                          <span className="font-semibold">成效：</span>
+                          {item.impactMetric}
+                        </p>
+                      ) : null}
+
+                      {previewFile ? (
+                        <div className="mt-4 rounded-xl border border-zinc-200/80 bg-white p-3">
+                          <CaseDocumentPreview
+                            file={previewFile}
+                            downloadFile={originalFile}
+                            policy="restricted"
+                          />
+                        </div>
+                      ) : item.homepageUrl ? (
+                        <a
+                          href={item.homepageUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold text-sky-700 hover:text-sky-900"
+                        >
+                          查看案例材料
+                          <i className="fa-solid fa-arrow-up-right-from-square text-[9px]" />
+                        </a>
+                      ) : null}
+                    </section>
+                  );
+                })}
+
                 {caseAttachments.length ? (
                   <SectionCard title="样例附件" icon="fa-paperclip">
                     <CaseDocumentPreviewList files={caseAttachments} policy="restricted" />
@@ -892,7 +967,7 @@ export function CatalogAgentDetailModal({
                   ) : null}
                 </SectionCard>
 
-                {!cases.length && !caseAttachments.length ? (
+                {!cases.length && !caseAttachments.length && !submittedCases.length ? (
                   <EmptyHint text="该 Agent 尚未配置 Demo 案例，可先查看上方方案与执行材料。" />
                 ) : null}
               </div>

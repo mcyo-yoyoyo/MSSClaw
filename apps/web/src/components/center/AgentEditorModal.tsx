@@ -874,14 +874,14 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
         </FormField>
         <details className="rounded-xl border border-zinc-200 bg-zinc-50/60 px-3 py-2.5">
           <summary className="cursor-pointer text-[12px] font-semibold text-zinc-700">
-            Agent Hub 顶部与筛选
+            Agent Hub 展示与归属
           </summary>
           <div className="mt-3 space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <p className="text-[11px] font-semibold text-[#86868b]">所属职能（可多选）</p>
                 <p className="mb-1 text-[10px] text-[#86868b]">
-                  详情顶部展示首项；Agent Hub 筛选匹配全部归属
+                  详情顶部展示首项；Agent Hub 左侧筛选匹配全部归属
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   {HQ_DEPTS.map((dept) => (
@@ -903,7 +903,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
               <div>
                 <p className="text-[11px] font-semibold text-[#86868b]">所属区域（可多选）</p>
                 <p className="mb-1 text-[10px] text-[#86868b]">
-                  详情顶部展示首项；Agent Hub 筛选匹配全部归属
+                  详情顶部展示首项；Agent Hub 左侧筛选匹配全部归属
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   {REGIONS.map((region) => (
@@ -926,7 +926,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
             <div>
               <p className="text-[11px] font-semibold text-[#86868b]">能力类型</p>
               <p className="mb-1 text-[10px] text-[#86868b]">
-                显示在详情顶部并参与筛选；可多选，未选择时按名称、描述和标签自动推断
+                显示在详情顶部；可多选，未选择时按名称、描述和标签自动推断
               </p>
               <div className="mt-1 grid gap-2 sm:grid-cols-2">
                 {AGENT_CAPABILITY_TYPES.map((type) => (
@@ -1501,7 +1501,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
           <div className="mt-3 space-y-3">
             <FormField
               label="适配平台（每行一个）"
-              hint={`Agent Hub 顶部筛选与关键状态使用；建议：${AGENT_PLATFORM_PRESETS.join('、')}`}
+              hint={`用于详情页运行环境信息；建议：${AGENT_PLATFORM_PRESETS.join('、')}`}
             >
               <FormTextarea
                 rows={3}

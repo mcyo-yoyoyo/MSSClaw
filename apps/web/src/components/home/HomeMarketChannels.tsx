@@ -10,7 +10,7 @@ import {
 const CHANNEL_ORDER: MarketShelfKind[] = ['external', 'internal', 'projects'];
 const CHANNEL_BLURB: Record<MarketShelfKind, string | null> = {
   external: '禁止将公司内部信息上传到外部AI网站',
-  internal: '写报告、查制度、个人问答，对上再打开',
+  internal: '写报告、查制度、个人问答等',
   projects: '高价值场景沉淀的 Skill 和 Agent',
 };
 

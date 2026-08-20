@@ -12,16 +12,18 @@ import { useMarketFilterStore } from '@/stores/marketFilterStore';
 export function StageIntentDock({
   scope = 'home',
   placeholder = '描述你要做的事，或输入工具名称…',
+  suggestions,
   className,
 }: {
   scope?: IntentSearchScope;
   placeholder?: string;
+  suggestions?: readonly string[];
   className?: string;
 }) {
   const search = useMarketFilterStore((s) => s.search);
   const setSearch = useMarketFilterStore((s) => s.setSearch);
 
-  const examples = intentSearchHintExamples(scope);
+  const examples = suggestions ?? intentSearchHintExamples(scope);
 
   const run = (next: string) => {
     setSearch(next);
