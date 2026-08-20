@@ -17,6 +17,7 @@ export function PortalAiBriefEmailPanel() {
   const dismissToast = useAiBriefEmailCopyStore((s) => s.dismissToast);
   const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const [subscriptions, setSubscriptions] = useState<AiBriefEmailSubscriptionRecord[]>([]);
+  const [subscriptionsWorkspaceId, setSubscriptionsWorkspaceId] = useState<string | null>(null);
   const [subscriptionsLoading, setSubscriptionsLoading] = useState(false);
   const [subscriptionsError, setSubscriptionsError] = useState<string | null>(null);
   const [subscriptionSearch, setSubscriptionSearch] = useState('');
@@ -31,8 +32,11 @@ export function PortalAiBriefEmailPanel() {
       const result = await fetchAiBriefSubscriptions(workspaceId);
       if (generation !== subscriptionLoadGeneration.current) return;
       setSubscriptions(result.items);
+      setSubscriptionsWorkspaceId(workspaceId);
     } catch {
       if (generation !== subscriptionLoadGeneration.current) return;
+      setSubscriptions([]);
+      setSubscriptionsWorkspaceId(workspaceId);
       setSubscriptionsError('订阅名单加载失败，请确认后台服务与管理员权限');
     } finally {
       if (generation === subscriptionLoadGeneration.current) {
@@ -58,15 +62,18 @@ export function PortalAiBriefEmailPanel() {
     return () => window.clearTimeout(t);
   }, [toast, dismissToast]);
 
+  const activeSubscriptions =
+    subscriptionsWorkspaceId === workspaceId ? subscriptions : [];
+
   const visibleSubscriptions = useMemo(() => {
     const query = subscriptionSearch.trim().toLowerCase();
-    if (!query) return subscriptions;
-    return subscriptions.filter((item) =>
+    if (!query) return activeSubscriptions;
+    return activeSubscriptions.filter((item) =>
       [item.userName, item.email, item.userId].some((value) =>
         value.toLowerCase().includes(query),
       ),
     );
-  }, [subscriptionSearch, subscriptions]);
+  }, [activeSubscriptions, subscriptionSearch]);
 
   const formatDateTime = (value: string) => {
     const date = new Date(value);
@@ -89,7 +96,7 @@ export function PortalAiBriefEmailPanel() {
             <div className="flex items-center gap-2">
               <h3 className="text-[13px] font-semibold text-zinc-900">邮件订阅名单</h3>
               <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600">
-                {subscriptions.length} 人
+                {activeSubscriptions.length} 人
               </span>
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
@@ -108,7 +115,7 @@ export function PortalAiBriefEmailPanel() {
             </button>
             <button
               type="button"
-              disabled={!visibleSubscriptions.length || exporting}
+              disabled={subscriptionsLoading || !visibleSubscriptions.length || exporting}
               onClick={() => {
                 setExporting(true);
                 void downloadAiBriefSubscriptionsExcel(visibleSubscriptions)
@@ -151,7 +158,7 @@ export function PortalAiBriefEmailPanel() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
-              {subscriptionsLoading && !subscriptions.length ? (
+              {subscriptionsLoading && !activeSubscriptions.length ? (
                 <tr>
                   <td colSpan={4} className="px-3 py-8 text-center text-zinc-400">
                     <i className="fa-solid fa-spinner fa-spin mr-1" />加载订阅名单…
