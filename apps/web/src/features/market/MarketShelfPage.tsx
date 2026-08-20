@@ -1025,9 +1025,7 @@ export function MarketShelfPage({
               ? null
               : kind === 'internal'
                 ? '按场景选公司工具'
-                : allowScenarioRun
-                  ? '可试用优先进入 AI 任务 · 下载为辅'
-                  : '暂不支持在线执行，相关能力敬请期待，可下载文件包使用'
+                : '暂不支持在线执行，相关能力敬请期待，可下载文件包使用'
           }
           tip={
             kind === 'external'

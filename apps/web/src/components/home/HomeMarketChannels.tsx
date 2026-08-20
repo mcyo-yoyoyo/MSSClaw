@@ -25,10 +25,12 @@ const TOP_N = 3;
 export function HomeMarketChannels({
   cardsByKind,
   onOpen,
+  onOpenChannel,
   searchActive,
 }: {
   cardsByKind: Record<MarketShelfKind, MarketShelfCardModel[]>;
   onOpen: (card: MarketShelfCardModel) => void;
+  onOpenChannel: (kind: MarketShelfKind) => void;
   searchActive?: boolean;
 }) {
   return (
@@ -52,7 +54,14 @@ export function HomeMarketChannels({
                     className="market-channel-title truncate"
                     style={{ color: TITLE_COLOR[kind] }}
                   >
-                    {meta.label}
+                    <button
+                      type="button"
+                      onClick={() => onOpenChannel(kind)}
+                      className="rounded-md transition hover:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2"
+                      aria-label={`进入${meta.label}`}
+                    >
+                      {meta.label}
+                    </button>
                   </h2>
                   {CHANNEL_BLURB[kind] ? (
                     <p

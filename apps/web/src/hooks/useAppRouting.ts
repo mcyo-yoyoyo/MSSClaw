@@ -27,7 +27,9 @@ export function useAppRouting() {
     appliedInitial.current = true;
 
     const initial = parseAppRoute(window.location.hash);
-    skipHashWrite.current = true;
+    // 会话通常晚于首帧恢复；若 URL 与当前 view 已一致，setAppView 不会触发
+    // 后续 effect，此时保留 skip=true 会吞掉用户的第一次真实导航。
+    skipHashWrite.current = initial.view !== useAppViewStore.getState().appView;
     setAppView(initial.view);
 
     if (initial.view === 'task' && initial.chat) {

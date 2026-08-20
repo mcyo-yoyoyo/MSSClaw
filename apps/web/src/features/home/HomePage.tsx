@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { canViewAsset } from '@/domain/assetVisibility';
 import { canExecuteChat } from '@/domain/permissions';
 import { PageStageHero } from '@/components/layout/PageStageHero';
@@ -53,13 +53,30 @@ import { emptyOrgPerspectiveSelection } from '@/domain/orgAxisTags';
 import { getBusinessScenarioMeta } from '@/domain/businessScenarios';
 import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
 import { sortByRankMode } from '@/domain/contentEngagement';
+import type { PrototypeAgentSeed, PrototypeSkillSeed } from '@/domain/prototype/types';
+import { resolveHomeProjectDetailTarget } from '@/domain/homeProjectDetail';
+import { MarketSkillDetailModal } from '@/features/market/MarketSkillDetailModal';
+import { CatalogAgentDetailModal } from '@/features/market/CatalogAgentDetailModal';
+import { allowsMarketScenarioRun } from '@/domain/marketRunCapability';
+import { useNavPresentationStore } from '@/stores/navPresentationStore';
 
-export function HomePage() {
+export function HomePage({
+  onInvokeAgent,
+  onInvokeSkill,
+}: {
+  onInvokeAgent?: (agent: PrototypeAgentSeed, prompt?: string) => void;
+  onInvokeSkill?: (skill: PrototypeSkillSeed) => void;
+}) {
   const { applyUserOrgDefaults } = useHomeStore();
   const agents = useMarketplaceStore((s) => s.agents);
   const skills = useMarketplaceStore((s) => s.skills);
+  const showToast = useMarketplaceStore((s) => s.showToast);
   const user = useSessionStore((s) => s.user);
   const executeAllowed = canExecuteChat(user?.platformRole);
+  const navPreset = useNavPresentationStore((s) => s.preset);
+  const allowScenarioRun = allowsMarketScenarioRun(navPreset);
+  const canRunSkills = allowScenarioRun && executeAllowed && Boolean(onInvokeSkill);
+  const canRunAgents = allowScenarioRun && executeAllowed && Boolean(onInvokeAgent);
   const engagementOf = useContentEngagementStore((s) => s.get);
   const engagementById = useContentEngagementStore((s) => s.byId);
   const bumpView = useContentEngagementStore((s) => s.bumpView);
@@ -79,6 +96,8 @@ export function HomePage() {
   const guideRecords = usePlazaToolGuideStore((s) => s.records);
   const pendingBusinessScenario = useNavigationIntentStore((s) => s.pendingBusinessScenario);
   const consumeBusinessScenario = useNavigationIntentStore((s) => s.consumeBusinessScenario);
+  const [skillDetail, setSkillDetail] = useState<PrototypeSkillSeed | null>(null);
+  const [agentDetail, setAgentDetail] = useState<PrototypeAgentSeed | null>(null);
 
   useEffect(() => {
     hydrateRecent();
@@ -180,7 +199,7 @@ export function HomePage() {
             downloads: engagement.downloads,
             scopeBadge: (skill.visibility ?? 'public') === 'public' ? 'public' : 'scoped',
             hasHowto: Boolean(skill.instructions || skill.command),
-            runnable: executeAllowed && isSkillRunnable(skill),
+            runnable: canRunSkills && isSkillRunnable(skill),
             primaryAction: 'detail',
             scenarioId: scenarioId ?? undefined,
             ownerDeptIds: skill.ownerDeptIds,
@@ -229,7 +248,7 @@ export function HomePage() {
             downloads: engagement.downloads,
             scopeBadge: (agent.visibility ?? 'public') === 'public' ? 'public' : 'scoped',
             hasHowto: Boolean(agent.systemPrompt || agent.skillIds?.length),
-            runnable: executeAllowed && Boolean(agent.skillIds?.length),
+            runnable: canRunAgents && Boolean(agent.skillIds?.length),
             primaryAction: 'detail',
             scenarioId: scenarioId ?? undefined,
             ownerDeptIds: agent.ownerDeptIds,
@@ -260,7 +279,8 @@ export function HomePage() {
     engagementById,
     howtoToolIds,
     officeSceneEntries,
-    executeAllowed,
+    canRunSkills,
+    canRunAgents,
   ]);
 
   const favoriteKeys = useMemo(
@@ -317,12 +337,26 @@ export function HomePage() {
   };
 
   const openPortalCard = (card: MarketShelfCardModel) => {
-    rememberCard(card);
-    bumpView(card.id);
     if (card.kind === 'projects') {
+      const target = resolveHomeProjectDetailTarget(card.id, skills, agents);
+      if (target?.kind === 'skill') {
+        rememberCard(card);
+        bumpView(card.id);
+        setSkillDetail(target.item);
+        return;
+      }
+      if (target?.kind === 'agent') {
+        rememberCard(card);
+        bumpView(card.id);
+        setAgentDetail(target.item);
+        return;
+      }
+      // 兼容已从当前市场快照移除的历史卡片。
       openMarketShelf('projects');
       return;
     }
+    rememberCard(card);
+    bumpView(card.id);
     openMarketToolDetail(card.id, card.kind);
   };
 
@@ -373,12 +407,37 @@ export function HomePage() {
           <HomeMarketChannels
             cardsByKind={channelCards}
             onOpen={openPortalCard}
+            onOpenChannel={openMarketShelf}
             searchActive={Boolean(marketSearch.trim())}
           />
         </div>
       </div>
       <MarketCompareDock />
       <MarketCompareDrawer onOpenCard={openPortalCard} />
+      {skillDetail ? (
+        <MarketSkillDetailModal
+          skill={skillDetail}
+          canRun={canRunSkills}
+          onClose={() => setSkillDetail(null)}
+          onRun={(skill) => {
+            setSkillDetail(null);
+            onInvokeSkill?.(skill);
+          }}
+          onToast={showToast}
+        />
+      ) : null}
+      {agentDetail ? (
+        <CatalogAgentDetailModal
+          agent={agentDetail}
+          canRun={canRunAgents}
+          onClose={() => setAgentDetail(null)}
+          onRun={(agent) => {
+            setAgentDetail(null);
+            onInvokeAgent?.(agent);
+          }}
+          onToast={showToast}
+        />
+      ) : null}
     </div>
   );
 }

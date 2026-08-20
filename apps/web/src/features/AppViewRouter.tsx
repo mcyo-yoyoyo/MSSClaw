@@ -95,7 +95,12 @@ export function AppViewRouter({ appView, handlers }: AppViewRouterProps) {
 
 function AppViewRouterContent({ appView, handlers }: AppViewRouterProps) {
   if (appView === 'home') {
-    return <HomePage />;
+    return (
+      <HomePage
+        onInvokeAgent={handlers.onInvokeAgent}
+        onInvokeSkill={handlers.onInvokeSkill}
+      />
+    );
   }
 
   if (isAppViewPlaceholder(appView)) {
@@ -286,6 +291,11 @@ function AppViewRouterContent({ appView, handlers }: AppViewRouterProps) {
         </LazyView>
       );
     default:
-      return <HomePage />;
+      return (
+        <HomePage
+          onInvokeAgent={handlers.onInvokeAgent}
+          onInvokeSkill={handlers.onInvokeSkill}
+        />
+      );
   }
 }
