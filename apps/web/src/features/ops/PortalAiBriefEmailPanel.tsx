@@ -1,5 +1,11 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAiBriefEmailCopyStore } from '@/stores/aiBriefEmailCopyStore';
+import {
+  fetchAiBriefSubscriptions,
+  type AiBriefEmailSubscriptionRecord,
+} from '@/api/aiBriefSubscriptionsApi';
+import { downloadAiBriefSubscriptionsExcel } from '@/domain/aiBriefSubscriptionExport';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 /** 门户运营 · AI 快讯邮件模板文案与落地链接 */
 export function PortalAiBriefEmailPanel() {
@@ -9,10 +15,33 @@ export function PortalAiBriefEmailPanel() {
   const resetToDefaults = useAiBriefEmailCopyStore((s) => s.resetToDefaults);
   const toast = useAiBriefEmailCopyStore((s) => s.toast);
   const dismissToast = useAiBriefEmailCopyStore((s) => s.dismissToast);
+  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
+  const [subscriptions, setSubscriptions] = useState<AiBriefEmailSubscriptionRecord[]>([]);
+  const [subscriptionsLoading, setSubscriptionsLoading] = useState(false);
+  const [subscriptionsError, setSubscriptionsError] = useState<string | null>(null);
+  const [subscriptionSearch, setSubscriptionSearch] = useState('');
+  const [exporting, setExporting] = useState(false);
+
+  const loadSubscriptions = useCallback(async () => {
+    setSubscriptionsLoading(true);
+    setSubscriptionsError(null);
+    try {
+      const result = await fetchAiBriefSubscriptions(workspaceId);
+      setSubscriptions(result.items);
+    } catch {
+      setSubscriptionsError('订阅名单加载失败，请确认后台服务与管理员权限');
+    } finally {
+      setSubscriptionsLoading(false);
+    }
+  }, [workspaceId]);
 
   useEffect(() => {
     hydrate();
   }, [hydrate]);
+
+  useEffect(() => {
+    void loadSubscriptions();
+  }, [loadSubscriptions]);
 
   useEffect(() => {
     if (!toast) return;
@@ -20,8 +49,132 @@ export function PortalAiBriefEmailPanel() {
     return () => window.clearTimeout(t);
   }, [toast, dismissToast]);
 
+  const visibleSubscriptions = useMemo(() => {
+    const query = subscriptionSearch.trim().toLowerCase();
+    if (!query) return subscriptions;
+    return subscriptions.filter((item) =>
+      [item.userName, item.email, item.userId].some((value) =>
+        value.toLowerCase().includes(query),
+      ),
+    );
+  }, [subscriptionSearch, subscriptions]);
+
+  const formatDateTime = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value || '—';
+    return new Intl.DateTimeFormat('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(date);
+  };
+
   return (
     <div className="space-y-4">
+      <section className="rounded-2xl border border-zinc-200/90 bg-white p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-[13px] font-semibold text-zinc-900">邮件订阅名单</h3>
+              <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600">
+                {subscriptions.length} 人
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+              数据来自后台数据库；用户在 AI快讯页订阅、更新或取消后会同步到这里。
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void loadSubscriptions()}
+              disabled={subscriptionsLoading}
+              className="rounded-xl border border-zinc-200 px-3 py-1.5 text-[11px] font-semibold text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-wait disabled:text-zinc-300"
+            >
+              <i className="fa-solid fa-rotate mr-1" />
+              刷新
+            </button>
+            <button
+              type="button"
+              disabled={!visibleSubscriptions.length || exporting}
+              onClick={() => {
+                setExporting(true);
+                void downloadAiBriefSubscriptionsExcel(visibleSubscriptions)
+                  .catch(() => setSubscriptionsError('Excel 导出失败，请重试'))
+                  .finally(() => setExporting(false));
+              }}
+              className="rounded-xl bg-zinc-900 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
+            >
+              <i className="fa-solid fa-file-excel mr-1" />
+              {exporting ? '导出中…' : '导出 Excel'}
+            </button>
+          </div>
+        </div>
+
+        <label className="relative mt-3 block">
+          <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-zinc-400" />
+          <input
+            type="search"
+            value={subscriptionSearch}
+            onChange={(event) => setSubscriptionSearch(event.target.value)}
+            placeholder="搜索姓名、邮箱或用户 ID"
+            className="w-full rounded-xl border border-zinc-200 py-2 pl-8 pr-3 text-[12px] text-zinc-900 outline-none transition focus:border-[#0071e3]"
+          />
+        </label>
+
+        {subscriptionsError ? (
+          <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+            {subscriptionsError}
+          </p>
+        ) : null}
+
+        <div className="mt-3 overflow-x-auto rounded-xl border border-zinc-100">
+          <table className="min-w-full border-collapse text-left text-[11px]">
+            <thead className="bg-zinc-50 text-zinc-500">
+              <tr>
+                <th className="px-3 py-2 font-semibold">姓名</th>
+                <th className="px-3 py-2 font-semibold">邮箱</th>
+                <th className="px-3 py-2 font-semibold">订阅时间</th>
+                <th className="px-3 py-2 font-semibold">更新时间</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100">
+              {subscriptionsLoading && !subscriptions.length ? (
+                <tr>
+                  <td colSpan={4} className="px-3 py-8 text-center text-zinc-400">
+                    <i className="fa-solid fa-spinner fa-spin mr-1" />加载订阅名单…
+                  </td>
+                </tr>
+              ) : visibleSubscriptions.length ? (
+                visibleSubscriptions.map((item) => (
+                  <tr key={item.userId} className="text-zinc-700">
+                    <td className="whitespace-nowrap px-3 py-2.5 font-medium text-zinc-900">
+                      {item.userName || '—'}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5">{item.email}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-zinc-500">
+                      {formatDateTime(item.subscribedAt)}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-zinc-500">
+                      {formatDateTime(item.updatedAt)}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="px-3 py-8 text-center text-zinc-400">
+                    {subscriptionSearch ? '没有匹配的订阅记录' : '暂无邮件订阅'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <div className="rounded-2xl border border-zinc-200/90 bg-white p-4">
         <p className="text-[12px] leading-relaxed text-zinc-500">
           配置「AI快讯」页下载的 HTML 邮件模板壳：品牌标题、页脚引导文案、按钮文字与平台链接。快讯正文仍取当日动态；改这里只影响邮件落地引导，便于对外推广时统一口径。

@@ -305,6 +305,8 @@ export function AiBriefPage() {
   const consumeAiNewsOverview = useNavigationIntentStore((s) => s.consumeAiNewsOverview);
   const pref = useAiNewsPreferenceStore((s) => s.pref);
   const hydratePref = useAiNewsPreferenceStore((s) => s.hydrate);
+  const subscriptionSaving = useAiNewsPreferenceStore((s) => s.saving);
+  const setEmailSubscription = useAiNewsPreferenceStore((s) => s.setEmailSubscription);
   const emailCopy = useAiBriefEmailCopyStore((s) => s.copy);
   const hydrateEmailCopy = useAiBriefEmailCopyStore((s) => s.hydrate);
   const showToast = useMarketplaceStore((s) => s.showToast);
@@ -320,7 +322,7 @@ export function AiBriefPage() {
   useEffect(() => {
     // 每次进入快讯页主动同步，避免开发热更新或上游短暂失败后长期停留在兜底内容。
     void hydrate(true);
-    hydratePref();
+    void hydratePref();
     hydrateEmailCopy();
   }, [hydrate, hydratePref, hydrateEmailCopy]);
 
@@ -399,6 +401,15 @@ export function AiBriefPage() {
     showToast('已下载 AI 快讯 HTML，可用企业邮箱打开后发送');
   };
 
+  const normalizedEmailDraft = emailDraft.trim().toLowerCase();
+  const isCurrentSubscription =
+    pref.emailSubscribed && pref.email.trim().toLowerCase() === normalizedEmailDraft;
+
+  const toggleEmailSubscription = async () => {
+    const result = await setEmailSubscription(emailDraft, !isCurrentSubscription);
+    showToast(result.message);
+  };
+
   return (
     <div className="center-surface scroll-hidden flex min-h-0 flex-1 flex-col overflow-y-auto">
       <PageCanvas className="flex flex-col py-5 pb-10 md:py-6">
@@ -426,19 +437,29 @@ export function AiBriefPage() {
                   <input
                     type="email"
                     value={emailDraft}
-                    readOnly
-                    disabled
+                    onChange={(e) => setEmailDraft(e.target.value)}
+                    disabled={subscriptionSaving}
                     placeholder={loginEmail || 'name@huawei.com'}
-                    className="w-full cursor-not-allowed rounded-lg border-0 bg-zinc-100 py-2 pl-8 pr-2.5 text-[12px] text-[#a1a1aa] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.04)] outline-none"
+                    maxLength={254}
+                    className="w-full rounded-lg border-0 bg-white py-2 pl-8 pr-2.5 text-[12px] text-[#1d1d1f] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12)] outline-none transition focus:shadow-[inset_0_0_0_2px_#0071e3] disabled:cursor-wait disabled:bg-zinc-100 disabled:text-zinc-400"
                   />
                 </label>
                 <button
                   type="button"
-                  disabled
-                  title="邮件自动订阅待开通"
-                  className="shrink-0 cursor-not-allowed rounded-lg bg-zinc-200 px-3 py-2 text-[11px] font-semibold text-zinc-400"
+                  onClick={() => void toggleEmailSubscription()}
+                  disabled={subscriptionSaving}
+                  title={isCurrentSubscription ? '取消当前邮件订阅' : '保存邮件订阅到后台'}
+                  className="shrink-0 rounded-lg bg-[#0071e3] px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-[#0077ed] disabled:cursor-wait disabled:bg-zinc-300"
                 >
-                  订阅
+                  {subscriptionSaving ? (
+                    <i className="fa-solid fa-spinner fa-spin" aria-label="保存中" />
+                  ) : isCurrentSubscription ? (
+                    '取消订阅'
+                  ) : pref.emailSubscribed ? (
+                    '更新订阅'
+                  ) : (
+                    '订阅'
+                  )}
                 </button>
                 <button
                   type="button"
@@ -451,8 +472,8 @@ export function AiBriefPage() {
                 </button>
               </div>
               <p className="ai-brief-subscribe__hint">
-                浏览器无法直发企业邮件；请点「下载」后用 Outlook / 企业邮箱发送。落地文案与链接在「门户运营 ·
-                AI快讯邮件」配置。
+                订阅邮箱会保存到后台，平台运营可在「门户运营 · AI快讯邮件」查看并导出名单；当前仍可下载
+                HTML 模板后通过 Outlook / 企业邮箱发送。
                 {platformUrl ? ` · 链接 ${platformUrl}` : ''}
               </p>
             </div>

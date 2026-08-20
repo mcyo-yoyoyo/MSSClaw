@@ -1,28 +1,24 @@
 import { create } from 'zustand';
-import { getCurrentUserId } from '@/domain/currentUser';
+import {
+  fetchMyAiBriefSubscription,
+  subscribeAiBriefEmail,
+  unsubscribeAiBriefEmail,
+} from '@/api/aiBriefSubscriptionsApi';
 import {
   canUsePlatformDocsApi,
   currentWorkspaceId,
-  fetchPlatformDoc,
-  scheduleSavePlatformDoc,
 } from '@/api/platformDocsApi';
 
 export type AiNewsPreference = {
-  /**
-   * WeLink 推送意向（接口未打通前仅本地记录，UI 置灰不可用）
-   * @deprecated 短期请用 welinkPushEnabled；保留兼容旧字段
-   */
+  /** WeLink 推送意向（接口待上线，暂不开放 UI） */
   subscribed: boolean;
-  /** 预留：WeLink 推送开关（待上线） */
   welinkPushEnabled: boolean;
-  /** 邮件推送订阅 */
+  /** 当前用户是否已在数据库中登记邮件订阅 */
   emailSubscribed: boolean;
   /** 接收 AI 快讯的邮箱 */
   email: string;
   updatedAt: string;
 };
-
-type PrefsDoc = { byUser?: Record<string, AiNewsPreference> };
 
 function defaultPref(): AiNewsPreference {
   return {
@@ -34,101 +30,120 @@ function defaultPref(): AiNewsPreference {
   };
 }
 
-function normalizePref(parsed: Partial<AiNewsPreference> | null | undefined): AiNewsPreference {
-  if (!parsed) return defaultPref();
-  return {
-    subscribed: Boolean(parsed.subscribed),
-    welinkPushEnabled: Boolean(parsed.welinkPushEnabled ?? parsed.subscribed),
-    emailSubscribed: Boolean(parsed.emailSubscribed),
-    email: typeof parsed.email === 'string' ? parsed.email.trim() : '',
-    updatedAt: parsed.updatedAt || new Date().toISOString(),
-  };
+export function isValidEmail(email: string): boolean {
+  const trimmed = email.trim();
+  return trimmed.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
 }
 
-/** 内存中的全量 byUser，hydrate 后用于写回 */
-let byUserCache: Record<string, AiNewsPreference> = {};
-
-function persistUser(userId: string, pref: AiNewsPreference) {
-  byUserCache = { ...byUserCache, [userId]: pref };
-  if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc(currentWorkspaceId(), 'ai-news-prefs', {
-    byUser: byUserCache,
-  });
-}
-
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-}
+let hydrateGeneration = 0;
 
 interface AiNewsPreferenceState {
   pref: AiNewsPreference;
-  hydrate: () => void;
+  loading: boolean;
+  saving: boolean;
+  error: string | null;
+  hydrate: () => Promise<void>;
   /** @deprecated WeLink 待上线，请勿在 UI 启用 */
   setSubscribed: (subscribed: boolean) => void;
-  setEmailSubscription: (email: string, subscribed: boolean) => { ok: boolean; message: string };
+  setEmailSubscription: (
+    email: string,
+    subscribed: boolean,
+  ) => Promise<{ ok: boolean; message: string }>;
 }
 
 export const useAiNewsPreferenceStore = create<AiNewsPreferenceState>((set, get) => ({
   pref: defaultPref(),
+  loading: false,
+  saving: false,
+  error: null,
 
-  hydrate: () => {
-    void (async () => {
-      const userId = getCurrentUserId() || 'anon';
-      if (!canUsePlatformDocsApi()) {
-        byUserCache = {};
-        set({ pref: defaultPref() });
-        return;
-      }
-      try {
-        const remote = await fetchPlatformDoc<PrefsDoc>(
-          currentWorkspaceId(),
-          'ai-news-prefs',
-        );
-        byUserCache =
-          remote?.byUser && typeof remote.byUser === 'object' ? { ...remote.byUser } : {};
-        set({ pref: normalizePref(byUserCache[userId]) });
-      } catch {
-        byUserCache = {};
-        set({ pref: defaultPref() });
-      }
-    })();
+  hydrate: async () => {
+    const generation = ++hydrateGeneration;
+    const workspaceId = currentWorkspaceId();
+    if (!canUsePlatformDocsApi()) {
+      set({ pref: defaultPref(), loading: false, error: '共享服务未连接' });
+      return;
+    }
+    set({ loading: true, error: null });
+    try {
+      const subscription = await fetchMyAiBriefSubscription(workspaceId);
+      if (generation !== hydrateGeneration || currentWorkspaceId() !== workspaceId) return;
+      set({
+        pref: {
+          ...get().pref,
+          emailSubscribed: Boolean(subscription),
+          email: subscription?.email ?? '',
+          updatedAt: subscription?.updatedAt ?? new Date().toISOString(),
+        },
+        loading: false,
+      });
+    } catch {
+      if (generation !== hydrateGeneration || currentWorkspaceId() !== workspaceId) return;
+      set({ pref: defaultPref(), loading: false, error: '订阅状态加载失败' });
+    }
   },
 
   setSubscribed: (subscribed) => {
-    const userId = getCurrentUserId() || 'anon';
-    const next: AiNewsPreference = {
-      ...get().pref,
-      subscribed,
-      welinkPushEnabled: subscribed,
-      updatedAt: new Date().toISOString(),
-    };
-    persistUser(userId, next);
-    set({ pref: next });
+    set({
+      pref: {
+        ...get().pref,
+        subscribed,
+        welinkPushEnabled: subscribed,
+        updatedAt: new Date().toISOString(),
+      },
+    });
   },
 
-  setEmailSubscription: (email, subscribed) => {
+  setEmailSubscription: async (email, subscribed) => {
     const trimmed = email.trim();
     if (subscribed && !isValidEmail(trimmed)) {
       return { ok: false, message: '请填写有效邮箱地址' };
     }
-    const userId = getCurrentUserId() || 'anon';
-    const next: AiNewsPreference = {
-      ...get().pref,
-      email: trimmed,
-      emailSubscribed: subscribed,
-      updatedAt: new Date().toISOString(),
-    };
-    persistUser(userId, next);
-    set({ pref: next });
-    return {
-      ok: true,
-      message: subscribed
-        ? '已登记邮箱（自动推送待开通，可先下载邮件模板人工发送）'
-        : trimmed
-          ? '已保存邮箱，邮件推送已关闭'
-          : '已关闭邮件推送',
-    };
+    if (!canUsePlatformDocsApi()) {
+      return { ok: false, message: '共享服务未连接，订阅信息无法保存到后台' };
+    }
+
+    const workspaceId = currentWorkspaceId();
+    set({ saving: true, error: null });
+    try {
+      if (subscribed) {
+        const saved = await subscribeAiBriefEmail(workspaceId, trimmed);
+        if (currentWorkspaceId() !== workspaceId) {
+          return { ok: false, message: '工作区已切换，请重新订阅' };
+        }
+        set({
+          pref: {
+            ...get().pref,
+            email: saved.email,
+            emailSubscribed: true,
+            updatedAt: saved.updatedAt,
+          },
+          saving: false,
+        });
+        return { ok: true, message: '订阅成功，邮箱已保存到后台' };
+      }
+
+      await unsubscribeAiBriefEmail(workspaceId);
+      if (currentWorkspaceId() !== workspaceId) {
+        return { ok: false, message: '工作区已切换，请重新操作' };
+      }
+      set({
+        pref: {
+          ...get().pref,
+          email: trimmed,
+          emailSubscribed: false,
+          updatedAt: new Date().toISOString(),
+        },
+        saving: false,
+      });
+      return { ok: true, message: '已取消邮件订阅' };
+    } catch {
+      if (currentWorkspaceId() === workspaceId) {
+        set({ saving: false, error: '订阅信息保存失败' });
+      }
+      return { ok: false, message: '保存失败，请检查后台服务后重试' };
+    } finally {
+      if (currentWorkspaceId() === workspaceId) set({ saving: false });
+    }
   },
 }));
-
-export { isValidEmail };

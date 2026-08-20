@@ -73,6 +73,20 @@ model PortalPageView {
   @@index([workspaceId, dateKey, visitorHash])
 }
 
+/// AI 快讯邮件订阅。每个工作区内每位用户只有一条当前有效订阅。
+model AiBriefEmailSubscription {
+  workspaceId  String
+  userId       String
+  userName     String
+  email        String
+  subscribedAt DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@id([workspaceId, userId])
+  @@index([workspaceId, subscribedAt])
+  @@index([workspaceId, email])
+}
+
 /// 工作区消息正文。广播消息使用 toUserId="*"，定向消息保存具体用户 id。
 model InboxMessageRecord {
   workspaceId String

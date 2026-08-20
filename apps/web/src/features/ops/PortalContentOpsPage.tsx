@@ -255,7 +255,7 @@ export function PortalContentOpsPage() {
                       : opsSurface === 'ainews'
                         ? '站点触达 · 每日 / 每周 AI 新闻'
                         : opsSurface === 'aibrief'
-                          ? '站点触达 · AI快讯邮件模板文案'
+                          ? '站点触达 · AI快讯邮件订阅与模板'
                           : opsSurface === 'scenes'
                             ? '场景分类字典 · 文案 / 图标 / 顺序'
                             : opsSurface === 'buildstats'
@@ -293,7 +293,7 @@ export function PortalContentOpsPage() {
               </>
             ) : opsSurface === 'aibrief' ? (
               <>
-                配置 AI快讯页「下载」生成的 HTML 邮件壳：探索引导、进入平台按钮与落地链接。正文仍来自当日快讯。
+                查看 AI快讯邮件订阅名单并导出 Excel；同时配置「下载」生成的 HTML 邮件壳与平台落地链接。
               </>
             ) : opsSurface === 'scenes' ? (
               <>

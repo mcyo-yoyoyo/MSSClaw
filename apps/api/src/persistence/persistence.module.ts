@@ -8,6 +8,8 @@ import { AiDailyNewsController } from './ai-daily-news.controller';
 import { AiNewsArchiveService } from './ai-news-archive.service';
 import { PortalAnalyticsController } from './portal-analytics.controller';
 import { PortalAnalyticsService } from './portal-analytics.service';
+import { AiBriefSubscriptionsController } from './ai-brief-subscriptions.controller';
+import { AiBriefSubscriptionsService } from './ai-brief-subscriptions.service';
 
 @Module({
   controllers: [
@@ -16,6 +18,7 @@ import { PortalAnalyticsService } from './portal-analytics.service';
     AuthController,
     AiDailyNewsController,
     PortalAnalyticsController,
+    AiBriefSubscriptionsController,
   ],
   providers: [
     PersistenceService,
@@ -23,6 +26,7 @@ import { PortalAnalyticsService } from './portal-analytics.service';
     PlatformDocsService,
     AiNewsArchiveService,
     PortalAnalyticsService,
+    AiBriefSubscriptionsService,
   ],
   exports: [BlobStoreService, PlatformDocsService],
 })
