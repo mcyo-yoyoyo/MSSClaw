@@ -15,7 +15,6 @@ import {
   buildAiBriefEmailHtml,
   downloadAiBriefEmailTemplate,
 } from '@/domain/aiBriefEmailTemplate';
-import { resolveAiBriefPlatformUrl } from '@/domain/aiBriefEmailCopy';
 import { useAiBriefEmailCopyStore } from '@/stores/aiBriefEmailCopyStore';
 import { PageCanvas } from '@/components/layout/PageCanvas';
 import { PageStageHero } from '@/components/layout/PageStageHero';
@@ -387,7 +386,6 @@ export function AiBriefPage() {
     typeof window !== 'undefined'
       ? `${window.location.origin}${window.location.pathname}`
       : '';
-  const platformUrl = resolveAiBriefPlatformUrl(emailCopy.platformUrl, runtimeOrigin);
 
   const downloadTemplate = () => {
     const html = buildAiBriefEmailHtml({
@@ -469,11 +467,6 @@ export function AiBriefPage() {
                   下载
                 </button>
               </div>
-              <p className="ai-brief-subscribe__hint">
-                订阅邮箱会保存到后台，平台运营可在「门户运营 · AI快讯邮件」查看并导出名单；当前仍可下载
-                HTML 模板后通过 Outlook / 企业邮箱发送。
-                {platformUrl ? ` · 链接 ${platformUrl}` : ''}
-              </p>
             </div>
           </div>
         </PageStageHero>
