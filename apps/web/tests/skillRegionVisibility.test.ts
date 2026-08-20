@@ -1,7 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { REGIONS, unrestrictedRegionMatchesSelection } from '../src/domain/orgTaxonomy.ts';
+import {
+  REGIONS,
+  getAssetRegionLabel,
+  unrestrictedRegionMatchesSelection,
+} from '../src/domain/orgTaxonomy.ts';
+
+test('不限区域的 Skill 卡片显示“全部区域”', () => {
+  assert.equal(getAssetRegionLabel(null), '全部区域');
+  assert.equal(getAssetRegionLabel(undefined), '全部区域');
+});
+
+test('指定区域的 Skill 卡片仍显示原区域标签', () => {
+  assert.equal(getAssetRegionLabel('latam'), '拉美');
+  assert.equal(getAssetRegionLabel('hq'), '机关');
+});
 
 test('不限区域的 Skill 命中任意具体区域筛选', () => {
   for (const region of REGIONS) {

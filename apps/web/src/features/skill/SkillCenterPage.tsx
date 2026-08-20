@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
 import {
+  getAssetRegionLabel,
   getDeptLabel,
-  getRegionLabel,
   HQ_DEPTS,
   REGIONS,
 } from '@/domain/orgTaxonomy';
@@ -202,9 +202,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
       if (s.ownerDeptIds?.[0]) {
         badges.push({ label: getDeptLabel(s.ownerDeptIds[0]), tone: 'dept' });
       }
-      if (s.ownerRegionId) {
-        badges.push({ label: getRegionLabel(s.ownerRegionId), tone: 'region' });
-      }
+      badges.push({ label: getAssetRegionLabel(s.ownerRegionId), tone: 'region' });
       if (bizLabel) badges.push({ label: bizLabel, tone: 'type' });
       // 上架状态放首位：筛选后需要一眼看出每张卡属于哪一档
       const lifecycle = resolveSkillLifecycleStatus(s, approvals);

@@ -46,7 +46,11 @@ import {
   getAgentCapabilityTypeLabel,
   resolveAgentCapabilityTypes,
 } from '@/domain/agentHubFilters';
-import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
+import {
+  getAssetRegionLabel,
+  getDeptLabel,
+  getRegionLabel,
+} from '@/domain/orgTaxonomy';
 import { canViewAsset } from '@/domain/assetVisibility';
 import { downloadSkillFile } from '@/domain/skillExport';
 import { MarketSkillDetailModal } from '@/features/market/MarketSkillDetailModal';
@@ -600,9 +604,7 @@ export function MarketShelfPage({
       if (s.ownerDeptIds?.[0]) {
         badges.push({ label: getDeptLabel(s.ownerDeptIds[0]), tone: 'dept' });
       }
-      if (s.ownerRegionId) {
-        badges.push({ label: getRegionLabel(s.ownerRegionId), tone: 'region' });
-      }
+      badges.push({ label: getAssetRegionLabel(s.ownerRegionId), tone: 'region' });
       if (bizLabel) badges.push({ label: bizLabel, tone: 'type' });
       const runnable = canRunSkills && isSkillRunnable(s);
       return {

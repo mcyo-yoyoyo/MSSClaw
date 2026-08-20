@@ -20,6 +20,7 @@
     "test:home-project-detail": "node --experimental-strip-types --test tests/homeProjectDetail.test.ts",
     "test:tool-logo": "node --experimental-strip-types --test tests/toolLogo.test.ts",
     "test:marketplace-persistence": "node --experimental-strip-types --test tests/marketplacePersistence.test.ts",
+    "test:market-shelf-card-layout": "node --experimental-strip-types --test tests/marketShelfCardLayout.test.ts",
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {

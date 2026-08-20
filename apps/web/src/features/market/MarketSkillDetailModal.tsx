@@ -14,7 +14,7 @@ import {
   resolveSkillSecurityScan,
   skillSecurityStatusLabel,
 } from '@/domain/skillSecurityScan';
-import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
+import { getAssetRegionLabel, getDeptLabel } from '@/domain/orgTaxonomy';
 import { getSkillVisibilityLabel } from '@/domain/skillVisibility';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import {
@@ -103,7 +103,7 @@ export function MarketSkillDetailModal({
     : '';
   const bizLabel = getSkillBusinessLabel(skill);
   const deptLabel = skill.ownerDeptIds?.[0] ? getDeptLabel(skill.ownerDeptIds[0]) : '';
-  const regionLabel = skill.ownerRegionId ? getRegionLabel(skill.ownerRegionId) : '';
+  const regionLabel = getAssetRegionLabel(skill.ownerRegionId);
   const isAllDepartmentsVisible = (skill.visibility ?? 'public') === 'public';
   const scopeLabel = getSkillVisibilityLabel(skill.visibility);
   const createdAt = skill.createdAt || '—';
