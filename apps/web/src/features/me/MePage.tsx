@@ -10,6 +10,7 @@ import { AiTasksPage } from '@/features/ai-tasks/AiTasksPage';
 import { MarketSkillDetailModal } from '@/features/market/MarketSkillDetailModal';
 import { CatalogAgentDetailModal } from '@/features/market/CatalogAgentDetailModal';
 import { useAppViewStore } from '@/stores/appViewStore';
+import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
@@ -59,6 +60,8 @@ export function MePage() {
   const toggleFavorite = useMarketFavoriteStore((s) => s.toggle);
   const setNote = useMarketFavoriteStore((s) => s.setNote);
   const recent = useRecentMarketStore((s) => s.items);
+  const pushRecent = useRecentMarketStore((s) => s.push);
+  const bumpView = useContentEngagementStore((s) => s.bumpView);
   const showToast = useMarketplaceStore((s) => s.showToast);
   const skills = useMarketplaceStore((s) => s.skills);
   const agents = useMarketplaceStore((s) => s.agents);
@@ -154,6 +157,14 @@ export function MePage() {
       openMarketShelf('projects');
       return;
     }
+    pushRecent({
+      id: item.id,
+      kind: item.kind,
+      title: item.title,
+      icon: item.icon,
+      logoUrl: item.logoUrl,
+    });
+    bumpView(item.id);
     openMarketToolDetail(item.id, item.kind);
   };
 
