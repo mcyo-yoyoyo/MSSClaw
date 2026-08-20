@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { canExecuteChat } from '@/domain/permissions';
+import { orderExternalFeaturedItems } from '@/domain/externalFeaturedOrder';
 import {
   applyMarketFeaturedPins,
   listMarketProjectCards,
@@ -384,8 +385,26 @@ export function MarketShelfPage({
       next = next.filter((c) => favoriteKeys.has(capabilityKey(c)));
     }
     next = next.filter((c) => !hiddenKeys.includes(`${c.kind}:${c.id}`));
-    return sortByRankMode(next, rankMode, getEngagement);
-  }, [scopedCards, search, favoritesOnly, favoriteKeys, hiddenKeys, rankMode, getEngagement, engagementById]);
+    const ranked = sortByRankMode(next, rankMode, getEngagement);
+    return kind === 'external' && rankMode === 'excel_order'
+      ? orderExternalFeaturedItems(
+          ranked,
+          featuredPins.external ?? [],
+          (card) => card.sourceOrder,
+        )
+      : ranked;
+  }, [
+    scopedCards,
+    search,
+    favoritesOnly,
+    favoriteKeys,
+    hiddenKeys,
+    rankMode,
+    getEngagement,
+    engagementById,
+    kind,
+    featuredPins.external,
+  ]);
 
   const isAgentHub = kind === 'projects' && mssSurface === 'projects';
   const sectionRankMode = isAgentHub ? agentRankMode : rankMode;

@@ -8,6 +8,7 @@ import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { HOME_CHANNEL_PINS } from '@/domain/homeChannelPins';
+import { orderExternalFeaturedItems } from '@/domain/externalFeaturedOrder';
 import {
   applyMarketFeaturedPins,
   listInternalOfficeMarketCards,
@@ -129,23 +130,16 @@ export function HomePage() {
     const eng = (id: string) => engagementOf(id);
     const org = emptyOrgPerspectiveSelection();
 
-    const externalRanked = applyMarketFeaturedPins(
-      listMarketToolCards(tools, 'external', viewer, org, 'all', eng, howtoToolIds),
-      featuredPins.external ?? [],
+    const externalPins = featuredPins.external ?? [];
+    const external = orderExternalFeaturedItems(
+      applyMarketFeaturedPins(
+        listMarketToolCards(tools, 'external', viewer, org, 'all', eng, howtoToolIds).filter(
+          qualifiesAsFeaturedContent,
+        ),
+        externalPins,
+      ),
+      externalPins,
     );
-    const overseasFeatured = externalRanked
-      .filter(
-        (card) =>
-          card.region === 'overseas' &&
-          card.featured &&
-          qualifiesAsFeaturedContent(card),
-      )
-      .slice(0, 3);
-    const overseasFeaturedIds = new Set(overseasFeatured.map((card) => card.id));
-    const external = [
-      ...overseasFeatured,
-      ...externalRanked.filter((card) => !overseasFeaturedIds.has(card.id)),
-    ];
     const internal = applyMarketFeaturedPins(
       listInternalOfficeMarketCards(tools, eng, howtoToolIds, officeSceneEntries),
       [...HOME_CHANNEL_PINS.internal],

@@ -128,6 +128,7 @@ export function PortalMarketFeaturedPanel() {
 
   const pinnedIds = pins[kind] ?? [];
   const pinnedSet = new Set(pinnedIds);
+  const toolById = useMemo(() => new Map(tools.map((tool) => [tool.id, tool])), [tools]);
 
   const projectCount = FEATURED_SCENARIOS.filter((d) =>
     (DISCOVER_SCENARIO_IDS as readonly string[]).includes(d.id),
@@ -294,7 +295,6 @@ export function PortalMarketFeaturedPanel() {
                     onClick={() => {
                       if (onShelf) {
                         patchToolShelf(t, { marketShelf: 'none' });
-                        if (pinnedSet.has(t.id)) togglePin(kind, t.id);
                         showToast(`已从「${MARKET_SHELF_META[kind].label}」下架`);
                       } else {
                         patchToolShelf(t, {
@@ -351,6 +351,10 @@ export function PortalMarketFeaturedPanel() {
               <ol className="flex flex-wrap gap-1.5">
                 {pinnedIds.map((id, i) => {
                   const hit = pinCandidates.find((c) => c.id === id);
+                  const tool = toolById.get(id);
+                  const isParked =
+                    kind === 'external' &&
+                    (!tool || resolveToolMarketShelf(tool) !== 'external');
                   return (
                     <li key={id}>
                       <button
@@ -363,7 +367,12 @@ export function PortalMarketFeaturedPanel() {
                         title="点击取消置顶"
                       >
                         <span className="text-amber-700">{i + 1}</span>
-                        {hit?.title ?? id}
+                        {hit?.title || tool?.marketTitle?.trim() || tool?.name || id}
+                        {isParked ? (
+                          <span className="rounded bg-zinc-100 px-1 py-0.5 text-[9px] text-zinc-500">
+                            已下架，位置保留
+                          </span>
+                        ) : null}
                         <i className="fa-solid fa-xmark text-[9px] text-zinc-400" />
                       </button>
                     </li>
@@ -432,7 +441,7 @@ export function PortalMarketFeaturedPanel() {
 
       {kind === 'external' && mode === 'pins' ? (
         <p className="text-[10px] text-zinc-400">
-          置顶决定外精选双栏露出顺序；未配置置顶时按点击热度排序。精选不再使用「精选角标」字段。
+          置顶决定首页及外精选露出顺序；临时下架会保留原位置，未置顶工具按清单顺序展示。
         </p>
       ) : null}
     </div>
