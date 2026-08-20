@@ -329,15 +329,6 @@ export const useAssetApprovalStore = create<AssetApprovalState>((set, get) => ({
           ? `「${cur.assetName}」更新已生效并同步集市`
           : `「${cur.assetName}」已通过上架审批`;
       useMarketplaceStore.getState().showToast(doneMsg);
-      if (cur.submitterUserId) {
-        useInboxStore.getState().pushMessage({
-          kind: 'system',
-          title: approvalActionTitle(cur.reasons) + '已通过',
-          body: doneMsg,
-          toUserId: cur.submitterUserId,
-          fromName: 'MSS 质量与运营',
-        });
-      }
       set({ current: null, currentRecordId: null, history });
       return;
     }

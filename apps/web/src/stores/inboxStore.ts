@@ -1,5 +1,9 @@
 ﻿import { create } from 'zustand';
-import type { InboxMessage, InboxMessageKind } from '@/domain/inbox';
+import {
+  isApprovalSuccessNotification,
+  type InboxMessage,
+  type InboxMessageKind,
+} from '@/domain/inbox';
 import { saveInboxMessages } from '@/domain/persistence/inboxStorage';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
 import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
@@ -116,13 +120,20 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   unreadCount: (userId) => {
     const uid = userId ?? getCurrentUserId();
     return get().messages.filter(
-      (m) => !m.read && (m.toUserId === uid || m.toUserId === '*'),
+      (m) =>
+        !isApprovalSuccessNotification(m) &&
+        !m.read &&
+        (m.toUserId === uid || m.toUserId === '*'),
     ).length;
   },
 
   forUser: (userId) => {
     const uid = userId ?? getCurrentUserId();
-    return get().messages.filter((m) => m.toUserId === uid || m.toUserId === '*');
+    return get().messages.filter(
+      (m) =>
+        !isApprovalSuccessNotification(m) &&
+        (m.toUserId === uid || m.toUserId === '*'),
+    );
   },
 
   seedDemoIfEmpty: (userId) => {

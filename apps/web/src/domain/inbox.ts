@@ -23,6 +23,26 @@ export interface InboxMessage {
   };
 }
 
+const APPROVAL_SUCCESS_TITLES = new Set([
+  '上架审批已通过',
+  '更新上架审批已通过',
+  '下架审批已通过',
+]);
+
+/**
+ * 审批通过结果已在审批记录和即时提示中反馈，不再占用消息中心。
+ * 保留此识别逻辑用于隐藏升级前已持久化的历史通知。
+ */
+export function isApprovalSuccessNotification(
+  message: Pick<InboxMessage, 'kind' | 'title' | 'fromName'>,
+): boolean {
+  return (
+    message.kind === 'system' &&
+    message.fromName === 'MSS 质量与运营' &&
+    APPROVAL_SUCCESS_TITLES.has(message.title.trim())
+  );
+}
+
 export function inboxKindLabel(kind: InboxMessageKind): string {
   switch (kind) {
     case 'deliverable':

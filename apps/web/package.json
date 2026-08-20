@@ -13,6 +13,7 @@
     "preview": "vite preview",
     "preview:react": "vite preview --config vite.react.config.ts",
     "test:external-order": "node --experimental-strip-types --test tests/externalFeaturedOrder.test.ts",
+    "test:inbox-visibility": "node --experimental-strip-types --test tests/inboxVisibility.test.ts",
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
