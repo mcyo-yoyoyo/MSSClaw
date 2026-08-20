@@ -51,7 +51,11 @@ import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeScene
 import { greetingForNow } from '@/domain/timeGreeting';
 import { emptyOrgPerspectiveSelection } from '@/domain/orgAxisTags';
 import { getBusinessScenarioMeta } from '@/domain/businessScenarios';
-import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
+import {
+  getAssetRegionLabel,
+  getDeptLabel,
+  getRegionLabel,
+} from '@/domain/orgTaxonomy';
 import { sortByRankMode } from '@/domain/contentEngagement';
 import type { PrototypeAgentSeed, PrototypeSkillSeed } from '@/domain/prototype/types';
 import { resolveHomeProjectDetailTarget } from '@/domain/homeProjectDetail';
@@ -178,9 +182,7 @@ export function HomePage({
           if (skill.ownerDeptIds?.[0]) {
             badges.push({ label: getDeptLabel(skill.ownerDeptIds[0]), tone: 'dept' });
           }
-          if (skill.ownerRegionId) {
-            badges.push({ label: getRegionLabel(skill.ownerRegionId), tone: 'region' });
-          }
+          badges.push({ label: getAssetRegionLabel(skill.ownerRegionId), tone: 'region' });
           return {
             id: skill.id,
             kind: 'projects',

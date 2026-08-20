@@ -160,6 +160,11 @@ export function getRegionLabel(id: RegionId): string {
   return REGION_LABEL_MAP[id] ?? id;
 }
 
+/** 资产卡片的区域标签：未限定区域时明确展示为“全部区域”。 */
+export function getAssetRegionLabel(ownerRegionId?: RegionId | null): string {
+  return ownerRegionId ? getRegionLabel(ownerRegionId) : '全部区域';
+}
+
 export function isDeptId(value: string): value is DeptId {
   return HQ_DEPTS.some((d) => d.id === value);
 }

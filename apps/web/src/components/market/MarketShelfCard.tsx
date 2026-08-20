@@ -237,7 +237,7 @@ export function MarketShelfCard({
           <div
             className={cn(
               'flex flex-wrap items-center gap-1.5',
-              homeDense ? 'mt-2.5' : 'mt-3.5',
+              homeDense ? 'mt-auto pt-2.5' : 'mt-auto pt-3.5',
             )}
           >
             {security && !homeDense && security !== 'mss' && card.kind !== 'projects' ? (
