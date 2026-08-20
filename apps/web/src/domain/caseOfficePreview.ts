@@ -38,7 +38,6 @@ function stripXml(xml: string): string {
 
 export type OfficePreviewPayload =
   | { kind: 'docx'; paragraphs: string[] }
-  | { kind: 'pptx'; slides: { title: string; body: string }[] }
   | { kind: 'xlsx'; sheets: { name: string; rows: string[][] }[] };
 
 /** 从 dataUrl / blob url 解析 Office 附件为可渲染结构 */
@@ -67,44 +66,19 @@ export async function parseOfficePreview(
       return { kind: 'xlsx', sheets };
     }
 
-    if (file.kind === 'docx' || file.kind === 'pptx') {
+    if (file.kind === 'docx') {
       const files = unzipSync(bytes);
-      if (file.kind === 'docx') {
-        const entry =
-          files['word/document.xml'] ||
-          Object.entries(files).find(([k]) => k.endsWith('word/document.xml'))?.[1];
-        if (!entry) return null;
-        const text = stripXml(strFromU8(entry));
-        const paragraphs = text
-          .split('\n')
-          .map((p) => p.trim())
-          .filter(Boolean)
-          .slice(0, 80);
-        return { kind: 'docx', paragraphs };
-      }
-
-      const slideKeys = Object.keys(files)
-        .filter((k) => /ppt\/slides\/slide\d+\.xml$/i.test(k.replace(/\\/g, '/')))
-        .sort((a, b) => {
-          const na = Number(/slide(\d+)/i.exec(a)?.[1] ?? 0);
-          const nb = Number(/slide(\d+)/i.exec(b)?.[1] ?? 0);
-          return na - nb;
-        })
-        .slice(0, 12);
-
-      const slides = slideKeys.map((key, i) => {
-        const xml = strFromU8(files[key]!);
-        const text = stripXml(xml);
-        const lines = text
-          .split('\n')
-          .map((l) => l.trim())
-          .filter(Boolean);
-        return {
-          title: lines[0] || `第 ${i + 1} 页`,
-          body: lines.slice(1).join('\n') || lines[0] || '（本页无可提取文本，可下载原件查看）',
-        };
-      });
-      return { kind: 'pptx', slides };
+      const entry =
+        files['word/document.xml'] ||
+        Object.entries(files).find(([k]) => k.endsWith('word/document.xml'))?.[1];
+      if (!entry) return null;
+      const text = stripXml(strFromU8(entry));
+      const paragraphs = text
+        .split('\n')
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .slice(0, 80);
+      return { kind: 'docx', paragraphs };
     }
   } catch {
     return null;

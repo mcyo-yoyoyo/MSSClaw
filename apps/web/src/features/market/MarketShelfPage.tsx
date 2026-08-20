@@ -17,7 +17,7 @@ import {
 } from '@/domain/businessScenarios';
 import {
   resolveSkillBusinessScenario,
-  resolveSkillFeaturedInDoTask,
+  resolveSkillFeaturedInMssMarket,
 } from '@/domain/skillBusinessScenarios';
 import { resolveAgentFeaturedInDoTask } from '@/domain/agentBusinessScenarios';
 import {
@@ -557,7 +557,7 @@ export function MarketShelfPage({
         securityLevel: 'mss' as const,
         icon: s.icon || 'fa-cube',
         badges,
-        featured: resolveSkillFeaturedInDoTask(s),
+        featured: resolveSkillFeaturedInMssMarket(s),
         heat: s.invokes ?? 0,
         likes: eng.likes,
         dislikes: eng.dislikes,
@@ -907,7 +907,7 @@ export function MarketShelfPage({
         description: currentSkill.desc,
         icon: currentSkill.icon || 'fa-cube',
         badges: [],
-        featured: resolveSkillFeaturedInDoTask(currentSkill),
+        featured: resolveSkillFeaturedInMssMarket(currentSkill),
         heat: currentSkill.invokes ?? 0,
         hasHowto: true,
         runnable: true,

@@ -58,6 +58,21 @@ model MarketUserInteraction {
   @@index([workspaceId, userId, favorited])
 }
 
+/// 门户页面访问事实。eventId 保证同一次上报幂等，PV/UV 均由事实记录实时聚合。
+model PortalPageView {
+  workspaceId String
+  eventId     String
+  dateKey     String
+  routeKey    String
+  visitorHash String
+  occurredAt  DateTime @default(now())
+
+  @@id([workspaceId, eventId])
+  @@index([workspaceId, dateKey])
+  @@index([workspaceId, dateKey, routeKey])
+  @@index([workspaceId, dateKey, visitorHash])
+}
+
 /// 工作区消息正文。广播消息使用 toUserId="*"，定向消息保存具体用户 id。
 model InboxMessageRecord {
   workspaceId String

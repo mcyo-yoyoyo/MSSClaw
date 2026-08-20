@@ -139,6 +139,8 @@ export interface PrototypeAgentSeed {
   inputOutput?: AgentInputOutputInfo;
   quickStart?: AgentQuickStartInfo;
   cases?: AgentCaseItem[];
+  /** 案例样例附件，与 Skill Hub 口径一致；当前支持 PDF / PPTX 在线预览。 */
+  caseAttachments?: PortalCasePreviewFile[];
   /** 版本与维护信息 */
   version?: string;
   versionSummary?: string;
@@ -214,16 +216,17 @@ export interface PrototypeSkillSeed extends AssetOwnershipFields {
    */
   callable?: boolean;
   /**
-   * 精选露出：出现在「AI工具Hub · 场景技能」。
+   * 历史精选字段；旧数据读取时作为 featuredInMssMarket 的回退。
    * 未设置时回退静态 HOME_BUSINESS_SKILLS 白名单。
    * @deprecated 语义等同 featuredInMssMarket；保留字段兼容旧数据
    */
   featuredInDoTask?: boolean;
   /**
-   * 精选露出到 MSS 场景技能（优先于 featuredInDoTask）。
+   * 是否进入「AI工具Hub → Skill Hub → 精选推荐」（优先于旧字段）。
+   * 不参与发布、普通列表展示、在线调用或其它入口的可见性判定。
    */
   featuredInMssMarket?: boolean;
-  /** MSS 场景技能所属业务场景（精选露出时用于筛选；缺省回退静态映射表） */
+  /** Skill Hub 所属业务场景（缺省回退静态映射表） */
   businessScenarioId?: BusinessScenarioId;
   invokes: number;
   icon: string;

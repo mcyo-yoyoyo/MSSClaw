@@ -13,6 +13,9 @@ import {
   parseOfficePreview,
   type OfficePreviewPayload,
 } from '@/domain/caseOfficePreview';
+import { RestrictedDocumentViewer } from '@/components/content/RestrictedDocumentViewer';
+
+export type DocumentPreviewPolicy = 'downloadable' | 'restricted';
 
 interface CaseDocumentPreviewProps {
   file: PortalCasePreviewFile;
@@ -23,24 +26,94 @@ interface CaseDocumentPreviewProps {
   variant?: 'default' | 'immersive';
   /** 隐藏顶栏文件信息（画廊自带标题时） */
   hideChrome?: boolean;
+  /** restricted：只读页面，不提供下载、打印或绘制入口 */
+  policy?: DocumentPreviewPolicy;
 }
 
-/** 场景案例附件在线预览：PDF/图片/视频原生；Office 本地解析正文；其它尝试嵌入 */
+/** 多附件只挂载当前选中项，避免打开详情时并发解析所有大文件。 */
+export function CaseDocumentPreviewList({
+  files,
+  policy = 'restricted',
+}: {
+  files: PortalCasePreviewFile[];
+  policy?: DocumentPreviewPolicy;
+}) {
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    setActiveIndex((current) => Math.min(current, Math.max(0, files.length - 1)));
+  }, [files.length]);
+
+  const activeFile = files[activeIndex];
+  if (!activeFile) return null;
+
+  return (
+    <div className="space-y-2.5">
+      {files.length > 1 ? (
+        <div
+          role="tablist"
+          aria-label="样例附件"
+          className="flex max-w-full gap-1.5 overflow-x-auto rounded-xl bg-zinc-100/80 p-1"
+        >
+          {files.map((file, index) => (
+            <button
+              key={`${file.blobId ?? file.name}-${index}`}
+              type="button"
+              role="tab"
+              aria-selected={index === activeIndex}
+              onClick={() => setActiveIndex(index)}
+              className={cn(
+                'inline-flex max-w-[220px] shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold transition',
+                index === activeIndex
+                  ? 'bg-white text-zinc-900 shadow-sm'
+                  : 'text-zinc-500 hover:text-zinc-800',
+              )}
+            >
+              <i
+                className={cn(
+                  'fa-solid',
+                  file.kind === 'pdf' ? 'fa-file-pdf' : 'fa-file-powerpoint',
+                )}
+              />
+              <span className="truncate">
+                {index + 1}. {file.name}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <CaseDocumentPreview
+        key={`${activeFile.blobId ?? activeFile.name}-${activeIndex}`}
+        file={activeFile}
+        variant="default"
+        policy={policy}
+      />
+    </div>
+  );
+}
+
+/** 场景案例附件在线预览：PDF/PPTX 页面阅读；图片/视频原生；其它 Office 解析正文 */
 export function CaseDocumentPreview({
   file,
   downloadFile,
   className,
   variant = 'default',
   hideChrome = false,
+  policy = 'downloadable',
 }: CaseDocumentPreviewProps) {
   const [mode, setMode] = useState<'preview' | 'meta'>('preview');
   const kindLabel = previewKindLabel(file.kind);
   const immersive = variant === 'immersive';
   const downloadTarget = hasPreviewPayload(downloadFile) ? downloadFile! : file;
-  const isTextOutlineKind = file.kind === 'pptx' || file.kind === 'docx';
-  const previewModeLabel = isTextOutlineKind
-    ? '文本大纲预览（非版式效果）'
-    : '在线预览';
+  const isTextOutlineKind = file.kind === 'docx';
+  const isPageReaderKind = file.kind === 'pdf' || file.kind === 'pptx';
+  const previewModeLabel = isPageReaderKind
+    ? file.kind === 'pptx'
+      ? '幻灯片页面预览'
+      : '页面预览'
+    : isTextOutlineKind
+      ? '文本大纲预览（非版式效果）'
+      : '在线预览';
   const src = resolvePreviewSrc(file);
 
   return (
@@ -91,19 +164,21 @@ export function CaseDocumentPreview({
                 ))}
               </div>
             ) : null}
-            <button
-              type="button"
-              onClick={() => downloadPreviewFile(downloadTarget)}
-              className={cn(
-                'rounded-lg px-2.5 py-1 text-[10px] font-medium',
-                isTextOutlineKind || downloadTarget !== file
-                  ? 'bg-zinc-900 font-semibold text-white hover:bg-zinc-800'
-                  : 'border border-black/8 text-zinc-600 hover:bg-black/[0.03]',
-              )}
-            >
-              <i className="fa-solid fa-download mr-1" />
-              下载原件
-            </button>
+            {policy === 'downloadable' ? (
+              <button
+                type="button"
+                onClick={() => downloadPreviewFile(downloadTarget)}
+                className={cn(
+                  'rounded-lg px-2.5 py-1 text-[10px] font-medium',
+                  isTextOutlineKind || downloadTarget !== file
+                    ? 'bg-zinc-900 font-semibold text-white hover:bg-zinc-800'
+                    : 'border border-black/8 text-zinc-600 hover:bg-black/[0.03]',
+                )}
+              >
+                <i className="fa-solid fa-download mr-1" />
+                下载原件
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -124,7 +199,13 @@ export function CaseDocumentPreview({
           </p>
         </div>
       ) : (
-        <PreviewBody file={file} immersive={immersive} kindLabel={kindLabel} src={src} />
+        <PreviewBody
+          file={file}
+          immersive={immersive}
+          kindLabel={kindLabel}
+          src={src}
+          policy={policy}
+        />
       )}
     </section>
   );
@@ -135,11 +216,13 @@ function PreviewBody({
   immersive,
   kindLabel,
   src,
+  policy,
 }: {
   file: PortalCasePreviewFile;
   immersive: boolean;
   kindLabel: string;
   src: string | null;
+  policy: DocumentPreviewPolicy;
 }) {
   const frame = cn(
     'w-full rounded-xl border border-zinc-200 bg-white',
@@ -151,6 +234,20 @@ function PreviewBody({
       <div className={cn(frame, 'flex items-center justify-center text-[12px] text-zinc-500')}>
         无可预览内容
       </div>
+    );
+  }
+
+  if (file.kind === 'pptx' || (file.kind === 'pdf' && policy === 'restricted')) {
+    return (
+      <RestrictedDocumentViewer
+        file={file}
+        restricted={policy === 'restricted'}
+        className={cn(
+          frame,
+          'overflow-hidden',
+          immersive && 'h-full min-h-0 border-0',
+        )}
+      />
     );
   }
 
@@ -199,8 +296,15 @@ function PreviewBody({
     );
   }
 
-  if (file.kind === 'docx' || file.kind === 'pptx' || file.kind === 'xlsx') {
-    return <OfficePreviewBody file={file} immersive={immersive} kindLabel={kindLabel} />;
+  if (file.kind === 'docx' || file.kind === 'xlsx') {
+    return (
+      <OfficePreviewBody
+        file={file}
+        immersive={immersive}
+        kindLabel={kindLabel}
+        policy={policy}
+      />
+    );
   }
 
   // other：尝试浏览器内嵌，失败则提示下载
@@ -209,15 +313,19 @@ function PreviewBody({
       <object data={src} type={file.mimeType || undefined} className={frame}>
         <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
           <p className="text-[13px] text-zinc-600">
-            当前浏览器无法直接预览「{kindLabel}」，请下载原件查看。
+            {policy === 'restricted'
+              ? `当前浏览器无法直接预览「${kindLabel}」，请联系管理员重新上传。`
+              : `当前浏览器无法直接预览「${kindLabel}」，请下载原件查看。`}
           </p>
-          <button
-            type="button"
-            onClick={() => downloadPreviewFile(file)}
-            className="rounded-lg bg-zinc-900 px-3 py-1.5 text-[11px] font-semibold text-white"
-          >
-            下载 {kindLabel}
-          </button>
+          {policy === 'downloadable' ? (
+            <button
+              type="button"
+              onClick={() => downloadPreviewFile(file)}
+              className="rounded-lg bg-zinc-900 px-3 py-1.5 text-[11px] font-semibold text-white"
+            >
+              下载 {kindLabel}
+            </button>
+          ) : null}
         </div>
       </object>
     </div>
@@ -228,10 +336,12 @@ function OfficePreviewBody({
   file,
   immersive,
   kindLabel,
+  policy,
 }: {
   file: PortalCasePreviewFile;
   immersive: boolean;
   kindLabel: string;
+  policy: DocumentPreviewPolicy;
 }) {
   const [payload, setPayload] = useState<OfficePreviewPayload | null>(null);
   const [error, setError] = useState(false);
@@ -269,14 +379,20 @@ function OfficePreviewBody({
   if (error || !payload) {
     return (
       <div className={cn(shell, 'flex flex-col items-center justify-center gap-3 text-center')}>
-        <p className="text-[13px] text-zinc-600">无法解析该 {kindLabel}，请下载原件查看完整内容。</p>
-        <button
-          type="button"
-          onClick={() => downloadPreviewFile(file)}
-          className="rounded-lg bg-zinc-900 px-3 py-1.5 text-[11px] font-semibold text-white"
-        >
-          下载完整 {kindLabel}
-        </button>
+        <p className="text-[13px] text-zinc-600">
+          {policy === 'restricted'
+            ? `无法解析该 ${kindLabel}，请联系管理员重新上传。`
+            : `无法解析该 ${kindLabel}，请下载原件查看完整内容。`}
+        </p>
+        {policy === 'downloadable' ? (
+          <button
+            type="button"
+            onClick={() => downloadPreviewFile(file)}
+            className="rounded-lg bg-zinc-900 px-3 py-1.5 text-[11px] font-semibold text-white"
+          >
+            下载完整 {kindLabel}
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -299,53 +415,6 @@ function OfficePreviewBody({
             ))}
           </div>
         </article>
-      </div>
-    );
-  }
-
-  if (payload.kind === 'pptx') {
-    return (
-      <div className={shell}>
-        <div
-          className={cn(
-            'mx-auto mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2',
-            immersive ? 'max-w-4xl' : 'max-w-[640px]',
-          )}
-        >
-          <p className="text-[11px] leading-snug text-amber-900/80">
-            当前为文本大纲预览，不保留幻灯片版式、图表与动画。
-          </p>
-          <button
-            type="button"
-            onClick={() => downloadPreviewFile(file)}
-            className="shrink-0 rounded-lg bg-zinc-900 px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-zinc-800"
-          >
-            <i className="fa-solid fa-download mr-1" />
-            下载原件查看幻灯片效果
-          </button>
-        </div>
-        <div className="space-y-3">
-          {payload.slides.map((slide, i) => (
-            <div
-              key={i}
-              className={cn(
-                'mx-auto rounded-sm bg-white px-6 py-5 shadow-sm',
-                immersive ? 'min-h-[200px] max-w-4xl' : 'min-h-[160px] max-w-[640px]',
-              )}
-            >
-              <div className="mb-3 flex items-center justify-between border-b border-zinc-100 pb-2">
-                <span className="text-[10px] font-semibold text-zinc-500">
-                  文本大纲 · 第 {i + 1} 页（非幻灯片效果）
-                </span>
-                <span className="truncate text-[10px] text-zinc-300">{file.name}</span>
-              </div>
-              <p className="text-[14px] font-semibold text-zinc-900">{slide.title}</p>
-              <p className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed text-zinc-600">
-                {slide.body}
-              </p>
-            </div>
-          ))}
-        </div>
       </div>
     );
   }

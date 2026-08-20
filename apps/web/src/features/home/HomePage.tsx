@@ -22,7 +22,7 @@ import {
 } from '@/domain/agentBusinessScenarios';
 import {
   resolveSkillBusinessScenario,
-  resolveSkillFeaturedInDoTask,
+  resolveSkillFeaturedInMssMarket,
 } from '@/domain/skillBusinessScenarios';
 import { skillDisplayDesc, skillDisplayName } from '@/domain/skillDisplay';
 import { isSkillRunnable } from '@/domain/skillRuntime';
@@ -154,7 +154,7 @@ export function HomePage() {
       skills
         .filter((skill) => skill.published)
         .filter((skill) => canViewAsset(skill, viewer))
-        .filter((skill) => resolveSkillFeaturedInDoTask(skill))
+        .filter((skill) => resolveSkillFeaturedInMssMarket(skill))
         .map((skill): MarketShelfCardModel => {
           const engagement = eng(skill.id);
           const scenarioId = resolveSkillBusinessScenario(skill);

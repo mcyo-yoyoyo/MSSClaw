@@ -37,7 +37,6 @@ export const PLATFORM_DOC_KINDS = [
   'inbox',
   'warroom-webhook',
   'security-policy',
-  'auth-sessions',
   'demo-content',
 ] as const;
 
@@ -266,6 +265,61 @@ function docId(workspaceId: string, kind: string) {
   return `doc-${kind}-${workspaceId}`;
 }
 
+function normalizedAccountEmail(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/@company\.com$/i, '@huawei.com');
+}
+
+function membersFromPayload(payload: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray((payload as { members?: unknown } | null)?.members)) {
+    return (payload as { members: unknown[] }).members.filter(isJsonObject);
+  }
+  return Array.isArray(payload) ? payload.filter(isJsonObject) : [];
+}
+
+interface StoredSessionEntry {
+  user: Record<string, unknown>;
+  expiresAt: string;
+}
+
+function authSessionsFromPayload(payload: unknown): Record<string, StoredSessionEntry> {
+  if (!isJsonObject(payload) || !isJsonObject(payload.sessions)) return {};
+  return Object.fromEntries(
+    Object.entries(payload.sessions).filter((entry): entry is [string, StoredSessionEntry] => {
+      const value = entry[1];
+      return (
+        isJsonObject(value) &&
+        isJsonObject(value.user) &&
+        typeof value.expiresAt === 'string' &&
+        Number.isFinite(Date.parse(value.expiresAt))
+      );
+    }),
+  );
+}
+
+function authSessionsRevision(payload: unknown): number {
+  if (!isJsonObject(payload)) return 0;
+  const revision = payload.revision;
+  return typeof revision === 'number' && Number.isSafeInteger(revision) && revision >= 0
+    ? revision
+    : 0;
+}
+
+function sessionUserForMember(member: Record<string, unknown>, workspaceId: string) {
+  return {
+    id: String(member.id),
+    name: String(member.name),
+    email: normalizedAccountEmail(member.email),
+    platformRole: String(member.role ?? 'business_user'),
+    avatar: String(member.avatar ?? 'bg-zinc-600'),
+    deptIds: Array.isArray(member.deptIds) ? member.deptIds : [],
+    regionId: (member.regionId as string | null) ?? null,
+    workspaceId,
+  };
+}
+
 function sha256Hex(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
 }
@@ -456,21 +510,15 @@ export class PlatformDocsService {
   }
 
   async login(body: { email?: string; password?: string; workspaceId?: string }) {
-    const email = (body.email ?? '').trim().toLowerCase().replace(/@company\.com$/i, '@huawei.com');
+    const email = normalizedAccountEmail(body.email);
     const password = body.password ?? '';
     const workspaceId = body.workspaceId || 'ws-mss-ai';
     if (!email || !password) throw new BadRequestException('email_and_password_required');
 
     const membersDoc = await this.getDoc(workspaceId, 'members');
-    const members = Array.isArray((membersDoc.payload as { members?: unknown })?.members)
-      ? ((membersDoc.payload as { members: Array<Record<string, unknown>> }).members)
-      : Array.isArray(membersDoc.payload)
-        ? (membersDoc.payload as Array<Record<string, unknown>>)
-        : SEED_MEMBERS;
+    const members = membersFromPayload(membersDoc.payload);
 
-    const member = members.find(
-      (m) => String(m.email ?? '').toLowerCase().replace(/@company\.com$/i, '@huawei.com') === email,
-    );
+    const member = members.find((m) => normalizedAccountEmail(m.email) === email);
     if (!member || member.status === 'suspended') {
       return { ok: false, error: '账号不存在或已停用' };
     }
@@ -494,16 +542,7 @@ export class PlatformDocsService {
       return { ok: false, error: cred ? '密码错误' : '该账号尚未设置密码，请联系平台运营' };
     }
 
-    const user = {
-      id: String(member.id),
-      name: String(member.name),
-      email,
-      platformRole: String(member.role ?? 'business_user'),
-      avatar: String(member.avatar ?? 'bg-zinc-600'),
-      deptIds: Array.isArray(member.deptIds) ? member.deptIds : [],
-      regionId: (member.regionId as string | null) ?? null,
-      workspaceId,
-    };
+    const user = sessionUserForMember(member, workspaceId);
 
     const token = randomBytes(24).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -514,63 +553,176 @@ export class PlatformDocsService {
 
   async me(token: string | undefined, workspaceId = 'ws-mss-ai') {
     if (!token) return { ok: false as const, error: '未登录' };
-    const session = await this.getSession(workspaceId, token);
-    if (!session) return { ok: false as const, error: '会话已失效，请重新登录' };
-    if (new Date(session.expiresAt).getTime() < Date.now()) {
-      await this.deleteSession(workspaceId, token);
+    const resolved = await this.findSession(workspaceId, token);
+    if (!resolved) return { ok: false as const, error: '会话已失效，请重新登录' };
+    if (new Date(resolved.session.expiresAt).getTime() < Date.now()) {
+      await this.deleteSession(resolved.workspaceId, token);
       return { ok: false as const, error: '会话已过期，请重新登录' };
     }
-    return { ok: true as const, user: session.user, token, expiresAt: session.expiresAt };
+    const user = await this.authorizeSessionForWorkspace(workspaceId, resolved.session.user);
+    if (!user) return { ok: false as const, error: '无权访问该工作区' };
+    return {
+      ok: true as const,
+      user,
+      token,
+      expiresAt: resolved.session.expiresAt,
+    };
   }
 
   async logout(token: string | undefined, workspaceId = 'ws-mss-ai') {
-    if (token) await this.deleteSession(workspaceId, token);
+    if (token) {
+      const resolved = await this.findSession(workspaceId, token);
+      if (resolved) await this.deleteSession(resolved.workspaceId, token);
+    }
     return { ok: true as const };
+  }
+
+  /**
+   * 登录令牌属于平台账号而不是当前 UI 工作区。优先查当前工作区，再回查其它工作区，
+   * 使切换租户后无需保存或重放用户密码。me() 会再按目标工作区成员表重建身份与角色，
+   * 不会把令牌签发工作区的权限带到目标工作区。
+   */
+  private async findSession(
+    preferredWorkspaceId: string,
+    token: string,
+  ): Promise<{
+    workspaceId: string;
+    session: { user: Record<string, unknown>; expiresAt: string };
+  } | null> {
+    const preferred = await this.getSession(preferredWorkspaceId, token);
+    if (preferred) return { workspaceId: preferredWorkspaceId, session: preferred };
+
+    const rows = await this.prisma.centerRecord.findMany({
+      where: {
+        kind: 'doc:auth-sessions',
+        workspaceId: { not: preferredWorkspaceId },
+      },
+      select: { workspaceId: true, payload: true },
+    });
+    for (const row of rows) {
+      const sessions = authSessionsFromPayload(row.payload);
+      const session = sessions[token];
+      if (session) return { workspaceId: row.workspaceId, session };
+    }
+    return null;
   }
 
   private async getSession(
     workspaceId: string,
     token: string,
-  ): Promise<{ user: Record<string, unknown>; expiresAt: string } | null> {
-    const doc = await this.getDoc(workspaceId, 'auth-sessions');
-    const sessions =
-      ((doc.payload as { sessions?: Record<string, { user: Record<string, unknown>; expiresAt: string }> })
-        ?.sessions ?? {}) as Record<string, { user: Record<string, unknown>; expiresAt: string }>;
+  ): Promise<StoredSessionEntry | null> {
+    const doc = await this.prisma.centerRecord.findUnique({
+      where: { id: docId(workspaceId, 'auth-sessions') },
+      select: { payload: true },
+    });
+    if (!doc) return null;
+    const sessions = authSessionsFromPayload(doc.payload);
     return sessions[token] ?? null;
+  }
+
+  private async authorizeSessionForWorkspace(
+    workspaceId: string,
+    sourceUser: Record<string, unknown>,
+  ): Promise<Record<string, unknown> | null> {
+    // 鉴权读取不能沿用 getDoc() 的“缺失即自动创建工作区”行为，否则任意 workspaceId
+    // 都可能被请求侧创建。只有已存在工作区才能承接一个跨工作区会话。
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { id: true },
+    });
+    if (!workspace) return null;
+
+    const membersRow = await this.prisma.centerRecord.findUnique({
+      where: { id: docId(workspaceId, 'members') },
+      select: { payload: true },
+    });
+    // 内置目录工作区在首次切换时允许初始化默认成员；其它（含自动创建的自定义工作区）
+    // 必须已有明确成员表，不能在一次鉴权请求里凭空获得默认成员。
+    let membersPayload: unknown = membersRow?.payload;
+    if (!membersPayload && WORKSPACE_CATALOGS.some((catalog) => catalog.workspace.id === workspaceId)) {
+      membersPayload = await this.seedIfNeeded(workspaceId, 'members');
+    }
+    if (!membersPayload) return null;
+    const members = membersFromPayload(membersPayload);
+    const sourceEmail = normalizedAccountEmail(sourceUser.email);
+    const sourceId = String(sourceUser.id ?? '').trim();
+    const member = members.find((candidate) => {
+      const candidateEmail = normalizedAccountEmail(candidate.email);
+      if (sourceEmail && candidateEmail) return candidateEmail === sourceEmail;
+      return Boolean(sourceId) && String(candidate.id ?? '').trim() === sourceId;
+    });
+    if (!member || member.status === 'suspended') return null;
+    return sessionUserForMember(member, workspaceId);
   }
 
   private async putSession(
     workspaceId: string,
     token: string,
-    entry: { user: Record<string, unknown>; expiresAt: string },
+    entry: StoredSessionEntry,
   ) {
-    const doc = await this.getDoc(workspaceId, 'auth-sessions');
-    const sessions = {
-      ...(((doc.payload as { sessions?: Record<string, unknown> })?.sessions ?? {}) as Record<
-        string,
-        unknown
-      >),
-    };
-    // prune expired
-    const now = Date.now();
-    for (const [k, v] of Object.entries(sessions)) {
-      const exp = (v as { expiresAt?: string })?.expiresAt;
-      if (exp && new Date(exp).getTime() < now) delete sessions[k];
-    }
-    sessions[token] = entry;
-    await this.putDoc(workspaceId, 'auth-sessions', { sessions });
+    await this.mutateSessions(workspaceId, (sessions) => {
+      const now = Date.now();
+      for (const [key, value] of Object.entries(sessions)) {
+        if (new Date(value.expiresAt).getTime() < now) delete sessions[key];
+      }
+      sessions[token] = entry;
+    });
   }
 
   private async deleteSession(workspaceId: string, token: string) {
-    const doc = await this.getDoc(workspaceId, 'auth-sessions');
-    const sessions = {
-      ...(((doc.payload as { sessions?: Record<string, unknown> })?.sessions ?? {}) as Record<
-        string,
-        unknown
-      >),
-    };
-    delete sessions[token];
-    await this.putDoc(workspaceId, 'auth-sessions', { sessions });
+    await this.mutateSessions(workspaceId, (sessions) => {
+      delete sessions[token];
+    });
+  }
+
+  private async mutateSessions(
+    workspaceId: string,
+    mutate: (sessions: Record<string, StoredSessionEntry>) => void,
+  ): Promise<void> {
+    await this.ensureWorkspace(workspaceId);
+    const id = docId(workspaceId, 'auth-sessions');
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const row = await this.prisma.centerRecord.findUnique({ where: { id } });
+      if (!row) {
+        const sessions: Record<string, StoredSessionEntry> = {};
+        mutate(sessions);
+        try {
+          await this.prisma.centerRecord.create({
+            data: {
+              id,
+              workspaceId,
+              kind: 'doc:auth-sessions',
+              payload: { revision: 1, sessions } as unknown as Prisma.InputJsonValue,
+            },
+          });
+          return;
+        } catch (error) {
+          if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+            continue;
+          }
+          throw error;
+        }
+      }
+
+      const expectedRevision = authSessionsRevision(row.payload);
+      const sessions = { ...authSessionsFromPayload(row.payload) };
+      mutate(sessions);
+      const nextPayload = JSON.stringify({ revision: expectedRevision + 1, sessions });
+      const changed = await this.prisma.$executeRaw`
+        UPDATE "CenterRecord"
+        SET "payload" = ${nextPayload}, "updatedAt" = ${Date.now()}
+        WHERE "id" = ${id}
+          AND CASE
+            WHEN json_type("payload", '$.revision') = 'integer'
+            THEN json_extract("payload", '$.revision')
+            ELSE 0
+          END = ${expectedRevision}
+      `;
+      if (changed === 1) return;
+    }
+
+    throw new ConflictException('auth_sessions_revision_conflict');
   }
 
   private async ensureWorkspace(workspaceId: string) {
@@ -700,8 +852,6 @@ export class PlatformDocsService {
         ],
         customModels: [],
       };
-    } else if (kind === 'auth-sessions') {
-      payload = { sessions: {} };
     } else if (kind === 'demo-content') {
       payload = { demoContentOff: false };
     } else {

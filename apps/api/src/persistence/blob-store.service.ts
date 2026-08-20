@@ -16,7 +16,8 @@ export type BlobMeta = {
 };
 
 export type UploadedBlob = Omit<BlobMeta, 'deleteCapabilityHash'> & { url: string };
-export type UploadedPackageBlob = UploadedBlob & { deleteToken: string };
+export type UploadedDeletableBlob = UploadedBlob & { deleteToken: string };
+export type UploadedPackageBlob = UploadedDeletableBlob;
 
 const DEFAULT_BLOB_MAX_BYTES = 12 * 1024 * 1024;
 const DEFAULT_PACKAGE_BLOB_MAX_BYTES = 200 * 1024 * 1024;
@@ -78,7 +79,7 @@ export class BlobStoreService {
   async putBase64(
     workspaceId: string,
     input: { name: string; mimeType?: string; dataBase64: string },
-  ): Promise<UploadedBlob> {
+  ): Promise<UploadedDeletableBlob> {
     const raw = Buffer.from(input.dataBase64, 'base64');
     if (!raw.length) throw new Error('empty_blob');
     const maxBytes = configuredPositiveBytes('BLOB_MAX_BYTES', DEFAULT_BLOB_MAX_BYTES);
@@ -86,6 +87,8 @@ export class BlobStoreService {
       throw new Error(`blob_too_large:${maxBytes}`);
     }
     const id = randomUUID().replace(/-/g, '');
+    const deleteToken = randomBytes(32).toString('base64url');
+    const deleteCapabilityHash = createHash('sha256').update(deleteToken).digest('hex');
     const dir = this.workspaceDir(workspaceId);
     await fs.mkdir(dir, { recursive: true });
     const sha256 = createHash('sha256').update(raw).digest('hex');
@@ -97,11 +100,12 @@ export class BlobStoreService {
       size: raw.length,
       sha256,
       createdAt: new Date().toISOString(),
+      deleteCapabilityHash,
     };
     await fs.writeFile(this.binPath(workspaceId, id), raw);
     await fs.writeFile(this.metaPath(workspaceId, id), JSON.stringify(meta, null, 2), 'utf8');
     this.logger.log(`blob stored ${workspaceId}/${id} (${meta.size}B)`);
-    return uploadedBlob(meta);
+    return { ...uploadedBlob(meta), deleteToken };
   }
 
   async putPackageStream(

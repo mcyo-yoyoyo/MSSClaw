@@ -13,7 +13,12 @@ import {
   type BusinessScenarioId,
 } from '@/domain/businessScenarios';
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
-import type { AssetVisibility, DeptId, RegionId } from '@/domain/orgTaxonomy';
+import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
+import {
+  normalizeSkillVisibility,
+  SKILL_VISIBILITY_OPTIONS,
+  type SkillVisibility,
+} from '@/domain/skillVisibility';
 import { DEFAULT_SKILL_ACCENT } from '@/domain/skillAccent';
 import { skillDisplayName, syncSkillZhPrimary } from '@/domain/skillDisplay';
 import { parseSkillUpload } from '@/domain/skillExport';
@@ -70,7 +75,7 @@ export function MarketSkillSubmitModal({
   const [businessId, setBusinessId] = useState<BusinessScenarioId | ''>('');
   const [ownerDeptIds, setOwnerDeptIds] = useState<DeptId[]>([]);
   const [ownerRegionId, setOwnerRegionId] = useState<RegionId | null>(null);
-  const [visibility, setVisibility] = useState<AssetVisibility>('org');
+  const [visibility, setVisibility] = useState<SkillVisibility>('org');
   const [callable, setCallable] = useState(false);
   const [featured, setFeatured] = useState(false);
   const [packName, setPackName] = useState<string | null>(null);
@@ -166,6 +171,10 @@ export function MarketSkillSubmitModal({
       showToast('请选择业务场景');
       return;
     }
+    if (visibility === 'org' && ownerDeptIds.length === 0) {
+      showToast('选择“部门可见”时，请选择一个归属职能');
+      return;
+    }
 
     const userName = getCurrentUserName() || user?.name || '业务用户';
     const userId = getCurrentUserId() || user?.id;
@@ -242,8 +251,7 @@ export function MarketSkillSubmitModal({
         homepageUrl: undefined,
         businessScenarioId: businessId,
         callable,
-        // 精选同时双写新旧字段，保持历史读取链路一致。
-        featuredInDoTask: featured,
+        // 新配置只写 Skill Hub 精选字段；featuredInDoTask 仅保留旧数据读取兼容。
         featuredInMssMarket: featured,
       } as PrototypeSkillSeed);
 
@@ -293,7 +301,8 @@ export function MarketSkillSubmitModal({
       <div className="space-y-3 text-left">
         <p className="text-[11px] leading-relaxed text-zinc-500">
           对齐能力开发「Skill 上传」：可上传标准 Skill 包自动解析，或手工填写。提交后进入「业务主管 →
-          MSS 质量与运营」审批；终审通过后发布到前台。可调用控制在线运行，精选控制场景分组，均不影响是否提审。
+          MSS 质量与运营」审批；终审通过后发布到前台。可调用控制在线运行，精选仅控制 AI工具Hub
+          中 Skill Hub 的「精选推荐」，均不影响是否提审。
         </p>
 
         <div
@@ -403,23 +412,27 @@ export function MarketSkillSubmitModal({
             <span>
               <span className="block text-[13px] font-medium text-zinc-800">精选</span>
               <span className="mt-0.5 block text-[11px] text-zinc-500">
-                控制场景 Skill 的精选分组露出；不影响发布审批和在线调用。
+                仅控制 AI工具Hub → Skill Hub 的「精选推荐」分组；不影响发布审批、普通列表展示和在线调用。
               </span>
             </span>
           </label>
         </div>
         <OwnershipFormFields
           singleDept
+          singleDeptHint={visibility === 'org' ? '单选 · 部门可见时必选' : '单选 · 用于资产归属'}
           ownerDeptIds={ownerDeptIds}
           ownerRegionId={ownerRegionId}
           sourceType="internal"
           visibility={visibility}
+          visibilityOptions={SKILL_VISIBILITY_OPTIONS}
           onChange={(patch) => {
             if (patch.ownerDeptIds) setOwnerDeptIds(patch.ownerDeptIds as DeptId[]);
             if (patch.ownerRegionId !== undefined) {
               setOwnerRegionId(patch.ownerRegionId as RegionId | null);
             }
-            if (patch.visibility) setVisibility(patch.visibility);
+            if (patch.visibility) {
+              setVisibility(normalizeSkillVisibility(patch.visibility, 'org'));
+            }
           }}
         />
       </div>

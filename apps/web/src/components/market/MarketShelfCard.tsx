@@ -25,6 +25,7 @@ export function MarketShelfCard({
   primaryLabel: primaryLabelOverride,
   howToLabel: _howToLabel,
   enableCompare = true,
+  showTags = true,
   footerActions,
 }: {
   card: MarketShelfCardModel;
@@ -40,6 +41,8 @@ export function MarketShelfCard({
   howToLabel?: string;
   /** 轻量对比勾选（同货架 2–3 项）；首页关闭 */
   enableCompare?: boolean;
+  /** 是否展示场景、区域、类型等标签；首页三栏关闭。 */
+  showTags?: boolean;
   /** 管理后台专用：将操作集中收纳到卡片内部。 */
   footerActions?: ReactNode;
 }) {
@@ -232,7 +235,7 @@ export function MarketShelfCard({
             </p>
           </div>
         </div>
-        {!compact ? (
+        {!compact && showTags ? (
           <div
             className={cn(
               'flex flex-wrap items-center gap-1.5',

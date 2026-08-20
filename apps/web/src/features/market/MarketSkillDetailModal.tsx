@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { SkillAvatar } from '@/components/brand/SkillAvatar';
 import { CenterModal } from '@/components/center/CenterShell';
-import { CaseDocumentPreview } from '@/components/content/CaseDocumentPreview';
+import { CaseDocumentPreviewList } from '@/components/content/CaseDocumentPreview';
 import { PackageFileTree } from '@/components/market/PackageFileTree';
 import { downloadPackageBlob } from '@/api/blobApi';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
@@ -14,11 +14,8 @@ import {
   resolveSkillSecurityScan,
   skillSecurityStatusLabel,
 } from '@/domain/skillSecurityScan';
-import {
-  ASSET_VISIBILITY_LABELS,
-  getDeptLabel,
-  getRegionLabel,
-} from '@/domain/orgTaxonomy';
+import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
+import { getSkillVisibilityLabel } from '@/domain/skillVisibility';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import {
   EXECUTION_TRUST_META,
@@ -107,8 +104,8 @@ export function MarketSkillDetailModal({
   const bizLabel = getSkillBusinessLabel(skill);
   const deptLabel = skill.ownerDeptIds?.[0] ? getDeptLabel(skill.ownerDeptIds[0]) : '';
   const regionLabel = skill.ownerRegionId ? getRegionLabel(skill.ownerRegionId) : '';
-  const scopeLabel =
-    (skill.visibility ?? 'public') === 'public' ? '公开' : '领域';
+  const isAllDepartmentsVisible = (skill.visibility ?? 'public') === 'public';
+  const scopeLabel = getSkillVisibilityLabel(skill.visibility);
   const createdAt = skill.createdAt || '—';
   const updatedAt = skill.updatedAt || '—';
   const updatedBy = skill.updatedBy || skill.publisher || skill.author || '—';
@@ -235,7 +232,7 @@ export function MarketSkillDetailModal({
                     <span
                       className={cn(
                         'rounded-md px-1.5 py-0.5 text-[10px] font-semibold',
-                        scopeLabel === '公开'
+                        isAllDepartmentsVisible
                           ? 'bg-emerald-50 text-emerald-800'
                           : 'bg-sky-50 text-sky-800',
                       )}
@@ -443,29 +440,23 @@ export function MarketSkillDetailModal({
                         </article>
                       ))}
                     </div>
-                  ) : (
+                  ) : !caseAttachments.length ? (
                     <p className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70 px-3 py-5 text-center text-[11px] text-zinc-400">
                       暂无上传案例素材
                     </p>
-                  )}
+                  ) : null}
 
                   {caseAttachments.length ? (
                     <div className="mt-3 space-y-2">
                       <p className="text-[11px] font-medium text-zinc-500">案例附件</p>
-                      {caseAttachments.map((file, i) => (
-                        <CaseDocumentPreview
-                          key={`${file.blobId ?? file.name}-${i}`}
-                          file={file}
-                          variant="default"
-                        />
-                      ))}
+                      <CaseDocumentPreviewList files={caseAttachments} policy="restricted" />
                     </div>
                   ) : null}
                 </section>
                 <section>
                   <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">权限要求</h4>
                   <p className="text-[13px] leading-relaxed text-zinc-600">
-                    {ASSET_VISIBILITY_LABELS[skill.visibility ?? 'public']}
+                    {getSkillVisibilityLabel(skill.visibility)}
                     {deptLabel ? ` · ${deptLabel}` : ''}
                     {regionLabel ? ` · ${regionLabel}` : ''}
                   </p>
@@ -673,7 +664,7 @@ export function MarketSkillDetailModal({
               <MetaRow label="更新者" value={updatedBy} />
               <MetaRow label="更新时间" value={updatedAt} />
               <MetaRow label="发布方" value={skill.publisher || skill.author || '未知'} />
-              <MetaRow label="可见性" value={ASSET_VISIBILITY_LABELS[skill.visibility ?? 'public']} />
+              <MetaRow label="可见性" value={getSkillVisibilityLabel(skill.visibility)} />
             </dl>
           </div>
 

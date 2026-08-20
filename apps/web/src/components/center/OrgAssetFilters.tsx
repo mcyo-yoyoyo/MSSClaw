@@ -281,6 +281,16 @@ export function OrgAssetFilterBar({
 }
 
 type DeptIdLike = string;
+type OwnershipVisibility = 'public' | 'org' | 'private';
+
+const DEFAULT_OWNERSHIP_VISIBILITY_OPTIONS: ReadonlyArray<{
+  value: OwnershipVisibility;
+  label: string;
+}> = [
+  { value: 'public', label: '公开可见' },
+  { value: 'org', label: '组织内' },
+  { value: 'private', label: '仅发布方' },
+];
 
 function OwnershipSelect({
   children,
@@ -315,7 +325,9 @@ export function OwnershipFormFields({
   homepageUrl,
   alwaysShowHomepage = false,
   singleDept = false,
+  singleDeptHint,
   lockSource = false,
+  visibilityOptions = DEFAULT_OWNERSHIP_VISIBILITY_OPTIONS,
   onChange,
 }: {
   ownerDeptIds: DeptIdLike[];
@@ -330,8 +342,15 @@ export function OwnershipFormFields({
    * 用于只保留一个职能的场景（如 Skill 提报），避免多选后被截断导致新选项失效。
    */
   singleDept?: boolean;
+  /** 单选状态旁的说明；Skill 可见性可覆盖“不选则不限”的通用提示。 */
+  singleDeptHint?: string;
   /** 来源由入口决定时隐藏来源选择（如“登记外部工具”） */
   lockSource?: boolean;
+  /** 按资产类型收敛可见性选项；默认保留通用三档。 */
+  visibilityOptions?: ReadonlyArray<{
+    value: OwnershipVisibility;
+    label: string;
+  }>;
   onChange: (patch: {
     ownerDeptIds?: DeptIdLike[];
     ownerRegionId?: string | null;
@@ -357,7 +376,9 @@ export function OwnershipFormFields({
         <p className="mb-1.5 text-[11px] font-semibold text-zinc-600">
           归属职能
           {singleDept ? (
-            <span className="ml-1.5 font-normal text-zinc-400">单选 · 不选则不限</span>
+            <span className="ml-1.5 font-normal text-zinc-400">
+              {singleDeptHint ?? '单选 · 不选则不限'}
+            </span>
           ) : null}
         </p>
         <div className="flex flex-wrap gap-1.5">
@@ -420,9 +441,11 @@ export function OwnershipFormFields({
             className="mt-1"
           >
             <option value="" disabled>请选择可见性</option>
-            <option value="public">公开可见</option>
-            <option value="org">组织内</option>
-            <option value="private">仅发布方</option>
+            {visibilityOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </OwnershipSelect>
         </label>
       </div>

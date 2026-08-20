@@ -33,7 +33,6 @@ export type PlatformDocKind =
   | 'inbox'
   | 'warroom-webhook'
   | 'security-policy'
-  | 'auth-sessions'
   | 'demo-content';
 
 function jsonHeaders(): HeadersInit {

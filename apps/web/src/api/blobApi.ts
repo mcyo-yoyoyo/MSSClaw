@@ -10,6 +10,19 @@ export type UploadedBlob = {
   size: number;
 };
 
+type WorkspaceBlobUploadContext = {
+  workspaceId: string;
+  apiBase: string;
+  uploadUrl: string;
+  deleteUrl: string;
+  authHeaders: Record<string, string>;
+  deleteToken: string;
+};
+
+export type UploadedWorkspaceBlob = UploadedBlob & {
+  readonly __workspaceBlobUploadContext: WorkspaceBlobUploadContext;
+};
+
 export type DownloadableBlob = Pick<UploadedBlob, 'url' | 'name'>;
 export type DeletableBlob = Partial<Pick<UploadedBlob, 'id' | 'url'>>;
 
@@ -58,6 +71,13 @@ function packageUploadContext(blob: string | DeletableBlob): PackageUploadContex
   return (blob as Partial<UploadedPackageBlob>).__packageUploadContext;
 }
 
+function workspaceBlobUploadContext(
+  blob: string | DeletableBlob,
+): WorkspaceBlobUploadContext | undefined {
+  if (typeof blob === 'string') return undefined;
+  return (blob as Partial<UploadedWorkspaceBlob>).__workspaceBlobUploadContext;
+}
+
 function sameHeaders(left: Record<string, string>, right: Record<string, string>): boolean {
   const leftEntries = Object.entries(left).sort(([a], [b]) => a.localeCompare(b));
   const rightEntries = Object.entries(right).sort(([a], [b]) => a.localeCompare(b));
@@ -67,6 +87,19 @@ function sameHeaders(left: Record<string, string>, right: Record<string, string>
       const candidate = rightEntries[index];
       return candidate?.[0] === key && candidate[1] === value;
     })
+  );
+}
+
+/** 普通附件上传完成后，确认 workspace / API 基址 / 会话仍与发起请求时一致。 */
+export function isWorkspaceBlobUploadContextCurrent(
+  blob: UploadedWorkspaceBlob,
+  workspaceId: string,
+): boolean {
+  const context = blob.__workspaceBlobUploadContext;
+  return (
+    context.workspaceId === workspaceId &&
+    context.apiBase === getApiBase() &&
+    sameHeaders(context.authHeaders, apiAuthHeaders())
   );
 }
 
@@ -123,17 +156,22 @@ export function resolveWorkspaceBlobUrl(url: string): string {
 export async function uploadWorkspaceBlob(
   workspaceId: string,
   file: Pick<PortalCasePreviewFile, 'name' | 'mimeType' | 'dataUrl'>,
-): Promise<UploadedBlob> {
+): Promise<UploadedWorkspaceBlob> {
   if (!file.dataUrl?.startsWith('data:')) {
     throw new Error('blob_requires_dataUrl');
   }
   const comma = file.dataUrl.indexOf(',');
   const dataBase64 = comma >= 0 ? file.dataUrl.slice(comma + 1) : file.dataUrl;
-  const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/blobs`), {
+  const apiBase = getApiBase();
+  const authHeaders = apiAuthHeaders();
+  const uploadUrl = freezeRequestUrl(
+    apiUrlForBase(apiBase, `/api/v1/workspaces/${workspaceId}/blobs`),
+  );
+  const res = await fetch(uploadUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...apiAuthHeaders(),
+      ...authHeaders,
     },
     body: JSON.stringify({
       name: file.name,
@@ -145,8 +183,36 @@ export async function uploadWorkspaceBlob(
     const text = await res.text().catch(() => '');
     throw new Error(`blob_upload_failed:${res.status}:${text.slice(0, 120)}`);
   }
-  const uploaded = (await res.json()) as UploadedBlob;
-  return { ...uploaded, url: resolveWorkspaceBlobUrl(uploaded.url) };
+  const uploaded = (await res.json()) as UploadedBlob & { deleteToken?: unknown };
+  const deleteToken =
+    typeof uploaded.deleteToken === 'string' ? uploaded.deleteToken.trim() : '';
+  if (!deleteToken) throw new Error('blob_upload_missing_delete_token');
+  const result: UploadedBlob = {
+    id: uploaded.id,
+    url: resolveWorkspaceBlobUrlForBase(uploaded.url, apiBase),
+    name: uploaded.name,
+    mimeType: uploaded.mimeType,
+    size: uploaded.size,
+  };
+  Object.defineProperty(result, '__workspaceBlobUploadContext', {
+    value: {
+      workspaceId,
+      apiBase,
+      uploadUrl,
+      deleteUrl: freezeRequestUrl(
+        apiUrlForBase(
+          apiBase,
+          `/api/v1/workspaces/${workspaceId}/blobs/${encodeURIComponent(uploaded.id)}`,
+        ),
+      ),
+      authHeaders,
+      deleteToken,
+    } satisfies WorkspaceBlobUploadContext,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return result as UploadedWorkspaceBlob;
 }
 
 /** package blob 为受保护资源，读取时统一携带 API key / 会话鉴权。 */
@@ -201,7 +267,7 @@ export async function deleteWorkspaceBlob(
   blob: string | DeletableBlob,
   options?: WorkspaceBlobDeleteOptions,
 ): Promise<void> {
-  const uploadContext = packageUploadContext(blob);
+  const uploadContext = packageUploadContext(blob) ?? workspaceBlobUploadContext(blob);
   const targetWorkspaceId = uploadContext?.workspaceId ?? workspaceId;
   const deleteToken = uploadContext?.deleteToken ?? options?.deleteToken?.trim();
   if (!deleteToken) throw new Error('blob_delete_token_required');
@@ -229,6 +295,13 @@ export async function deleteWorkspaceBlob(
   if (res.ok || res.status === 404) return;
   const text = await res.text().catch(() => '');
   throw new Error(`blob_delete_failed:${res.status}:${text.slice(0, 120)}`);
+}
+
+/** 删除尚未提交到业务文档的普通附件，始终复用上传瞬间冻结的工作区、API 与鉴权上下文。 */
+export async function deleteUploadedWorkspaceBlob(
+  blob: UploadedWorkspaceBlob,
+): Promise<void> {
+  await deleteWorkspaceBlob(blob.__workspaceBlobUploadContext.workspaceId, blob);
 }
 
 /**

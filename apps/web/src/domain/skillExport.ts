@@ -2,9 +2,10 @@ import { strToU8, zipSync, unzipSync, strFromU8 } from 'fflate';
 import * as XLSX from 'xlsx';
 import type { EfficiencyCategory, PrototypeSkillSeed } from '@/domain/prototype/types';
 import { getSkillPack } from '@/domain/skills/catalog';
-import { ASSET_VISIBILITY_LABELS, getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
+import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
 import type { AssetVisibility, DeptId, RegionId } from '@/domain/orgTaxonomy';
 import { readPackageZipMetadata } from '@/domain/safeZip';
+import { getSkillVisibilityLabel } from '@/domain/skillVisibility';
 
 const VALID_CATEGORIES: EfficiencyCategory[] = ['office', 'manage', 'process', 'experience'];
 
@@ -232,6 +233,7 @@ export function downloadAllSkillsFile(
     },
     {} as Record<string, number>,
   );
+  const departmentVisibleCount = (byVisibility.org || 0) + (byVisibility.private || 0);
   const topInvoked = [...rows].sort((a, b) => b.invokeCount - a.invokeCount).slice(0, 10);
 
   const detailSheet =
@@ -261,9 +263,9 @@ export function downloadAllSkillsFile(
             近30天调用量预留: '—',
             英文名称: r.nameEn,
             调用指令: r.command,
-            可见范围: ASSET_VISIBILITY_LABELS[vis] ?? String(vis),
+            可见范围: getSkillVisibilityLabel(vis),
             已上架可调用: r.publishedExecutable ? '是' : '否',
-            精选MSS场景技能: r.featuredInDoTask ? '是' : '否',
+            精选SkillHub推荐: r.featuredInDoTask ? '是' : '否',
             演示调用次数: r.invokeCount,
             具备执行正文: r.hasExecutableBody ? '是' : '否',
             使用须知摘要: (r.usageNotes || '').slice(0, 80),
@@ -279,12 +281,11 @@ export function downloadAllSkillsFile(
     { 指标: 'Skill 总数', 值: rows.length },
     { 指标: '已上架可调用数', 值: executableCount },
     { 指标: '当前可对话执行数', 值: runnableCount },
-    { 指标: '精选MSS场景技能数', 值: featuredCount },
+    { 指标: '精选Skill Hub推荐数', 值: featuredCount },
     { 指标: '演示调用总次数', 值: totalInvokes },
     { 指标: '真实调用/Token', 值: '—（预留，待模型计量对接）' },
-    { 指标: '可见-全员', 值: byVisibility.public || 0 },
-    { 指标: '可见-本组织', 值: byVisibility.org || 0 },
-    { 指标: '可见-仅发布方', 值: byVisibility.private || 0 },
+    { 指标: '可见-全部门', 值: byVisibility.public || 0 },
+    { 指标: '可见-部门', 值: departmentVisibleCount },
   ];
 
   const topSheet = topInvoked.length
@@ -379,11 +380,11 @@ export function parseSkillImport(raw: unknown): PrototypeSkillSeed | null {
     author: typeof o.author === 'string' ? o.author : 'Imported',
     version: typeof o.version === 'string' ? o.version : '1.0.0',
     connector: typeof o.connector === 'string' ? o.connector : '',
-    // 导入默认草稿：不可调用，组织内可见（需审批后上架/公开）
+    // 导入默认草稿：不可调用、部门可见（需审批后上架/全部门可见）
     published: false,
     ...(typeof callable === 'boolean' ? { callable } : {}),
     ...(typeof featured === 'boolean'
-      ? { featuredInDoTask: featured, featuredInMssMarket: featured }
+      ? { featuredInMssMarket: featured }
       : {}),
     visibility: 'org',
     invokes: typeof o.invokes === 'number' ? o.invokes : 0,

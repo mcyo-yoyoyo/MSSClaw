@@ -28,7 +28,6 @@ import { downloadAuditLogsExcel } from '@/domain/auditExport';
 import {
   batchSetAccountPasswords,
   generateTempPassword,
-  hasCredential,
   listCredentialEmails,
   loadAuthPolicy,
   setAccountPassword,
@@ -575,7 +574,7 @@ function MembersAndOrgPanel({
             <span>
               <span className="text-[13px] font-semibold text-zinc-900">登录与密码</span>
               <span className="mt-0.5 block text-[11px] text-zinc-400">
-                演示密码开关 · 单账号设密（高级）
+                演示密码开关 · 批量改密（高级）
               </span>
             </span>
             <i
@@ -708,8 +707,6 @@ function AccountPasswordAdminSection({
   const [batchText, setBatchText] = useState(
     '# 每行：邮箱,密码\nmcyo@huawei.com,ChangeMe123\n',
   );
-  const [singleEmail, setSingleEmail] = useState('');
-  const [singlePwd, setSinglePwd] = useState('');
   const [busy, setBusy] = useState(false);
   const setToast = useSettingsStore((s) => s.setToast);
 
@@ -745,48 +742,6 @@ function AccountPasswordAdminSection({
           </span>
         </span>
       </label>
-
-      <div className="flex flex-wrap gap-2">
-        <select
-          value={singleEmail}
-          onChange={(e) => setSingleEmail(e.target.value)}
-          className="min-w-[180px] rounded-lg border border-zinc-200 px-2 py-1.5 text-[12px]"
-        >
-          <option value="">选择成员设密</option>
-          {activeEmails.map((em) => (
-            <option key={em} value={em}>
-              {em}
-              {hasCredential(em) ? ' · 已设密' : ' · 未设密'}
-            </option>
-          ))}
-        </select>
-        <input
-          type="text"
-          value={singlePwd}
-          onChange={(e) => setSinglePwd(e.target.value)}
-          placeholder="新密码（≥6 位）"
-          className="min-w-[140px] flex-1 rounded-lg border border-zinc-200 px-2 py-1.5 text-[12px]"
-        />
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => {
-            void (async () => {
-              setBusy(true);
-              const r = await setAccountPassword(singleEmail, singlePwd);
-              setBusy(false);
-              if (r.ok) {
-                setToast(`已为 ${singleEmail} 设置密码`);
-                setSinglePwd('');
-                onChanged();
-              } else setToast(r.error);
-            })();
-          }}
-          className="rounded-lg bg-zinc-900 px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
-        >
-          保存密码
-        </button>
-      </div>
 
       <details className="rounded-xl border border-zinc-200 bg-white">
         <summary className="cursor-pointer px-3 py-2 text-[12px] font-semibold text-zinc-700">

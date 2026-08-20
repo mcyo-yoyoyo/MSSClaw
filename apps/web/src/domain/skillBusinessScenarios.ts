@@ -136,21 +136,22 @@ export function resolveSkillBusinessScenario(
 }
 
 /**
- * 解析历史「精选」运营字段：
+ * 解析 Skill Hub「精选推荐」运营字段：
  * - 显式 featuredInMssMarket（优先）
  * - 显式 featuredInDoTask（兼容旧字段）
  * - 未设置时回退 HOME_BUSINESS_SKILLS 静态精选
  *
- * 仅供管理端兼容历史配置；业务前台不得据此过滤，只以 published 判定上架。
+ * 只能用于 AI工具Hub → Skill Hub 的精选分组及其首页摘要；不得用于过滤
+ * Skill Hub 普通列表、发布状态、在线调用或其它业务入口。
  */
-export function resolveSkillFeaturedInDoTask(skill: PrototypeSkillSeed): boolean {
+export function resolveSkillFeaturedInMssMarket(skill: PrototypeSkillSeed): boolean {
   if (typeof skill.featuredInMssMarket === 'boolean') return skill.featuredInMssMarket;
   if (typeof skill.featuredInDoTask === 'boolean') return skill.featuredInDoTask;
   return Object.values(HOME_BUSINESS_SKILLS).some((ids) => ids.includes(skill.id));
 }
 
-/** @alias resolveSkillFeaturedInDoTask — 仅兼容历史运营字段 */
-export const resolveSkillFeaturedInMssMarket = resolveSkillFeaturedInDoTask;
+/** @deprecated 旧名称仅供外部兼容；新代码使用 resolveSkillFeaturedInMssMarket。 */
+export const resolveSkillFeaturedInDoTask = resolveSkillFeaturedInMssMarket;
 
 export function getSkillBusinessLabel(
   skillOrId: string | Pick<PrototypeSkillSeed, 'id' | 'businessScenarioId'>,

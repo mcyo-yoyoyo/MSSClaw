@@ -96,7 +96,7 @@ export function ProjectDocsGallery({
     if (!el || !slides.length) return;
     const child = el.children[index] as HTMLElement | undefined;
     child?.scrollIntoView({ behavior: 'auto', inline: 'center', block: 'nearest' });
-  }, [slides.length]); // eslint-disable-line react-hooks/exhaustive-deps -- only re-snap when slides change
+  }, [index, slides.length]);
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -112,6 +112,7 @@ export function ProjectDocsGallery({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
         scrollTo(index - 1);
@@ -229,22 +230,24 @@ export function ProjectDocsGallery({
             ref={scrollerRef}
             className="absolute inset-0 flex snap-x snap-mandatory overflow-x-auto scroll-hidden"
           >
-            {slides.map((slide) => (
+            {slides.map((slide, slideIndex) => (
               <div
                 key={slide.id}
                 className="box-border flex h-full w-full min-w-full shrink-0 snap-center flex-col p-1.5 sm:p-2"
               >
-                {slide.previewFile ? (
-                  <CaseDocumentPreview
-                    file={slide.previewFile}
-                    downloadFile={slide.downloadFile}
-                    variant="immersive"
-                    hideChrome
-                    className="h-full overflow-hidden rounded-lg"
-                  />
-                ) : (
-                  <LinkPreviewSlide title={slide.title} url={slide.url!} />
-                )}
+                {slideIndex === index ? (
+                  slide.previewFile ? (
+                    <CaseDocumentPreview
+                      file={slide.previewFile}
+                      downloadFile={slide.downloadFile}
+                      variant="immersive"
+                      hideChrome
+                      className="h-full overflow-hidden rounded-lg"
+                    />
+                  ) : (
+                    <LinkPreviewSlide title={slide.title} url={slide.url!} />
+                  )
+                ) : null}
               </div>
             ))}
           </div>

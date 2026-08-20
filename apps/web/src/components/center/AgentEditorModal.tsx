@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CenterModal } from '@/components/center/CenterShell';
 import {
   FormField,
@@ -23,7 +23,13 @@ import {
   type AgentLifecycleStatus,
 } from '@/domain/agentLifecycle';
 import type { AgentCaseItem, PrototypeAgentSeed } from '@/domain/prototype/types';
-import { uploadWorkspacePackage } from '@/api/blobApi';
+import {
+  deleteUploadedWorkspaceBlob,
+  isWorkspaceBlobUploadContextCurrent,
+  type UploadedWorkspaceBlob,
+  uploadWorkspaceBlob,
+  uploadWorkspacePackage,
+} from '@/api/blobApi';
 import { currentWorkspaceId } from '@/api/platformDocsApi';
 import {
   ASSET_VISIBILITY_LABELS,
@@ -62,6 +68,10 @@ import { useTemporaryWorkspaceBlobs } from '@/hooks/useTemporaryWorkspaceBlobs';
 export type AgentEditorTarget = string | 'new' | null;
 
 const AVATAR_MAX_BYTES = 512 * 1024;
+const CASE_ATTACHMENT_MAX_BYTES = 12 * 1024 * 1024;
+const PDF_MIME_TYPE = 'application/pdf';
+const PPTX_MIME_TYPE =
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
 function readAvatarFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -104,6 +114,7 @@ function emptyAgent(): PrototypeAgentSeed {
     avatarPresetId: DEFAULT_AGENT_AVATAR_PRESET_ID,
     avatarUrl: undefined,
     systemPrompt: '',
+    caseAttachments: [],
     visibility: 'public',
     businessScenarioId: undefined,
   };
@@ -117,6 +128,7 @@ function normalizeAgent(agent: PrototypeAgentSeed): PrototypeAgentSeed {
     planSteps: Array.isArray(agent.planSteps) ? agent.planSteps : [],
     systemPrompt: agent.systemPrompt ?? '',
     demoPrompt: agent.demoPrompt ?? '',
+    caseAttachments: Array.isArray(agent.caseAttachments) ? agent.caseAttachments : [],
     avatarPresetId: agent.avatarUrl
       ? undefined
       : agent.avatarPresetId || DEFAULT_AGENT_AVATAR_PRESET_ID,
@@ -208,14 +220,96 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
   const [onlyPublishedSkills, setOnlyPublishedSkills] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [uploadingPackage, setUploadingPackage] = useState(false);
+  const [uploadingCaseAttachment, setUploadingCaseAttachment] = useState(false);
+  const caseUploadGenerationRef = useRef(0);
+  const caseAttachmentUploadsRef = useRef(new Map<string, UploadedWorkspaceBlob>());
   const businessOptions = useMemo(() => listVisibleBusinessScenarioCategories(), []);
+
+  const uploadCaseAttachment = async (file: File) => {
+    const lowerName = file.name.toLowerCase();
+    const kind = lowerName.endsWith('.pdf')
+      ? 'pdf'
+      : lowerName.endsWith('.pptx')
+        ? 'pptx'
+        : null;
+    if (!kind) {
+      showToast('仅支持 PDF / PPTX 附件');
+      return;
+    }
+    if (file.size > CASE_ATTACHMENT_MAX_BYTES) {
+      showToast('样例附件请控制在 12MB 以内');
+      return;
+    }
+
+    const workspaceId = currentWorkspaceId();
+    const generation = caseUploadGenerationRef.current;
+    const mimeType = kind === 'pdf' ? PDF_MIME_TYPE : PPTX_MIME_TYPE;
+    setUploadingCaseAttachment(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ''));
+        reader.onerror = () => reject(reader.error ?? new Error('file_read_failed'));
+        reader.readAsDataURL(file);
+      });
+      const uploaded = await uploadWorkspaceBlob(workspaceId, {
+        name: file.name,
+        mimeType,
+        dataUrl,
+      });
+      if (
+        generation !== caseUploadGenerationRef.current ||
+        !isWorkspaceBlobUploadContextCurrent(uploaded, currentWorkspaceId())
+      ) {
+        void deleteUploadedWorkspaceBlob(uploaded).catch(() => undefined);
+        return;
+      }
+      caseAttachmentUploadsRef.current.set(uploaded.id, uploaded);
+      setForm((current) => ({
+        ...current,
+        caseAttachments: [
+          ...(current.caseAttachments ?? []),
+          {
+            name: uploaded.name,
+            mimeType,
+            size: uploaded.size,
+            url: uploaded.url,
+            blobId: uploaded.id,
+            kind,
+          },
+        ],
+      }));
+      showToast(`已上传样例附件：${uploaded.name}`);
+    } catch {
+      if (generation === caseUploadGenerationRef.current) {
+        showToast('附件上传失败，请检查后端连接后重试');
+      }
+    } finally {
+      if (generation === caseUploadGenerationRef.current) {
+        setUploadingCaseAttachment(false);
+      }
+    }
+  };
 
   useEffect(() => {
     hydrateBusinessCatalog();
   }, [hydrateBusinessCatalog]);
 
   useEffect(() => {
+    caseUploadGenerationRef.current += 1;
+    for (const uploaded of caseAttachmentUploadsRef.current.values()) {
+      void deleteUploadedWorkspaceBlob(uploaded).catch(() => undefined);
+    }
+    caseAttachmentUploadsRef.current.clear();
     setUploadingPackage(false);
+    setUploadingCaseAttachment(false);
+    return () => {
+      caseUploadGenerationRef.current += 1;
+      for (const uploaded of caseAttachmentUploadsRef.current.values()) {
+        void deleteUploadedWorkspaceBlob(uploaded).catch(() => undefined);
+      }
+      caseAttachmentUploadsRef.current.clear();
+    };
   }, [target]);
 
   useEffect(() => {
@@ -289,6 +383,12 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
   };
 
   const handleClose = () => {
+    caseUploadGenerationRef.current += 1;
+    for (const uploaded of caseAttachmentUploadsRef.current.values()) {
+      void deleteUploadedWorkspaceBlob(uploaded).catch(() => undefined);
+    }
+    caseAttachmentUploadsRef.current.clear();
+    setUploadingCaseAttachment(false);
     temporaryPackageBlobs.finish();
     onClose();
   };
@@ -356,8 +456,34 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
   };
 
   const handleSave = () => {
-    if (uploadingPackage) {
-      showToast('执行包正在上传，请稍候');
+    if (uploadingPackage || uploadingCaseAttachment) {
+      showToast(uploadingCaseAttachment ? '样例附件正在上传，请稍候' : '执行包正在上传，请稍候');
+      return;
+    }
+    const attachedBlobIds = new Set(
+      (form.caseAttachments ?? []).map((attachment) => attachment.blobId).filter(Boolean),
+    );
+    const staleAttachmentIds = [...caseAttachmentUploadsRef.current]
+      .filter(
+        ([blobId, uploaded]) =>
+          attachedBlobIds.has(blobId) &&
+          !isWorkspaceBlobUploadContextCurrent(uploaded, currentWorkspaceId()),
+      )
+      .map(([blobId]) => blobId);
+    if (staleAttachmentIds.length) {
+      const staleIds = new Set(staleAttachmentIds);
+      staleAttachmentIds.forEach((blobId) => {
+        const uploaded = caseAttachmentUploadsRef.current.get(blobId);
+        caseAttachmentUploadsRef.current.delete(blobId);
+        if (uploaded) void deleteUploadedWorkspaceBlob(uploaded).catch(() => undefined);
+      });
+      setForm((current) => ({
+        ...current,
+        caseAttachments: (current.caseAttachments ?? []).filter(
+          (attachment) => !attachment.blobId || !staleIds.has(attachment.blobId),
+        ),
+      }));
+      showToast('工作区、API 或登录状态已变更，请重新上传样例附件');
       return;
     }
     if (!temporaryPackageBlobs.canCommit(form.packageBlob)) {
@@ -481,6 +607,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
         inputOutput,
         quickStart,
         cases: cases.length ? cases : undefined,
+        caseAttachments: form.caseAttachments?.length ? form.caseAttachments : undefined,
         version: clean(form.version),
         versionSummary: clean(form.versionSummary),
         maintainer: clean(form.maintainer),
@@ -525,6 +652,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
       isNew,
     );
     temporaryPackageBlobs.finish(form.packageBlob);
+    caseAttachmentUploadsRef.current.clear();
     onClose();
     if (needsApproval) {
       useAssetApprovalStore.getState().openApproval({
@@ -1301,6 +1429,69 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
                 暂未配置业务案例
               </p>
             )}
+            <FormField
+              label="样例附件"
+              hint="支持 PDF / PPTX；Agent Hub 详情「案例与方案包」可在线预览"
+            >
+              <div className="space-y-2">
+                <input
+                  type="file"
+                  accept={`.pdf,.pptx,${PDF_MIME_TYPE},${PPTX_MIME_TYPE}`}
+                  disabled={uploadingCaseAttachment}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    if (file) void uploadCaseAttachment(file);
+                  }}
+                  className="block w-full text-[12px] file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-[12px] file:font-medium file:text-white"
+                />
+                {uploadingCaseAttachment ? (
+                  <p className="text-[11px] text-zinc-500">
+                    <i className="fa-solid fa-spinner fa-spin mr-1" />
+                    上传中…
+                  </p>
+                ) : null}
+                {(form.caseAttachments ?? []).map((attachment, index) => (
+                  <div
+                    key={`${attachment.blobId ?? attachment.name}-${index}`}
+                    className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5"
+                  >
+                    <i
+                      className={cn(
+                        'text-[12px]',
+                        attachment.kind === 'pdf'
+                          ? 'fa-solid fa-file-pdf text-rose-500'
+                          : 'fa-solid fa-file-powerpoint text-orange-500',
+                      )}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-[12px] text-zinc-700">
+                      {attachment.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (attachment.blobId) {
+                          const uploaded = caseAttachmentUploadsRef.current.get(attachment.blobId);
+                          caseAttachmentUploadsRef.current.delete(attachment.blobId);
+                          if (uploaded) {
+                            void deleteUploadedWorkspaceBlob(uploaded).catch(() => undefined);
+                          }
+                        }
+                        setForm((current) => ({
+                          ...current,
+                          caseAttachments: (current.caseAttachments ?? []).filter(
+                            (_, attachmentIndex) => attachmentIndex !== index,
+                          ),
+                        }));
+                      }}
+                      className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-zinc-500 transition hover:bg-rose-50 hover:text-rose-600"
+                    >
+                      移除
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </FormField>
           </div>
         </details>
         <details className="rounded-xl border border-zinc-200 bg-zinc-50/60 px-3 py-2.5">

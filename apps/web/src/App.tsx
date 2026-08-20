@@ -30,6 +30,7 @@ import { useAppViewStore } from '@/stores/appViewStore';
 import { useTaskStore } from '@/stores/taskStore';
 import type { AppCommandHandlers } from '@/domain/commands';
 import { useAppRouting } from '@/hooks/useAppRouting';
+import { usePortalTrafficTracking } from '@/hooks/usePortalTrafficTracking';
 import { useTaskRouteSync, navigateToTaskChat } from '@/hooks/useTaskRouteSync';
 import { writeAppRouteToLocation } from '@/domain/appRoute';
 import { isWarRoom } from '@/domain/chat';
@@ -151,6 +152,7 @@ export function App() {
   );
 
   useAppRouting();
+  usePortalTrafficTracking();
   useTaskRouteSync(appView);
   usePlatformStoreLoader(appView);
 

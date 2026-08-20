@@ -22,7 +22,7 @@ import {
 } from '@/domain/businessScenarios';
 import {
   resolveSkillBusinessScenario,
-  resolveSkillFeaturedInDoTask,
+  resolveSkillFeaturedInMssMarket,
   getSkillBusinessLabel,
 } from '@/domain/skillBusinessScenarios';
 import {
@@ -153,8 +153,8 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
     const homo = homogenizationWarningCount(skills);
     return [
       ['Skill 总数', total],
-      ['公开 Skill', publicCount],
-      ['领域权限 Skill', scopedCount],
+      ['全部门可见 Skill', publicCount],
+      ['部门可见 Skill', scopedCount],
       ['本月新增', monthNew],
       ['同质化预警', homo],
     ] as [string, string | number][];
@@ -225,7 +225,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
           icon: s.icon || 'fa-cube',
           logoUrl: s.iconUrl,
           badges,
-          featured: resolveSkillFeaturedInDoTask(s),
+          featured: resolveSkillFeaturedInMssMarket(s),
           heat: s.invokes ?? 0,
           likes: eng.likes,
           dislikes: eng.dislikes,
@@ -275,7 +275,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
           subtitle="运营看板 · 多维筛选 · 与集市统一的 Skill 卡片 · 发布展示需审批"
           tip={
             <>
-              上传标准包 → 配置中英文与标签 → 设置发布权限范围。终审通过后前台展示；「上架可调用」与「精选」分别控制在线运行和精选分组。安全扫描模块已预留（待对接
+              上传标准包 → 配置中英文与标签 → 设置部门可见或全部门可见。终审通过后前台展示；「上架可调用」控制在线运行，「精选」仅控制 Skill Hub 的精选推荐。安全扫描模块已预留（待对接
               IT）。输入 <code className="rounded bg-black/[0.04] px-1">/skill名</code> 调用已发布且开启调用的技能。
             </>
           }

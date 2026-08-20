@@ -473,7 +473,9 @@ export function CaseEditorModal({
                       {hasLayout
                         ? '以下为业务用户所见：视觉预览（PDF/图片）；下载仍指向原件。'
                         : needsLayoutPreviewCompanion(form.previewFile.kind)
-                          ? '以下预览与业务用户前端一致（文本大纲，非幻灯片效果）。建议上传视觉预览件。'
+                          ? form.previewFile.kind === 'pptx'
+                            ? '以下预览与业务用户前端一致：按幻灯片页面展示；动画与少数特殊对象会静态或简化。'
+                            : '以下预览与业务用户前端一致（文本大纲，非版式效果）。建议上传视觉预览件。'
                           : '以下预览与业务用户前端一致。'}
                     </p>
                     <CaseDocumentPreview

@@ -78,6 +78,7 @@ export function HomeMarketChannels({
                     card={c}
                     className="home-channel-card"
                     enableCompare={false}
+                    showTags={false}
                     onOpen={() => onOpen(c)}
                     onPrimary={() => onOpen(c)}
                   />

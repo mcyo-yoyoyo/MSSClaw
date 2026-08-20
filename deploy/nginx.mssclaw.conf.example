@@ -47,6 +47,14 @@ http {
     root /opt/mssclaw/apps/web/dist;
     index index.html;
 
+    # PDF.js worker 由 Vite 产出为 .mjs；显式 MIME 兼容未收录 mjs 的旧版内网 Nginx。
+    location ~ ^/assets/.*\.mjs$ {
+      default_type application/javascript;
+      expires 30d;
+      add_header Cache-Control "public, immutable";
+      try_files $uri =404;
+    }
+
     # 静态资源长缓存（Vite 带 hash 的 chunk）
     location /assets/ {
       expires 30d;

@@ -7,20 +7,32 @@ import {
   FormTextarea,
 } from '@/components/center/CenterFormFields';
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
-import type { AssetVisibility, DeptId, RegionId } from '@/domain/orgTaxonomy';
-import { ASSET_VISIBILITY_LABELS, HQ_DEPTS, REGIONS } from '@/domain/orgTaxonomy';
+import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
+import { HQ_DEPTS, REGIONS } from '@/domain/orgTaxonomy';
+import {
+  getSkillVisibilityLabel,
+  normalizeSkillVisibility,
+  SKILL_VISIBILITY_LABELS,
+  type SkillVisibility,
+} from '@/domain/skillVisibility';
 import { DEFAULT_SKILL_ACCENT } from '@/domain/skillAccent';
 import { cn } from '@/lib/utils';
 import {
   listVisibleBusinessScenarioCategories,
   type BusinessScenarioId,
 } from '@/domain/businessScenarios';
-import { uploadWorkspaceBlob, uploadWorkspacePackage } from '@/api/blobApi';
+import {
+  deleteUploadedWorkspaceBlob,
+  isWorkspaceBlobUploadContextCurrent,
+  type UploadedWorkspaceBlob,
+  uploadWorkspaceBlob,
+  uploadWorkspacePackage,
+} from '@/api/blobApi';
 import { currentWorkspaceId } from '@/api/platformDocsApi';
 import type { PortalCasePreviewFile } from '@/domain/prototype/portalContent';
 import {
   resolveSkillBusinessScenario,
-  resolveSkillFeaturedInDoTask,
+  resolveSkillFeaturedInMssMarket,
 } from '@/domain/skillBusinessScenarios';
 import {
   getCurrentDeptIds,
@@ -49,6 +61,10 @@ import { packageZipErrorMessage } from '@/domain/safeZip';
 import { useTemporaryWorkspaceBlobs } from '@/hooks/useTemporaryWorkspaceBlobs';
 
 const ICON_MAX_BYTES = 512 * 1024;
+const CASE_ATTACHMENT_MAX_BYTES = 12 * 1024 * 1024;
+const PDF_MIME_TYPE = 'application/pdf';
+const PPTX_MIME_TYPE =
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
 function readSkillIconFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -90,7 +106,6 @@ function emptySkill(): PrototypeSkillSeed {
     connector: '',
     published: false,
     callable: false,
-    featuredInDoTask: false,
     featuredInMssMarket: false,
     invokes: 0,
     icon: 'fa-cube',
@@ -122,7 +137,7 @@ function emptySkill(): PrototypeSkillSeed {
 
 function normalizeSkillForm(skill: PrototypeSkillSeed): PrototypeSkillSeed {
   const base = { ...emptySkill(), ...skill };
-  const featured = resolveSkillFeaturedInDoTask(skill);
+  const featured = resolveSkillFeaturedInMssMarket(skill);
   return {
     ...base,
     nameZh: skill.nameZh || skill.name || '',
@@ -150,10 +165,9 @@ function normalizeSkillForm(skill: PrototypeSkillSeed): PrototypeSkillSeed {
       ? skill.ownerDeptIds.slice(0, 1)
       : getCurrentDeptIds().slice(0, 1),
     ownerRegionId: skill.ownerRegionId ?? getCurrentRegionId(),
-    visibility: skill.visibility === 'org' || skill.visibility === 'private' ? skill.visibility : 'public',
+    visibility: normalizeSkillVisibility(skill.visibility, 'public'),
     published: Boolean(skill.published),
     callable: typeof skill.callable === 'boolean' ? skill.callable : Boolean(skill.published),
-    featuredInDoTask: featured,
     featuredInMssMarket: featured,
     businessScenarioId: resolveSkillBusinessScenario(skill) ?? undefined,
     accentColor: skill.accentColor || DEFAULT_SKILL_ACCENT,
@@ -178,6 +192,8 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   const temporaryPackageBlobs = useTemporaryWorkspaceBlobs(target);
   const [form, setForm] = useState<PrototypeSkillSeed>(emptySkill());
   const [uploadingCase, setUploadingCase] = useState(false);
+  const caseUploadGenerationRef = useRef(0);
+  const caseAttachmentUploadsRef = useRef(new Map<string, UploadedWorkspaceBlob>());
   const [uploadingPackage, setUploadingPackage] = useState(false);
   const [step, setStep] = useState<WizardStep>(0);
   const [packName, setPackName] = useState<string | null>(null);
@@ -198,8 +214,21 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   );
 
   useEffect(() => {
+    caseUploadGenerationRef.current += 1;
+    for (const uploaded of caseAttachmentUploadsRef.current.values()) {
+      void deleteUploadedWorkspaceBlob(uploaded).catch(() => undefined);
+    }
+    caseAttachmentUploadsRef.current.clear();
+    setUploadingCase(false);
     setParsing(false);
     setUploadingPackage(false);
+    return () => {
+      caseUploadGenerationRef.current += 1;
+      for (const uploaded of caseAttachmentUploadsRef.current.values()) {
+        void deleteUploadedWorkspaceBlob(uploaded).catch(() => undefined);
+      }
+      caseAttachmentUploadsRef.current.clear();
+    };
   }, [target]);
 
   useEffect(() => {
@@ -344,6 +373,12 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   };
 
   const handleClose = () => {
+    caseUploadGenerationRef.current += 1;
+    for (const uploaded of caseAttachmentUploadsRef.current.values()) {
+      void deleteUploadedWorkspaceBlob(uploaded).catch(() => undefined);
+    }
+    caseAttachmentUploadsRef.current.clear();
+    setUploadingCase(false);
     temporaryPackageBlobs.finish();
     onClose();
   };
@@ -367,8 +402,13 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
         showToast('请选择业务场景分类');
         return false;
       }
+      const visibility = normalizeSkillVisibility(form.visibility, 'org');
+      if (visibility === 'org' && !form.ownerDeptIds?.length) {
+        showToast('选择“部门可见”时，请选择一个所属职能');
+        return false;
+      }
       if (!(form.ownerDeptIds?.length || form.ownerRegionId)) {
-        showToast('请至少选择所属职能或区域（默认组织内可见）');
+        showToast('请至少选择所属职能或区域（用于资产归属）');
         return false;
       }
       if (!isPlatformOps) {
@@ -393,8 +433,34 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   };
 
   const handleSave = () => {
-    if (uploadingPackage || parsing) {
-      showToast('技能包正在解析或上传，请稍候');
+    if (uploadingPackage || uploadingCase || parsing) {
+      showToast(uploadingCase ? '样例附件正在上传，请稍候' : '技能包正在解析或上传，请稍候');
+      return;
+    }
+    const attachedBlobIds = new Set(
+      (form.caseAttachments ?? []).map((attachment) => attachment.blobId).filter(Boolean),
+    );
+    const staleAttachmentIds = [...caseAttachmentUploadsRef.current]
+      .filter(
+        ([blobId, uploaded]) =>
+          attachedBlobIds.has(blobId) &&
+          !isWorkspaceBlobUploadContextCurrent(uploaded, currentWorkspaceId()),
+      )
+      .map(([blobId]) => blobId);
+    if (staleAttachmentIds.length) {
+      const staleIds = new Set(staleAttachmentIds);
+      staleAttachmentIds.forEach((blobId) => {
+        const uploaded = caseAttachmentUploadsRef.current.get(blobId);
+        caseAttachmentUploadsRef.current.delete(blobId);
+        if (uploaded) void deleteUploadedWorkspaceBlob(uploaded).catch(() => undefined);
+      });
+      setForm((current) => ({
+        ...current,
+        caseAttachments: (current.caseAttachments ?? []).filter(
+          (attachment) => !attachment.blobId || !staleIds.has(attachment.blobId),
+        ),
+      }));
+      showToast('工作区、API 或登录状态已变更，请重新上传样例附件');
       return;
     }
     if (!temporaryPackageBlobs.canCommit(form.packageBlob)) {
@@ -433,8 +499,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     const id = isNew ? `skill-${Date.now()}` : (target as string);
     const stamp = new Date().toISOString().slice(0, 10);
 
-    const visibility: AssetVisibility =
-      form.visibility === 'org' || form.visibility === 'private' ? form.visibility : 'public';
+    const visibility: SkillVisibility = normalizeSkillVisibility(form.visibility, 'org');
 
     const envInfo = {
       dependencies: form.envInfo?.dependencies?.trim() || undefined,
@@ -486,8 +551,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       published: Boolean(prev?.published),
       // 可调用/精选不参与是否提审的判断，也不直接改变 published。
       callable: Boolean(form.callable),
-      // 精选同时双写新旧字段，保持历史读取链路一致。
-      featuredInDoTask: Boolean(form.featuredInMssMarket),
+      // 新配置只写 Skill Hub 精选字段；featuredInDoTask 仅保留旧数据读取兼容。
       featuredInMssMarket: Boolean(form.featuredInMssMarket),
       createdAt: prev?.createdAt || form.createdAt || stamp,
       updatedAt: stamp,
@@ -511,6 +575,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
 
     upsertSkill(draft, isNew);
     temporaryPackageBlobs.finish(form.packageBlob);
+    caseAttachmentUploadsRef.current.clear();
     onClose();
 
     if (needsApproval) {
@@ -535,8 +600,8 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       ? '优先上传标准 Skill 包，自动解析后再配置范围'
       : step === 1
         ? '中英文名称与描述；默认界面展示中文'
-        : step === 2
-          ? '默认组织内可见，沉淀部门资产；公开需审批'
+      : step === 2
+          ? '默认部门可见；设置全部门可见需审批'
           : form.published
             ? '已发布 Skill 保存编辑后保持发布状态'
             : '保存即提交发布审批，终审通过后前台展示';
@@ -922,6 +987,14 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                         showToast('仅支持 PDF / PPTX 附件');
                         return;
                       }
+                      if (file.size > CASE_ATTACHMENT_MAX_BYTES) {
+                        showToast('样例附件请控制在 12MB 以内');
+                        return;
+                      }
+                      const workspaceId = currentWorkspaceId();
+                      const generation = caseUploadGenerationRef.current;
+                      const isPdf = lower.endsWith('.pdf');
+                      const mimeType = isPdf ? PDF_MIME_TYPE : PPTX_MIME_TYPE;
                       setUploadingCase(true);
                       try {
                         const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -930,18 +1003,26 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                           reader.onerror = () => reject(reader.error ?? new Error('file_read_failed'));
                           reader.readAsDataURL(file);
                         });
-                        const uploaded = await uploadWorkspaceBlob(currentWorkspaceId(), {
+                        const uploaded = await uploadWorkspaceBlob(workspaceId, {
                           name: file.name,
-                          mimeType: file.type || 'application/octet-stream',
+                          mimeType,
                           dataUrl,
                         });
+                        if (
+                          generation !== caseUploadGenerationRef.current ||
+                          !isWorkspaceBlobUploadContextCurrent(uploaded, currentWorkspaceId())
+                        ) {
+                          void deleteUploadedWorkspaceBlob(uploaded).catch(() => undefined);
+                          return;
+                        }
+                        caseAttachmentUploadsRef.current.set(uploaded.id, uploaded);
                         const item: PortalCasePreviewFile = {
                           name: uploaded.name,
-                          mimeType: uploaded.mimeType,
+                          mimeType,
                           size: uploaded.size,
                           url: uploaded.url,
                           blobId: uploaded.id,
-                          kind: lower.endsWith('.pdf') ? 'pdf' : 'pptx',
+                          kind: isPdf ? 'pdf' : 'pptx',
                         };
                         setForm((f) => ({
                           ...f,
@@ -949,9 +1030,13 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                         }));
                         showToast(`已上传附件：${uploaded.name}`);
                       } catch {
-                        showToast('附件上传失败，请检查后端连接后重试');
+                        if (generation === caseUploadGenerationRef.current) {
+                          showToast('附件上传失败，请检查后端连接后重试');
+                        }
                       } finally {
-                        setUploadingCase(false);
+                        if (generation === caseUploadGenerationRef.current) {
+                          setUploadingCase(false);
+                        }
                       }
                     }}
                     className="block w-full text-[12px] file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-[12px] file:font-medium file:text-white"
@@ -978,12 +1063,19 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                       <span className="min-w-0 flex-1 truncate text-[12px] text-zinc-700">{att.name}</span>
                       <button
                         type="button"
-                        onClick={() =>
+                        onClick={() => {
+                          if (att.blobId) {
+                            const uploaded = caseAttachmentUploadsRef.current.get(att.blobId);
+                            caseAttachmentUploadsRef.current.delete(att.blobId);
+                            if (uploaded) {
+                              void deleteUploadedWorkspaceBlob(uploaded).catch(() => undefined);
+                            }
+                          }
                           setForm((f) => ({
                             ...f,
                             caseAttachments: (f.caseAttachments ?? []).filter((_, i) => i !== idx),
-                          }))
-                        }
+                          }));
+                        }}
                         className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-zinc-500 transition hover:bg-rose-50 hover:text-rose-600"
                       >
                         移除
@@ -1173,20 +1265,19 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
             <div className="rounded-xl border border-zinc-200 px-3 py-2.5 space-y-2">
               <p className="text-[13px] font-semibold text-zinc-800">发布权限范围</p>
               <p className="text-[11px] text-zinc-500">
-                默认组织内可见（角标「领域」）：业务用户仅能看到归属命中本人领域或区域的
-                Skill；发布方与平台运营可看全部。
-                公开可见（角标「公开」）：不区分登录人领域/区域，需通过审批。
+                部门可见：仅归属职能与登录用户部门匹配时可见；发布方与平台运营可管理全部。
+                全部门可见：不区分登录用户所属部门，需通过审批。
               </p>
               <label className="flex cursor-pointer items-center gap-2">
                 <input
                   type="radio"
                   name="skill-vis"
                   className="accent-claw-600"
-                  checked={(form.visibility ?? 'org') === 'public'}
-                  onChange={() => setForm({ ...form, visibility: 'public' })}
+                  checked={normalizeSkillVisibility(form.visibility, 'org') === 'org'}
+                  onChange={() => setForm({ ...form, visibility: 'org' })}
                 />
                 <span className="text-[13px] font-medium text-zinc-800">
-                  {ASSET_VISIBILITY_LABELS.public}
+                  {SKILL_VISIBILITY_LABELS.org}
                 </span>
               </label>
               <label className="flex cursor-pointer items-center gap-2">
@@ -1194,11 +1285,11 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                   type="radio"
                   name="skill-vis"
                   className="accent-claw-600"
-                  checked={form.visibility === 'org'}
-                  onChange={() => setForm({ ...form, visibility: 'org' })}
+                  checked={normalizeSkillVisibility(form.visibility, 'org') === 'public'}
+                  onChange={() => setForm({ ...form, visibility: 'public' })}
                 />
                 <span className="text-[13px] font-medium text-zinc-800">
-                  {ASSET_VISIBILITY_LABELS.org}
+                  {SKILL_VISIBILITY_LABELS.public}
                 </span>
               </label>
             </div>
@@ -1211,11 +1302,12 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
               <p className="text-[13px] font-semibold text-zinc-800">发布与调用状态</p>
               <p className="text-[11px] text-zinc-500">
                 {form.published
-                  ? '该 Skill 已发布。保存本次编辑后继续保持前台展示；如申请公开可见，仍需完成对应审批。'
+                  ? '该 Skill 已发布。保存本次编辑后继续保持前台展示；如申请全部门可见，仍需完成对应审批。'
                   : '保存后自动发起发布审批。终审通过前 Skill 保持未发布，不可被对话或任务调用。'}
               </p>
               <p className="rounded-lg bg-zinc-50 px-3 py-2 text-[11px] leading-snug text-zinc-600">
-                发布审批只控制前台展示；「上架可调用」控制发布后的在线调用，「精选」控制场景分组露出。
+                发布审批只控制前台展示；「上架可调用」控制发布后的在线调用，「精选」仅控制
+                AI工具Hub → Skill Hub 的「精选推荐」。
               </p>
             </div>
 
@@ -1242,7 +1334,6 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                   onChange={(e) =>
                     setForm({
                       ...form,
-                      featuredInDoTask: e.target.checked,
                       featuredInMssMarket: e.target.checked,
                     })
                   }
@@ -1250,7 +1341,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                 <span>
                   <span className="block text-[13px] font-medium text-zinc-800">精选</span>
                   <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500">
-                    控制场景 Skill 的精选分组露出；不影响发布审批和在线调用。
+                    仅控制 AI工具Hub → Skill Hub 的「精选推荐」分组；不影响发布审批、普通列表展示和在线调用。
                   </span>
                 </span>
               </label>
@@ -1262,9 +1353,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                 <li>资产写入：Skill 沉淀</li>
                 <li>
                   权限范围：
-                  {ASSET_VISIBILITY_LABELS[
-                    form.visibility === 'org' ? 'org' : 'public'
-                  ]}
+                  {getSkillVisibilityLabel(form.visibility)}
                 </li>
                 {form.published ? (
                   <li>发布状态：保持已上架</li>
@@ -1272,7 +1361,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                   <li>触发审批：终审通过后正式上架</li>
                 )}
                 <li>
-                  发布配置：上架可调用{form.callable ? '已选' : '未选'}、精选
+                  发布配置：上架可调用{form.callable ? '已选' : '未选'}、Skill Hub 精选
                   {form.featuredInMssMarket ? '已选' : '未选'}
                 </li>
               </ul>

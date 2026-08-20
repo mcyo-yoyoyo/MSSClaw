@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { AgentPortrait } from '@/components/brand/AgentPortrait';
 import { CenterModal } from '@/components/center/CenterShell';
+import { CaseDocumentPreviewList } from '@/components/content/CaseDocumentPreview';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
 import {
   buildAgentDemoPrompt,
@@ -390,6 +391,7 @@ export function CatalogAgentDetailModal({
     ...capabilityTypeLabels,
   ]).slice(0, 5);
   const cases = agent.cases ?? [];
+  const caseAttachments = agent.caseAttachments ?? [];
   const valueProposition = agent.valueProposition?.trim() || '';
 
   const environment = agent.environment;
@@ -836,6 +838,12 @@ export function CatalogAgentDetailModal({
                   </section>
                 ))}
 
+                {caseAttachments.length ? (
+                  <SectionCard title="样例附件" icon="fa-paperclip">
+                    <CaseDocumentPreviewList files={caseAttachments} policy="restricted" />
+                  </SectionCard>
+                ) : null}
+
                 {/* §6.5 方案包：文档类资源标出文件类型，避免用户不知道点开是什么 */}
                 <SectionCard title="方案与执行材料" icon="fa-folder-open">
                   <div className="space-y-2">
@@ -884,7 +892,7 @@ export function CatalogAgentDetailModal({
                   ) : null}
                 </SectionCard>
 
-                {!cases.length ? (
+                {!cases.length && !caseAttachments.length ? (
                   <EmptyHint text="该 Agent 尚未配置 Demo 案例，可先查看上方方案与执行材料。" />
                 ) : null}
               </div>

@@ -9,7 +9,7 @@ export const CAPABILITY_SHELF_HINT =
   '能力发布后进入前台；Skill 是否允许在线调用由 callable 独立控制。外部工具再配置「上架货架 / 精选置顶」进入运营分组。';
 
 export const DO_TASK_FEATURED_HINT =
-  '精选用于「AI工具Hub · 场景技能」运营分组；发布展示由 published 控制，在线调用另由 callable 控制。';
+  '精选仅用于「AI工具Hub → Skill Hub → 精选推荐」运营分组；发布展示由 published 控制，在线调用另由 callable 控制。';
 
 export const FIND_CASES_FEATURED_HINT =
   '外精选露出请在「门户运营 · 货架运营」用精选置顶配置；本字段已停用，保留仅兼容旧数据。';
