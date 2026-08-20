@@ -42,6 +42,10 @@ import {
   AGENT_HUB_SEARCH_HINTS,
   matchesAgentHubSearch,
 } from '@/domain/agentHubSearch';
+import {
+  getAgentCapabilityTypeLabel,
+  resolveAgentCapabilityTypes,
+} from '@/domain/agentHubFilters';
 import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
 import { canViewAsset } from '@/domain/assetVisibility';
 import { downloadSkillFile } from '@/domain/skillExport';
@@ -434,8 +438,21 @@ export function MarketShelfPage({
         return deptOk && regionOk;
       })
       .filter((agent) => {
+        const businessScenarioLabel = agent.businessScenarioId
+          ? getBusinessScenarioMeta(agent.businessScenarioId).label
+          : '';
+        const tagLabels = [
+          ...(agent.scenarioTags ?? []),
+          agent.bizLine,
+          businessScenarioLabel,
+          ...(agent.ownerDeptIds ?? []).map(getDeptLabel),
+          ...(agent.ownerRegionIds ?? []).map(getRegionLabel),
+          ...resolveAgentCapabilityTypes(agent).map(getAgentCapabilityTypeLabel),
+          ...(agent.targetUsers ?? []),
+          ...(agent.environment?.platforms ?? []),
+        ].filter(Boolean);
         return matchesAgentHubSearch(
-          { title: agent.name, description: agent.desc },
+          { title: agent.name, description: agent.desc, tags: tagLabels },
           q,
         );
       })

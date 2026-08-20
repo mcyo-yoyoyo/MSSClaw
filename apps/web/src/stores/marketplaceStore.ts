@@ -22,7 +22,12 @@ import { currentWorkspaceId } from '@/api/platformDocsApi';
 import { packageUploadSizeError } from '@/domain/packageUpload';
 import { packageZipErrorMessage } from '@/domain/safeZip';
 import { rebuildKbVectorIndex } from '@/api/kbClient';
-import { loadMarketplace, scheduleSaveMarketplace } from '@/domain/persistence/storage';
+import {
+  flushSaveMarketplace,
+  loadMarketplace,
+  scheduleSaveMarketplace,
+  type MarketplaceSaveResult,
+} from '@/domain/persistence/storage';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import {
   matchesAssetOrgFilters,
@@ -77,6 +82,7 @@ interface MarketplaceState {
   upsertAgent: (agent: PrototypeAgentSeed, isNew?: boolean) => void;
   upsertSkill: (skill: PrototypeSkillSeed, isNew?: boolean) => void;
   upsertTool: (tool: PrototypeToolSeed, isNew?: boolean) => void;
+  saveToolNow: (tool: PrototypeToolSeed, isNew?: boolean) => Promise<MarketplaceSaveResult>;
   upsertAutomation: (automation: PrototypeAutomation, isNew?: boolean) => void;
   upsertKbDoc: (doc: PrototypeKbDocument, isNew?: boolean) => void;
   uploadKbFile: (file: File) => Promise<string | null>;
@@ -148,6 +154,16 @@ async function retainImportedPackage(file: File) {
 }
 
 let marketplaceBootstrapGeneration = 0;
+const immediateToolSaveChains = new Map<string, Promise<MarketplaceSaveResult>>();
+
+function withUpsertedTool(
+  tools: PrototypeToolSeed[],
+  tool: PrototypeToolSeed,
+  isNew: boolean,
+): PrototypeToolSeed[] {
+  if (isNew) return [tool, ...tools.filter((item) => item.id !== tool.id)];
+  return tools.map((item) => (item.id === tool.id ? tool : item));
+}
 
 export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   ready: false,
@@ -225,9 +241,18 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   },
 
   persist: () => {
-    const { agents, skills, tools, automations, kbDocs } = get();
     const workspaceId = useWorkspaceStore.getState().workspaceId;
-    scheduleSaveMarketplace(workspaceId, { agents, skills, tools, automations, kbDocs });
+    const persistLatest = () => {
+      if (useWorkspaceStore.getState().workspaceId !== workspaceId) return;
+      const { agents, skills, tools, automations, kbDocs } = get();
+      scheduleSaveMarketplace(workspaceId, { agents, skills, tools, automations, kbDocs });
+    };
+    const pendingImmediateSave = immediateToolSaveChains.get(workspaceId);
+    if (pendingImmediateSave) {
+      void pendingImmediateSave.then(persistLatest, persistLatest);
+      return;
+    }
+    persistLatest();
   },
 
   upsertAgent: (agent, isNew = false) => {
@@ -246,9 +271,53 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
 
   upsertTool: (tool, isNew = false) => {
     set((s) => ({
-      tools: isNew ? [tool, ...s.tools] : s.tools.map((t) => (t.id === tool.id ? tool : t)),
+      tools: withUpsertedTool(s.tools, tool, isNew),
     }));
     get().persist();
+  },
+
+  saveToolNow: async (tool, isNew = false) => {
+    const workspaceId = useWorkspaceStore.getState().workspaceId;
+    const previous = immediateToolSaveChains.get(workspaceId);
+    const run = async (): Promise<MarketplaceSaveResult> => {
+      if (useWorkspaceStore.getState().workspaceId !== workspaceId) {
+        return { synced: false, reason: 'failed', detail: 'workspace_changed' };
+      }
+      const current = get();
+      const tools = withUpsertedTool(current.tools, tool, isNew);
+      const result = await flushSaveMarketplace(
+        workspaceId,
+        {
+          agents: current.agents,
+          skills: current.skills,
+          tools,
+          automations: current.automations,
+          kbDocs: current.kbDocs,
+        },
+        { reportFailure: false },
+      );
+      if (!result.synced) return result;
+      if (useWorkspaceStore.getState().workspaceId !== workspaceId) {
+        return { synced: false, reason: 'failed', detail: 'workspace_changed' };
+      }
+      set((state) => ({ tools: withUpsertedTool(state.tools, tool, isNew) }));
+      return result;
+    };
+    const operation = previous ? previous.then(run, run) : run();
+    immediateToolSaveChains.set(workspaceId, operation);
+    void operation.then(
+      () => {
+        if (immediateToolSaveChains.get(workspaceId) === operation) {
+          immediateToolSaveChains.delete(workspaceId);
+        }
+      },
+      () => {
+        if (immediateToolSaveChains.get(workspaceId) === operation) {
+          immediateToolSaveChains.delete(workspaceId);
+        }
+      },
+    );
+    return operation;
   },
 
   upsertAutomation: (automation, isNew = false) => {

@@ -3,6 +3,7 @@ export const AGENT_HUB_SEARCH_HINTS = ['洞察', 'VOC', '内容生成'] as const
 export type AgentHubSearchDocument = {
   title: string;
   description: string;
+  tags?: readonly string[];
 };
 
 const VOC_KEYWORDS = [
@@ -36,7 +37,7 @@ function queryKeywords(query: string): string[] {
     .filter(Boolean);
 }
 
-/** Agent Hub 仅按用户可见的标题与描述做关键词 OR 匹配。 */
+/** Agent Hub 按用户可见的标题、描述与标签做关键词 OR 匹配。 */
 export function matchesAgentHubSearch(
   document: AgentHubSearchDocument,
   query: string,
@@ -44,6 +45,8 @@ export function matchesAgentHubSearch(
   const keywords = queryKeywords(query).map(normalize);
   if (!keywords.length) return true;
 
-  const haystack = normalize(`${document.title} ${document.description}`);
+  const haystack = normalize(
+    [document.title, document.description, ...(document.tags ?? [])].join(' '),
+  );
   return keywords.some((keyword) => haystack.includes(keyword));
 }

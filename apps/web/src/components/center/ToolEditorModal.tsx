@@ -8,7 +8,6 @@ import {
   FormInput,
   FormSelect,
   FormTextarea,
-  ModalActions,
 } from '@/components/center/CenterFormFields';
 import { OwnershipFormFields } from '@/components/center/OrgAssetFilters';
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
@@ -34,11 +33,10 @@ import {
 import { listVisibleExternalToolTypes } from '@/domain/externalTaxonomyCatalog';
 import { useExternalTaxonomyCatalogStore } from '@/stores/externalTaxonomyCatalogStore';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
-import { resolveToolLogoUrl } from '@/domain/toolLogo';
+import { resolvePersistedToolLogoUrl, resolveToolLogoUrl } from '@/domain/toolLogo';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
-import { shareSyncSaveHint } from '@/domain/shareSync';
 
 const LOGO_MAX_BYTES = 512 * 1024;
 
@@ -143,8 +141,10 @@ interface ToolEditorModalProps {
 }
 
 export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
-  const { tools, upsertTool, showToast } = useMarketplaceStore();
+  const { tools, saveToolNow, showToast } = useMarketplaceStore();
   const [form, setForm] = useState<PrototypeToolSeed>(emptyTool(false));
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const externalTaxonomy = useExternalTaxonomyCatalogStore((s) => s.catalog);
   const externalTypeOptions = useMemo(() => {
     const visible = listVisibleExternalToolTypes(externalTaxonomy);
@@ -159,6 +159,8 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
 
   useEffect(() => {
     if (!target) return;
+    setSaving(false);
+    setSaveError(null);
     if (target === 'new') {
       setForm(emptyTool(false));
       return;
@@ -167,7 +169,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
       setForm(emptyTool(true));
       return;
     }
-    const existing = tools.find((t) => t.id === target);
+    const existing = useMarketplaceStore.getState().tools.find((t) => t.id === target);
     if (!existing) {
       setForm(emptyTool(false));
       return;
@@ -179,7 +181,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
       businessScenarioIds: resolveToolBusinessScenarios(existing),
       featuredInFindCases: resolveToolFeaturedInFindCases(existing),
     });
-  }, [target, tools]);
+  }, [target]);
 
   if (!target) return null;
 
@@ -190,7 +192,8 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
   const scenarioCats = listVisibleBusinessScenarioCategories();
   const selectedLobeIconId = resolveLobeIconId(form.logoUrl);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (saving) return;
     const name = form.name.trim();
     if (!name) {
       showToast('请填写工具名称');
@@ -235,81 +238,107 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
     const tags = ensureMarketShelfTags(form.tags ?? [], marketShelf);
     const marketTitle = form.marketTitle?.trim() || undefined;
     const businessScenarioIds = (form.businessScenarioIds ?? []) as BusinessScenarioId[];
-
-    upsertTool(
-      {
+    const nextTool: PrototypeToolSeed = {
+      ...form,
+      id,
+      name,
+      desc:
+        sourceType === 'external'
+          ? form.cardSummary?.trim() || form.productIntro?.trim() || ''
+          : form.desc.trim(),
+      category:
+        sourceType === 'external'
+          ? 'external'
+          : form.category === 'platform'
+            ? 'platform'
+            : 'connector',
+      tags,
+      author: prev?.author ?? userName,
+      publisher: form.publisher || userName,
+      publisherUserId: form.publisherUserId || userId || undefined,
+      invokes: prev?.invokes ?? 0,
+      icon:
+        prev?.icon ??
+        (sourceType === 'external' ? 'fa-arrow-up-right-from-square' : 'fa-plug'),
+      sourceType,
+      visibility: (form.visibility ?? 'public') as AssetVisibility,
+      ownerDeptIds: (form.ownerDeptIds ?? []) as DeptId[],
+      ownerRegionId: (form.ownerRegionId ?? null) as RegionId | null,
+      homepageUrl: form.homepageUrl?.trim() || undefined,
+      logoUrl: resolvePersistedToolLogoUrl({
         ...form,
         id,
-        name,
-        desc:
-          sourceType === 'external'
-            ? form.cardSummary?.trim() || form.productIntro?.trim() || ''
-            : form.desc.trim(),
-        category:
-          sourceType === 'external'
-            ? 'external'
-            : form.category === 'platform'
-              ? 'platform'
-              : 'connector',
-        tags,
-        author: prev?.author ?? userName,
-        publisher: form.publisher || userName,
-        publisherUserId: form.publisherUserId || userId || undefined,
-        invokes: prev?.invokes ?? 0,
-        icon:
-          prev?.icon ??
-          (sourceType === 'external' ? 'fa-arrow-up-right-from-square' : 'fa-plug'),
         sourceType,
-        visibility: (form.visibility ?? 'public') as AssetVisibility,
-        ownerDeptIds: (form.ownerDeptIds ?? []) as DeptId[],
-        ownerRegionId: (form.ownerRegionId ?? null) as RegionId | null,
-        homepageUrl: form.homepageUrl?.trim() || undefined,
-        logoUrl: form.logoUrl?.trim() || undefined,
-        published:
-          sourceType === 'external' || isNew ? true : needsApproval ? false : form.published,
         marketShelf,
-        marketTitle: marketShelf === 'external' ? marketTitle : undefined,
-        businessScenarioIds: businessScenarioIds.length ? businessScenarioIds : undefined,
-        featuredInFindCases: marketShelf === 'none' ? false : Boolean(form.featuredInFindCases),
-        ...(sourceType === 'external' || marketShelf === 'external'
-          ? {
-              region: form.region as ToolRegion,
-              toolTypeId: selectedToolTypeIds[0],
-              toolTypeIds: selectedToolTypeIds,
-              toolTypeLabels: selectedToolTypeIds.map(
-                (id) => externalTaxonomy.types.find((type) => type.id === id)?.label ?? id,
-              ),
-              cardSummary: form.cardSummary?.trim() || undefined,
-              company: form.company?.trim() || undefined,
-              productIntro: form.productIntro?.trim() || undefined,
-              bestFor: form.bestFor?.trim() || undefined,
-              coreCapabilities: form.coreCapabilities?.filter(Boolean),
-              docsUrl: form.docsUrl?.trim() || undefined,
-              mediaUrl: form.mediaUrl?.trim() || undefined,
-              screenshotUrl: form.screenshotUrl?.trim() || undefined,
-            }
-          : {
-              region: undefined,
-              toolTypeId: undefined,
-              cardSummary: undefined,
-              company: undefined,
-            }),
-      },
-      isNew,
-    );
-    onClose();
-    if (needsApproval) {
-      useAssetApprovalStore.getState().openApproval({
-        kind: 'tool',
-        assetId: id,
-        assetName: name,
-      });
-      showToast('工具已保存，已进入上架审批' + shareSyncSaveHint());
-    } else {
-      showToast(
-        (sourceType === 'external' || form.published ? '工具已保存' : '工具已保存（草稿）') +
-          shareSyncSaveHint(),
-      );
+      }),
+      published:
+        sourceType === 'external' || isNew ? true : needsApproval ? false : form.published,
+      marketShelf,
+      marketTitle: marketShelf === 'external' ? marketTitle : undefined,
+      businessScenarioIds: businessScenarioIds.length ? businessScenarioIds : undefined,
+      featuredInFindCases: marketShelf === 'none' ? false : Boolean(form.featuredInFindCases),
+      ...(sourceType === 'external' || marketShelf === 'external'
+        ? {
+            region: form.region as ToolRegion,
+            toolTypeId: selectedToolTypeIds[0],
+            toolTypeIds: selectedToolTypeIds,
+            toolTypeLabels: selectedToolTypeIds.map(
+              (typeId) => externalTaxonomy.types.find((type) => type.id === typeId)?.label ?? typeId,
+            ),
+            cardSummary: form.cardSummary?.trim() || undefined,
+            company: form.company?.trim() || undefined,
+            productIntro: form.productIntro?.trim() || undefined,
+            bestFor: form.bestFor?.trim() || undefined,
+            coreCapabilities: form.coreCapabilities?.filter(Boolean),
+            docsUrl: form.docsUrl?.trim() || undefined,
+            mediaUrl: form.mediaUrl?.trim() || undefined,
+            screenshotUrl: form.screenshotUrl?.trim() || undefined,
+          }
+        : {
+            region: undefined,
+            toolTypeId: undefined,
+            cardSummary: undefined,
+            company: undefined,
+          }),
+    };
+
+    setSaveError(null);
+    setSaving(true);
+    try {
+      const result = await saveToolNow(nextTool, isNew);
+      if (!result.synced) {
+        const message =
+          result.detail === 'workspace_changed'
+            ? '保存期间工作区已切换，未更新当前页面。请返回原工作区确认后重试。'
+            : result.reason === 'offline'
+            ? '共享服务未连接，工具尚未保存。请恢复后重试。'
+            : `工具保存失败${result.detail ? `（${result.detail}）` : ''}，请稍后重试。`;
+        setSaveError(message);
+        showToast(message);
+        return;
+      }
+
+      if (needsApproval) {
+        useAssetApprovalStore.getState().openApproval({
+          kind: 'tool',
+          assetId: id,
+          assetName: name,
+        });
+        showToast('工具已保存并同步，已进入上架审批');
+      } else {
+        showToast(
+          sourceType === 'external' || form.published
+            ? '工具已保存并同步到共享服务'
+            : '工具草稿已保存并同步到共享服务',
+        );
+      }
+      onClose();
+    } catch (error) {
+      const message = `工具保存失败${error instanceof Error && error.message ? `（${error.message}）` : ''}，请稍后重试。`;
+      setSaveError(message);
+      showToast(message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -320,25 +349,49 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
     setForm({ ...form, businessScenarioIds: [...cur] as BusinessScenarioId[] });
   };
 
+  const guardedClose = () => {
+    if (!saving) onClose();
+  };
+  const saveButtonLabel =
+    isNew || form.sourceType === 'external' || shelf === 'external'
+      ? '保存'
+      : '保存并提交审批';
+
   return (
     <CenterModal
       open
       title={title}
-      onClose={onClose}
+      onClose={guardedClose}
       actions={
-        <ModalActions
-          onCancel={onClose}
-          onSave={handleSave}
-          saveLabel={
-            isNew || form.sourceType === 'external' || shelf === 'external'
-              ? '保存'
-              : '保存并提交审批'
-          }
-          cancelFirst
-        />
+        <>
+          <button
+            type="button"
+            onClick={guardedClose}
+            disabled={saving}
+            className="rounded-xl border border-black/8 px-4 py-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={saving}
+            className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white disabled:cursor-wait disabled:opacity-60"
+          >
+            {saving ? '保存中…' : saveButtonLabel}
+          </button>
+        </>
       }
     >
-      <div className="space-y-3 text-left">
+      <fieldset disabled={saving} className="min-w-0 space-y-3 text-left disabled:opacity-75">
+        {saveError ? (
+          <div
+            role="alert"
+            className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] leading-relaxed text-red-700"
+          >
+            {saveError}
+          </div>
+        ) : null}
         {isNew ? (
           <FormField
             label="上架货架"
@@ -753,7 +806,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
             <span className="text-[13px]">提交上架审批（能力上架）</span>
           </label>
         ) : null}
-      </div>
+      </fieldset>
     </CenterModal>
   );
 }

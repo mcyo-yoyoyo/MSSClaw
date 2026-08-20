@@ -18,6 +18,7 @@
     "test:skill-hub-search": "node --experimental-strip-types --test tests/skillHubSearch.test.ts",
     "test:skill-region-visibility": "node --experimental-strip-types --test tests/skillRegionVisibility.test.ts",
     "test:tool-logo": "node --experimental-strip-types --test tests/toolLogo.test.ts",
+    "test:marketplace-persistence": "node --experimental-strip-types --test tests/marketplacePersistence.test.ts",
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {

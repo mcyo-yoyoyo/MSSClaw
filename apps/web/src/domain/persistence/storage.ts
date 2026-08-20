@@ -32,6 +32,11 @@ export type MarketplaceSaveResult = {
   detail?: string;
 };
 
+type MarketplaceSaveOptions = {
+  /** Some callers keep the draft open and show a context-specific error themselves. */
+  reportFailure?: boolean;
+};
+
 const memorySessions = new Map<string, Record<string, ChatConfig>>();
 
 function emptyMarketplace(): MarketplaceSnapshot {
@@ -74,10 +79,11 @@ export async function loadMarketplace(
 export async function saveMarketplace(
   workspaceId: string,
   snapshot: MarketplaceSnapshot,
+  options?: MarketplaceSaveOptions,
 ): Promise<MarketplaceSaveResult> {
   if (!useWorkspaceStore.getState().apiConnected) {
     const result: MarketplaceSaveResult = { synced: false, reason: 'offline' };
-    reportMarketplaceSync(result);
+    if (options?.reportFailure !== false) reportMarketplaceSync(result);
     return result;
   }
   try {
@@ -91,7 +97,7 @@ export async function saveMarketplace(
       reason: 'failed',
       detail: err instanceof Error ? err.message : undefined,
     };
-    reportMarketplaceSync(result);
+    if (options?.reportFailure !== false) reportMarketplaceSync(result);
     return result;
   }
 }
@@ -226,6 +232,35 @@ export async function saveSessions(
 }
 
 const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const marketplaceSaveChains = new Map<string, Promise<MarketplaceSaveResult>>();
+
+function enqueueMarketplaceSave(
+  workspaceId: string,
+  snapshot: MarketplaceSnapshot,
+  options?: MarketplaceSaveOptions,
+): Promise<MarketplaceSaveResult> {
+  const previous = marketplaceSaveChains.get(workspaceId);
+  const next = previous
+    ? previous.then(
+        () => saveMarketplace(workspaceId, snapshot, options),
+        () => saveMarketplace(workspaceId, snapshot, options),
+      )
+    : saveMarketplace(workspaceId, snapshot, options);
+  marketplaceSaveChains.set(workspaceId, next);
+  void next.then(
+    () => {
+      if (marketplaceSaveChains.get(workspaceId) === next) {
+        marketplaceSaveChains.delete(workspaceId);
+      }
+    },
+    () => {
+      if (marketplaceSaveChains.get(workspaceId) === next) {
+        marketplaceSaveChains.delete(workspaceId);
+      }
+    },
+  );
+  return next;
+}
 
 export function scheduleSaveMarketplace(workspaceId: string, snapshot: MarketplaceSnapshot, ms = 600) {
   const key = `market:${workspaceId}`;
@@ -235,9 +270,28 @@ export function scheduleSaveMarketplace(workspaceId: string, snapshot: Marketpla
     key,
     setTimeout(() => {
       debounceTimers.delete(key);
-      void saveMarketplace(workspaceId, snapshot);
+      void enqueueMarketplaceSave(workspaceId, snapshot);
     }, ms),
   );
+}
+
+/**
+ * Cancel the still-pending debounce for this workspace and persist the supplied
+ * full snapshot now. Already-started writes stay ordered ahead of this one, so
+ * an older request cannot finish later and overwrite the confirmed save.
+ */
+export function flushSaveMarketplace(
+  workspaceId: string,
+  snapshot: MarketplaceSnapshot,
+  options?: MarketplaceSaveOptions,
+): Promise<MarketplaceSaveResult> {
+  const key = `market:${workspaceId}`;
+  const pending = debounceTimers.get(key);
+  if (pending) {
+    clearTimeout(pending);
+    debounceTimers.delete(key);
+  }
+  return enqueueMarketplaceSave(workspaceId, snapshot, options);
 }
 
 export function scheduleSaveSessions(workspaceId: string, chats: Record<string, ChatConfig>, ms = 600) {
