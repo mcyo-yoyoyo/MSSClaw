@@ -10,6 +10,7 @@ export interface PortalAnalyticsReport {
   totals: {
     pv: number;
     uv: number;
+    todayLoginUsers: number;
   };
   series: Array<{
     date: string;

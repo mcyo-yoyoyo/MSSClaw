@@ -120,6 +120,7 @@ export function PortalTrafficPanel() {
     report &&
       (report.totals.pv > 0 ||
         report.totals.uv > 0 ||
+        report.totals.todayLoginUsers > 0 ||
         dailyRows.some((row) => row.pv > 0 || row.uv > 0) ||
         pageRows.some((row) => row.pv > 0 || row.uv > 0)),
   );
@@ -196,7 +197,7 @@ export function PortalTrafficPanel() {
 
       {loading ? (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="访问数据读取中">
-          {Array.from({ length: 4 }, (_, index) => (
+          {Array.from({ length: 5 }, (_, index) => (
             <div key={index} className="apple-card animate-pulse p-3">
               <div className="h-2.5 w-16 rounded bg-zinc-100" />
               <div className="mt-3 h-6 w-24 rounded bg-zinc-100" />
@@ -211,6 +212,7 @@ export function PortalTrafficPanel() {
             items={[
               ['PV 浏览量', formatCount(report.totals.pv)],
               ['UV 独立访客', formatCount(report.totals.uv)],
+              ['今日登录人数', formatCount(report.totals.todayLoginUsers)],
               ['人均浏览', formatAverage(report.totals.pv, report.totals.uv)],
               ['统计周期', report.range.days === 1 ? '今天' : `${report.range.days} 天`],
             ]}

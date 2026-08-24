@@ -73,6 +73,17 @@ model PortalPageView {
   @@index([workspaceId, dateKey, visitorHash])
 }
 
+/// 每日成功登录账号。复合主键保证同一账号当天重复登录只计为一人。
+model PortalDailyLogin {
+  workspaceId  String
+  dateKey      String
+  visitorHash  String
+  firstLoginAt DateTime @default(now())
+
+  @@id([workspaceId, dateKey, visitorHash])
+  @@index([workspaceId, dateKey])
+}
+
 /// AI 快讯邮件订阅。每个工作区内每位用户只有一条当前有效订阅。
 model AiBriefEmailSubscription {
   workspaceId  String

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -8,6 +8,7 @@ import {
   SEED_EXTERNAL_TAXONOMY,
   SEED_INTERNAL_OFFICE_SCENES,
 } from '../data/market-doc-seeds';
+import { PortalAnalyticsService } from './portal-analytics.service';
 
 /** 允许持久化的平台文档 kind（对应原前端 localStorage 配置） */
 export const PLATFORM_DOC_KINDS = [
@@ -361,7 +362,12 @@ function shouldUpgradeMarketDoc(kind: PlatformDocKind, payload: unknown): boolea
 
 @Injectable()
 export class PlatformDocsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(PlatformDocsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly portalAnalytics: PortalAnalyticsService,
+  ) {}
 
   async getDoc(workspaceId: string, kind: string): Promise<{ kind: string; payload: unknown }> {
     if (!isDocKind(kind)) throw new BadRequestException(`unsupported_doc_kind:${kind}`);
@@ -547,6 +553,18 @@ export class PlatformDocsService {
     const token = randomBytes(24).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     await this.putSession(workspaceId, token, { user, expiresAt });
+
+    // 登录统计不可反向阻断认证；数据库暂时不可写时保留服务端日志，登录仍正常返回。
+    try {
+      await this.portalAnalytics.recordDailyLogin({
+        workspaceId,
+        userId: String(user.id ?? ''),
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Daily login analytics failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
 
     return { ok: true, user, token, expiresAt };
   }

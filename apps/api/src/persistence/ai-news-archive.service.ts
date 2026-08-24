@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import type { Prisma } from '@prisma/client';
+import { ProxyAgent, fetch as undiciFetch } from 'undici';
 import { PrismaService } from '../prisma/prisma.service';
 
 export const AI_NEWS_SOURCE = 'https://aihot.virxact.com';
@@ -11,6 +12,32 @@ const RETENTION_DAYS = 180;
 
 /** 启动时距上次成功同步超过该小时数即补拉；取 12h 可覆盖"错过当天 08:00"的情形 */
 const STALE_AFTER_HOURS = 12;
+
+/**
+ * 内网出口常静默丢包而不是明确拒绝，两次尝试都必须有超时，否则启动补偿会一直挂着。
+ * 直连给短一点，代理链路多一跳给宽一点。
+ */
+const DIRECT_TIMEOUT_MS = 10_000;
+const PROXY_TIMEOUT_MS = 20_000;
+
+/** 只从环境变量读，不硬编码任何公司内部地址；读不到就不尝试代理 */
+function proxyUrlFromEnv(): string {
+  return (process.env.HTTPS_PROXY || process.env.https_proxy || '').trim();
+}
+
+/**
+ * undici 连接失败时 message 恒为 "fetch failed"，真实原因（ConnectTimeoutError /
+ * ENOTFOUND / 证书错误…）藏在 cause 里。不展开就没法判断该配代理还是配 CA。
+ */
+function describeError(e: unknown): string {
+  if (!(e instanceof Error)) return 'fetch failed';
+  const cause = (e as Error & { cause?: unknown }).cause;
+  if (cause instanceof Error) {
+    const code = (cause as Error & { code?: string }).code;
+    return `${e.message} (${code ? `${code}: ` : ''}${cause.message})`;
+  }
+  return cause ? `${e.message} (${String(cause)})` : e.message || 'fetch failed';
+}
 
 /** 全局单条记录：AI 快讯不区分工作区，各租户读同一份公共资讯 */
 const ARCHIVE_ID = 'doc-ai-news-archive';
@@ -50,6 +77,8 @@ interface ArchivePayload {
   updatedAt: string;
   lastSyncAt?: string;
   lastSyncError?: string;
+  /** 上次成功走的是直连还是代理；便于判断内网出口是否已恢复 */
+  lastSyncVia?: 'direct' | 'proxy';
 }
 
 function dateLabel(value?: string): string {
@@ -148,6 +177,57 @@ export class AiNewsArchiveService implements OnModuleInit {
   }
 
   /** 拉取上游并合并入库；上游失败时保留既有归档不动 */
+  /**
+   * 先直连，失败且配了 HTTPS_PROXY 才换代理重试。
+   *
+   * 顺序取「先直连」而非「先代理」：没配代理的环境行为完全不变，不会因为环境变量
+   * 配错导致全部流量莫名走代理。代价是内网每次要先等一轮直连超时——这是每天一次的
+   * 定时任务，十几秒无所谓。
+   *
+   * 用 undici 自带的 fetch 而不是全局 fetch：ProxyAgent 来自这个包，全局 fetch 是
+   * Node 内置的另一份 undici 实例，跨实例传 dispatcher 是否生效取决于版本，
+   * 会出现「配了但没走代理」这种极难排查的情况。
+   */
+  private async fetchItems(): Promise<{ items: AihotItem[]; via: 'direct' | 'proxy' }> {
+    const read = async (
+      via: 'direct' | 'proxy',
+      dispatcher: ProxyAgent | undefined,
+      timeoutMs: number,
+    ) => {
+      const upstream = await undiciFetch(ITEMS_API, {
+        dispatcher,
+        signal: AbortSignal.timeout(timeoutMs),
+        headers: {
+          'User-Agent': 'mssclaw-ai-brief/1.0',
+          Accept: 'application/json',
+        },
+      });
+      if (!upstream.ok) throw new Error(`upstream ${upstream.status}`);
+      const data = (await upstream.json()) as { items?: AihotItem[] };
+      return { items: Array.isArray(data.items) ? data.items : [], via };
+    };
+
+    try {
+      return await read('direct', undefined, DIRECT_TIMEOUT_MS);
+    } catch (directError) {
+      const proxyUrl = proxyUrlFromEnv();
+      if (!proxyUrl) throw directError;
+
+      this.logger.warn(
+        `AI news direct fetch failed (${describeError(directError)}); retrying via proxy`,
+      );
+      const agent = new ProxyAgent(proxyUrl);
+      try {
+        return await read('proxy', agent, PROXY_TIMEOUT_MS);
+      } catch (proxyError) {
+        // 两条路都失败时报代理那次的原因：配了代理说明它才是预期路径
+        throw proxyError;
+      } finally {
+        void agent.close().catch(() => undefined);
+      }
+    }
+  }
+
   async syncNow(): Promise<{
     ok: boolean;
     added: number;
@@ -156,18 +236,13 @@ export class AiNewsArchiveService implements OnModuleInit {
   }> {
     const archive = await this.readArchive();
     let fetched: AihotItem[];
+    let via: 'direct' | 'proxy';
     try {
-      const upstream = await fetch(ITEMS_API, {
-        headers: {
-          'User-Agent': 'mssclaw-ai-brief/1.0',
-          Accept: 'application/json',
-        },
-      });
-      if (!upstream.ok) throw new Error(`upstream ${upstream.status}`);
-      const data = (await upstream.json()) as { items?: AihotItem[] };
-      fetched = Array.isArray(data.items) ? data.items : [];
+      const result = await this.fetchItems();
+      fetched = result.items;
+      via = result.via;
     } catch (e) {
-      const error = e instanceof Error ? e.message : 'fetch failed';
+      const error = describeError(e);
       await this.writeArchive({
         ...archive,
         lastSyncAt: new Date().toISOString(),
@@ -199,6 +274,7 @@ export class AiNewsArchiveService implements OnModuleInit {
       updatedAt: new Date().toISOString(),
       lastSyncAt: new Date().toISOString(),
       lastSyncError: undefined,
+      lastSyncVia: via,
     });
     return { ok: true, added, total: items.length };
   }
@@ -239,6 +315,7 @@ export class AiNewsArchiveService implements OnModuleInit {
       updatedAt: payload?.updatedAt ?? new Date(0).toISOString(),
       lastSyncAt: payload?.lastSyncAt,
       lastSyncError: payload?.lastSyncError,
+      lastSyncVia: payload?.lastSyncVia,
     };
   }
 

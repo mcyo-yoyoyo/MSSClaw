@@ -43,10 +43,14 @@ interface PageRow {
   uv: CountValue;
 }
 
+interface DailyLoginRow {
+  users: CountValue;
+}
+
 export interface PortalAnalyticsReport {
   timezone: typeof ANALYTICS_TIME_ZONE;
   range: { days: number; from: string; to: string };
-  totals: { pv: number; uv: number };
+  totals: { pv: number; uv: number; todayLoginUsers: number };
   series: Array<{ date: string; pv: number; uv: number }>;
   pages: Array<{ routeKey: string; pv: number; uv: number }>;
   updatedAt: string | null;
@@ -103,6 +107,27 @@ function normalizedUpdatedAt(
 export class PortalAnalyticsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * 只在账号密码校验成功并创建新会话后调用。按北京时间和账号去重，
+   * 因此同一账号当天重复登录、换浏览器登录都只计为一名登录用户。
+   */
+  async recordDailyLogin(input: { workspaceId: string; userId: string }) {
+    const userId = input.userId.trim();
+    if (!userId) throw new BadRequestException('portal_analytics_user_id_required');
+
+    const firstLoginAt = new Date();
+    const dateKey = shanghaiDateKey(firstLoginAt);
+    const visitorHash = this.visitorHash(input.workspaceId, userId);
+    const inserted = await this.prisma.$executeRaw`
+      INSERT OR IGNORE INTO "PortalDailyLogin"
+        ("workspaceId", "dateKey", "visitorHash", "firstLoginAt")
+      VALUES
+        (${input.workspaceId}, ${dateKey}, ${visitorHash}, ${firstLoginAt})
+    `;
+
+    return { accepted: true, duplicate: inserted === 0, date: dateKey };
+  }
+
   async recordPageView(input: {
     workspaceId: string;
     eventId?: string;
@@ -144,7 +169,7 @@ export class PortalAnalyticsService {
     const to = shanghaiDateKey();
     const from = shiftDateKey(to, -(days - 1));
 
-    const [totalsRows, seriesRows, pageRows] = await Promise.all([
+    const [totalsRows, seriesRows, pageRows, dailyLoginRows] = await Promise.all([
       this.prisma.$queryRaw<TotalsRow[]>`
         SELECT
           COUNT(*) AS "pv",
@@ -176,6 +201,12 @@ export class PortalAnalyticsService {
         GROUP BY "routeKey"
         ORDER BY "pv" DESC, "routeKey" ASC
       `,
+      this.prisma.$queryRaw<DailyLoginRow[]>`
+        SELECT COUNT(*) AS "users"
+        FROM "PortalDailyLogin"
+        WHERE "workspaceId" = ${workspaceId}
+          AND "dateKey" = ${to}
+      `,
     ]);
 
     const totalsRow = totalsRows[0];
@@ -190,7 +221,11 @@ export class PortalAnalyticsService {
     return {
       timezone: ANALYTICS_TIME_ZONE,
       range: { days, from, to },
-      totals: { pv: count(totalsRow?.pv), uv: count(totalsRow?.uv) },
+      totals: {
+        pv: count(totalsRow?.pv),
+        uv: count(totalsRow?.uv),
+        todayLoginUsers: count(dailyLoginRows[0]?.users),
+      },
       series,
       pages: pageRows.map((row) => ({
         routeKey: row.routeKey,
