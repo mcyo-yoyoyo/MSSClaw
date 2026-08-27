@@ -17,6 +17,7 @@
     "test:external-tool-layout-store": "node --experimental-strip-types --test tests/externalToolLayoutStore.test.ts",
     "test:inbox-visibility": "node --experimental-strip-types --test tests/inboxVisibility.test.ts",
     "test:agent-hub-search": "node --experimental-strip-types --test tests/agentHubSearch.test.ts",
+    "test:ai-news-sync": "node --experimental-strip-types --test tests/aiNewsSync.test.ts",
     "test:skill-hub-search": "node --experimental-strip-types --test tests/skillHubSearch.test.ts",
     "test:skill-region-visibility": "node --experimental-strip-types --test tests/skillRegionVisibility.test.ts",
     "test:home-project-detail": "node --experimental-strip-types --test tests/homeProjectDetail.test.ts",

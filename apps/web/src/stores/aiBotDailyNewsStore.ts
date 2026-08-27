@@ -4,9 +4,11 @@ import {
   fetchAiBotDailyNews,
   flattenAiBotNews,
   readCachedAiBotDailyNews,
+  syncAiBotDailyNews,
   type AiBotDailyNewsPayload,
   type AiBotNewsItem,
 } from '@/domain/aiBotDailyNews';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 type SyncResult = {
   ok: boolean;
@@ -28,6 +30,7 @@ type State = {
 };
 
 let inflight: Promise<void> | null = null;
+let syncInflight: Promise<SyncResult> | null = null;
 let lastHydratedAt = 0;
 const TTL_MS = 10 * 60 * 1000;
 
@@ -77,43 +80,72 @@ export const useAiBotDailyNewsStore = create<State>((set, get) => ({
     return inflight;
   },
 
-  syncFromSource: async () => {
-    set({ syncing: true, error: null });
-    try {
-      const payload = await fetchAiBotDailyNews();
-      if (payload.fromFallback || !payload.groups.length) {
-        set({ syncing: false, error: '同步失败，已保留当前内容' });
+  syncFromSource: () => {
+    if (syncInflight) return syncInflight;
+    const operation = (async (): Promise<SyncResult> => {
+      set({ syncing: true, error: null });
+      try {
+        const workspaceId = useWorkspaceStore.getState().workspaceId || 'ws-mss-ai';
+        const sync = await syncAiBotDailyNews(workspaceId);
+        if (!sync.ok) {
+          const detail = sync.error?.trim();
+          const message = detail ? `拉取失败：${detail}` : '未能从 AIHOT 拉取最新快讯';
+          set({ syncing: false, error: message });
+          return {
+            ok: false,
+            message: `${message}，已保留当前内容`,
+            itemCount: get().payload.groups.reduce((n, g) => n + g.items.length, 0),
+            latestDate: get().payload.groups[0]?.dateLabel ?? null,
+          };
+        }
+
+        const payload = await fetchAiBotDailyNews();
+        if (payload.fromFallback || !payload.groups.length) {
+          const message = '快讯已拉取，但页面未能读取最新内容';
+          set({ syncing: false, error: message });
+          return {
+            ok: false,
+            message: `${message}，请稍后刷新`,
+            itemCount: get().payload.groups.reduce((n, g) => n + g.items.length, 0),
+            latestDate: get().payload.groups[0]?.dateLabel ?? null,
+          };
+        }
+        lastHydratedAt = Date.now();
+        set({
+          payload,
+          syncing: false,
+          error: null,
+          lastSyncedAt: payload.fetchedAt,
+        });
+        const itemCount = payload.groups.reduce((n, g) => n + g.items.length, 0);
+        const latestDate = payload.groups[0]?.dateLabel ?? null;
+        const updateSummary = sync.added
+          ? `新增 ${sync.added} 条，当前共 ${sync.total} 条`
+          : `已是最新，当前共 ${sync.total} 条`;
+        return {
+          ok: true,
+          message: `AI 快讯已更新：${updateSummary}${latestDate ? `（最新：${latestDate}）` : ''}`,
+          itemCount,
+          latestDate,
+        };
+      } catch (error) {
+        const detail = error instanceof Error ? error.message.trim() : '';
+        const message = detail ? `拉取失败：${detail}` : '拉取失败，请稍后重试';
+        const current = get().payload;
+        set({ syncing: false, error: message });
         return {
           ok: false,
-          message: '未能从 AIHOT 拉取最新快讯（接口不可用），已保留当前内容',
-          itemCount: get().payload.groups.reduce((n, g) => n + g.items.length, 0),
-          latestDate: get().payload.groups[0]?.dateLabel ?? null,
+          message: `${message}，已保留当前内容`,
+          itemCount: current.groups.reduce((n, g) => n + g.items.length, 0),
+          latestDate: current.groups[0]?.dateLabel ?? null,
         };
       }
-      lastHydratedAt = Date.now();
-      set({
-        payload,
-        syncing: false,
-        error: null,
-        lastSyncedAt: payload.fetchedAt,
-      });
-      const itemCount = payload.groups.reduce((n, g) => n + g.items.length, 0);
-      const latestDate = payload.groups[0]?.dateLabel ?? null;
-      return {
-        ok: true,
-        message: `已同步 ${itemCount} 条快讯${latestDate ? `（最新：${latestDate}）` : ''}`,
-        itemCount,
-        latestDate,
-      };
-    } catch {
-      set({ syncing: false, error: '同步失败' });
-      return {
-        ok: false,
-        message: '同步失败，请稍后重试',
-        itemCount: 0,
-        latestDate: null,
-      };
-    }
+    })();
+    syncInflight = operation;
+    void operation.finally(() => {
+      if (syncInflight === operation) syncInflight = null;
+    });
+    return operation;
   },
 
   latest: () => flattenAiBotNews(get().payload)[0] ?? null,

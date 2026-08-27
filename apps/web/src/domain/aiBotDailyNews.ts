@@ -4,6 +4,7 @@
  */
 
 import { AI_BOT_DAILY_NEWS_FALLBACK as FALLBACK_SEED } from '@/domain/aiBotDailyNewsFallback';
+import { apiAuthHeaders, apiUrl, fetchWithTimeout } from '@/api/client';
 
 export const AI_BOT_DAILY_NEWS_URL = 'https://aihot.virxact.com';
 
@@ -35,6 +36,13 @@ export type AiBotDailyNewsPayload = {
   groups: AiBotNewsGroup[];
   /** true 表示接口失败后使用本地兜底 / 运营缓存 */
   fromFallback?: boolean;
+};
+
+export type AiBotDailyNewsSyncResponse = {
+  ok: boolean;
+  added: number;
+  total: number;
+  error?: string;
 };
 
 const SHANGHAI_TIME_ZONE = 'Asia/Shanghai';
@@ -178,9 +186,7 @@ export function flattenAiBotNews(payload: AiBotDailyNewsPayload): AiBotNewsItem[
 }
 
 export function apiAiDailyNewsPath(): string {
-  const base = import.meta.env.BASE_URL || '/';
-  const normalizedBase = base.endsWith('/') ? base : `${base}/`;
-  return `${normalizedBase}api/v1/ai-daily-news`;
+  return apiUrl('/api/v1/ai-daily-news');
 }
 
 function legacyAiDailyNewsPath(): string {
@@ -205,7 +211,7 @@ export async function fetchAiBotDailyNews(signal?: AbortSignal): Promise<AiBotDa
     try {
       const res = await fetch(path, {
         signal,
-        headers: { Accept: 'application/json' },
+        headers: { Accept: 'application/json', ...apiAuthHeaders() },
         cache: 'no-store',
       });
       if (!res.ok) continue;
@@ -217,4 +223,45 @@ export async function fetchAiBotDailyNews(signal?: AbortSignal): Promise<AiBotDa
     }
   }
   return { ...AI_BOT_DAILY_NEWS_FALLBACK, fetchedAt: new Date().toISOString(), fromFallback: true };
+}
+
+async function readSyncFailure(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { message?: string | string[]; error?: string };
+    if (Array.isArray(body.message)) return body.message.join('；');
+    return body.message || body.error || `HTTP ${res.status}`;
+  } catch {
+    return `HTTP ${res.status}`;
+  }
+}
+
+/** 运营手动补拉：触发 Nest 从 AIHOT 拉取并合并到数据库归档。 */
+export async function syncAiBotDailyNews(
+  workspaceId: string,
+): Promise<AiBotDailyNewsSyncResponse> {
+  // 后端最慢会经历 10s 直连 + 20s 代理重试，前端超时需覆盖完整链路。
+  const res = await fetchWithTimeout(
+    `${apiAiDailyNewsPath()}/sync?workspaceId=${encodeURIComponent(workspaceId)}`,
+    {
+      method: 'POST',
+      headers: { Accept: 'application/json', ...apiAuthHeaders() },
+    },
+    40_000,
+  );
+  if (!res.ok) throw new Error(await readSyncFailure(res));
+
+  const body = (await res.json()) as Partial<AiBotDailyNewsSyncResponse>;
+  if (
+    typeof body.ok !== 'boolean' ||
+    typeof body.added !== 'number' ||
+    typeof body.total !== 'number'
+  ) {
+    throw new Error('同步接口返回异常');
+  }
+  return {
+    ok: body.ok,
+    added: body.added,
+    total: body.total,
+    error: typeof body.error === 'string' ? body.error : undefined,
+  };
 }

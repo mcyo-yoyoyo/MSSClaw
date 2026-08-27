@@ -3,6 +3,12 @@ import { cn } from '@/lib/utils';
 import { AI_NEWS_SEEDS, type AiNewsCadence } from '@/domain/aiNewsSeeds';
 import { ensureAiNewsOverviewInbox } from '@/domain/aiNews';
 import { useAiNewsStore, type AiNewsRecord } from '@/stores/aiNewsStore';
+import { useAiBotDailyNewsStore } from '@/stores/aiBotDailyNewsStore';
+
+type SyncFeedback = {
+  ok: boolean;
+  message: string;
+};
 
 function newDraft(): AiNewsRecord {
   const day = new Date().toISOString().slice(0, 10);
@@ -28,8 +34,11 @@ export function PortalAiNewsPanel() {
   const resetToSeeds = useAiNewsStore((s) => s.resetToSeeds);
   const showToast = useAiNewsStore((s) => s.toast);
   const dismissToast = useAiNewsStore((s) => s.dismissToast);
+  const syncing = useAiBotDailyNewsStore((s) => s.syncing);
+  const syncFromSource = useAiBotDailyNewsStore((s) => s.syncFromSource);
 
   const [draft, setDraft] = useState<AiNewsRecord | null>(null);
+  const [syncFeedback, setSyncFeedback] = useState<SyncFeedback | null>(null);
 
   useEffect(() => {
     hydrate();
@@ -56,14 +65,39 @@ export function PortalAiNewsPanel() {
     setDraft(null);
   };
 
+  const pullLatestNews = async () => {
+    if (syncing) return;
+    setSyncFeedback(null);
+    const result = await syncFromSource();
+    setSyncFeedback({ ok: result.ok, message: result.message });
+  };
+
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-zinc-200/90 bg-white p-4">
         <p className="text-[12px] leading-relaxed text-zinc-500">
           配置每日 AI 新闻（同一天仅保留一条，重复发布会覆盖当日）。首页只滚动最新一期；历史在「我的消息 ·
-          AI新闻总览」已迁至顶栏「AI快讯」。此处仍可维护站内稿；订阅为 WeLink 二期预留。
+          AI新闻总览」已迁至顶栏「AI快讯」。拉取新闻会更新顶栏「AI快讯」，不会覆盖下方站内稿；订阅为 WeLink
+          二期预留。
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void pullLatestNews()}
+            disabled={syncing}
+            aria-busy={syncing}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50 px-3 py-1.5 text-[12px] font-semibold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100 disabled:cursor-wait disabled:opacity-60"
+            title="从 AIHOT 拉取并更新顶栏 AI快讯"
+          >
+            <i
+              className={cn(
+                'fa-solid fa-arrows-rotate text-[10px]',
+                syncing && 'animate-spin',
+              )}
+              aria-hidden="true"
+            />
+            {syncing ? '正在拉取…' : '拉取新闻'}
+          </button>
           <button
             type="button"
             onClick={() => setDraft(newDraft())}
@@ -89,6 +123,28 @@ export function PortalAiNewsPanel() {
           </span>
         </div>
       </div>
+
+      {syncFeedback ? (
+        <div
+          role={syncFeedback.ok ? 'status' : 'alert'}
+          aria-live="polite"
+          className={cn(
+            'flex items-start gap-2 rounded-xl border px-3 py-2 text-[12px]',
+            syncFeedback.ok
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              : 'border-red-200 bg-red-50 text-red-700',
+          )}
+        >
+          <i
+            className={cn(
+              'fa-solid mt-0.5 text-[11px]',
+              syncFeedback.ok ? 'fa-circle-check' : 'fa-circle-exclamation',
+            )}
+            aria-hidden="true"
+          />
+          <span>{syncFeedback.message}</span>
+        </div>
+      ) : null}
 
       {showToast ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-800">
