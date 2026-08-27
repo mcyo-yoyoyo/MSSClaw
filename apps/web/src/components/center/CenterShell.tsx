@@ -102,7 +102,7 @@ export function CenterModal({
 
 interface CenterPageHeaderProps {
   title: string;
-  subtitle: string;
+  subtitle?: string;
   actions?: ReactNode;
   /** 标题旁的快速上手提示（悬停/点击展开） */
   tip?: ReactNode;
@@ -117,7 +117,9 @@ export function CenterPageHeader({ title, subtitle, actions, tip }: CenterPageHe
           <h2 className="text-[20px] font-semibold tracking-tight text-zinc-900 md:text-[22px]">{title}</h2>
           {tip ? <HeaderQuickTip>{tip}</HeaderQuickTip> : null}
         </div>
-        <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">{subtitle}</p>
+        {subtitle ? (
+          <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">{subtitle}</p>
+        ) : null}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>

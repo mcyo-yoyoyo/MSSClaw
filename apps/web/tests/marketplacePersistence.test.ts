@@ -45,6 +45,7 @@ type MarketplaceStoreState = {
     tool: Record<string, unknown>,
     isNew?: boolean,
   ) => Promise<MarketplaceSaveResult>;
+  deleteToolNow: (id: string) => Promise<MarketplaceSaveResult>;
   persist: () => void;
   bumpToolInvokes: (id: string) => void;
 };
@@ -286,6 +287,88 @@ test('saveToolNow keeps the previous tool when the remote save fails', async () 
     detail: 'HTTP 500',
   });
   assert.deepEqual(marketplaceStore.getState().tools, [originalTool]);
+});
+
+test('deleteToolNow commits the removal only after the remote save succeeds', async () => {
+  const workspaceId = 'ws-test-tool-delete-success';
+  const calls: FetchCall[] = [];
+  const response = deferred<Response>();
+  const keepTool = { id: 'tool-keep', name: 'Keep' };
+  const deleteTool = { id: 'tool-delete', name: 'Delete' };
+  enableRemoteApi(workspaceId);
+  marketplaceStore.setState({
+    agents: [],
+    skills: [],
+    tools: [keepTool, deleteTool],
+    automations: [],
+    kbDocs: [],
+  });
+  globalThis.fetch = (async (input, init) => {
+    calls.push(readFetchCall(input, init));
+    return response.promise;
+  }) as typeof fetch;
+
+  const deleting = marketplaceStore.getState().deleteToolNow(deleteTool.id);
+  await nextTurn();
+
+  assert.deepEqual(calls[0]?.body.tools, [keepTool]);
+  assert.deepEqual(
+    marketplaceStore.getState().tools,
+    [keepTool, deleteTool],
+    'the card must remain visible while the remote PUT is pending',
+  );
+
+  response.resolve(new Response(null, { status: 200 }));
+  assert.deepEqual(await deleting, { synced: true });
+  assert.deepEqual(marketplaceStore.getState().tools, [keepTool]);
+});
+
+test('deleteToolNow keeps the tool when the remote save fails', async () => {
+  const workspaceId = 'ws-test-tool-delete-failure';
+  const tool = { id: 'tool-delete-failure', name: 'Delete failure' };
+  enableRemoteApi(workspaceId);
+  marketplaceStore.setState({
+    agents: [],
+    skills: [],
+    tools: [tool],
+    automations: [],
+    kbDocs: [],
+  });
+  globalThis.fetch = (async () => new Response(null, { status: 500 })) as typeof fetch;
+
+  assert.deepEqual(await marketplaceStore.getState().deleteToolNow(tool.id), {
+    synced: false,
+    reason: 'failed',
+    detail: 'HTTP 500',
+  });
+  assert.deepEqual(marketplaceStore.getState().tools, [tool]);
+});
+
+test('deleteToolNow does not commit into a different workspace', async () => {
+  const workspaceId = 'ws-test-tool-delete-switch-origin';
+  const response = deferred<Response>();
+  const tool = { id: 'tool-delete-switch', name: 'Delete switch' };
+  enableRemoteApi(workspaceId);
+  marketplaceStore.setState({
+    agents: [],
+    skills: [],
+    tools: [tool],
+    automations: [],
+    kbDocs: [],
+  });
+  globalThis.fetch = (async () => response.promise) as typeof fetch;
+
+  const deleting = marketplaceStore.getState().deleteToolNow(tool.id);
+  await nextTurn();
+  workspaceStore.setState({ workspaceId: 'ws-test-tool-delete-switch-destination' });
+  response.resolve(new Response(null, { status: 200 }));
+
+  assert.deepEqual(await deleting, {
+    synced: false,
+    reason: 'failed',
+    detail: 'workspace_changed',
+  });
+  assert.deepEqual(marketplaceStore.getState().tools, [tool]);
 });
 
 test('saveToolNow does not report success or commit into a different workspace', async () => {

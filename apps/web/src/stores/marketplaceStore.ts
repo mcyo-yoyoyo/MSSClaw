@@ -83,6 +83,7 @@ interface MarketplaceState {
   upsertSkill: (skill: PrototypeSkillSeed, isNew?: boolean) => void;
   upsertTool: (tool: PrototypeToolSeed, isNew?: boolean) => void;
   saveToolNow: (tool: PrototypeToolSeed, isNew?: boolean) => Promise<MarketplaceSaveResult>;
+  deleteToolNow: (id: string) => Promise<MarketplaceSaveResult>;
   upsertAutomation: (automation: PrototypeAutomation, isNew?: boolean) => void;
   upsertKbDoc: (doc: PrototypeKbDocument, isNew?: boolean) => void;
   uploadKbFile: (file: File) => Promise<string | null>;
@@ -162,7 +163,13 @@ function withUpsertedTool(
   isNew: boolean,
 ): PrototypeToolSeed[] {
   if (isNew) return [tool, ...tools.filter((item) => item.id !== tool.id)];
-  return tools.map((item) => (item.id === tool.id ? tool : item));
+  return tools.map((item) =>
+    item.id === tool.id
+      ? typeof item.invokes === 'number'
+        ? { ...tool, invokes: item.invokes }
+        : tool
+      : item,
+  );
 }
 
 export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
@@ -301,6 +308,51 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
         return { synced: false, reason: 'failed', detail: 'workspace_changed' };
       }
       set((state) => ({ tools: withUpsertedTool(state.tools, tool, isNew) }));
+      return result;
+    };
+    const operation = previous ? previous.then(run, run) : run();
+    immediateToolSaveChains.set(workspaceId, operation);
+    void operation.then(
+      () => {
+        if (immediateToolSaveChains.get(workspaceId) === operation) {
+          immediateToolSaveChains.delete(workspaceId);
+        }
+      },
+      () => {
+        if (immediateToolSaveChains.get(workspaceId) === operation) {
+          immediateToolSaveChains.delete(workspaceId);
+        }
+      },
+    );
+    return operation;
+  },
+
+  deleteToolNow: async (id) => {
+    const workspaceId = useWorkspaceStore.getState().workspaceId;
+    const previous = immediateToolSaveChains.get(workspaceId);
+    const run = async (): Promise<MarketplaceSaveResult> => {
+      if (useWorkspaceStore.getState().workspaceId !== workspaceId) {
+        return { synced: false, reason: 'failed', detail: 'workspace_changed' };
+      }
+      const current = get();
+      const tools = current.tools.filter((item) => item.id !== id);
+      if (tools.length === current.tools.length) return { synced: true };
+      const result = await flushSaveMarketplace(
+        workspaceId,
+        {
+          agents: current.agents,
+          skills: current.skills,
+          tools,
+          automations: current.automations,
+          kbDocs: current.kbDocs,
+        },
+        { reportFailure: false },
+      );
+      if (!result.synced) return result;
+      if (useWorkspaceStore.getState().workspaceId !== workspaceId) {
+        return { synced: false, reason: 'failed', detail: 'workspace_changed' };
+      }
+      set((state) => ({ tools: state.tools.filter((item) => item.id !== id) }));
       return result;
     };
     const operation = previous ? previous.then(run, run) : run();

@@ -353,7 +353,7 @@ export class PersistenceService {
         payload: payload as Prisma.InputJsonValue,
       },
     });
-    await this.syncMarketplaceToCenters(workspaceId, payload);
+    await this.syncMarketplaceToCenters(workspaceId, payload, existing);
     return payload;
   }
 
@@ -710,7 +710,11 @@ export class PersistenceService {
   }
 
   /** 集市为权威源：写入时镜像 agent/skill/tool 到 center 记录，供中心 API 合并读取 */
-  private async syncMarketplaceToCenters(workspaceId: string, payload: MarketplacePayload) {
+  private async syncMarketplaceToCenters(
+    workspaceId: string,
+    payload: MarketplacePayload,
+    previousPayload?: MarketplacePayload,
+  ) {
     const kinds = ['agent', 'skill', 'tool'] as const;
     for (const kind of kinds) {
       const items = listMappedFromMarketplace(kind, payload);
@@ -729,6 +733,21 @@ export class PersistenceService {
             payload: toPrismaJson(item),
           },
         });
+      }
+      if (kind === 'tool' && previousPayload) {
+        const nextIds = new Set(items.map((item) => String(item.id)));
+        const removedIds = listMappedFromMarketplace(kind, previousPayload)
+          .map((item) => String(item.id))
+          .filter((id) => id && !nextIds.has(id));
+        if (removedIds.length) {
+          await this.prisma.centerRecord.deleteMany({
+            where: {
+              workspaceId,
+              kind,
+              id: { in: removedIds },
+            },
+          });
+        }
       }
     }
   }
