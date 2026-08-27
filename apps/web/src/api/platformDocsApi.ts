@@ -18,6 +18,7 @@ export type PlatformDocKind =
   | 'mss-build-stats'
   | 'business-scenario-catalog'
   | 'external-taxonomy'
+  | 'external-tool-layout'
   | 'internal-office-scenes'
   | 'org-taxonomy'
   | 'market-featured'

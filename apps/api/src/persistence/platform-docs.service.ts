@@ -6,6 +6,7 @@ import { buildCatalogPayload, WORKSPACE_CATALOGS } from '../data/workspace-catal
 import {
   SEED_BUSINESS_SCENARIO_CATALOG,
   SEED_EXTERNAL_TAXONOMY,
+  SEED_EXTERNAL_TOOL_LAYOUT,
   SEED_INTERNAL_OFFICE_SCENES,
 } from '../data/market-doc-seeds';
 import { PortalAnalyticsService } from './portal-analytics.service';
@@ -23,6 +24,7 @@ export const PLATFORM_DOC_KINDS = [
   'mss-build-stats',
   'business-scenario-catalog',
   'external-taxonomy',
+  'external-tool-layout',
   'internal-office-scenes',
   'org-taxonomy',
   'market-featured',
@@ -58,6 +60,21 @@ const OFFICE_SCENE_ID_RE = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const OFFICE_SCENE_TOOL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const OFFICE_SCENE_ICON_RE = /^[A-Za-z0-9_-]+(?:\s+[A-Za-z0-9_-]+)*$/;
 
+const EXTERNAL_TOOL_LAYOUT_LIMITS = {
+  categories: 100,
+  idsPerList: 500,
+  categoryId: 48,
+  toolId: 128,
+} as const;
+
+const EXTERNAL_TOOL_LAYOUT_CATEGORY_ID_RE = /^[a-z0-9][a-z0-9-]{0,47}$/;
+const EXTERNAL_TOOL_LAYOUT_TOOL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const EXTERNAL_TOOL_LAYOUT_UNSAFE_CATEGORY_IDS = new Set([
+  '__proto__',
+  'prototype',
+  'constructor',
+]);
+
 type JsonObject = Record<string, unknown>;
 
 interface CanonicalOfficeSceneEntry {
@@ -76,12 +93,312 @@ interface CanonicalOfficeSceneInput {
   entries: CanonicalOfficeSceneEntry[];
 }
 
+interface CanonicalExternalToolLayoutAll {
+  overseasFeaturedIds: string[];
+  domesticFeaturedIds: string[];
+  overseasMoreOrderIds: string[];
+  domesticMoreOrderIds: string[];
+}
+
+interface CanonicalExternalToolLayoutCategory {
+  overseasFeaturedIds: string[];
+  domesticFeaturedIds: string[];
+}
+
+export interface CanonicalExternalToolLayoutInput {
+  expectedRevision: number;
+  all: CanonicalExternalToolLayoutAll;
+  categories: Record<string, CanonicalExternalToolLayoutCategory>;
+}
+
 function isJsonObject(value: unknown): value is JsonObject {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function invalidOfficeScenes(path: string, reason: string): never {
   throw new BadRequestException(`invalid_internal_office_scenes:${path}:${reason}`);
+}
+
+function invalidExternalToolLayout(path: string, reason: string): never {
+  throw new BadRequestException(`invalid_external_tool_layout:${path}:${reason}`);
+}
+
+function canonicalExternalToolId(value: unknown, path: string): string {
+  if (typeof value !== 'string') {
+    invalidExternalToolLayout(path, 'string_required');
+  }
+  const id = value.trim();
+  if (!id) invalidExternalToolLayout(path, 'required');
+  if (id.length > EXTERNAL_TOOL_LAYOUT_LIMITS.toolId) {
+    invalidExternalToolLayout(path, `max_length_${EXTERNAL_TOOL_LAYOUT_LIMITS.toolId}`);
+  }
+  if (!EXTERNAL_TOOL_LAYOUT_TOOL_ID_RE.test(id)) {
+    invalidExternalToolLayout(path, 'invalid_id');
+  }
+  return id;
+}
+
+/** Trim IDs and keep their first occurrence so repeated drag events cannot persist duplicates. */
+function canonicalExternalToolIdList(value: unknown, path: string): string[] {
+  if (!Array.isArray(value)) invalidExternalToolLayout(path, 'array_required');
+  if (value.length > EXTERNAL_TOOL_LAYOUT_LIMITS.idsPerList) {
+    invalidExternalToolLayout(
+      path,
+      `max_items_${EXTERNAL_TOOL_LAYOUT_LIMITS.idsPerList}`,
+    );
+  }
+
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  value.forEach((rawId, index) => {
+    const id = canonicalExternalToolId(rawId, `${path}[${index}]`);
+    if (seen.has(id)) return;
+    seen.add(id);
+    ids.push(id);
+  });
+  return ids;
+}
+
+/**
+ * Canonical write contract for the external tool operations shelf.
+ * Unknown fields, including client-supplied version/revision, are intentionally discarded.
+ */
+export function canonicalizeExternalToolLayoutInput(
+  payload: unknown,
+): CanonicalExternalToolLayoutInput {
+  if (!isJsonObject(payload)) invalidExternalToolLayout('payload', 'object_required');
+
+  const expectedRevision = payload.expectedRevision;
+  if (
+    typeof expectedRevision !== 'number' ||
+    !Number.isSafeInteger(expectedRevision) ||
+    expectedRevision < 0
+  ) {
+    invalidExternalToolLayout('expectedRevision', 'non_negative_integer_required');
+  }
+
+  if (!isJsonObject(payload.all)) invalidExternalToolLayout('all', 'object_required');
+  const claimedAllListIds = new Set<string>();
+  const keepFirstAllListOccurrence = (ids: string[]): string[] =>
+    ids.filter((id) => {
+      if (claimedAllListIds.has(id)) return false;
+      claimedAllListIds.add(id);
+      return true;
+    });
+  const overseasFeaturedIds = keepFirstAllListOccurrence(
+    canonicalExternalToolIdList(
+      payload.all.overseasFeaturedIds,
+      'all.overseasFeaturedIds',
+    ),
+  );
+  const domesticFeaturedIds = keepFirstAllListOccurrence(
+    canonicalExternalToolIdList(
+      payload.all.domesticFeaturedIds,
+      'all.domesticFeaturedIds',
+    ),
+  );
+  const overseasMoreOrderIds = keepFirstAllListOccurrence(
+    canonicalExternalToolIdList(
+      payload.all.overseasMoreOrderIds,
+      'all.overseasMoreOrderIds',
+    ),
+  );
+  const domesticMoreOrderIds = keepFirstAllListOccurrence(
+    canonicalExternalToolIdList(
+      payload.all.domesticMoreOrderIds,
+      'all.domesticMoreOrderIds',
+    ),
+  );
+
+  if (!isJsonObject(payload.categories)) {
+    invalidExternalToolLayout('categories', 'object_required');
+  }
+  const rawCategories = Object.entries(payload.categories);
+  if (rawCategories.length > EXTERNAL_TOOL_LAYOUT_LIMITS.categories) {
+    invalidExternalToolLayout(
+      'categories',
+      `max_items_${EXTERNAL_TOOL_LAYOUT_LIMITS.categories}`,
+    );
+  }
+
+  const categories: Record<string, CanonicalExternalToolLayoutCategory> = {};
+  for (const [rawCategoryId, rawCategory] of rawCategories) {
+    const categoryId = rawCategoryId.trim().toLowerCase();
+    const path = `categories.${rawCategoryId}`;
+    if (!categoryId) invalidExternalToolLayout(path, 'required');
+    if (categoryId.length > EXTERNAL_TOOL_LAYOUT_LIMITS.categoryId) {
+      invalidExternalToolLayout(
+        path,
+        `max_length_${EXTERNAL_TOOL_LAYOUT_LIMITS.categoryId}`,
+      );
+    }
+    if (!EXTERNAL_TOOL_LAYOUT_CATEGORY_ID_RE.test(categoryId)) {
+      invalidExternalToolLayout(path, 'invalid_id');
+    }
+    if (EXTERNAL_TOOL_LAYOUT_UNSAFE_CATEGORY_IDS.has(categoryId)) {
+      invalidExternalToolLayout(path, 'unsafe_id');
+    }
+    if (Object.prototype.hasOwnProperty.call(categories, categoryId)) {
+      invalidExternalToolLayout(path, 'duplicate_normalized_id');
+    }
+    if (!isJsonObject(rawCategory)) invalidExternalToolLayout(path, 'object_required');
+    const overseasFeaturedIds = canonicalExternalToolIdList(
+      rawCategory.overseasFeaturedIds,
+      `${path}.overseasFeaturedIds`,
+    );
+    // During the additive rollout, old browser clients omit this field. Treat only
+    // an absent field as an empty list; a supplied value still follows strict validation.
+    const hasDomesticFeaturedIds = Object.prototype.hasOwnProperty.call(
+      rawCategory,
+      'domesticFeaturedIds',
+    );
+    const rawDomesticFeaturedIds = hasDomesticFeaturedIds
+      ? rawCategory.domesticFeaturedIds
+      : [];
+    const claimedCategoryIds = new Set(overseasFeaturedIds);
+    const domesticFeaturedIds = canonicalExternalToolIdList(
+      rawDomesticFeaturedIds,
+      `${path}.domesticFeaturedIds`,
+    ).filter((id) => !claimedCategoryIds.has(id));
+    categories[categoryId] = { overseasFeaturedIds, domesticFeaturedIds };
+  }
+
+  return {
+    expectedRevision,
+    all: {
+      overseasFeaturedIds,
+      domesticFeaturedIds,
+      overseasMoreOrderIds,
+      domesticMoreOrderIds,
+    },
+    categories,
+  };
+}
+
+function categoryIdsMissingDomesticFeaturedIds(payload: unknown): Set<string> {
+  if (!isJsonObject(payload) || !isJsonObject(payload.categories)) return new Set();
+  return new Set(
+    Object.entries(payload.categories)
+      .filter(
+        ([, rawCategory]) =>
+          isJsonObject(rawCategory) &&
+          !Object.prototype.hasOwnProperty.call(rawCategory, 'domesticFeaturedIds'),
+      )
+      .map(([rawCategoryId]) => rawCategoryId.trim().toLowerCase()),
+  );
+}
+
+function storedCategoryDomesticFeaturedIds(
+  payload: unknown,
+  categoryId: string,
+  overseasFeaturedIds: string[],
+): string[] {
+  if (!isJsonObject(payload) || !isJsonObject(payload.categories)) return [];
+  const storedCategoryEntry = Object.entries(payload.categories).find(
+    ([rawCategoryId]) => rawCategoryId.trim().toLowerCase() === categoryId,
+  );
+  const rawCategory = storedCategoryEntry?.[1];
+  if (!isJsonObject(rawCategory) || rawCategory.domesticFeaturedIds === undefined) {
+    return [];
+  }
+  const claimedCategoryIds = new Set(overseasFeaturedIds);
+  return canonicalExternalToolIdList(
+    rawCategory.domesticFeaturedIds,
+    `stored.categories.${categoryId}.domesticFeaturedIds`,
+  ).filter((id) => !claimedCategoryIds.has(id));
+}
+
+function defaultExternalToolLayoutSeed() {
+  return {
+    version: SEED_EXTERNAL_TOOL_LAYOUT.version,
+    revision: SEED_EXTERNAL_TOOL_LAYOUT.revision,
+    all: {
+      overseasFeaturedIds: [...SEED_EXTERNAL_TOOL_LAYOUT.all.overseasFeaturedIds],
+      domesticFeaturedIds: [...SEED_EXTERNAL_TOOL_LAYOUT.all.domesticFeaturedIds],
+      overseasMoreOrderIds: [] as string[],
+      domesticMoreOrderIds: [] as string[],
+    },
+    categories: {} as Record<string, CanonicalExternalToolLayoutCategory>,
+  };
+}
+
+/**
+ * Migrate the one historical `pins.external` list into the two regional shelves.
+ * Invalid, duplicate, missing, or regionless IDs are ignored; marketplace order never
+ * replaces the legacy pin order. A completely unusable old list falls back to the static seed.
+ */
+export function buildExternalToolLayoutSeed(
+  marketFeaturedPayload: unknown,
+  marketplacePayload: unknown,
+) {
+  if (!isJsonObject(marketFeaturedPayload) || !isJsonObject(marketFeaturedPayload.pins)) {
+    return defaultExternalToolLayoutSeed();
+  }
+  const rawPins = marketFeaturedPayload.pins.external;
+  if (!Array.isArray(rawPins) || !isJsonObject(marketplacePayload)) {
+    return defaultExternalToolLayoutSeed();
+  }
+  const rawTools = marketplacePayload.tools;
+  if (!Array.isArray(rawTools)) return defaultExternalToolLayoutSeed();
+
+  const regionById = new Map<string, 'overseas' | 'domestic'>();
+  for (const rawTool of rawTools) {
+    if (!isJsonObject(rawTool) || typeof rawTool.id !== 'string') continue;
+    const id = rawTool.id.trim();
+    if (
+      !id ||
+      id.length > EXTERNAL_TOOL_LAYOUT_LIMITS.toolId ||
+      !EXTERNAL_TOOL_LAYOUT_TOOL_ID_RE.test(id) ||
+      regionById.has(id)
+    ) {
+      continue;
+    }
+    const region =
+      typeof rawTool.region === 'string' ? rawTool.region.trim().toLowerCase() : '';
+    if (region === 'overseas' || region === 'domestic') regionById.set(id, region);
+  }
+
+  const seen = new Set<string>();
+  const overseasFeaturedIds: string[] = [];
+  const domesticFeaturedIds: string[] = [];
+  for (const rawPin of rawPins) {
+    if (typeof rawPin !== 'string') continue;
+    const id = rawPin.trim();
+    if (
+      !id ||
+      id.length > EXTERNAL_TOOL_LAYOUT_LIMITS.toolId ||
+      !EXTERNAL_TOOL_LAYOUT_TOOL_ID_RE.test(id) ||
+      seen.has(id)
+    ) {
+      continue;
+    }
+    seen.add(id);
+    const region = regionById.get(id);
+    if (region === 'overseas') overseasFeaturedIds.push(id);
+    if (region === 'domestic') domesticFeaturedIds.push(id);
+    if (
+      overseasFeaturedIds.length + domesticFeaturedIds.length >=
+      EXTERNAL_TOOL_LAYOUT_LIMITS.idsPerList
+    ) {
+      break;
+    }
+  }
+
+  if (!overseasFeaturedIds.length && !domesticFeaturedIds.length) {
+    return defaultExternalToolLayoutSeed();
+  }
+
+  return {
+    version: SEED_EXTERNAL_TOOL_LAYOUT.version,
+    revision: 0,
+    all: {
+      overseasFeaturedIds,
+      domesticFeaturedIds,
+      overseasMoreOrderIds: [] as string[],
+      domesticMoreOrderIds: [] as string[],
+    },
+    categories: {} as Record<string, CanonicalExternalToolLayoutCategory>,
+  };
 }
 
 function boundedString(
@@ -222,6 +539,57 @@ function officeScenePayloadForRead(payload: unknown): unknown {
   return { ...stored, revision: storedOfficeSceneRevision(payload) };
 }
 
+/** Missing/legacy revisions are revision zero until the first successful CAS write. */
+export function storedExternalToolLayoutRevision(payload: unknown): number {
+  if (!isJsonObject(payload)) return 0;
+  const revision = payload.revision;
+  return typeof revision === 'number' && Number.isSafeInteger(revision) && revision >= 0
+    ? revision
+    : 0;
+}
+
+function externalToolLayoutPayloadForRead(payload: unknown): unknown {
+  if (!isJsonObject(payload)) return payload;
+  const {
+    expectedRevision: _discardedExpectedRevision,
+    revision: _discardedRevision,
+    version,
+    ...stored
+  } = payload;
+  const readableVersion =
+    typeof version === 'number' && Number.isSafeInteger(version) && version > 0
+      ? version
+      : SEED_EXTERNAL_TOOL_LAYOUT.version;
+  const readableCategories = isJsonObject(stored.categories)
+    ? Object.fromEntries(
+        Object.entries(stored.categories).map(([categoryId, rawCategory]) => {
+          if (!isJsonObject(rawCategory)) return [categoryId, rawCategory];
+          return [
+            categoryId,
+            {
+              ...rawCategory,
+              // GET is a non-persisting compatibility view: old category records keep
+              // every operational field and gain only the absent regional list. A present
+              // but malformed value must remain visible to strict clients as bad data.
+              domesticFeaturedIds: Object.prototype.hasOwnProperty.call(
+                rawCategory,
+                'domesticFeaturedIds',
+              )
+                ? rawCategory.domesticFeaturedIds
+                : [],
+            },
+          ];
+        }),
+      )
+    : stored.categories;
+  return {
+    version: readableVersion,
+    revision: storedExternalToolLayoutRevision(payload),
+    ...stored,
+    categories: readableCategories,
+  };
+}
+
 const SEED_MEMBERS = [
   {
     id: 'u-mcyo',
@@ -336,14 +704,15 @@ function randomSalt(): string {
 function initialMarketDoc(kind: PlatformDocKind): unknown | undefined {
   if (kind === 'business-scenario-catalog') return SEED_BUSINESS_SCENARIO_CATALOG;
   if (kind === 'external-taxonomy') return SEED_EXTERNAL_TAXONOMY;
+  if (kind === 'external-tool-layout') return SEED_EXTERNAL_TOOL_LAYOUT;
   if (kind === 'internal-office-scenes') return SEED_INTERNAL_OFFICE_SCENES;
   return undefined;
 }
 
 function shouldUpgradeMarketDoc(kind: PlatformDocKind, payload: unknown): boolean {
   if (initialMarketDoc(kind) === undefined) return false;
-  // 办公场景一旦存在即以数据库为准。版本迁移必须显式完成，GET 绝不能用种子覆盖运营数据。
-  if (kind === 'internal-office-scenes') return false;
+  // 可写运营配置一旦存在即以数据库为准。版本迁移必须显式完成，GET 绝不能用种子覆盖运营数据。
+  if (kind === 'internal-office-scenes' || kind === 'external-tool-layout') return false;
   if (
     kind === 'external-taxonomy' &&
     (!payload ||
@@ -377,6 +746,9 @@ export class PlatformDocsService {
       where: { id: docId(workspaceId, kind) },
     });
     if (row) {
+      if (kind === 'external-tool-layout') {
+        return { kind, payload: externalToolLayoutPayloadForRead(row.payload) };
+      }
       if (kind === 'internal-office-scenes') {
         return { kind, payload: officeScenePayloadForRead(row.payload) };
       }
@@ -402,6 +774,9 @@ export class PlatformDocsService {
   ): Promise<{ kind: string; payload: unknown }> {
     if (!isDocKind(kind)) throw new BadRequestException(`unsupported_doc_kind:${kind}`);
     await this.ensureWorkspace(workspaceId);
+    if (kind === 'external-tool-layout') {
+      return this.putExternalToolLayoutDoc(workspaceId, payload);
+    }
     if (kind === 'internal-office-scenes') {
       return this.putInternalOfficeScenesDoc(workspaceId, payload);
     }
@@ -429,7 +804,9 @@ export class PlatformDocsService {
     const byKind: Record<string, unknown> = {};
     for (const kind of PLATFORM_DOC_KINDS) {
       const row = rows.find((r) => r.id === docId(workspaceId, kind));
-      if (row && kind === 'internal-office-scenes') {
+      if (row && kind === 'external-tool-layout') {
+        byKind[kind] = externalToolLayoutPayloadForRead(row.payload);
+      } else if (row && kind === 'internal-office-scenes') {
         byKind[kind] = officeScenePayloadForRead(row.payload);
       } else if (row && shouldUpgradeMarketDoc(kind, row.payload)) {
         const payload = initialMarketDoc(kind)!;
@@ -443,6 +820,93 @@ export class PlatformDocsService {
       }
     }
     return { docs: byKind };
+  }
+
+  private async putExternalToolLayoutDoc(workspaceId: string, payload: unknown) {
+    const legacyCategoryIds = categoryIdsMissingDomesticFeaturedIds(payload);
+    const { expectedRevision, all, categories } = canonicalizeExternalToolLayoutInput(payload);
+    const id = docId(workspaceId, 'external-tool-layout');
+    const existing = await this.prisma.centerRecord.findUnique({ where: { id } });
+    const currentRevision = existing
+      ? storedExternalToolLayoutRevision(existing.payload)
+      : 0;
+
+    if (expectedRevision !== currentRevision) {
+      throw new ConflictException({
+        error: 'external_tool_layout_revision_conflict',
+        expectedRevision,
+        currentRevision,
+      });
+    }
+
+    // An old browser does not know the additive domestic field. Preserve the current
+    // domestic selection for categories it still submits, while a genuinely new category
+    // starts empty. This merge happens after the revision check and before the CAS write.
+    if (existing) {
+      for (const categoryId of legacyCategoryIds) {
+        const category = categories[categoryId];
+        if (!category) continue;
+        category.domesticFeaturedIds = storedCategoryDomesticFeaturedIds(
+          existing.payload,
+          categoryId,
+          category.overseasFeaturedIds,
+        );
+      }
+    }
+
+    const nextPayload = {
+      version: SEED_EXTERNAL_TOOL_LAYOUT.version,
+      revision: currentRevision + 1,
+      all,
+      categories,
+    };
+
+    if (!existing) {
+      try {
+        await this.prisma.centerRecord.create({
+          data: {
+            id,
+            workspaceId,
+            kind: 'doc:external-tool-layout',
+            payload: nextPayload as unknown as Prisma.InputJsonValue,
+          },
+        });
+      } catch (error) {
+        // Concurrent first writers race on the deterministic CenterRecord ID.
+        const raced = await this.prisma.centerRecord.findUnique({ where: { id } });
+        if (raced) {
+          throw new ConflictException({
+            error: 'external_tool_layout_revision_conflict',
+            expectedRevision,
+            currentRevision: storedExternalToolLayoutRevision(raced.payload),
+          });
+        }
+        throw error;
+      }
+      return { kind: 'external-tool-layout', payload: nextPayload };
+    }
+
+    const changed = await this.prisma.$executeRaw`
+      UPDATE "CenterRecord"
+      SET "payload" = ${JSON.stringify(nextPayload)}, "updatedAt" = ${Date.now()}
+      WHERE "id" = ${id}
+        AND CASE
+          WHEN json_type("payload", '$.revision') = 'integer'
+          THEN json_extract("payload", '$.revision')
+          ELSE 0
+        END = ${expectedRevision}
+    `;
+
+    if (changed !== 1) {
+      const raced = await this.prisma.centerRecord.findUnique({ where: { id } });
+      throw new ConflictException({
+        error: 'external_tool_layout_revision_conflict',
+        expectedRevision,
+        currentRevision: raced ? storedExternalToolLayoutRevision(raced.payload) : 0,
+      });
+    }
+
+    return { kind: 'external-tool-layout', payload: nextPayload };
   }
 
   private async putInternalOfficeScenesDoc(workspaceId: string, payload: unknown) {
@@ -777,8 +1241,25 @@ export class PlatformDocsService {
     });
   }
 
+  private async initialExternalToolLayoutSeed(workspaceId: string) {
+    const [marketFeatured, marketplace] = await Promise.all([
+      this.prisma.centerRecord.findFirst({
+        where: { workspaceId, kind: 'doc:market-featured' },
+        select: { payload: true },
+      }),
+      this.prisma.centerRecord.findFirst({
+        where: { workspaceId, kind: 'marketplace' },
+        select: { payload: true },
+      }),
+    ]);
+    return buildExternalToolLayoutSeed(marketFeatured?.payload, marketplace?.payload);
+  }
+
   private async seedIfNeeded(workspaceId: string, kind: PlatformDocKind): Promise<unknown> {
-    const marketSeed = initialMarketDoc(kind);
+    const marketSeed =
+      kind === 'external-tool-layout'
+        ? await this.initialExternalToolLayoutSeed(workspaceId)
+        : initialMarketDoc(kind);
     let payload: unknown = {};
     if (marketSeed !== undefined) {
       payload = marketSeed;

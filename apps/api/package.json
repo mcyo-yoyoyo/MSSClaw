@@ -8,6 +8,7 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
     "test:ai-brief-dedupe": "npm run build --silent && node --test tests/aiBriefEmailRecipients.test.mjs",
+    "test:external-tool-layout": "npm run build --silent && node --test tests/externalToolLayout.test.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed"

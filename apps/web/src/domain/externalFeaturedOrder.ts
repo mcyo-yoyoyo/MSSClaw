@@ -4,6 +4,12 @@ export type ExternalFeaturedOrderItem = {
   sourceOrder?: number;
 };
 
+export type ExternalFeaturedRegionItem = {
+  id: string;
+  featured?: boolean;
+  region?: 'overseas' | 'domestic';
+};
+
 export type ExternalFeaturedOrderSelector<T> = (item: T) => number | undefined;
 
 /**
@@ -40,4 +46,30 @@ export function orderExternalFeaturedItems<T extends ExternalFeaturedOrderItem>(
       return a.inputIndex - b.inputIndex;
     })
     .map(({ item }) => item);
+}
+
+/**
+ * 外部货架按海外 / 国内各取固定数量；未实际展示进精选的置顶卡仍回到“更多”。
+ * 这样运营配置不均衡时不会出现卡片被精选截断后又从全部列表消失。
+ */
+export function splitExternalFeaturedItemsByRegion<T extends ExternalFeaturedRegionItem>(
+  items: readonly T[],
+  qualifies: (item: T) => boolean,
+  perRegionLimit = 4,
+) {
+  const eligible = items.filter((item) => item.featured && qualifies(item));
+  const overseas = eligible
+    .filter((item) => item.region === 'overseas')
+    .slice(0, perRegionLimit);
+  const domestic = eligible
+    .filter((item) => item.region === 'domestic')
+    .slice(0, perRegionLimit);
+  const featuredIds = new Set([...overseas, ...domestic].map((item) => item.id));
+
+  return {
+    featured: items.filter((item) => featuredIds.has(item.id)),
+    overseas,
+    domestic,
+    rest: items.filter((item) => !featuredIds.has(item.id)),
+  };
 }

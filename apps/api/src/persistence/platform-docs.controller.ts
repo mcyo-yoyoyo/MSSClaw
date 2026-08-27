@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Headers, Param, Post, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Put,
+  Query,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { PlatformDocsService } from './platform-docs.service';
 
 @Controller('workspaces/:workspaceId/docs')
@@ -6,24 +17,68 @@ export class PlatformDocsController {
   constructor(private readonly docs: PlatformDocsService) {}
 
   @Get()
-  list(@Param('workspaceId') workspaceId: string) {
+  async list(
+    @Param('workspaceId') workspaceId: string,
+    @Headers('authorization') authorization: string | undefined,
+    @Headers('x-session-token') xSessionToken: string | undefined,
+  ) {
+    await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
     return this.docs.listDocs(workspaceId);
   }
 
   @Get(':kind')
-  getOne(@Param('workspaceId') workspaceId: string, @Param('kind') kind: string) {
+  async getOne(
+    @Param('workspaceId') workspaceId: string,
+    @Param('kind') kind: string,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    if (kind === 'external-tool-layout' || kind === 'internal-office-scenes') {
+      await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
+    }
     return this.docs.getDoc(workspaceId, kind);
   }
 
   @Put(':kind')
-  putOne(
+  async putOne(
     @Param('workspaceId') workspaceId: string,
     @Param('kind') kind: string,
     @Body() body: { payload?: unknown } | Record<string, unknown>,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
   ) {
+    if (kind === 'external-tool-layout' || kind === 'internal-office-scenes') {
+      const user = await this.requireWorkspaceMember(
+        workspaceId,
+        authorization,
+        xSessionToken,
+      );
+      if (String(user.platformRole ?? '') !== 'super_admin') {
+        throw new ForbiddenException(
+          kind === 'external-tool-layout'
+            ? 'external_tool_layout_admin_required'
+            : 'internal_office_scenes_admin_required',
+        );
+      }
+    }
     const payload =
       body && typeof body === 'object' && 'payload' in body ? body.payload : body;
     return this.docs.putDoc(workspaceId, kind, payload ?? {});
+  }
+
+  private async requireWorkspaceMember(
+    workspaceId: string,
+    authorization?: string,
+    xSessionToken?: string,
+  ): Promise<Record<string, unknown>> {
+    const session = await this.docs.me(
+      bearerToken(authorization, xSessionToken),
+      workspaceId,
+    );
+    if (!session.ok) {
+      throw new UnauthorizedException(session.error || 'platform_docs_login_required');
+    }
+    return session.user;
   }
 }
 

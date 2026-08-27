@@ -12,6 +12,9 @@ import {
 } from '@/api/platformDocsApi';
 
 const MAX_PER_KIND = 12;
+let hydratedKey: string | null = null;
+let hydrationInFlightKey: string | null = null;
+let localMutationVersion = 0;
 
 export type MarketFeaturedPins = Record<MarketShelfKind, string[]>;
 
@@ -55,6 +58,16 @@ function persist(pins: MarketFeaturedPins) {
   void scheduleSavePlatformDoc(currentWorkspaceId(), 'market-featured', { pins });
 }
 
+function currentHydrationKey() {
+  return `${currentWorkspaceId()}::${canUsePlatformDocsApi() ? 'api' : 'offline'}`;
+}
+
+function markLocalMutation() {
+  localMutationVersion += 1;
+  // 本地态已经是当前页面的最新真值；防抖 PUT 完成前禁止重新 hydrate 旧缓存覆盖它。
+  hydratedKey = currentHydrationKey();
+}
+
 interface MarketFeaturedState {
   pins: MarketFeaturedPins;
   hydrate: () => void;
@@ -68,23 +81,41 @@ export const useMarketFeaturedStore = create<MarketFeaturedState>((set, get) => 
   pins: defaultPins(),
 
   hydrate: () => {
+    const workspaceId = currentWorkspaceId();
+    const canUseApi = canUsePlatformDocsApi();
+    const key = `${workspaceId}::${canUseApi ? 'api' : 'offline'}`;
+    if (hydratedKey === key || hydrationInFlightKey === key) return;
+
+    hydrationInFlightKey = key;
+    const mutationVersionAtStart = localMutationVersion;
     void (async () => {
-      if (!canUsePlatformDocsApi()) {
-        set({ pins: defaultPins() });
-        return;
-      }
       try {
+        if (!canUseApi) {
+          if (localMutationVersion === mutationVersionAtStart) set({ pins: defaultPins() });
+          hydratedKey = key;
+          return;
+        }
         const remote = await fetchPlatformDoc<{ pins?: MarketFeaturedPins } | MarketFeaturedPins>(
-          currentWorkspaceId(),
+          workspaceId,
           'market-featured',
         );
         const pins =
           remote && typeof remote === 'object' && 'pins' in remote && remote.pins
             ? normalizePins(remote.pins)
             : normalizePins(remote as Partial<MarketFeaturedPins> | null);
-        set({ pins });
+        if (currentWorkspaceId() === workspaceId) {
+          if (localMutationVersion === mutationVersionAtStart) set({ pins });
+          hydratedKey = key;
+        }
       } catch {
-        set({ pins: defaultPins() });
+        if (
+          currentWorkspaceId() === workspaceId &&
+          localMutationVersion === mutationVersionAtStart
+        ) {
+          set({ pins: defaultPins() });
+        }
+      } finally {
+        if (hydrationInFlightKey === key) hydrationInFlightKey = null;
       }
     })();
   },
@@ -92,6 +123,7 @@ export const useMarketFeaturedStore = create<MarketFeaturedState>((set, get) => 
   pinsFor: (kind) => get().pins[kind] ?? [],
 
   setPins: (kind, ids) => {
+    markLocalMutation();
     const pins = {
       ...get().pins,
       [kind]: ids.slice(0, MAX_PER_KIND),
@@ -101,6 +133,7 @@ export const useMarketFeaturedStore = create<MarketFeaturedState>((set, get) => 
   },
 
   togglePin: (kind, id) => {
+    markLocalMutation();
     const cur = get().pins[kind] ?? [];
     const next = cur.includes(id)
       ? cur.filter((x) => x !== id)

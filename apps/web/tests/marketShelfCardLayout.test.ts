@@ -45,3 +45,16 @@ test('标签行固定在底部分隔线上方，不随描述长度移动', () =>
     '指标与操作区的分隔线必须紧随标签所在主体之后',
   );
 });
+
+test('后台可以隐藏默认指标与详情区，同时保留自定义拖拽操作', () => {
+  assert.match(cardSource, /showDefaultFooter = true/);
+  assert.match(
+    cardSource,
+    /\{showDefaultFooter \? \([\s\S]*?title="查看"[\s\S]*?\{primaryLabel\}[\s\S]*?\) : null\}/,
+  );
+  assert.match(
+    cardSource,
+    /\{footerActions \? \([\s\S]*?\{footerActions\}[\s\S]*?\) : null\}/,
+    '隐藏默认 footer 时，后台传入的左下角拖拽手柄仍必须渲染',
+  );
+});

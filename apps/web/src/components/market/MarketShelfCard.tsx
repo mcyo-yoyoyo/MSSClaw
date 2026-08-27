@@ -27,6 +27,8 @@ export function MarketShelfCard({
   enableCompare = true,
   showTags = true,
   footerActions,
+  showDefaultFooter = true,
+  interactionMode = 'user',
 }: {
   card: MarketShelfCardModel;
   variant?: 'grid' | 'featured' | 'compact';
@@ -45,6 +47,10 @@ export function MarketShelfCard({
   showTags?: boolean;
   /** 管理后台专用：将操作集中收纳到卡片内部。 */
   footerActions?: ReactNode;
+  /** 管理后台可隐藏指标与“详情”等默认操作，只保留自定义维护操作。 */
+  showDefaultFooter?: boolean;
+  /** 运营预览只展示真实指标，不写入收藏、赞踩或对比状态。 */
+  interactionMode?: 'user' | 'preview';
 }) {
   void _onHowTo;
   void _howToLabel;
@@ -52,6 +58,7 @@ export function MarketShelfCard({
   const compact = variant === 'compact';
   const homeDense = Boolean(className?.includes('home-channel-card'));
   const primaryLabel = primaryLabelOverride ?? '详情';
+  const previewOnly = interactionMode === 'preview';
 
   const regionTone =
     card.kind === 'external' && card.region === 'overseas'
@@ -281,12 +288,13 @@ export function MarketShelfCard({
           </div>
         ) : null}
       </button>
-      <div
-        className={cn(
-          'flex flex-wrap items-center gap-2 border-t border-black/[0.04]',
-          compact ? 'mt-2.5 pt-2.5' : homeDense ? 'mt-2.5 pt-2.5' : 'mt-3.5 pt-3',
-        )}
-      >
+      {showDefaultFooter ? (
+        <div
+          className={cn(
+            'flex flex-wrap items-center gap-2 border-t border-black/[0.04]',
+            compact ? 'mt-2.5 pt-2.5' : homeDense ? 'mt-2.5 pt-2.5' : 'mt-3.5 pt-3',
+          )}
+        >
         <div className="mr-auto inline-flex flex-wrap items-center gap-0.5 text-[10px] tabular-nums">
           <span
             className="inline-flex items-center gap-0.5 px-1 py-0.5 text-[#86868b]"
@@ -295,51 +303,88 @@ export function MarketShelfCard({
             <i className="fa-regular fa-eye text-[9px] text-zinc-400" />
             {formatToolInvokes(engagement?.views ?? 0)}
           </span>
-          <button
-            type="button"
-            onClick={onToggleFavorite}
-            title={favorited ? '取消收藏' : '收藏'}
-            aria-pressed={favorited}
-            className={cn(
-              'inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition',
-              favorited ? 'text-amber-600' : 'text-[#86868b] hover:text-zinc-700',
-            )}
-          >
-            <i className={cn('text-[9px]', favorited ? 'fa-solid fa-star' : 'fa-regular fa-star')} />
-            {formatToolInvokes(engagement?.favorites ?? 0)}
-          </button>
-          <button
-            type="button"
-            onClick={(ev) => {
-              ev.stopPropagation();
-              toggleLike(card.id);
-            }}
-            title="点赞"
-            aria-pressed={userVote === 'like'}
-            className={cn(
-              'inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition',
-              userVote === 'like' ? 'text-sky-600' : 'text-[#86868b] hover:text-zinc-700',
-            )}
-          >
-            <i className="fa-solid fa-thumbs-up text-[9px]" />
-            {formatToolInvokes(engagement?.likes ?? 0)}
-          </button>
-          <button
-            type="button"
-            onClick={(ev) => {
-              ev.stopPropagation();
-              toggleDislike(card.id);
-            }}
-            title="点踩"
-            aria-pressed={userVote === 'dislike'}
-            className={cn(
-              'inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition',
-              userVote === 'dislike' ? 'text-zinc-800' : 'text-[#86868b] hover:text-zinc-700',
-            )}
-          >
-            <i className="fa-solid fa-thumbs-down text-[9px]" />
-            {formatToolInvokes(engagement?.dislikes ?? 0)}
-          </button>
+          {previewOnly ? (
+            <>
+              <span
+                className={cn(
+                  'inline-flex items-center gap-0.5 rounded px-1 py-0.5',
+                  favorited ? 'text-amber-600' : 'text-[#86868b]',
+                )}
+                title="收藏"
+              >
+                <i className={cn('text-[9px]', favorited ? 'fa-solid fa-star' : 'fa-regular fa-star')} />
+                {formatToolInvokes(engagement?.favorites ?? 0)}
+              </span>
+              <span
+                className={cn(
+                  'inline-flex items-center gap-0.5 rounded px-1 py-0.5',
+                  userVote === 'like' ? 'text-sky-600' : 'text-[#86868b]',
+                )}
+                title="点赞"
+              >
+                <i className="fa-solid fa-thumbs-up text-[9px]" />
+                {formatToolInvokes(engagement?.likes ?? 0)}
+              </span>
+              <span
+                className={cn(
+                  'inline-flex items-center gap-0.5 rounded px-1 py-0.5',
+                  userVote === 'dislike' ? 'text-zinc-800' : 'text-[#86868b]',
+                )}
+                title="点踩"
+              >
+                <i className="fa-solid fa-thumbs-down text-[9px]" />
+                {formatToolInvokes(engagement?.dislikes ?? 0)}
+              </span>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onToggleFavorite}
+                title={favorited ? '取消收藏' : '收藏'}
+                aria-pressed={favorited}
+                className={cn(
+                  'inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition',
+                  favorited ? 'text-amber-600' : 'text-[#86868b] hover:text-zinc-700',
+                )}
+              >
+                <i className={cn('text-[9px]', favorited ? 'fa-solid fa-star' : 'fa-regular fa-star')} />
+                {formatToolInvokes(engagement?.favorites ?? 0)}
+              </button>
+              <button
+                type="button"
+                onClick={(ev) => {
+                  ev.stopPropagation();
+                  toggleLike(card.id);
+                }}
+                title="点赞"
+                aria-pressed={userVote === 'like'}
+                className={cn(
+                  'inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition',
+                  userVote === 'like' ? 'text-sky-600' : 'text-[#86868b] hover:text-zinc-700',
+                )}
+              >
+                <i className="fa-solid fa-thumbs-up text-[9px]" />
+                {formatToolInvokes(engagement?.likes ?? 0)}
+              </button>
+              <button
+                type="button"
+                onClick={(ev) => {
+                  ev.stopPropagation();
+                  toggleDislike(card.id);
+                }}
+                title="点踩"
+                aria-pressed={userVote === 'dislike'}
+                className={cn(
+                  'inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition',
+                  userVote === 'dislike' ? 'text-zinc-800' : 'text-[#86868b] hover:text-zinc-700',
+                )}
+              >
+                <i className="fa-solid fa-thumbs-down text-[9px]" />
+                {formatToolInvokes(engagement?.dislikes ?? 0)}
+              </button>
+            </>
+          )}
           {canDownload ? (
             <button
               type="button"
@@ -352,7 +397,7 @@ export function MarketShelfCard({
             </button>
           ) : null}
         </div>
-        {enableCompare ? (
+        {enableCompare && !previewOnly ? (
           <button
             type="button"
             onClick={onToggleCompare}
@@ -387,7 +432,8 @@ export function MarketShelfCard({
         >
           {primaryLabel}
         </button>
-      </div>
+        </div>
+      ) : null}
       {footerActions ? (
         <div className="mt-2" onClick={(event) => event.stopPropagation()}>
           {footerActions}

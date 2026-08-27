@@ -68,9 +68,12 @@ function SectionTitle({ children }: { children: string }) {
 export function MarketToolDetailModal({
   toolId,
   onClose,
+  interactionMode = 'user',
 }: {
   toolId: string;
   onClose: () => void;
+  /** 运营侧只读详情：保留内容与文档链接，不写入收藏、使用或最近访问。 */
+  interactionMode?: 'user' | 'preview';
 }) {
   const tools = useMarketplaceStore((s) => s.tools);
   const showToast = useMarketplaceStore((s) => s.showToast);
@@ -81,12 +84,14 @@ export function MarketToolDetailModal({
   const toggleFavorite = useMarketFavoriteStore((s) => s.toggle);
 
   const [showExternalWarning, setShowExternalWarning] = useState(false);
+  const previewOnly = interactionMode === 'preview';
 
   const tool = tools.find((t) => t.id === toolId) ?? null;
   const kind = resolveToolKind(tool);
   const isFav = favItems.some((x) => x.id === toolId && x.kind === kind);
 
   const openUrl = () => {
+    if (previewOnly) return;
     if (!tool) return;
     if (!tool.homepageUrl || tool.homepageUrl === '#') {
       // 没有可用入口时不计入跳转量，否则「跳转官网」会被无效点击灌水
@@ -113,6 +118,7 @@ export function MarketToolDetailModal({
   };
 
   const onToggleFavorite = () => {
+    if (previewOnly) return;
     if (!tool) return;
     const on = toggleFavorite({
       id: tool.id,
@@ -232,19 +238,26 @@ export function MarketToolDetailModal({
         }
         actions={
           <div className="flex w-full items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={onToggleFavorite}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition',
-                isFav
-                  ? 'bg-amber-50 text-amber-700'
-                  : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700',
-              )}
-            >
-              <i className={cn(isFav ? 'fa-solid fa-star' : 'fa-regular fa-star', 'text-[10px]')} />
-              {isFav ? '已收藏' : '收藏'}
-            </button>
+            {previewOnly ? (
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-100 px-2.5 py-1.5 text-[11px] font-medium text-zinc-500">
+                <i className="fa-regular fa-eye text-[10px]" />
+                运营只读预览
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={onToggleFavorite}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition',
+                  isFav
+                    ? 'bg-amber-50 text-amber-700'
+                    : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700',
+                )}
+              >
+                <i className={cn(isFav ? 'fa-solid fa-star' : 'fa-regular fa-star', 'text-[10px]')} />
+                {isFav ? '已收藏' : '收藏'}
+              </button>
+            )}
             <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
@@ -264,7 +277,7 @@ export function MarketToolDetailModal({
                   使用指导
                 </a>
               ) : null}
-              {hasHome ? (
+              {hasHome && !previewOnly ? (
                 <button
                   type="button"
                   onClick={() => (kind === 'external' ? setShowExternalWarning(true) : openUrl())}

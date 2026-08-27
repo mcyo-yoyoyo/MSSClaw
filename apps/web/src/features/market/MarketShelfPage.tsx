@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { canExecuteChat } from '@/domain/permissions';
-import { orderExternalFeaturedItems } from '@/domain/externalFeaturedOrder';
+import {
+  orderExternalFeaturedItems,
+  splitExternalFeaturedItemsByRegion,
+} from '@/domain/externalFeaturedOrder';
 import {
   applyMarketFeaturedPins,
   listMarketProjectCards,
   listMarketToolCards,
   MARKET_SHELF_META,
+  qualifiesAsFeaturedContent,
   splitFeaturedAndRest,
   type MarketShelfCard as MarketShelfCardModel,
   type MarketShelfKind,
@@ -133,7 +137,9 @@ import {
 import { useRecentMarketStore } from '@/stores/recentMarketStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useMarketFeaturedStore } from '@/stores/marketFeaturedStore';
+import { useExternalToolLayoutStore } from '@/stores/externalToolLayoutStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { allowsMarketScenarioRun } from '@/domain/marketRunCapability';
 
 export type MarketShelfPageProps = {
@@ -174,8 +180,13 @@ export function MarketShelfPage({
   const bumpUse = useContentEngagementStore((s) => s.bumpUse);
   const guideRecords = usePlazaToolGuideStore((s) => s.records);
   const featuredPins = useMarketFeaturedStore((s) => s.pins);
+  const externalToolLayout = useExternalToolLayoutStore((s) => s.document);
+  const externalToolLayoutLoading = useExternalToolLayoutStore((s) => s.loading);
+  const externalToolLayoutError = useExternalToolLayoutStore((s) => s.error);
+  const hydrateExternalToolLayout = useExternalToolLayoutStore((s) => s.hydrate);
   const externalTaxonomy = useExternalTaxonomyCatalogStore((s) => s.catalog);
   const hydrateFeaturedPins = useMarketFeaturedStore((s) => s.hydrate);
+  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
 
   const [showcaseId, setShowcaseId] = useState<string | null>(null);
   const [howTo, setHowTo] = useState<{ title: string; guides: PlazaToolGuide[] } | null>(null);
@@ -223,6 +234,14 @@ export function MarketShelfPage({
     // 外部工具按 Excel 清单序、公司工具按办公场景字典序；MSS 集市才按互动量
     setRankMode(kind === 'projects' ? 'most_viewed' : 'excel_order');
   }, [kind]);
+
+  useEffect(() => {
+    if (kind !== 'external') return;
+    const layoutState = useExternalToolLayoutStore.getState();
+    if (layoutState.loading || layoutState.saving || layoutState.dirty) return;
+    if (layoutState.workspaceId === workspaceId && layoutState.document) return;
+    void hydrateExternalToolLayout(workspaceId);
+  }, [kind, workspaceId, hydrateExternalToolLayout]);
 
   /** 运营隐藏类型后，清除已失效的筛选态 */
   useEffect(() => {
@@ -332,12 +351,23 @@ export function MarketShelfPage({
 
     let working = raw;
     if (kind === 'external') {
-      working = working.filter((c) =>
-        toolMatchesExternalTypeCatalog(
-          c.toolTypeIds?.length ? c.toolTypeIds : c.toolTypeId,
-          externalType,
-          externalTaxonomy,
-        ),
+      // raw 已先执行发布状态与账号可见性过滤；运营精选可跨 taxonomy 标签选入，
+      // 但仍必须继续经过下方统一的搜索、收藏与隐藏过滤。
+      const categoryFeaturedIds =
+        externalType === 'all'
+          ? null
+          : new Set([
+              ...(externalToolLayout?.categories[externalType]?.overseasFeaturedIds ?? []),
+              ...(externalToolLayout?.categories[externalType]?.domesticFeaturedIds ?? []),
+            ]);
+      working = working.filter(
+        (c) =>
+          categoryFeaturedIds?.has(c.id) ||
+          toolMatchesExternalTypeCatalog(
+            c.toolTypeIds?.length ? c.toolTypeIds : c.toolTypeId,
+            externalType,
+            externalTaxonomy,
+          ),
       );
       working = working.map((card) => ({
         ...card,
@@ -368,6 +398,7 @@ export function MarketShelfPage({
     listBusiness,
     externalType,
     externalTaxonomy,
+    externalToolLayout,
     getEngagement,
     engagementById,
     howtoToolIds,
@@ -710,18 +741,45 @@ export function MarketShelfPage({
   }, [orgSelection]);
 
   const featuredLimit = 8;
-  const { featured, rest } = splitFeaturedAndRest(filteredCards, featuredLimit);
+  const externalFeaturedSplit =
+    kind === 'external'
+      ? splitExternalFeaturedItemsByRegion(filteredCards, qualifiesAsFeaturedContent)
+      : null;
+  const { featured, rest } =
+    externalFeaturedSplit ?? splitFeaturedAndRest(filteredCards, featuredLimit);
+  const isExternalCategory = kind === 'external' && externalType !== 'all';
+  const externalCategoryFeatured = useMemo(() => {
+    if (!isExternalCategory) return [] as MarketShelfCardModel[];
+    const categoryLayout = externalToolLayout?.categories[externalType];
+    const visibleById = new Map(filteredCards.map((card) => [card.id, card]));
+    const selectRegion = (
+      configuredIds: readonly string[],
+      region: 'overseas' | 'domestic',
+    ) =>
+      configuredIds.flatMap((id) => {
+        const card = visibleById.get(id);
+        return card?.region === region ? [card] : [];
+      });
+    return [
+      ...selectRegion(categoryLayout?.overseasFeaturedIds ?? [], 'overseas'),
+      ...selectRegion(categoryLayout?.domesticFeaturedIds ?? [], 'domestic'),
+    ];
+  }, [isExternalCategory, externalToolLayout, externalType, filteredCards]);
   const { featured: skillFeatured, rest: skillRest } = splitFeaturedAndRest(skillCards, 4);
   const { featured: agentFeatured, rest: agentRest } = splitFeaturedAndRest(agentCards, 4);
   const showFeaturedStrip =
     kind !== 'internal' &&
-    (kind === 'projects'
+    (isExternalCategory
+      ? true
+      : kind === 'projects'
       ? mssSurface === 'skills'
         ? skillFeatured.length > 0
         : agentFeatured.length > 0
       : featured.length > 0);
   const activeFeatured =
-    kind === 'projects'
+    isExternalCategory
+      ? externalCategoryFeatured
+      : kind === 'projects'
       ? mssSurface === 'skills'
         ? skillFeatured
         : agentFeatured
@@ -730,17 +788,35 @@ export function MarketShelfPage({
   const externalFeaturedOverseas = useMemo(
     () =>
       kind === 'external'
-        ? activeFeatured.filter((c) => c.region === 'overseas').slice(0, 4)
+        ? isExternalCategory
+          ? activeFeatured.filter((c) => c.region === 'overseas')
+          : activeFeatured.filter((c) => c.region === 'overseas').slice(0, 4)
         : [],
-    [kind, activeFeatured],
+    [kind, isExternalCategory, activeFeatured],
   );
   const externalFeaturedDomestic = useMemo(
     () =>
       kind === 'external'
-        ? activeFeatured.filter((c) => c.region === 'domestic').slice(0, 4)
+        ? isExternalCategory
+          ? activeFeatured.filter((c) => c.region === 'domestic')
+          : activeFeatured.filter((c) => c.region === 'domestic').slice(0, 4)
         : [],
-    [kind, activeFeatured],
+    [kind, isExternalCategory, activeFeatured],
   );
+  const externalFeaturedColumns = [
+    {
+      key: 'overseas' as const,
+      title: '海外精选',
+      sub: `GLOBAL TOP ${externalFeaturedOverseas.length}`,
+      items: externalFeaturedOverseas,
+    },
+    {
+      key: 'domestic' as const,
+      title: '国内精选',
+      sub: `CHINA TOP ${externalFeaturedDomestic.length}`,
+      items: externalFeaturedDomestic,
+    },
+  ];
 
   const externalFilterStats = useMemo(() => {
     if (kind !== 'external') return { total: 0, overseas: 0, domestic: 0 };
@@ -1249,34 +1325,47 @@ export function MarketShelfPage({
           </div>
         ) : null}
 
-        {kind !== 'internal' && showFeaturedStrip ? (
+        {isExternalCategory && !externalToolLayout ? (
+          <section
+            className={cn(
+              'mb-7 rounded-2xl border px-4 py-12 text-center text-[13px]',
+              externalToolLayoutError
+                ? 'border-red-200 bg-red-50 text-red-700'
+                : 'border-dashed border-zinc-200 bg-white text-[#86868b]',
+            )}
+            role={externalToolLayoutError ? 'alert' : 'status'}
+            data-testid="external-category-layout-status"
+          >
+            {externalToolLayoutError
+              ? `精选配置加载失败：${externalToolLayoutError}`
+              : externalToolLayoutLoading
+                ? '正在加载分类精选配置…'
+                : '正在准备分类精选配置…'}
+          </section>
+        ) : kind !== 'internal' && showFeaturedStrip ? (
           <section className="mb-7">
             {kind === 'external' ? (
               <>
-                <ShelfSectionHead
-                  title="精选推荐"
-                  count={activeFeatured.length}
-                  rankMode={rankMode}
-                  onRankChange={setRankMode}
-                  showExcelOrder
-                />
+                {isExternalCategory ? (
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h2 className="min-w-0 text-[15px] font-semibold tracking-tight text-[#1d1d1f]">
+                      精选推荐
+                      <span className="ml-1.5 font-normal text-[#86868b]">
+                        {activeFeatured.length}
+                      </span>
+                    </h2>
+                  </div>
+                ) : (
+                  <ShelfSectionHead
+                    title="精选推荐"
+                    count={activeFeatured.length}
+                    rankMode={rankMode}
+                    onRankChange={setRankMode}
+                    showExcelOrder
+                  />
+                )}
                 <div className="grid gap-4 lg:grid-cols-2">
-                  {(
-                    [
-                      {
-                        key: 'overseas',
-                        title: '海外精选',
-                        sub: `GLOBAL TOP ${externalFeaturedOverseas.length}`,
-                        items: externalFeaturedOverseas,
-                      },
-                      {
-                        key: 'domestic',
-                        title: '国内精选',
-                        sub: `CHINA TOP ${externalFeaturedDomestic.length}`,
-                        items: externalFeaturedDomestic,
-                      },
-                    ] as const
-                  ).map((col) => (
+                  {externalFeaturedColumns.map((col) => (
                     <div
                       key={col.key}
                       className={cn(
@@ -1354,7 +1443,7 @@ export function MarketShelfPage({
           </section>
         ) : null}
 
-        {kind !== 'internal' ? (
+        {kind !== 'internal' && !isExternalCategory ? (
         <section>
           <ShelfSectionHead
             title={showFeaturedStrip ? '更多' : '全部'}

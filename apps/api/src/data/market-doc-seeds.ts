@@ -34,6 +34,37 @@ export const SEED_EXTERNAL_TAXONOMY = {
   ],
 };
 
+/**
+ * 外部工具运营货架的首次配置。
+ *
+ * “更多”顺序留空代表继续使用 marketplace/Excel 的当前顺序；只有运营首次保存后，
+ * 对应列表才成为数据库中的显式人工顺序。分类精选同理，不用静态种子覆盖后续运营数据。
+ */
+export const SEED_EXTERNAL_TOOL_LAYOUT = {
+  version: 1,
+  revision: 0,
+  all: {
+    overseasFeaturedIds: [
+      'tool-saas-chatgpt',
+      'tool-saas-claude',
+      'tool-saas-gemini',
+      'tool-saas-perplexity',
+    ],
+    domesticFeaturedIds: [
+      'tool-saas-doubao',
+      'tool-saas-deepseek',
+      'tool-saas-kimi',
+      'tool-saas-tongyi',
+    ],
+    overseasMoreOrderIds: [],
+    domesticMoreOrderIds: [],
+  },
+  categories: {} as Record<
+    string,
+    { overseasFeaturedIds: string[]; domesticFeaturedIds: string[] }
+  >,
+};
+
 export const SEED_INTERNAL_OFFICE_SCENES = {
   version: 2,
   /** 首次写入数据库的基线版本；客户端首次修改需提交 expectedRevision: 0。 */

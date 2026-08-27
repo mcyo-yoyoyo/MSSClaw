@@ -6,6 +6,7 @@ import {
   type InternalOfficeSceneCatalogEntry,
   type InternalOfficeSceneId,
 } from '@/domain/internalOfficeScenes';
+import { reorderVisibleOfficeSceneEntries } from '@/domain/internalOfficeSceneOrder';
 import {
   canUsePlatformDocsApi,
   currentWorkspaceId,
@@ -329,6 +330,14 @@ export interface InternalOfficeSceneCatalogState {
   ) => Promise<boolean>;
   setToolIds: (id: InternalOfficeSceneId, toolIds: string[]) => Promise<boolean>;
   moveEntry: (id: InternalOfficeSceneId, dir: -1 | 1) => Promise<boolean>;
+  reorderVisibleEntry: (
+    activeId: InternalOfficeSceneId,
+    beforeId: InternalOfficeSceneId | null,
+    /** 拖拽开始时完整、未筛选的可见场景顺序。 */
+    visibleIds: InternalOfficeSceneId[],
+    /** 拖拽开始时的数据库 revision；变化后本次放置作废。 */
+    startRevision?: number,
+  ) => Promise<boolean>;
   addEntry: (input?: NewInternalOfficeSceneInput) => Promise<InternalOfficeSceneId | null>;
   removeEntry: (id: InternalOfficeSceneId) => Promise<boolean>;
   dismissToast: () => void;
@@ -473,6 +482,33 @@ export const useInternalOfficeSceneCatalogStore =
       const target = index + dir;
       if (index < 0 || target < 0 || target >= current.length) return false;
       const next = moveToPosition(current, id, target);
+      return persistDatabaseSnapshot(get, set, next, '已调整场景顺序');
+    },
+
+    reorderVisibleEntry: async (
+      activeId,
+      beforeId,
+      visibleIds,
+      startRevision,
+    ) => {
+      const state = get();
+      if (
+        startRevision !== undefined &&
+        (!Number.isSafeInteger(startRevision) || startRevision !== state.revision)
+      ) {
+        set({
+          toast: '场景顺序已刷新，本次拖拽未提交。请按当前顺序重试。',
+          toastTone: 'error',
+        });
+        return false;
+      }
+      const next = reorderVisibleOfficeSceneEntries(
+        state.entries,
+        activeId,
+        beforeId,
+        visibleIds,
+      );
+      if (!next) return false;
       return persistDatabaseSnapshot(get, set, next, '已调整场景顺序');
     },
 

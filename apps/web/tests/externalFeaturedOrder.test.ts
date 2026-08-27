@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { orderExternalFeaturedItems } from '../src/domain/externalFeaturedOrder.ts';
+import {
+  orderExternalFeaturedItems,
+  splitExternalFeaturedItemsByRegion,
+} from '../src/domain/externalFeaturedOrder.ts';
 
 type Card = {
   id: string;
@@ -83,4 +86,30 @@ test('sorting does not mutate cards or pins', () => {
   assert.deepEqual(ids(orderExternalFeaturedItems(cards, pins)), ['second', 'first']);
   assert.deepEqual(ids(cards), ['second', 'first']);
   assert.deepEqual(pins, ['second']);
+});
+
+test('regional featured limit returns overflow pins to the rest list', () => {
+  const cards = [
+    ...Array.from({ length: 5 }, (_, index) => ({
+      id: `overseas-${index + 1}`,
+      featured: true,
+      region: 'overseas' as const,
+    })),
+    ...Array.from({ length: 3 }, (_, index) => ({
+      id: `domestic-${index + 1}`,
+      featured: true,
+      region: 'domestic' as const,
+    })),
+    { id: 'regular', featured: false, region: 'domestic' as const },
+  ];
+
+  const result = splitExternalFeaturedItemsByRegion(cards, () => true);
+
+  assert.equal(result.overseas.length, 4);
+  assert.equal(result.domestic.length, 3);
+  assert.deepEqual(
+    result.rest.map((card) => card.id),
+    ['overseas-5', 'regular'],
+  );
+  assert.equal(result.featured.length + result.rest.length, cards.length);
 });

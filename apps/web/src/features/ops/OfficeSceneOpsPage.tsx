@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { currentWorkspaceId } from '@/api/platformDocsApi';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { CenterPageHeader, StatCardGrid } from '@/components/center/CenterShell';
 import { resolveToolMarketShelf } from '@/domain/aiToolCategories';
@@ -82,8 +83,14 @@ function sameDraft(a: SceneDraft | null, b: SceneDraft | null): boolean {
   );
 }
 
-/** 原版主从布局；数据仍以服务器数据库的 fresh 快照为准。 */
-export function OfficeSceneOpsPage() {
+/** 原版主从布局；布局与只读能力分开控制，数据仍以服务器数据库的 fresh 快照为准。 */
+export function OfficeSceneOpsPage({
+  embedded = false,
+  readOnly = false,
+}: {
+  embedded?: boolean;
+  readOnly?: boolean;
+}) {
   const tools = useMarketplaceStore((state) => state.tools);
   const toolsReady = useMarketplaceStore((state) => state.ready);
   const marketplaceLoadError = useMarketplaceStore((state) => state.loadError);
@@ -101,7 +108,6 @@ export function OfficeSceneOpsPage() {
   const updateEntry = useInternalOfficeSceneCatalogStore(
     (state) => state.updateEntry,
   );
-  const moveEntry = useInternalOfficeSceneCatalogStore((state) => state.moveEntry);
   const addEntry = useInternalOfficeSceneCatalogStore((state) => state.addEntry);
   const removeEntry = useInternalOfficeSceneCatalogStore(
     (state) => state.removeEntry,
@@ -126,8 +132,16 @@ export function OfficeSceneOpsPage() {
   );
 
   useEffect(() => {
+    const state = useInternalOfficeSceneCatalogStore.getState();
+    if (
+      embedded &&
+      state.loaded &&
+      state.workspaceId === currentWorkspaceId()
+    ) {
+      return;
+    }
     void hydrate();
-  }, [hydrate]);
+  }, [embedded, hydrate]);
 
   useEffect(() => {
     if (!toast) return;
@@ -156,19 +170,18 @@ export function OfficeSceneOpsPage() {
     [candidateTools],
   );
   const selected = entries.find((entry) => entry.id === selectedId) ?? null;
-  const selectedIndex = entries.findIndex((entry) => entry.id === selectedId);
   const dirty = Boolean(draft && baseDraft && !sameDraft(draft, baseDraft));
   const toolCatalogAvailable = toolsReady && !marketplaceLoadError;
   const pageReady = loaded && toolCatalogAvailable;
   const draftStale = Boolean(
     draftContext &&
-      (loading ||
-        !sceneWorkspaceId ||
+      (!sceneWorkspaceId ||
         draftContext.workspaceId !== sceneWorkspaceId ||
         draftContext.revision !== revision ||
         draftContext.entryId !== selectedId),
   );
-  const controlsDisabled = saving || loading || !pageReady || draftStale;
+  const editorUnavailable = saving || loading || !pageReady || draftStale;
+  const controlsDisabled = readOnly || editorUnavailable;
   const latestDraftRef = useRef<{
     dirty: boolean;
     draft: SceneDraft | null;
@@ -276,16 +289,16 @@ export function OfficeSceneOpsPage() {
 
   useEffect(() => {
     if (!selected || !sceneWorkspaceId) return;
-    if (
+    const sameDraftContext =
       draftContext?.entryId === selected.id &&
-      draftContext.workspaceId === sceneWorkspaceId
-    ) {
-      return;
-    }
+      draftContext.workspaceId === sceneWorkspaceId;
+    if (sameDraftContext && draftContext.revision === revision) return;
+    // clean 草稿跟随 fresh DB 快照自动重建；有改动时保留旧草稿并进入 stale 提示。
+    if (sameDraftContext && dirty) return;
     installDraft(selected);
-    // installDraft 仅在选择/工作区改变时建立 DB 草稿基线。
+    // installDraft 仅在选择、工作区或 clean DB revision 改变时建立草稿基线。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id, sceneWorkspaceId]);
+  }, [dirty, revision, sceneWorkspaceId, selected?.id]);
 
   const filteredCandidates = useMemo(() => {
     const query = toolQuery.trim().toLocaleLowerCase();
@@ -311,6 +324,7 @@ export function OfficeSceneOpsPage() {
   const staleBoundTool = Boolean(draft?.toolId && !boundTool);
 
   const patchDraft = (patch: Partial<SceneDraft>) => {
+    if (readOnly) return;
     setDraft((current) => (current ? { ...current, ...patch } : current));
     setEditorError(null);
   };
@@ -320,6 +334,7 @@ export function OfficeSceneOpsPage() {
   };
   const restoreShelvedDraft = (shelvedDraft: ShelvedDraft) => {
     if (
+      readOnly ||
       !shelvedDraft ||
       !sceneWorkspaceId ||
       shelvedDraft.context.workspaceId !== sceneWorkspaceId ||
@@ -374,6 +389,7 @@ export function OfficeSceneOpsPage() {
 
   const addScene = async () => {
     if (
+      readOnly ||
       !pageReady ||
       saving ||
       loading ||
@@ -402,7 +418,7 @@ export function OfficeSceneOpsPage() {
   };
 
   const saveDraft = async () => {
-    if (!selected || !draft || controlsDisabled) return;
+    if (readOnly || !selected || !draft || controlsDisabled) return;
     const actionWorkspaceId = sceneWorkspaceId;
     const actionEntryId = selected.id;
     if (!actionWorkspaceId) return;
@@ -447,35 +463,8 @@ export function OfficeSceneOpsPage() {
     if (selected && !saving && !loading) installDraft(selected);
   };
 
-  const reorderScene = async (direction: -1 | 1) => {
-    if (
-      !selected ||
-      controlsDisabled ||
-      !confirmDiscard(direction < 0 ? '上移场景' : '下移场景')
-    ) {
-      return;
-    }
-    const actionWorkspaceId = sceneWorkspaceId;
-    const actionEntryId = selected.id;
-    if (!actionWorkspaceId) return;
-    const ok = await moveEntry(actionEntryId, direction);
-    if (
-      useInternalOfficeSceneCatalogStore.getState().workspaceId !==
-      actionWorkspaceId
-    ) {
-      return;
-    }
-    if (!ok) {
-      setEditorError(storeError('排序失败，数据库内容未改变。'));
-      return;
-    }
-    const state = useInternalOfficeSceneCatalogStore.getState();
-    const moved = state.entries.find((entry) => entry.id === actionEntryId);
-    if (moved) installDraft(moved, state.revision);
-  };
-
   const deleteScene = async () => {
-    if (!selected || controlsDisabled) return;
+    if (readOnly || !selected || controlsDisabled) return;
     const draftNotice = dirty ? '，未保存的草稿也会丢失' : '';
     if (
       !window.confirm(
@@ -505,32 +494,45 @@ export function OfficeSceneOpsPage() {
   };
 
   return (
-    <div className="center-surface center-page scroll-hidden flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-6xl">
-        <CenterPageHeader
-          title="配置办公场景"
-          subtitle="内部办公推荐页的场景字典：陈列文案、展示顺序与场景内的工具绑定"
-          tip={
-            <>
-              每个场景绑定一个数据库中的内部工具。这里维护文案、顺序、可见性和绑定关系；所有操作均在数据库保存并重新读取成功后生效。
-            </>
-          }
-          actions={
-            <button
-              type="button"
-              disabled={
-                !pageReady || loading || saving || entries.length >= SCENE_LIMIT
+    <div
+      className={cn(
+        embedded
+          ? 'min-w-0'
+          : 'center-surface center-page scroll-hidden flex-1 overflow-y-auto',
+      )}
+      data-testid="office-scene-ops-workspace"
+      data-layout={embedded ? 'embedded' : 'page'}
+      data-read-only={readOnly ? 'true' : 'false'}
+    >
+      <div className={cn(embedded ? 'min-w-0' : 'mx-auto max-w-6xl')}>
+        {!embedded ? (
+          <div data-testid="office-scene-ops-page-chrome">
+            <CenterPageHeader
+              title="配置办公场景"
+              subtitle="内部办公推荐页的场景字典：陈列文案、展示顺序与场景内的工具绑定"
+              tip={
+                <>
+                  每个场景绑定一个数据库中的内部工具。这里维护文案、顺序、可见性和绑定关系；所有操作均在数据库保存并重新读取成功后生效。
+                </>
               }
-              onClick={() => void addScene()}
-              className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <i className="fa-solid fa-plus mr-1" />
-              新增场景
-            </button>
-          }
-        />
+              actions={
+                <button
+                  type="button"
+                  disabled={
+                    !pageReady || loading || saving || entries.length >= SCENE_LIMIT
+                  }
+                  onClick={() => void addScene()}
+                  className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <i className="fa-solid fa-plus mr-1" />
+                  新增场景
+                </button>
+              }
+            />
 
-        <StatCardGrid items={stats} />
+            <StatCardGrid items={stats} />
+          </div>
+        ) : null}
 
         {toast && toastTone === 'error' ? (
           <div
@@ -558,41 +560,45 @@ export function OfficeSceneOpsPage() {
           </div>
         ) : null}
 
-        {shelvedDrafts.map((shelvedDraft) => (
-          <div
-            key={retainedDraftKey(shelvedDraft.context)}
-            role="alert"
-            className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2 text-[11px] text-amber-800"
-          >
-            <span className="min-w-0 flex-1">
-              已在当前会话保留「{shelvedDraft.entryLabel}」的未保存草稿（工作区 {shelvedDraft.context.workspaceId}），未写入数据库。
-            </span>
-            {shelvedDraft.context.workspaceId === sceneWorkspaceId ? (
-              <button
-                type="button"
-                disabled={saving || loading}
-                onClick={() => restoreShelvedDraft(shelvedDraft)}
-                className="rounded-lg border border-amber-300 bg-white px-2 py-1 font-medium disabled:opacity-40"
+        {!readOnly
+          ? shelvedDrafts.map((shelvedDraft) => (
+              <div
+                key={retainedDraftKey(shelvedDraft.context)}
+                role="alert"
+                className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2 text-[11px] text-amber-800"
               >
-                恢复草稿
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => dismissShelvedDraft(shelvedDraft)}
-              className="rounded-lg px-2 py-1 text-amber-700 hover:bg-amber-100"
-            >
-              放弃草稿
-            </button>
-          </div>
-        ))}
+                <span className="min-w-0 flex-1">
+                  已在当前会话保留「{shelvedDraft.entryLabel}」的未保存草稿（工作区 {shelvedDraft.context.workspaceId}），未写入数据库。
+                </span>
+                {shelvedDraft.context.workspaceId === sceneWorkspaceId ? (
+                  <button
+                    type="button"
+                    disabled={saving || loading}
+                    onClick={() => restoreShelvedDraft(shelvedDraft)}
+                    className="rounded-lg border border-amber-300 bg-white px-2 py-1 font-medium disabled:opacity-40"
+                  >
+                    恢复草稿
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => dismissShelvedDraft(shelvedDraft)}
+                  className="rounded-lg px-2 py-1 text-amber-700 hover:bg-amber-100"
+                >
+                  放弃草稿
+                </button>
+              </div>
+            ))
+          : null}
 
         {!toolsReady || (loading && !loaded) ? (
           <LoadingMasterDetail />
         ) : !entries.length ? (
           <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-4 py-14 text-center text-[13px] text-zinc-400">
             {loaded
-              ? '数据库中暂无办公场景，可点击右上角「新增场景」。'
+              ? embedded
+                ? '数据库中暂无办公场景，请到「配置办公场景」新增。'
+                : '数据库中暂无办公场景，可点击右上角「新增场景」。'
               : '尚未从数据库加载场景字典，请检查后端连接。'}
           </div>
         ) : (
@@ -611,13 +617,11 @@ export function OfficeSceneOpsPage() {
                   <SceneEditorHeader
                     entry={selected}
                     boundTool={boundTool}
-                    index={selectedIndex}
-                    total={entries.length}
                     draft={draft}
                     disabled={controlsDisabled}
-                    onMove={reorderScene}
-                    onVisible={(visible) => patchDraft({ visible })}
                     onDelete={deleteScene}
+                    showDelete={!embedded}
+                    readOnly={readOnly}
                   />
 
                   {editorError ? (
@@ -629,8 +633,20 @@ export function OfficeSceneOpsPage() {
                     </div>
                   ) : null}
                   {draftStale ? (
-                    <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
-                      数据库快照已变化。请放弃旧草稿后重新编辑。
+                    <div className="mb-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
+                      <span className="min-w-0 flex-1">
+                        数据库快照已变化。请放弃旧草稿后重新编辑。
+                      </span>
+                      {embedded ? (
+                        <button
+                          type="button"
+                          disabled={saving || loading}
+                          onClick={discardDraft}
+                          className="shrink-0 rounded-lg border border-amber-300 bg-white px-2 py-1 font-medium disabled:opacity-40"
+                        >
+                          重新载入
+                        </button>
+                      ) : null}
                     </div>
                   ) : null}
 
@@ -638,39 +654,42 @@ export function OfficeSceneOpsPage() {
                     <label className="block text-[11px] text-zinc-600">
                       场景名
                       <input
-                        disabled={controlsDisabled}
+                        disabled={editorUnavailable}
+                        readOnly={readOnly}
                         maxLength={LABEL_LIMIT}
                         value={draft.label}
                         onChange={(event) =>
                           patchDraft({ label: event.target.value })
                         }
-                        className="mt-1 w-full rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[12px] outline-none focus:border-zinc-400 disabled:bg-zinc-50"
+                        className="mt-1 w-full rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[12px] outline-none focus:border-zinc-400 read-only:cursor-default read-only:bg-zinc-50 read-only:text-zinc-600 disabled:bg-zinc-50"
                       />
                     </label>
                     <label className="block text-[11px] text-zinc-600">
                       英文副标
                       <input
-                        disabled={controlsDisabled}
+                        disabled={editorUnavailable}
+                        readOnly={readOnly}
                         maxLength={ENGLISH_LIMIT}
                         value={draft.english}
                         onChange={(event) =>
                           patchDraft({ english: event.target.value })
                         }
-                        className="mt-1 w-full rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[12px] outline-none focus:border-zinc-400 disabled:bg-zinc-50"
+                        className="mt-1 w-full rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[12px] outline-none focus:border-zinc-400 read-only:cursor-default read-only:bg-zinc-50 read-only:text-zinc-600 disabled:bg-zinc-50"
                       />
                     </label>
                   </div>
                   <label className="mt-2 block text-[11px] text-zinc-600">
                     简介
                     <textarea
-                      disabled={controlsDisabled}
+                      disabled={editorUnavailable}
+                      readOnly={readOnly}
                       maxLength={DESCRIPTION_LIMIT}
                       rows={2}
                       value={draft.description}
                       onChange={(event) =>
                         patchDraft({ description: event.target.value })
                       }
-                      className="mt-1 w-full resize-none rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[12px] outline-none focus:border-zinc-400 disabled:bg-zinc-50"
+                      className="mt-1 w-full resize-none rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[12px] outline-none focus:border-zinc-400 read-only:cursor-default read-only:bg-zinc-50 read-only:text-zinc-600 disabled:bg-zinc-50"
                     />
                   </label>
                 </div>
@@ -682,42 +701,48 @@ export function OfficeSceneOpsPage() {
                   candidates={filteredCandidates}
                   query={toolQuery}
                   disabled={controlsDisabled}
+                  readOnly={readOnly}
                   onQuery={setToolQuery}
                   onSelect={(toolId) => patchDraft({ toolId })}
                 />
 
-                <div className="sticky bottom-0 flex items-center justify-end gap-2 rounded-2xl border border-black/[0.05] bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
-                  <span
-                    className={cn(
-                      'mr-auto text-[11px]',
-                      saving || !dirty ? 'text-zinc-400' : 'text-amber-700',
-                    )}
+                {!embedded ? (
+                  <div
+                    className="sticky bottom-0 flex items-center justify-end gap-2 rounded-2xl border border-black/[0.05] bg-white/95 px-4 py-3 shadow-sm backdrop-blur"
+                    data-testid="office-scene-ops-page-footer"
                   >
-                    {saving
-                      ? '正在写入并重新读取数据库…'
-                      : draftStale
-                        ? '数据已刷新，请放弃旧草稿'
-                        : dirty
-                          ? '● 有未保存的改动'
-                          : '当前内容来自数据库'}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={saving || loading || (!dirty && !draftStale)}
-                    onClick={discardDraft}
-                    className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium text-zinc-600 transition hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    放弃改动
-                  </button>
-                  <button
-                    type="button"
-                    disabled={controlsDisabled || !dirty || !draft.label.trim()}
-                    onClick={() => void saveDraft()}
-                    className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    保存
-                  </button>
-                </div>
+                    <span
+                      className={cn(
+                        'mr-auto text-[11px]',
+                        saving || !dirty ? 'text-zinc-400' : 'text-amber-700',
+                      )}
+                    >
+                      {saving
+                        ? '正在写入并重新读取数据库…'
+                        : draftStale
+                          ? '数据已刷新，请放弃旧草稿'
+                          : dirty
+                            ? '● 有未保存的改动'
+                            : '当前内容来自数据库'}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={saving || loading || (!dirty && !draftStale)}
+                      onClick={discardDraft}
+                      className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium text-zinc-600 transition hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      放弃改动
+                    </button>
+                    <button
+                      type="button"
+                      disabled={controlsDisabled || !dirty || !draft.label.trim()}
+                      onClick={() => void saveDraft()}
+                      className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      保存
+                    </button>
+                  </div>
+                ) : null}
               </section>
             ) : null}
           </div>
@@ -814,23 +839,19 @@ function SceneList({
 function SceneEditorHeader({
   entry,
   boundTool,
-  index,
-  total,
   draft,
   disabled,
-  onMove,
-  onVisible,
   onDelete,
+  showDelete = true,
+  readOnly = false,
 }: {
   entry: InternalOfficeSceneCatalogEntry;
   boundTool: CandidateTool | null;
-  index: number;
-  total: number;
   draft: SceneDraft;
   disabled: boolean;
-  onMove: (direction: -1 | 1) => Promise<void>;
-  onVisible: (visible: boolean) => void;
   onDelete: () => Promise<void>;
+  showDelete?: boolean;
+  readOnly?: boolean;
 }) {
   return (
     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -858,40 +879,25 @@ function SceneEditorHeader({
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
-        <button
-          type="button"
-          disabled={disabled || index <= 0}
-          onClick={() => void onMove(-1)}
-          className="rounded-lg border border-zinc-200 px-2 py-1 text-[11px] disabled:opacity-40"
-        >
-          上移
-        </button>
-        <button
-          type="button"
-          disabled={disabled || index === total - 1}
-          onClick={() => void onMove(1)}
-          className="rounded-lg border border-zinc-200 px-2 py-1 text-[11px] disabled:opacity-40"
-        >
-          下移
-        </button>
-        <label className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2 py-1 text-[11px]">
-          <input
-            type="checkbox"
+        {readOnly ? (
+          <span
+            data-testid="office-scene-ops-readonly-status"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-100 px-2 py-1 text-[11px] text-zinc-500"
+          >
+            <i className="fa-regular fa-eye" />
+            {draft.visible ? '业务可见' : '业务隐藏'}
+          </span>
+        ) : null}
+        {showDelete && !readOnly ? (
+          <button
+            type="button"
             disabled={disabled}
-            checked={draft.visible}
-            onChange={(event) => onVisible(event.target.checked)}
-            className="accent-zinc-800"
-          />
-          业务可见
-        </label>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => void onDelete()}
-          className="rounded-lg border border-zinc-200 px-2 py-1 text-[11px] text-zinc-500 hover:border-rose-200 hover:text-rose-600 disabled:opacity-40"
-        >
-          删除
-        </button>
+            onClick={() => void onDelete()}
+            className="rounded-lg border border-zinc-200 px-2 py-1 text-[11px] text-zinc-500 hover:border-rose-200 hover:text-rose-600 disabled:opacity-40"
+          >
+            删除
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -904,6 +910,7 @@ function ToolBindingEditor({
   candidates,
   query,
   disabled,
+  readOnly = false,
   onQuery,
   onSelect,
 }: {
@@ -913,6 +920,7 @@ function ToolBindingEditor({
   candidates: CandidateTool[];
   query: string;
   disabled: boolean;
+  readOnly?: boolean;
   onQuery: (query: string) => void;
   onSelect: (toolId: string) => void;
 }) {
@@ -922,20 +930,22 @@ function ToolBindingEditor({
         <p className="text-[12px] font-semibold text-zinc-800">
           场景内工具
           <span className="ml-2 font-normal text-zinc-400">
-            每个场景绑定一个公司工具
+            {readOnly ? '当前绑定与候选工具（只读）' : '每个场景绑定一个公司工具'}
           </span>
         </p>
-        <label className="relative w-full sm:w-56">
-          <span className="sr-only">搜索工具</span>
-          <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-zinc-400" />
-          <input
-            disabled={disabled}
-            value={query}
-            onChange={(event) => onQuery(event.target.value)}
-            placeholder="搜索公司工具…"
-            className="w-full rounded-lg border border-zinc-200 bg-zinc-50/80 py-1.5 pl-8 pr-2.5 text-[12px] outline-none focus:border-zinc-400 disabled:bg-zinc-100"
-          />
-        </label>
+        {!readOnly ? (
+          <label className="relative w-full sm:w-56">
+            <span className="sr-only">搜索工具</span>
+            <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-zinc-400" />
+            <input
+              disabled={disabled}
+              value={query}
+              onChange={(event) => onQuery(event.target.value)}
+              placeholder="搜索公司工具…"
+              className="w-full rounded-lg border border-zinc-200 bg-zinc-50/80 py-1.5 pl-8 pr-2.5 text-[12px] outline-none focus:border-zinc-400 disabled:bg-zinc-100"
+            />
+          </label>
+        ) : null}
       </div>
 
       {boundTool ? (
@@ -954,28 +964,34 @@ function ToolBindingEditor({
               {boundTool.blurb || '暂无工具说明'}
             </p>
           </div>
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => onSelect('')}
-            className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-500 hover:text-rose-600 disabled:opacity-40"
-          >
-            取消绑定
-          </button>
+          {!readOnly ? (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onSelect('')}
+              className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-500 hover:text-rose-600 disabled:opacity-40"
+            >
+              取消绑定
+            </button>
+          ) : null}
         </div>
       ) : staleBoundTool ? (
         <div className="mb-3 flex items-center gap-2 rounded-xl border border-dashed border-rose-200 bg-rose-50/60 px-3 py-2 text-[11px] text-rose-700">
           <span className="min-w-0 flex-1">
-            数据库绑定的工具（{draft.toolId}）已下架或不存在；保存其它字段不会自动清除该绑定。
+            {readOnly
+              ? `数据库绑定的工具（${draft.toolId}）已下架或不存在。`
+              : `数据库绑定的工具（${draft.toolId}）已下架或不存在；保存其它字段不会自动清除该绑定。`}
           </span>
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => onSelect('')}
-            className="shrink-0 rounded-lg border border-rose-200 bg-white px-2 py-1 text-[10px] hover:bg-rose-100 disabled:opacity-40"
-          >
-            清除绑定
-          </button>
+          {!readOnly ? (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onSelect('')}
+              className="shrink-0 rounded-lg border border-rose-200 bg-white px-2 py-1 text-[10px] hover:bg-rose-100 disabled:opacity-40"
+            >
+              清除绑定
+            </button>
+          ) : null}
         </div>
       ) : (
         <p
@@ -986,7 +1002,9 @@ function ToolBindingEditor({
       )}
 
       <p className="mb-1.5 text-[11px] font-medium text-zinc-500">
-        点选绑定（名称与说明取自「配置工具」数据库）
+        {readOnly
+          ? '工具列表（当前绑定已高亮）'
+          : '点选绑定（名称与说明取自「配置工具」数据库）'}
       </p>
       <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="场景绑定工具">
         {candidates.map((tool) => {
@@ -997,7 +1015,11 @@ function ToolBindingEditor({
               title={tool.blurb}
               className={cn(
                 'inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-medium transition',
-                disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+                readOnly
+                  ? 'cursor-default'
+                  : disabled
+                    ? 'cursor-not-allowed opacity-50'
+                    : 'cursor-pointer',
                 active
                   ? 'border-zinc-800 bg-zinc-900 text-white'
                   : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300',
@@ -1006,7 +1028,7 @@ function ToolBindingEditor({
               <input
                 type="radio"
                 name="office-scene-tool"
-                disabled={disabled}
+                disabled={disabled || readOnly}
                 checked={active}
                 onChange={() => onSelect(tool.id)}
                 className="sr-only"

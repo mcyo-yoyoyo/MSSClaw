@@ -34,11 +34,9 @@ type PinCandidate = {
 
 const KINDS: MarketShelfKind[] = ['external', 'internal', 'projects'];
 
-type ShelfMode = 'assign' | 'pins';
-
 /**
  * 门户运营 · 货架运营
- * - 外精选：上架选品（marketShelf / 标题）+ 精选置顶（pins）
+ * - 外精选：仅维护上架选品（marketShelf / 标题）；精选与排序统一在工具运营维护
  * - 公司推荐：前台为办公场景网格，本页仅说明场景工具与配置工具维护口径
  * - MSS 集市：仅场景卡置顶（案例材料在「场景内容」）
  */
@@ -47,19 +45,11 @@ export function PortalMarketFeaturedPanel() {
   const upsertTool = useMarketplaceStore((s) => s.upsertTool);
   const showToast = useMarketplaceStore((s) => s.showToast);
   const pins = useMarketFeaturedStore((s) => s.pins);
-  const hydrate = useMarketFeaturedStore((s) => s.hydrate);
   const togglePin = useMarketFeaturedStore((s) => s.togglePin);
   const [kind, setKind] = useState<MarketShelfKind>('external');
-  const [mode, setMode] = useState<ShelfMode>('assign');
   const [q, setQ] = useState('');
 
   useEffect(() => {
-    hydrate();
-  }, [hydrate]);
-
-  useEffect(() => {
-    if (kind === 'projects') setMode('pins');
-    else if (kind === 'external') setMode('assign');
     setQ('');
   }, [kind]);
 
@@ -105,30 +95,17 @@ export function PortalMarketFeaturedPanel() {
   }, [kind, publishedTools, q]);
 
   const pinCandidates = useMemo((): PinCandidate[] => {
-    if (kind === 'projects') {
-      const needle = q.trim().toLowerCase();
-      if (!needle) return projectCandidates;
-      return projectCandidates.filter(
-        (c) =>
-          c.title.toLowerCase().includes(needle) ||
-          c.description.toLowerCase().includes(needle),
-      );
-    }
-    return assignList
-      .filter((t) => resolveToolMarketShelf(t) === kind)
-      .map((t) => ({
-        id: t.id,
-        title: t.marketTitle?.trim() || t.name,
-        description: t.desc,
-        productName: t.name,
-        logoUrl: resolveToolLogoUrl(t),
-        icon: t.icon,
-      }));
-  }, [kind, projectCandidates, assignList, q]);
+    const needle = q.trim().toLowerCase();
+    if (!needle) return projectCandidates;
+    return projectCandidates.filter(
+      (c) =>
+        c.title.toLowerCase().includes(needle) ||
+        c.description.toLowerCase().includes(needle),
+    );
+  }, [projectCandidates, q]);
 
-  const pinnedIds = pins[kind] ?? [];
+  const pinnedIds = pins.projects ?? [];
   const pinnedSet = new Set(pinnedIds);
-  const toolById = useMemo(() => new Map(tools.map((tool) => [tool.id, tool])), [tools]);
 
   const projectCount = FEATURED_SCENARIOS.filter((d) =>
     (DISCOVER_SCENARIO_IDS as readonly string[]).includes(d.id),
@@ -165,8 +142,7 @@ export function PortalMarketFeaturedPanel() {
     <div className="space-y-4">
       <p className="text-[12px] leading-relaxed text-zinc-500">
         <strong className="font-semibold text-zinc-700">外部工具精选</strong>
-        ：上架选品、场景标题与精选置顶（每货架最多 {MARKET_FEATURED_MAX}{' '}
-        个）。分类芯片请到「外精选分类」维护。
+        ：此处维护上架选品和场景标题；精选与顺序请到「工具运营 / 外部工具」直接拖拽卡片。
         <strong className="ml-1 font-semibold text-zinc-700">内部办公推荐</strong>
         ：下方可配办公场景字典；链接/Logo 在「配置工具」，How to 在「工具 How to」。
         <strong className="ml-1 font-semibold text-zinc-700">MSS 集市</strong>
@@ -204,28 +180,9 @@ export function PortalMarketFeaturedPanel() {
       </div>
 
       {kind === 'external' ? (
-        <div className="inline-flex rounded-xl border border-zinc-200 bg-zinc-50 p-0.5">
-          {(
-            [
-              ['assign', '上架选品'],
-              ['pins', '精选置顶'],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setMode(id)}
-              className={cn(
-                'rounded-lg px-3 py-1.5 text-[11px] font-semibold transition',
-                mode === id
-                  ? 'bg-white text-zinc-900 shadow-sm'
-                  : 'text-zinc-500 hover:text-zinc-800',
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <p className="rounded-xl border border-blue-100 bg-blue-50/60 px-3 py-2 text-[11px] text-blue-800">
+          当前仅维护上架状态与卡片标题，不再写入旧的外部精选置顶数据。
+        </p>
       ) : null}
 
       {kind === 'projects' ? (
@@ -242,16 +199,14 @@ export function PortalMarketFeaturedPanel() {
           placeholder={
             kind === 'projects'
               ? `搜索场景…`
-              : mode === 'assign'
-                ? '搜索已发布工具…'
-                : '搜索本货架工具…'
+              : '搜索已发布工具…'
           }
           className="min-w-[220px] flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-zinc-400"
         />
       </div>
       ) : null}
 
-      {kind === 'external' && mode === 'assign' ? (
+      {kind === 'external' ? (
         <ul className="divide-y divide-zinc-100 rounded-2xl border border-zinc-200 bg-white">
           {assignList.map((t) => {
             const shelf = resolveToolMarketShelf(t);
@@ -341,7 +296,7 @@ export function PortalMarketFeaturedPanel() {
         </ul>
       ) : null}
 
-      {(kind === 'external' && mode === 'pins') || kind === 'projects' ? (
+      {kind === 'projects' ? (
         <>
           {pinnedIds.length > 0 ? (
             <div className="rounded-xl border border-amber-100 bg-amber-50/50 px-3 py-2">
@@ -351,28 +306,19 @@ export function PortalMarketFeaturedPanel() {
               <ol className="flex flex-wrap gap-1.5">
                 {pinnedIds.map((id, i) => {
                   const hit = pinCandidates.find((c) => c.id === id);
-                  const tool = toolById.get(id);
-                  const isParked =
-                    kind === 'external' &&
-                    (!tool || resolveToolMarketShelf(tool) !== 'external');
                   return (
                     <li key={id}>
                       <button
                         type="button"
                         onClick={() => {
-                          togglePin(kind, id);
+                          togglePin('projects', id);
                           showToast('已取消置顶');
                         }}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-white px-2 py-1 text-[11px] font-medium text-zinc-700 hover:bg-amber-50"
                         title="点击取消置顶"
                       >
                         <span className="text-amber-700">{i + 1}</span>
-                        {hit?.title || tool?.marketTitle?.trim() || tool?.name || id}
-                        {isParked ? (
-                          <span className="rounded bg-zinc-100 px-1 py-0.5 text-[9px] text-zinc-500">
-                            已下架，位置保留
-                          </span>
-                        ) : null}
+                        {hit?.title || id}
                         <i className="fa-solid fa-xmark text-[9px] text-zinc-400" />
                       </button>
                     </li>
@@ -388,17 +334,7 @@ export function PortalMarketFeaturedPanel() {
               const full = !on && pinnedIds.length >= MARKET_FEATURED_MAX;
               return (
                 <li key={c.id} className="flex items-center gap-3 px-3 py-2.5">
-                  {kind === 'projects' ? (
-                    <AssetAccentMark id={c.id} className="mt-0" />
-                  ) : (
-                    <ToolLogo
-                      name={c.productName || c.title}
-                      logoUrl={c.logoUrl}
-                      icon={c.icon}
-                      size={28}
-                      className="rounded-lg"
-                    />
-                  )}
+                  <AssetAccentMark id={c.id} className="mt-0" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-semibold text-zinc-900">{c.title}</p>
                     <p className="truncate text-[11px] text-zinc-400">{c.description}</p>
@@ -411,7 +347,7 @@ export function PortalMarketFeaturedPanel() {
                         showToast(`每货架最多置顶 ${MARKET_FEATURED_MAX} 个`);
                         return;
                       }
-                      togglePin(kind, c.id);
+                      togglePin('projects', c.id);
                       showToast(on ? '已取消置顶' : '已加入精选置顶');
                     }}
                     className={cn(
@@ -430,19 +366,11 @@ export function PortalMarketFeaturedPanel() {
             })}
             {!pinCandidates.length ? (
               <li className="px-3 py-10 text-center text-[12px] text-zinc-400">
-                {kind === 'projects'
-                  ? '无匹配场景'
-                  : '本货架尚无上架工具，请先在「上架选品」中上架'}
+                无匹配场景
               </li>
             ) : null}
           </ul>
         </>
-      ) : null}
-
-      {kind === 'external' && mode === 'pins' ? (
-        <p className="text-[10px] text-zinc-400">
-          置顶决定首页及外精选露出顺序；临时下架会保留原位置，未置顶工具按清单顺序展示。
-        </p>
       ) : null}
     </div>
   );
