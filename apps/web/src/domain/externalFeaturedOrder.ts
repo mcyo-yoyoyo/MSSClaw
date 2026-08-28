@@ -4,6 +4,12 @@ export type ExternalFeaturedOrderItem = {
   sourceOrder?: number;
 };
 
+export type ExternalCategoryRankedItem = {
+  id: string;
+  externalSortOrder?: number;
+  externalCategoryRanks?: Record<string, number>;
+};
+
 export type ExternalFeaturedRegionItem = {
   id: string;
   featured?: boolean;
@@ -42,6 +48,43 @@ export function orderExternalFeaturedItems<T extends ExternalFeaturedOrderItem>(
 
       const aSourceOrder = orderOf(a.item) ?? Number.POSITIVE_INFINITY;
       const bSourceOrder = orderOf(b.item) ?? Number.POSITIVE_INFINITY;
+      if (aSourceOrder !== bSourceOrder) return aSourceOrder - bSourceOrder;
+      return a.inputIndex - b.inputIndex;
+    })
+    .map(({ item }) => item);
+}
+
+/**
+ * 分类“更多”只消费 Excel 中明确存在的分类排名，并排除当前分类精选。
+ * 排名相同时回落到 Excel 全表顺序，最后保持输入稳定，避免全局精选 pin
+ * 或其他互动排序污染分类排名。
+ */
+export function listExternalCategoryRankedMore<T extends ExternalCategoryRankedItem>(
+  items: readonly T[],
+  categoryId: string,
+  featuredIds: readonly string[],
+): T[] {
+  const featured = new Set(featuredIds);
+
+  return items
+    .filter((item) => {
+      const rank = item.externalCategoryRanks?.[categoryId];
+      return (
+        !featured.has(item.id) &&
+        typeof rank === 'number' &&
+        Number.isFinite(rank) &&
+        rank > 0
+      );
+    })
+    .map((item, inputIndex) => ({ item, inputIndex }))
+    .sort((a, b) => {
+      const rankDelta =
+        (a.item.externalCategoryRanks?.[categoryId] ?? Number.POSITIVE_INFINITY) -
+        (b.item.externalCategoryRanks?.[categoryId] ?? Number.POSITIVE_INFINITY);
+      if (rankDelta !== 0) return rankDelta;
+
+      const aSourceOrder = a.item.externalSortOrder ?? Number.POSITIVE_INFINITY;
+      const bSourceOrder = b.item.externalSortOrder ?? Number.POSITIVE_INFINITY;
       if (aSourceOrder !== bSourceOrder) return aSourceOrder - bSourceOrder;
       return a.inputIndex - b.inputIndex;
     })

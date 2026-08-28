@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  listExternalCategoryRankedMore,
   orderExternalFeaturedItems,
   splitExternalFeaturedItemsByRegion,
 } from '../src/domain/externalFeaturedOrder.ts';
@@ -86,6 +87,77 @@ test('sorting does not mutate cards or pins', () => {
   assert.deepEqual(ids(orderExternalFeaturedItems(cards, pins)), ['second', 'first']);
   assert.deepEqual(ids(cards), ['second', 'first']);
   assert.deepEqual(pins, ['second']);
+});
+
+test('category more keeps only explicitly ranked non-featured tools in requested rank order', () => {
+  const cards = [
+    {
+      id: 'global-best-but-not-search',
+      externalSortOrder: 1,
+      externalSortRank: 1,
+      externalCategoryRanks: { general: 1 },
+    },
+    {
+      id: 'search-rank-3',
+      externalSortOrder: 2,
+      externalCategoryRanks: { search: 3 },
+    },
+    {
+      id: 'search-featured',
+      externalSortOrder: 3,
+      externalCategoryRanks: { search: 1 },
+    },
+    {
+      id: 'search-rank-2',
+      externalSortOrder: 4,
+      externalCategoryRanks: { search: 2 },
+    },
+    {
+      id: 'general-invalid-rank',
+      externalSortOrder: 5,
+      externalCategoryRanks: { search: Number.NaN },
+    },
+    {
+      id: 'general-zero-rank',
+      externalSortOrder: 6,
+      externalCategoryRanks: { search: 0 },
+    },
+    {
+      id: 'general-negative-rank',
+      externalSortOrder: 7,
+      externalCategoryRanks: { search: -1 },
+    },
+  ];
+
+  assert.deepEqual(
+    ids(listExternalCategoryRankedMore(cards, 'search', ['search-featured'])),
+    ['search-rank-2', 'search-rank-3'],
+  );
+  assert.deepEqual(
+    ids(listExternalCategoryRankedMore(cards, 'general', [])),
+    ['global-best-but-not-search'],
+  );
+});
+
+test('category rank ties fall back to Excel source order without mutating input', () => {
+  const cards = Object.freeze([
+    {
+      id: 'later-in-excel',
+      externalSortOrder: 20,
+      externalCategoryRanks: { general: 1 },
+    },
+    {
+      id: 'earlier-in-excel',
+      externalSortOrder: 10,
+      externalCategoryRanks: { general: 1 },
+    },
+  ]);
+
+  assert.deepEqual(
+    ids(listExternalCategoryRankedMore(cards, 'general', [])),
+    ['earlier-in-excel', 'later-in-excel'],
+  );
+  assert.deepEqual(ids(cards), ['later-in-excel', 'earlier-in-excel']);
 });
 
 test('regional featured limit returns overflow pins to the rest list', () => {

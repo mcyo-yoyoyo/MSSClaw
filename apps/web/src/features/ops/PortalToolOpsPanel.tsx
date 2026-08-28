@@ -13,6 +13,7 @@ import { ExternalMarketFilters } from '@/components/market/ExternalMarketFilters
 import { InternalOfficeSceneGrid } from '@/components/market/InternalOfficeSceneGrid';
 import { MarketShelfCard } from '@/components/market/MarketShelfCard';
 import { searchCapabilitiesByIntent } from '@/domain/capabilityIntentSearch';
+import { listExternalCategoryRankedMore } from '@/domain/externalFeaturedOrder';
 import { listVisibleExternalToolTypes } from '@/domain/externalTaxonomyCatalog';
 import {
   insertExternalToolIdBefore,
@@ -236,8 +237,22 @@ function previewExternalDropItems(
     return [...items];
   }
 
-  // 分类页的“更多”是完整候选池，不会因加入精选而移除工具。
-  if (isCategoryMoreList(listId)) return [...items];
+  if (isCategoryMoreList(listId)) {
+    if (listId === drag.source && placement.target !== drag.source) {
+      return items.filter((item) => item.id !== drag.cardId);
+    }
+    if (listId === placement.target) {
+      const categoryId = listId.split(':')[1];
+      return categoryId
+        ? listExternalCategoryRankedMore(
+            [...items.filter((item) => item.id !== drag.cardId), draggedCard],
+            categoryId,
+            [],
+          )
+        : [...items];
+    }
+    return [...items];
+  }
   if (listId === placement.target) {
     return insertExternalToolCardBefore(items, draggedCard, placement.beforeId);
   }
@@ -495,8 +510,7 @@ function ToolDropGrid({
               dragState?.cardId === card.id && dragState.source === listId;
             const isDropPlaceholder =
               dragState?.cardId === card.id &&
-              dragPlacement?.target === listId &&
-              !isCategoryMoreList(listId);
+              dragPlacement?.target === listId;
             return (
               <div
                 key={card.id}
@@ -833,9 +847,19 @@ export function PortalToolOpsPanel() {
     domesticCards,
     categoryDomesticFeaturedIds,
   );
-  // 分类页下方始终是完整候选池；精选仅是上方引用，不会把工具从候选池移走。
-  const categoryOverseasMore = overseasCards;
-  const categoryDomesticMore = domesticCards;
+  const categoryRankedMore =
+    externalType === 'all' || !activeLayout
+      ? []
+      : listExternalCategoryRankedMore(externalCards, externalType, [
+          ...categoryOverseasFeaturedIds,
+          ...categoryDomesticFeaturedIds,
+        ]);
+  const categoryOverseasMore = categoryRankedMore.filter(
+    (card) => card.region === 'overseas',
+  );
+  const categoryDomesticMore = categoryRankedMore.filter(
+    (card) => card.region === 'domestic',
+  );
 
   const searchIds = useMemo(() => {
     if (!search.trim()) return null;

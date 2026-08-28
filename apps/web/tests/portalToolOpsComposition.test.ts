@@ -227,7 +227,7 @@ test('外部工具全部筛选维护四个独立列表并在拖放后立即保�
   );
 });
 
-test('其他分类的精选与更多均从外部全库按海外和国内分列', () => {
+test('分类精选从全库解析，更多按当前分类排名过滤并排除精选', () => {
   assert.match(
     portalPanelSource,
     /listId=\{`category:\$\{externalType\}:overseas:featured`\}/,
@@ -292,8 +292,23 @@ test('其他分类的精选与更多均从外部全库按海外和国内分列',
   );
   assert.match(
     portalPanelSource,
-    /const categoryOverseasMore = overseasCards;[\s\S]*?const categoryDomesticMore = domesticCards;/,
-    '分类更多必须展示外部全库（含已精选项），并按地区拆分',
+    /listExternalCategoryRankedMore\(externalCards, externalType, \[[\s\S]*?\.\.\.categoryOverseasFeaturedIds,[\s\S]*?\.\.\.categoryDomesticFeaturedIds,[\s\S]*?\]\)/,
+    '分类更多必须按当前 Excel 分类排名过滤，并排除海外和国内精选',
+  );
+  assert.match(
+    portalPanelSource,
+    /externalType === 'all' \|\| !activeLayout[\s\S]*?\? \[\][\s\S]*?: listExternalCategoryRankedMore/,
+    '布局未加载成功时不能用空精选配置伪造分类更多',
+  );
+  assert.match(
+    portalPanelSource,
+    /const categoryOverseasMore = categoryRankedMore\.filter\([\s\S]*?card\.region === 'overseas'[\s\S]*?const categoryDomesticMore = categoryRankedMore\.filter\([\s\S]*?card\.region === 'domestic'/,
+    '分类更多必须把排名候选按地区拆分',
+  );
+  assert.doesNotMatch(
+    portalPanelSource,
+    /const categoryOverseasMore = overseasCards;|const categoryDomesticMore = domesticCards;/,
+    '分类更多不能再直接展示外部全库',
   );
   assert.match(
     portalPanelSource,
@@ -303,13 +318,38 @@ test('其他分类的精选与更多均从外部全库按海外和国内分列',
   assert.match(
     portalPanelSource,
     /searchCapabilitiesByIntent\(search, externalCards, externalCards\.length\)/,
-    '非全部分类搜索必须覆盖全库候选，否则跨分类工具会再次消失',
+    '搜索索引可覆盖全库，但最终只能与已筛选的分类更多取交集',
+  );
+  assert.match(
+    portalPanelSource,
+    /items=\{visibleMore\(categoryOverseasMore\)\}[\s\S]*?items=\{visibleMore\(categoryDomesticMore\)\}/,
+    '分类搜索不能重新引入未排名或已精选工具',
   );
   assert.match(portalPanelSource, /dragEnabled=\{externalDragEnabled\}/);
   assert.doesNotMatch(
     portalPanelSource,
     /categories\[[^\]]+\][\s\S]{0,80}MoreOrderIds/,
     '分类布局不能持久化更多排序',
+  );
+  assert.match(
+    portalPanelSource,
+    /if \(listId === drag\.source && placement\.target !== drag\.source\) \{[\s\S]*?items\.filter\(\(item\) => item\.id !== drag\.cardId\)/,
+    '从更多拖入精选时，原列表必须即时收拢',
+  );
+  assert.doesNotMatch(
+    portalPanelSource,
+    /dragPlacement\?\.target === listId &&\s*!isCategoryMoreList\(listId\)/,
+    '分类更多也必须显示实时落点占位',
+  );
+  assert.match(
+    portalPanelSource,
+    /const featured = `category:\$\{selectedType\}:\$\{drag\.region\}:featured`;[\s\S]*?return target === featured \|\| \(target === more && drag\.source === featured\);/,
+    '分类更多必须允许拖入对应地区精选，精选也必须允许移回更多',
+  );
+  assert.match(
+    portalPanelSource,
+    /if \(target === featuredList\) \{[\s\S]*?setCategoryFeatured\([\s\S]*?return true;/,
+    '拖入精选必须更新分类精选配置',
   );
 });
 

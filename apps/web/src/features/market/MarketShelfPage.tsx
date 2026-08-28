@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { canExecuteChat } from '@/domain/permissions';
 import {
+  listExternalCategoryRankedMore,
   orderExternalFeaturedItems,
   splitExternalFeaturedItemsByRegion,
 } from '@/domain/externalFeaturedOrder';
@@ -784,6 +785,19 @@ export function MarketShelfPage({
         ? skillFeatured
         : agentFeatured
       : featured;
+  const showExternalCategoryMore =
+    isExternalCategory && Boolean(externalToolLayout);
+  const externalCategoryMore = useMemo(
+    () => {
+      if (!showExternalCategoryMore) return [];
+      const categoryLayout = externalToolLayout?.categories[externalType];
+      return listExternalCategoryRankedMore(filteredCards, externalType, [
+        ...(categoryLayout?.overseasFeaturedIds ?? []),
+        ...(categoryLayout?.domesticFeaturedIds ?? []),
+      ]);
+    },
+    [showExternalCategoryMore, externalToolLayout, externalType, filteredCards],
+  );
 
   const externalFeaturedOverseas = useMemo(
     () =>
@@ -1064,7 +1078,9 @@ export function MarketShelfPage({
       : '权限范围内暂无上架内容。若预期应可见，请联系运营确认可见性与上架状态。';
 
   const gridCards =
-    kind === 'projects'
+    showExternalCategoryMore
+      ? externalCategoryMore
+      : kind === 'projects'
       ? mssSurface === 'skills'
         ? showFeaturedStrip
           ? skillRest
@@ -1443,16 +1459,28 @@ export function MarketShelfPage({
           </section>
         ) : null}
 
-        {kind !== 'internal' && !isExternalCategory ? (
+        {kind !== 'internal' && (!isExternalCategory || showExternalCategoryMore) ? (
         <section>
-          <ShelfSectionHead
-            title={showFeaturedStrip ? '更多' : '全部'}
-            count={gridCards.length}
-            rankMode={sectionRankMode}
-            onRankChange={setSectionRankMode}
-            showExcelOrder={kind === 'external'}
-            rankOptions={sectionRankOptions}
-          />
+          {showExternalCategoryMore ? (
+            <div className="mb-3 flex items-center gap-3">
+              <h2 className="min-w-0 text-[15px] font-semibold tracking-tight text-[#1d1d1f]">
+                更多
+                <span className="ml-1.5 font-normal text-[#86868b]">
+                  {gridCards.length}
+                </span>
+              </h2>
+              <span className="text-[11px] text-[#86868b]">按清单分类排名</span>
+            </div>
+          ) : (
+            <ShelfSectionHead
+              title={showFeaturedStrip ? '更多' : '全部'}
+              count={gridCards.length}
+              rankMode={sectionRankMode}
+              onRankChange={setSectionRankMode}
+              showExcelOrder={kind === 'external'}
+              rankOptions={sectionRankOptions}
+            />
+          )}
           {kind === 'external' ? (
             gridCards.length ? (
               <div className="grid gap-4 lg:grid-cols-2">
@@ -1510,7 +1538,7 @@ export function MarketShelfPage({
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-4 py-14 text-center text-[13px] text-[#86868b]">
-                {emptyHint}
+                {showExternalCategoryMore ? '当前分类暂无更多工具。' : emptyHint}
               </div>
             )
           ) : gridCards.length ? (

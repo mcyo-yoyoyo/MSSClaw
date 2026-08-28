@@ -62,8 +62,30 @@ test('用户侧分类精选可跨 taxonomy 选入，并继续服从页面搜索�
   );
 });
 
-test('用户侧非全部筛选渲染双精选但不渲染更多区域', () => {
-  assert.match(source, /kind !== 'internal' && !isExternalCategory \? \(/);
+test('用户侧所有非全部筛选都显示按当前 Excel 分类排名过滤的更多区域', () => {
+  assert.match(
+    source,
+    /const showExternalCategoryMore =\s*isExternalCategory && Boolean\(externalToolLayout\)/,
+  );
+  assert.match(
+    source,
+    /const categoryLayout = externalToolLayout\?\.categories\[externalType\]/,
+  );
+  assert.match(
+    source,
+    /listExternalCategoryRankedMore\(filteredCards, externalType/,
+  );
+  assert.match(
+    source,
+    /kind !== 'internal' && \(!isExternalCategory \|\| showExternalCategoryMore\) \? \(/,
+  );
+  assert.match(source, /按清单分类排名/);
+  assert.match(source, /showExternalCategoryMore \? '当前分类暂无更多工具。' : emptyHint/);
+});
+
+test('用户侧非全部筛选继续渲染海外和国内双精选', () => {
+  assert.match(source, /const isExternalCategory = kind === 'external' && externalType !== 'all'/);
+  assert.match(source, /\(!isExternalCategory \|\| showExternalCategoryMore\)/);
   assert.match(source, /<div className="grid gap-4 lg:grid-cols-2">/);
   assert.match(
     source,
