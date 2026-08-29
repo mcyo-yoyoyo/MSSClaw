@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useSessionStore } from '@/stores/sessionStore';
 import {
   fetchMyAiBriefSubscription,
   subscribeAiBriefEmail,
@@ -63,6 +64,11 @@ export const useAiNewsPreferenceStore = create<AiNewsPreferenceState>((set, get)
     const workspaceId = currentWorkspaceId();
     if (!canUsePlatformDocsApi()) {
       set({ pref: defaultPref(), loading: false, error: '共享服务未连接' });
+      return;
+    }
+    // 邮件订阅是个人态：游客不查，避免无谓的 401
+    if (!useSessionStore.getState().isAuthenticated) {
+      set({ pref: defaultPref(), loading: false, error: null });
       return;
     }
     set({ loading: true, error: null });

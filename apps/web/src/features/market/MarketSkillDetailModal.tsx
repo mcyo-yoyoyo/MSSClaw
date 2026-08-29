@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { GuestGateLock } from '@/components/auth/GuestGateLock';
 import { SkillAvatar } from '@/components/brand/SkillAvatar';
 import { CenterModal } from '@/components/center/CenterShell';
 import { CaseDocumentPreviewList } from '@/components/content/CaseDocumentPreview';
@@ -16,7 +17,9 @@ import {
 } from '@/domain/skillSecurityScan';
 import { getAssetRegionLabel, getDeptLabel } from '@/domain/orgTaxonomy';
 import { getSkillVisibilityLabel } from '@/domain/skillVisibility';
+import { requireLogin } from '@/stores/authGateStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
+import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import {
   EXECUTION_TRUST_META,
   resolveSkillExecutionTrust,
@@ -88,6 +91,8 @@ export function MarketSkillDetailModal({
   const toggleLike = useContentEngagementStore((s) => s.toggleLike);
   const toggleDislike = useContentEngagementStore((s) => s.toggleDislike);
   const getVote = useContentEngagementStore((s) => s.userVote);
+  const favorited = useMarketFavoriteStore((s) => s.isFavorite(skill.id, 'projects'));
+  const toggleFavorite = useMarketFavoriteStore((s) => s.toggle);
   void engagementById;
   const eng = getEngagement(skill.id);
   const vote = getVote(skill.id);
@@ -156,6 +161,26 @@ export function MarketSkillDetailModal({
     onToast(`已下载：${name}`);
   };
 
+  const requestDownload = () => {
+    const run = () => void handleDownload();
+    if (requireLogin('download', run)) run();
+  };
+
+  const requestFavorite = () => {
+    const item = {
+      id: skill.id,
+      kind: 'projects' as const,
+      title: name,
+      icon: skill.icon || 'fa-cube',
+      logoUrl: skill.iconUrl,
+    };
+    const run = () => {
+      const on = toggleFavorite(item);
+      onToast(on ? `已收藏：${item.title}` : `已取消收藏：${item.title}`);
+    };
+    if (requireLogin('favorite', run)) run();
+  };
+
   /** 历史版本各下各自归档的包；此前所有行都调 handleDownload，下到的都是当前包 */
   const downloadVersion = async (row: SkillVersionRecord) => {
     if (!row.packageBlob) {
@@ -169,6 +194,11 @@ export function MarketSkillDetailModal({
     } catch {
       onToast(`v${row.version} 包下载失败，请检查登录状态或后端连接`);
     }
+  };
+
+  const requestVersionDownload = (row: SkillVersionRecord) => {
+    const run = () => void downloadVersion(row);
+    if (requireLogin('download', run)) run();
   };
 
   const tabs: { id: DetailTab; label: string; badge?: string }[] = [
@@ -589,7 +619,7 @@ export function MarketSkillDetailModal({
                         <td className="px-2 py-2.5">
                           <button
                             type="button"
-                            onClick={() => void downloadVersion(v)}
+                            onClick={() => requestVersionDownload(v)}
                             disabled={!v.packageBlob}
                             title={v.packageBlob ? v.packageBlob.name : '该版本未归档安装包'}
                             className={cn(
@@ -669,20 +699,63 @@ export function MarketSkillDetailModal({
           </div>
 
           <div className="space-y-2 rounded-xl border border-zinc-200/80 bg-white p-3">
-            <button type="button" onClick={handleDownload} className="w-full rounded-xl bg-zinc-900 px-3 py-2 text-[12px] font-semibold text-white">
+            <button
+              type="button"
+              onClick={requestFavorite}
+              className="relative w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[12px] font-semibold text-zinc-700 transition hover:bg-zinc-50"
+            >
+              <i
+                className={cn(
+                  'mr-1.5',
+                  favorited ? 'fa-solid fa-star text-amber-500' : 'fa-regular fa-star',
+                )}
+              />
+              {favorited ? '已收藏' : '收藏'} {formatToolInvokes(eng.favorites)}
+              <GuestGateLock />
+            </button>
+            <button
+              type="button"
+              onClick={requestDownload}
+              className="w-full rounded-xl bg-zinc-900 px-3 py-2 text-[12px] font-semibold text-white"
+            >
               <i className="fa-solid fa-download mr-1.5" />下载 Skill 包
             </button>
             {canRunOnline ? (
-              <button type="button" onClick={() => onRun(skill)} className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-800">
+              <button type="button" onClick={() => onRun(skill)} className="relative w-full rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-800">
                 <i className="fa-solid fa-play mr-1.5" />在线试用
+                <GuestGateLock />
               </button>
             ) : null}
             <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => toggleLike(skill.id)} className={cn('rounded-lg px-2 py-1.5 text-[11px] font-medium', vote === 'like' ? 'bg-sky-50 text-sky-800' : 'bg-zinc-50 text-zinc-600')}>
+              <button
+                type="button"
+                onClick={() => {
+                  const contentId = skill.id;
+                  const run = () => toggleLike(contentId);
+                  if (requireLogin('like', run)) run();
+                }}
+                className={cn(
+                  'relative rounded-lg px-2 py-1.5 text-[11px] font-medium',
+                  vote === 'like' ? 'bg-sky-50 text-sky-800' : 'bg-zinc-50 text-zinc-600',
+                )}
+              >
                 <i className="fa-solid fa-thumbs-up mr-1" />点赞 {formatToolInvokes(eng.likes)}
+                <GuestGateLock />
               </button>
-              <button type="button" onClick={() => toggleDislike(skill.id)} className={cn('rounded-lg px-2 py-1.5 text-[11px] font-medium', vote === 'dislike' ? 'bg-zinc-200 text-zinc-900' : 'bg-zinc-50 text-zinc-600')}>
+              <button
+                type="button"
+                onClick={() => {
+                  const contentId = skill.id;
+                  const run = () => toggleDislike(contentId);
+                  if (requireLogin('dislike', run)) run();
+                }}
+                className={cn(
+                  'relative rounded-lg px-2 py-1.5 text-[11px] font-medium',
+                  vote === 'dislike' ? 'bg-zinc-200 text-zinc-900' : 'bg-zinc-50 text-zinc-600',
+                )}
+              >
                 <i className="fa-solid fa-thumbs-down mr-1" />点踩 {formatToolInvokes(eng.dislikes)}
+                <GuestGateLock />
               </button>
             </div>
             {adminActions ? (

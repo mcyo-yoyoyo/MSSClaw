@@ -133,6 +133,7 @@ export async function loginWithApi(params: {
   email: string;
   password: string;
   workspaceId?: string;
+  visitorId?: string;
 }): Promise<
   | {
       ok: true;

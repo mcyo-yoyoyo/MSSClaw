@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { canExecuteChat } from '@/domain/permissions';
+import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
 import {
   listExternalCategoryRankedMore,
   orderExternalFeaturedItems,
   splitExternalFeaturedItemsByRegion,
 } from '@/domain/externalFeaturedOrder';
+import { orderExternalToolsByLayoutIds } from '@/domain/externalToolLayout';
 import {
   applyMarketFeaturedPins,
   listMarketProjectCards,
@@ -142,6 +143,7 @@ import { useExternalToolLayoutStore } from '@/stores/externalToolLayoutStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { allowsMarketScenarioRun } from '@/domain/marketRunCapability';
+import { requireLogin, type AuthGateAction } from '@/stores/authGateStore';
 
 export type MarketShelfPageProps = {
   kind: MarketShelfKind;
@@ -164,6 +166,7 @@ export function MarketShelfPage({
   const bumpToolInvokes = useMarketplaceStore((s) => s.bumpToolInvokes);
   const portalContent = usePortalContentStore((s) => s.items);
   const user = useSessionStore((s) => s.user);
+  const isGuest = useSessionStore((s) => s.isGuest);
   const orgSelection = useMarketFilterStore((s) => s.orgSelection);
   const businessFilter = useMarketFilterStore((s) => s.businessFilter);
   const setBusinessFilter = useMarketFilterStore((s) => s.setBusinessFilter);
@@ -208,15 +211,31 @@ export function MarketShelfPage({
   const hydrateBuildStatsCopy = useMssBuildStatsCopyStore((s) => s.hydrate);
 
   const canSubmit = canExecuteChat(user?.platformRole);
+  const canShowSubmit = isGuest || canSubmit;
   const navPreset = useNavPresentationStore((s) => s.preset);
   const allowScenarioRun = allowsMarketScenarioRun(navPreset);
   const canRunProjects =
     kind === 'projects' &&
     allowScenarioRun &&
-    canSubmit &&
+    (canSubmit || isGuest) &&
     Boolean(onInvokeSkill && onInvokeAgent && onStartExpertTeam);
   const canRunSkills =
-    kind === 'projects' && allowScenarioRun && canSubmit && Boolean(onInvokeSkill);
+    kind === 'projects' && allowScenarioRun && (canSubmit || isGuest) && Boolean(onInvokeSkill);
+
+  const requestSubmit = () => {
+    const action: AuthGateAction =
+      kind === 'projects' && mssSurface === 'skills' ? 'submit-skill' : 'submit-tool';
+    const openSubmit = () => {
+      const currentRole = useSessionStore.getState().user?.platformRole;
+      if (!canExecuteChat(currentRole)) {
+        showToast(READONLY_EXECUTE_HINT);
+        return;
+      }
+      setSubmitOpen(true);
+    };
+    if (!requireLogin(action, openSubmit)) return;
+    openSubmit();
+  };
 
   useEffect(() => {
     ensurePlazaToolGuidesBootstrapped();
@@ -791,10 +810,20 @@ export function MarketShelfPage({
     () => {
       if (!showExternalCategoryMore) return [];
       const categoryLayout = externalToolLayout?.categories[externalType];
-      return listExternalCategoryRankedMore(filteredCards, externalType, [
+      const rankedMore = listExternalCategoryRankedMore(filteredCards, externalType, [
         ...(categoryLayout?.overseasFeaturedIds ?? []),
         ...(categoryLayout?.domesticFeaturedIds ?? []),
       ]);
+      return [
+        ...orderExternalToolsByLayoutIds(
+          rankedMore.filter((card) => card.region === 'overseas'),
+          categoryLayout?.overseasMoreOrderIds ?? [],
+        ),
+        ...orderExternalToolsByLayoutIds(
+          rankedMore.filter((card) => card.region === 'domestic'),
+          categoryLayout?.domesticMoreOrderIds ?? [],
+        ),
+      ];
     },
     [showExternalCategoryMore, externalToolLayout, externalType, filteredCards],
   );
@@ -1003,6 +1032,11 @@ export function MarketShelfPage({
     showToast(`已下载学习包：${card.title}`);
   };
 
+  const requestProjectDownload = (card: MarketShelfCardModel) => {
+    const run = () => downloadUseProject(card);
+    if (requireLogin('download', run)) run();
+  };
+
   const runProjectDemo = (card: MarketShelfCardModel) => {
     const trust =
       card.executionTrust ??
@@ -1012,13 +1046,13 @@ export function MarketShelfPage({
       });
     if (!canRunProjects || !card.scenarioId) {
       showToast(executionTrustBlockedMessage(trust, '暂不可在线试用，已改为下载学习包'));
-      downloadUseProject(card);
+      requestProjectDownload(card);
       return;
     }
     const bundle = projectBundles.find((b) => b.id === card.scenarioId) ?? null;
     if (!bundle || !resolveScenarioDemoPlan(bundle)) {
       showToast(executionTrustBlockedMessage('download_only', '暂无可执行打样链路，已改为下载学习包'));
-      downloadUseProject(card);
+      requestProjectDownload(card);
       return;
     }
     try {
@@ -1039,13 +1073,25 @@ export function MarketShelfPage({
     const can = Boolean(onInvokeSkill && canRunSkills && isSkillRunnable(currentSkill));
     const trust = resolveSkillExecutionTrust(can);
     if (!can) {
-      downloadSkillFile(currentSkill);
-      const reason = !isSkillCallable(currentSkill)
-        ? '该 Skill 已发布展示，但尚未启用在线调用'
-        : !hasSkillExecutionBody(currentSkill)
-          ? '该 Skill 缺少执行正文，暂不可在线调用'
-          : `已下载技能包：${currentSkill.name}`;
-      showToast(executionTrustBlockedMessage(trust, reason));
+      const skillId = currentSkill.id;
+      const downloadFallback = () => {
+        const latestSkill = useMarketplaceStore
+          .getState()
+          .skills.find((item) => item.id === skillId);
+        if (!latestSkill) {
+          showToast('该 Skill 已不在当前工作区，请刷新后重试');
+          return;
+        }
+        bumpDownload(latestSkill.id);
+        downloadSkillFile(latestSkill);
+        const reason = !isSkillCallable(latestSkill)
+          ? '该 Skill 已发布展示，但尚未启用在线调用'
+          : !hasSkillExecutionBody(latestSkill)
+            ? '该 Skill 缺少执行正文，暂不可在线调用'
+            : `已下载技能包：${latestSkill.name}`;
+        showToast(executionTrustBlockedMessage(trust, reason));
+      };
+      if (requireLogin('download', downloadFallback)) downloadFallback();
       return;
     }
     try {
@@ -1133,10 +1179,10 @@ export function MarketShelfPage({
                 : null
           }
           titleAside={
-            canSubmit && kind === 'projects' ? (
+            canShowSubmit ? (
               <button
                 type="button"
-                onClick={() => setSubmitOpen(true)}
+                onClick={requestSubmit}
                 className="rounded-lg px-2 py-1 text-[11px] font-medium text-[#a1a1aa] transition hover:bg-black/[0.04] hover:text-[#52525b]"
               >
                 {kind === 'projects'
@@ -1469,7 +1515,9 @@ export function MarketShelfPage({
                   {gridCards.length}
                 </span>
               </h2>
-              <span className="text-[11px] text-[#86868b]">按清单分类排名</span>
+              <span className="text-[11px] text-[#86868b]">
+                人工排序优先 · 新工具按清单分类排名追加
+              </span>
             </div>
           ) : (
             <ShelfSectionHead
@@ -1578,6 +1626,7 @@ export function MarketShelfPage({
         kind={kind}
         open={submitOpen && (kind === 'external' || kind === 'internal')}
         onClose={() => setSubmitOpen(false)}
+        onLoginReplay={() => setSubmitOpen(true)}
       />
       <MarketCompareDock />
       <MarketCompareDrawer onOpenCard={openCard} />
@@ -1596,6 +1645,7 @@ export function MarketShelfPage({
       <MarketSkillSubmitModal
         open={submitOpen && kind === 'projects' && mssSurface === 'skills'}
         onClose={() => setSubmitOpen(false)}
+        onLoginReplay={() => setSubmitOpen(true)}
       />
 
       {skillDetail ? (

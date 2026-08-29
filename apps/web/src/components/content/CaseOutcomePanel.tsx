@@ -7,6 +7,7 @@ import {
   resolveOnlinePreviewFile,
 } from '@/domain/casePreview';
 import { EngagementActions } from '@/components/content/EngagementActions';
+import { requireLogin } from '@/stores/authGateStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 
 interface CaseOutcomePanelProps {
@@ -240,8 +241,12 @@ export function CaseOutcomePanel({
           <button
             type="button"
             onClick={() => {
-              useContentEngagementStore.getState().bumpDownload(card.id);
-              onDownload();
+              const contentId = card.id;
+              const run = () => {
+                useContentEngagementStore.getState().bumpDownload(contentId);
+                onDownload();
+              };
+              if (requireLogin('download', run)) run();
             }}
             className="rounded-xl border border-black/8 px-3.5 py-2 text-[12px] font-medium transition hover:bg-black/[0.03]"
           >

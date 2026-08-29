@@ -26,16 +26,12 @@ export class PlatformDocsController {
     return this.docs.listDocs(workspaceId);
   }
 
+  /**
+   * 门户展示类文档（货架布局 / 内部办公场景）对游客只读开放，
+   * 否则未登录访客的市场货架会整体空白；写入仍限 super_admin（见 PUT）。
+   */
   @Get(':kind')
-  async getOne(
-    @Param('workspaceId') workspaceId: string,
-    @Param('kind') kind: string,
-    @Headers('authorization') authorization?: string,
-    @Headers('x-session-token') xSessionToken?: string,
-  ) {
-    if (kind === 'external-tool-layout' || kind === 'internal-office-scenes') {
-      await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
-    }
+  async getOne(@Param('workspaceId') workspaceId: string, @Param('kind') kind: string) {
     return this.docs.getDoc(workspaceId, kind);
   }
 
@@ -96,7 +92,7 @@ export class AuthController {
   @Post('login')
   login(
     @Body()
-    body: { email?: string; password?: string; workspaceId?: string },
+    body: { email?: string; password?: string; workspaceId?: string; visitorId?: string },
   ) {
     return this.docs.login(body ?? {});
   }

@@ -22,13 +22,12 @@ export type MarketEngagementMutation = {
   favorited: boolean;
 };
 
+/** 身份由会话 token 决定：游客只拿到聚合计数，个人态为空 */
 export async function fetchMarketEngagementApi(
   workspaceId: string,
-  userId: string,
 ): Promise<MarketEngagementSnapshot> {
-  const query = new URLSearchParams({ userId });
   const res = await fetch(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/market-engagement?${query.toString()}`),
+    apiUrl(`/api/v1/workspaces/${workspaceId}/market-engagement`),
     { headers: { Accept: 'application/json', ...apiAuthHeaders() }, cache: 'no-store' },
   );
   if (!res.ok) throw new Error(`market_engagement_get_${res.status}`);
@@ -38,7 +37,7 @@ export async function fetchMarketEngagementApi(
 export async function mutateMarketEngagementApi(
   workspaceId: string,
   contentId: string,
-  input: { action: MarketEngagementAction; userId: string; active?: boolean },
+  input: { action: MarketEngagementAction; active?: boolean },
 ): Promise<MarketEngagementMutation> {
   const res = await fetch(
     apiUrl(

@@ -26,18 +26,22 @@ import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 import { useSessionStore } from '@/stores/sessionStore';
+import { requireLogin } from '@/stores/authGateStore';
 
 /** 外精选 / 公司推荐：提报工具（案例提报走 CaseEditorModal） */
 export function MarketSubmitModal({
   kind,
   open,
   onClose,
+  onLoginReplay,
 }: {
   kind: MarketShelfKind;
   open: boolean;
   onClose: () => void;
+  onLoginReplay?: () => void;
 }) {
   const user = useSessionStore((s) => s.user);
+  const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
   const upsertTool = useMarketplaceStore((s) => s.upsertTool);
   const showToast = useMarketplaceStore((s) => s.showToast);
   const externalTypeOptions = listVisibleExternalToolTypes(
@@ -73,7 +77,13 @@ export function MarketSubmitModal({
     setCompany('');
   }, [open, user, kind]);
 
-  if (!open || kind === 'projects') return null;
+  useEffect(() => {
+    if (!open || isAuthenticated) return;
+    onClose();
+    requireLogin('submit-tool', onLoginReplay);
+  }, [isAuthenticated, onClose, onLoginReplay, open]);
+
+  if (!open || !isAuthenticated || kind === 'projects') return null;
 
   const title = isExternal ? '提报外部工具' : '提报内部工具';
 

@@ -38,6 +38,9 @@ import { usePlatformStoreLoader } from '@/hooks/usePlatformStoreLoader';
 import { loadSessions } from '@/domain/persistence/storage';
 import { AppViewRouter } from '@/features/AppViewRouter';
 import { LoginPage } from '@/features/auth/LoginPage';
+import { AuthGateOverlay } from '@/features/auth/AuthGateOverlay';
+import { isGuestBlockedView } from '@/domain/guestAccess';
+import { requireLogin, useAuthGateStore } from '@/stores/authGateStore';
 import {
   LazyCommandPalette,
   LazyExportModal,
@@ -61,7 +64,8 @@ import { fetchApiHealthInfo } from '@/api/persistenceApi';
 import { cn } from '@/lib/utils';
 
 export function App() {
-  const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
+  const shellReady = useSessionStore((s) => s.shellReady);
+  const isGuest = useSessionStore((s) => s.isGuest);
   const sessionBootstrapped = useSessionStore((s) => s.bootstrapped);
   const hydrateFromServer = useSessionStore((s) => s.hydrateFromServer);
   const shellPerspective = useShellPerspectiveStore((s) => s.perspective);
@@ -190,9 +194,27 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    // 游客同样需要目录/货架数据，否则会卡在「正在初始化平台」
+    if (!shellReady) return;
     void bootstrap();
-  }, [bootstrap, isAuthenticated]);
+  }, [bootstrap, shellReady]);
+
+  // 游客直达个人域页面（#/me、#/messages）：回到首页并就地弹登录，登录后再送回去。
+  // 主动登出走同一路径，但只静默回首页——刚登出的人不该马上又被要求登录。
+  useEffect(() => {
+    if (!isGuest || !isGuestBlockedView(appView)) return;
+    const target = appView;
+    setAppView('home');
+    writeAppRouteToLocation({ view: 'home' }, true);
+    if (useSessionStore.getState().suppressGuestGate) {
+      useSessionStore.getState().clearGuestGateSuppression();
+      return;
+    }
+    useAuthGateStore.getState().requestLogin('account', () => {
+      writeAppRouteToLocation({ view: target });
+      useAppViewStore.getState().setAppView(target);
+    });
+  }, [appView, isGuest, setAppView]);
 
   useEffect(() => {
     const sync = () => {
@@ -297,7 +319,7 @@ export function App() {
     openAiAssistantForNewTask();
   }, []);
 
-  const handleSubmitTask = useCallback((text: string, agent?: PrototypeAgentSeed | null) => {
+  const performSubmitTask = useCallback((text: string, agent?: PrototypeAgentSeed | null) => {
     if (!canExecuteChat()) {
       useConversationStore.setState({ pushToast: READONLY_EXECUTE_HINT });
       return;
@@ -325,7 +347,7 @@ export function App() {
     goToTaskWithTransit(trimmed, chatId);
   }, [createAgentTaskSession, goToTaskWithTransit, sessionsReady]);
 
-  const handleInvokeAgent = useCallback((agent: PrototypeAgentSeed, prompt?: string) => {
+  const performInvokeAgent = useCallback((agent: PrototypeAgentSeed, prompt?: string) => {
     if (!canExecuteChat()) {
       useConversationStore.setState({ pushToast: READONLY_EXECUTE_HINT });
       return;
@@ -344,7 +366,7 @@ export function App() {
     goToTaskWithTransit(message, chatId);
   }, [findOrCreateAgentSession, switchChat, goToTaskWithTransit, sessionsReady]);
 
-  const handleInvokeSkill = useCallback((skill: PrototypeSkillSeed) => {
+  const performInvokeSkill = useCallback((skill: PrototypeSkillSeed) => {
     if (!canExecuteChat()) {
       useConversationStore.setState({ pushToast: READONLY_EXECUTE_HINT });
       return;
@@ -389,6 +411,33 @@ export function App() {
     goToTaskWithTransit(currentSkill.name, chatId);
   }, [createAgentTaskSession, goToTaskWithTransit, sessionsReady]);
 
+  // 登录浮层可能跨过若干次 React 重渲染；重放时只保留动作参数，
+  // 实际执行始终走当前 render 的实现，避免捕获过期的 sessionsReady 等组件状态。
+  const submitTaskRef = useRef(performSubmitTask);
+  const invokeAgentRef = useRef(performInvokeAgent);
+  const invokeSkillRef = useRef(performInvokeSkill);
+  submitTaskRef.current = performSubmitTask;
+  invokeAgentRef.current = performInvokeAgent;
+  invokeSkillRef.current = performInvokeSkill;
+
+  const handleSubmitTask = useCallback((text: string, agent?: PrototypeAgentSeed | null) => {
+    const replay = () => submitTaskRef.current(text, agent);
+    if (!requireLogin('chat', replay)) return;
+    replay();
+  }, []);
+
+  const handleInvokeAgent = useCallback((agent: PrototypeAgentSeed, prompt?: string) => {
+    const replay = () => invokeAgentRef.current(agent, prompt);
+    if (!requireLogin('chat', replay)) return;
+    replay();
+  }, []);
+
+  const handleInvokeSkill = useCallback((skill: PrototypeSkillSeed) => {
+    const replay = () => invokeSkillRef.current(skill);
+    if (!requireLogin('chat', replay)) return;
+    replay();
+  }, []);
+
   const handleAskKbDocument = useCallback((doc: PrototypeKbDocument) => {
     const agent = getAgentById('agent-knowledge');
     if (!agent) return;
@@ -405,7 +454,7 @@ export function App() {
     }
   }, [handleInvokeAgent]);
 
-  const handleStartExpertTeam = useCallback(
+  const performStartExpertTeam = useCallback(
     (plan: ScenarioDemoPlan, fromIndex = 0) => {
       if (!canExecuteChat()) {
         useConversationStore.setState({ pushToast: READONLY_EXECUTE_HINT });
@@ -431,6 +480,14 @@ export function App() {
     },
     [sessionsReady, startExpertTeamRelay, goToTaskWithTransit],
   );
+
+  const startExpertTeamRef = useRef(performStartExpertTeam);
+  startExpertTeamRef.current = performStartExpertTeam;
+  const handleStartExpertTeam = useCallback((plan: ScenarioDemoPlan, fromIndex = 0) => {
+    const replay = () => startExpertTeamRef.current(plan, fromIndex);
+    if (!requireLogin('chat', replay)) return;
+    replay();
+  }, []);
 
   const viewHandlers = useMemo(
     () => ({
@@ -526,7 +583,8 @@ export function App() {
     );
   }
 
-  if (!isAuthenticated) {
+  // 会话已就绪但既非登录也非游客（极少数竞态）时才回落整页登录
+  if (!shellReady) {
     return <LoginPage />;
   }
 
@@ -601,6 +659,7 @@ export function App() {
       <HomeToTaskTransit open={transit.open} summary={transit.summary} />
       <GlobalToastHost />
       <AssetApprovalModal />
+      <AuthGateOverlay />
     </div>
     </AppErrorBoundary>
   );

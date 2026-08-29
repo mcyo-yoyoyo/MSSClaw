@@ -87,6 +87,12 @@ export const LazyPortalContentOpsPage = lazy(() =>
   import('@/features/ops/PortalContentOpsPage').then((m) => ({ default: m.PortalContentOpsPage })),
 );
 
+export const LazyPortalDataDashboardPage = lazy(() =>
+  import('@/features/ops/PortalDataDashboardPage').then((m) => ({
+    default: m.PortalDataDashboardPage,
+  })),
+);
+
 export const LazyModelCatalogOpsPage = lazy(() =>
   import('@/features/ops/ModelCatalogOpsPage').then((m) => ({ default: m.ModelCatalogOpsPage })),
 );
@@ -138,6 +144,7 @@ export const ROUTE_PREFETCH: Partial<Record<AppView, () => void>> = {
   presentation: () => void import('@/features/presentation/PresentationConfigPage'),
   'workspace-config': () => void import('@/features/workspace/WorkspaceConfigPage'),
   'portal-ops': () => void import('@/features/ops/PortalContentOpsPage'),
+  'portal-dashboard': () => void import('@/features/ops/PortalDataDashboardPage'),
   'model-ops': () => void import('@/features/ops/ModelCatalogOpsPage'),
   executions: () => void import('@/features/ops/ExecutionHistoryPage'),
   approvals: () => void import('@/features/ops/ApprovalCenterPage'),

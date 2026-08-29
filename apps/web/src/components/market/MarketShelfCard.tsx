@@ -8,6 +8,7 @@ import {
 } from '@/domain/marketShelf';
 import { EXECUTION_TRUST_META } from '@/domain/executionTrust';
 import { downloadSkillFile } from '@/domain/skillExport';
+import { requireLogin } from '@/stores/authGateStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useMarketCompareStore } from '@/stores/marketCompareStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
@@ -72,8 +73,6 @@ export function MarketShelfCard({
   const compareSelected = useMarketCompareStore((s) => s.isSelected(card.id, card.kind));
   const toggleCompare = useMarketCompareStore((s) => s.toggle);
   const showToast = useMarketplaceStore((s) => s.showToast);
-  const skills = useMarketplaceStore((s) => s.skills);
-  const agents = useMarketplaceStore((s) => s.agents);
   const engagement = useContentEngagementStore((s) => s.byId[card.id]);
   const userVote = useContentEngagementStore((s) => s.userVotes[card.id] ?? null);
   const toggleLike = useContentEngagementStore((s) => s.toggleLike);
@@ -92,33 +91,42 @@ export function MarketShelfCard({
 
   const onToggleFavorite = (e: { stopPropagation: () => void }) => {
     e.stopPropagation();
-    const on = toggleFavorite({
+    const item = {
       id: card.id,
       kind: card.kind,
       title: card.title,
       icon: card.icon,
       logoUrl: card.logoUrl,
-    });
-    showToast(on ? `已收藏：${card.title}` : `已取消收藏：${card.title}`);
+    };
+    const run = () => {
+      const on = toggleFavorite(item);
+      showToast(on ? `已收藏：${item.title}` : `已取消收藏：${item.title}`);
+    };
+    if (requireLogin('favorite', run)) run();
   };
 
   const onDownload = (e: { stopPropagation: () => void }) => {
     e.stopPropagation();
-    const skill = skills.find((s) => s.id === card.id);
-    if (skill) {
-      bumpDownload(card.id);
-      downloadSkillFile(skill);
-      showToast(`已下载技能包：${skill.name}`);
-      return;
-    }
-    const agent = agents.find((a) => a.id === card.id);
-    if (agent) {
-      bumpDownload(card.id);
-      downloadAgentFile(agent);
-      showToast(`已下载 Agent 包：${agent.name}`);
-      return;
-    }
-    showToast('请打开详情后下载');
+    const contentId = card.id;
+    const run = () => {
+      const market = useMarketplaceStore.getState();
+      const skill = market.skills.find((s) => s.id === contentId);
+      if (skill) {
+        bumpDownload(contentId);
+        downloadSkillFile(skill);
+        market.showToast(`已下载技能包：${skill.name}`);
+        return;
+      }
+      const agent = market.agents.find((a) => a.id === contentId);
+      if (agent) {
+        bumpDownload(contentId);
+        downloadAgentFile(agent);
+        market.showToast(`已下载 Agent 包：${agent.name}`);
+        return;
+      }
+      market.showToast('请打开详情后下载');
+    };
+    if (requireLogin('download', run)) run();
   };
 
   const onToggleCompare = (e: { stopPropagation: () => void }) => {
@@ -355,7 +363,9 @@ export function MarketShelfCard({
                 type="button"
                 onClick={(ev) => {
                   ev.stopPropagation();
-                  toggleLike(card.id);
+                  const contentId = card.id;
+                  const run = () => toggleLike(contentId);
+                  if (requireLogin('like', run)) run();
                 }}
                 title="点赞"
                 aria-pressed={userVote === 'like'}
@@ -371,7 +381,9 @@ export function MarketShelfCard({
                 type="button"
                 onClick={(ev) => {
                   ev.stopPropagation();
-                  toggleDislike(card.id);
+                  const contentId = card.id;
+                  const run = () => toggleDislike(contentId);
+                  if (requireLogin('dislike', run)) run();
                 }}
                 title="点踩"
                 aria-pressed={userVote === 'dislike'}

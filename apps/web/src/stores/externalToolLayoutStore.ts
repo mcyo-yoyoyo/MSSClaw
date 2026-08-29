@@ -14,10 +14,12 @@ import {
   reorderExternalToolCategoryFeatured,
   reorderExternalToolLayoutAllList,
   setExternalToolCategoryFeatured,
+  setExternalToolCategoryList,
   setExternalToolLayoutAllList,
   toExternalToolLayoutSavePayload,
   type ExternalToolLayoutAllListKey,
   type ExternalToolCategoryFeaturedListKey,
+  type ExternalToolCategoryListKey,
   type ExternalToolLayoutDocument,
 } from '@/domain/externalToolLayout';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -95,6 +97,11 @@ export interface ExternalToolLayoutState {
     categoryId: string,
     ids: readonly string[],
     key?: ExternalToolCategoryFeaturedListKey,
+  ) => void;
+  setCategoryList: (
+    categoryId: string,
+    ids: readonly string[],
+    key: ExternalToolCategoryListKey,
   ) => void;
   reorderAllList: (
     key: ExternalToolLayoutAllListKey,
@@ -287,6 +294,12 @@ export const useExternalToolLayoutStore = create<ExternalToolLayoutState>((set, 
   setCategoryFeatured: (categoryId, ids, key = 'overseasFeaturedIds') => {
     updateDraft(get, set, (draft) =>
       setExternalToolCategoryFeatured(draft, categoryId, ids, key),
+    );
+  },
+
+  setCategoryList: (categoryId, ids, key) => {
+    updateDraft(get, set, (draft) =>
+      setExternalToolCategoryList(draft, categoryId, ids, key),
     );
   },
 

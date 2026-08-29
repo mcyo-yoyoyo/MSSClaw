@@ -35,6 +35,7 @@ export function isOpsOnlyView(view: string): boolean {
     view === 'automation' ||
     view === 'workflow' ||
     view === 'portal-ops' ||
+    view === 'portal-dashboard' ||
     view === 'model-ops' ||
     view === 'executions' ||
     view === 'approvals' ||

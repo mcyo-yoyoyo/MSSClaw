@@ -29,7 +29,14 @@ type ReviewsDoc = {
   bySkillId?: Record<string, SkillReviewItem[]>;
 };
 
+function authenticatedUserId(): string {
+  const userId = getCurrentUserId();
+  if (!userId) throw new Error('skill_review_requires_authenticated_user');
+  return userId;
+}
+
 function persist(bySkillId: Record<string, SkillReviewItem[]>) {
+  authenticatedUserId();
   if (!canUsePlatformDocsApi()) return;
   const ws = currentWorkspaceId();
   const payload: ReviewsDoc = { bySkillId };
@@ -84,11 +91,12 @@ export const useSkillReviewStore = create<SkillReviewState>((set, get) => ({
   },
 
   addReview: (skillId, rating, text) => {
+    const userId = authenticatedUserId();
     const clamped = Math.min(5, Math.max(1, Math.round(rating)));
     const item: SkillReviewItem = {
       id: `rev_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       skillId,
-      userId: getCurrentUserId() || 'anonymous',
+      userId,
       userName: getCurrentUserName() || '匿名用户',
       rating: clamped,
       text: text.trim().slice(0, 500),
@@ -102,6 +110,7 @@ export const useSkillReviewStore = create<SkillReviewState>((set, get) => ({
   },
 
   replyReview: (skillId, reviewId, reply) => {
+    authenticatedUserId();
     const prev = get().bySkillId[skillId] ?? [];
     const nextList = prev.map((r) =>
       r.id === reviewId

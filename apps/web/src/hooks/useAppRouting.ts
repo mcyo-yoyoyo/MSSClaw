@@ -14,12 +14,13 @@ export function useAppRouting() {
   const appView = useAppViewStore((s) => s.appView);
   const setAppView = useAppViewStore((s) => s.setAppView);
   const sessionBootstrapped = useSessionStore((s) => s.bootstrapped);
-  const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
+  // 游客与登录用户共用同一套路由；只等会话恢复完成
+  const shellReady = useSessionStore((s) => s.shellReady);
   const skipHashWrite = useRef(false);
   const appliedInitial = useRef(false);
 
   useEffect(() => {
-    if (!sessionBootstrapped || !isAuthenticated) {
+    if (!sessionBootstrapped || !shellReady) {
       appliedInitial.current = false;
       return;
     }
@@ -46,7 +47,7 @@ export function useAppRouting() {
         true,
       );
     }
-  }, [setAppView, sessionBootstrapped, isAuthenticated]);
+  }, [setAppView, sessionBootstrapped, shellReady]);
 
   useEffect(() => {
     if (skipHashWrite.current) {
@@ -64,7 +65,7 @@ export function useAppRouting() {
   }, [appView]);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!shellReady) return;
 
     const onNavigate = () => {
       const route = parseAppRoute(window.location.hash);
@@ -86,7 +87,7 @@ export function useAppRouting() {
       window.removeEventListener('hashchange', onNavigate);
       window.removeEventListener('popstate', onNavigate);
     };
-  }, [setAppView, isAuthenticated]);
+  }, [setAppView, shellReady]);
 }
 
 export function navigateToAppView(view: AppView): void {

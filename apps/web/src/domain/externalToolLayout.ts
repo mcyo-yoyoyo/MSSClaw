@@ -24,11 +24,21 @@ export interface ExternalToolLayoutAll {
 export interface ExternalToolCategoryLayout {
   overseasFeaturedIds: string[];
   domesticFeaturedIds: string[];
+  overseasMoreOrderIds: string[];
+  domesticMoreOrderIds: string[];
 }
 
 export type ExternalToolCategoryFeaturedListKey =
   | 'overseasFeaturedIds'
   | 'domesticFeaturedIds';
+
+export type ExternalToolCategoryMoreListKey =
+  | 'overseasMoreOrderIds'
+  | 'domesticMoreOrderIds';
+
+export type ExternalToolCategoryListKey =
+  | ExternalToolCategoryFeaturedListKey
+  | ExternalToolCategoryMoreListKey;
 
 export interface ExternalToolLayoutDocument {
   version: typeof EXTERNAL_TOOL_LAYOUT_VERSION;
@@ -51,6 +61,12 @@ export const EXTERNAL_TOOL_LAYOUT_ALL_LIST_KEYS: readonly ExternalToolLayoutAllL
 export const EXTERNAL_TOOL_CATEGORY_FEATURED_LIST_KEYS: readonly ExternalToolCategoryFeaturedListKey[] = [
   'overseasFeaturedIds',
   'domesticFeaturedIds',
+];
+
+export const EXTERNAL_TOOL_CATEGORY_LIST_KEYS: readonly ExternalToolCategoryListKey[] = [
+  ...EXTERNAL_TOOL_CATEGORY_FEATURED_LIST_KEYS,
+  'overseasMoreOrderIds',
+  'domesticMoreOrderIds',
 ];
 
 const UNSAFE_CATEGORY_IDS = new Set(['__proto__', 'prototype', 'constructor']);
@@ -97,6 +113,22 @@ function dedupeExternalToolLayoutAllLists(
   const seen = new Set<string>();
   for (const key of priority) {
     next[key] = all[key].filter((id) => {
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }
+  return next;
+}
+
+function dedupeExternalToolCategoryLists(
+  layout: ExternalToolCategoryLayout,
+  priority: readonly ExternalToolCategoryListKey[] = EXTERNAL_TOOL_CATEGORY_LIST_KEYS,
+): ExternalToolCategoryLayout {
+  const next = {} as ExternalToolCategoryLayout;
+  const seen = new Set<string>();
+  for (const key of priority) {
+    next[key] = layout[key].filter((id) => {
       if (seen.has(id)) return false;
       seen.add(id);
       return true;
@@ -158,7 +190,7 @@ export function parseExternalToolLayoutDocument(value: unknown): ExternalToolLay
     if (!isRecord(rawLayout)) {
       throw new Error(`invalid_external_tool_layout:categories.${categoryId}`);
     }
-    categories[categoryId] = {
+    const normalizedCategory: ExternalToolCategoryLayout = {
       overseasFeaturedIds: normalizeIdList(
         rawLayout.overseasFeaturedIds,
         `categories.${categoryId}.overseasFeaturedIds`,
@@ -169,15 +201,28 @@ export function parseExternalToolLayoutDocument(value: unknown): ExternalToolLay
       domesticFeaturedIds:
         rawLayout.domesticFeaturedIds === undefined
           ? []
-          : normalizeIdList(
+            : normalizeIdList(
               rawLayout.domesticFeaturedIds,
               `categories.${categoryId}.domesticFeaturedIds`,
             ),
+      // 分类 More 排序是 version 1 的增量字段。旧快照未包含时以 Excel
+      // 分类排名作为回退；新保存的文档会显式写出两个列表。
+      overseasMoreOrderIds:
+        rawLayout.overseasMoreOrderIds === undefined
+          ? []
+          : normalizeIdList(
+              rawLayout.overseasMoreOrderIds,
+              `categories.${categoryId}.overseasMoreOrderIds`,
+            ),
+      domesticMoreOrderIds:
+        rawLayout.domesticMoreOrderIds === undefined
+          ? []
+          : normalizeIdList(
+              rawLayout.domesticMoreOrderIds,
+              `categories.${categoryId}.domesticMoreOrderIds`,
+            ),
     };
-    const overseasIds = new Set(categories[categoryId].overseasFeaturedIds);
-    categories[categoryId].domesticFeaturedIds = categories[
-      categoryId
-    ].domesticFeaturedIds.filter((id) => !overseasIds.has(id));
+    categories[categoryId] = dedupeExternalToolCategoryLists(normalizedCategory);
   }
 
   return {
@@ -206,6 +251,8 @@ export function cloneExternalToolLayoutDocument(
         {
           overseasFeaturedIds: [...layout.overseasFeaturedIds],
           domesticFeaturedIds: [...layout.domesticFeaturedIds],
+          overseasMoreOrderIds: [...layout.overseasMoreOrderIds],
+          domesticMoreOrderIds: [...layout.domesticMoreOrderIds],
         },
       ]),
     ),
@@ -233,7 +280,7 @@ export function externalToolLayoutsEqual(
   return leftCategories.every((categoryId) => {
     const leftLayout = left.categories[categoryId]!;
     const rightLayout = right.categories[categoryId]!;
-    return EXTERNAL_TOOL_CATEGORY_FEATURED_LIST_KEYS.every((key) => {
+    return EXTERNAL_TOOL_CATEGORY_LIST_KEYS.every((key) => {
       const a = leftLayout[key];
       const b = rightLayout[key];
       return a.length === b.length && a.every((id, index) => id === b[index]);
@@ -295,34 +342,47 @@ export function setExternalToolCategoryFeatured(
   ids: readonly string[],
   key: ExternalToolCategoryFeaturedListKey = 'overseasFeaturedIds',
 ): ExternalToolLayoutDocument {
+  return setExternalToolCategoryList(document, categoryId, ids, key);
+}
+
+export function setExternalToolCategoryList(
+  document: ExternalToolLayoutDocument,
+  categoryId: string,
+  ids: readonly string[],
+  key: ExternalToolCategoryListKey,
+): ExternalToolLayoutDocument {
   const normalizedCategoryId = normalizeCategoryId(categoryId);
-  if (!EXTERNAL_TOOL_CATEGORY_FEATURED_LIST_KEYS.includes(key)) {
+  if (!EXTERNAL_TOOL_CATEGORY_LIST_KEYS.includes(key)) {
     throw new Error('invalid_external_tool_layout:category_list_key');
   }
   const previous = document.categories[normalizedCategoryId] ?? {
     overseasFeaturedIds: [],
     domesticFeaturedIds: [],
+    overseasMoreOrderIds: [],
+    domesticMoreOrderIds: [],
   };
   const normalizedIds = normalizeIdList(
     [...ids],
     `categories.${normalizedCategoryId}.${key}`,
   );
   const targetIds = new Set(normalizedIds);
-  const otherKey: ExternalToolCategoryFeaturedListKey =
-    key === 'overseasFeaturedIds' ? 'domesticFeaturedIds' : 'overseasFeaturedIds';
-  const nextLayout: ExternalToolCategoryLayout = {
+  const nextLayout = {
     ...previous,
     [key]: normalizedIds,
-    [otherKey]: previous[otherKey].filter((id) => !targetIds.has(id)),
   };
+  for (const otherKey of EXTERNAL_TOOL_CATEGORY_LIST_KEYS) {
+    if (otherKey === key) continue;
+    nextLayout[otherKey] = nextLayout[otherKey].filter((id) => !targetIds.has(id));
+  }
+  const canonicalLayout = dedupeExternalToolCategoryLists(nextLayout, [
+    key,
+    ...EXTERNAL_TOOL_CATEGORY_LIST_KEYS.filter((candidate) => candidate !== key),
+  ]);
   const categories = { ...document.categories };
-  if (
-    nextLayout.overseasFeaturedIds.length === 0 &&
-    nextLayout.domesticFeaturedIds.length === 0
-  ) {
+  if (EXTERNAL_TOOL_CATEGORY_LIST_KEYS.every((listKey) => canonicalLayout[listKey].length === 0)) {
     delete categories[normalizedCategoryId];
   } else {
-    categories[normalizedCategoryId] = nextLayout;
+    categories[normalizedCategoryId] = canonicalLayout;
   }
   return {
     ...document,
@@ -456,8 +516,24 @@ export function reorderExternalToolCategoryFeatured(
   overId: string | null,
   key: ExternalToolCategoryFeaturedListKey = 'overseasFeaturedIds',
 ): ExternalToolLayoutDocument {
+  return reorderExternalToolCategoryList(
+    document,
+    categoryId,
+    activeId,
+    overId,
+    key,
+  );
+}
+
+export function reorderExternalToolCategoryList(
+  document: ExternalToolLayoutDocument,
+  categoryId: string,
+  activeId: string,
+  overId: string | null,
+  key: ExternalToolCategoryListKey,
+): ExternalToolLayoutDocument {
   const ids = document.categories[categoryId]?.[key] ?? [];
-  return setExternalToolCategoryFeatured(
+  return setExternalToolCategoryList(
     document,
     categoryId,
     reorderExternalToolIds(ids, activeId, overId),

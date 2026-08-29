@@ -16,6 +16,7 @@ import { listVisibleBusinessScenarioCategories } from '@/domain/businessScenario
 import { getMembersByWorkspace } from '@/domain/rbac';
 import { canExecuteChat } from '@/domain/permissions';
 import { useSessionStore } from '@/stores/sessionStore';
+import { requireLogin } from '@/stores/authGateStore';
 
 interface TaskCenterPageProps {
   onWorkspaceSwitch?: (workspaceId: string) => void;
@@ -149,7 +150,18 @@ export function TaskCenterPage(_props: TaskCenterPageProps) {
             chat={chat}
             draft={draft}
             onDraftChange={setDraft}
-            onSend={(text) => void sendMessage(text, workspaceId)}
+            onSend={(text) => {
+              const send = () => {
+                const currentWorkspaceId = useWorkspaceStore.getState().workspaceId;
+                void useConversationStore.getState().sendMessage(text, currentWorkspaceId);
+              };
+              if (!requireLogin('chat', send)) {
+                setDraft('');
+                return;
+              }
+              send();
+              setDraft('');
+            }}
             isAgentTyping={isAgentTyping}
             streamStatus={streamStatus}
             onCancelStream={cancelStream}

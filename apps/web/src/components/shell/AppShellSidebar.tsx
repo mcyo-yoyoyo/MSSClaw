@@ -23,9 +23,11 @@ import { SidebarMarketFilters } from '@/components/shell/SidebarMarketFilters';
 import { ROUTE_PREFETCH } from '@/features/lazyPages';
 import { cn } from '@/lib/utils';
 import { useAppViewStore } from '@/stores/appViewStore';
+import { useAuthGateStore } from '@/stores/authGateStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useShellPerspectiveStore } from '@/stores/shellPerspectiveStore';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 export function AppShellSidebar() {
   const {
@@ -38,8 +40,12 @@ export function AppShellSidebar() {
     openSettings,
   } = useAppViewStore();
   const isViewEnabled = useNavPresentationStore((s) => s.isViewEnabled);
+  const roleEnabled = useNavPresentationStore((s) => s.roleEnabled);
+  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const user = useSessionStore((s) => s.user);
+  const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
   const logout = useSessionStore((s) => s.logout);
+  const requestLogin = useAuthGateStore((s) => s.requestLogin);
   const perspective = useShellPerspectiveStore((s) => s.perspective);
   const hydrate = useShellPerspectiveStore((s) => s.hydrate);
 
@@ -76,7 +82,7 @@ export function AppShellSidebar() {
     });
 
     return acc;
-  }, [isViewEnabled]);
+  }, [isViewEnabled, roleEnabled, user?.platformRole, workspaceId]);
 
   const capabilityItems = useMemo(() => {
     const merge = [...itemsBySection.platform, ...itemsBySection.ops];
@@ -126,7 +132,7 @@ export function AppShellSidebar() {
         deptIds: user.deptIds,
         regionId: user.regionId,
       })
-    : '未登录';
+    : '游客浏览';
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
 
@@ -297,41 +303,57 @@ export function AppShellSidebar() {
                 <p className="mt-0.5 text-[10px] text-zinc-400">{roleLabel}</p>
               ) : null}
             </div>
-            {isViewEnabled('me') ? (
+            {isAuthenticated ? (
+              <>
+                {isViewEnabled('me') ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAccountOpen(false);
+                      goView('me');
+                    }}
+                    className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] text-zinc-700 hover:bg-zinc-50"
+                  >
+                    <i className="fa-solid fa-user w-4 text-center text-[11px] text-zinc-400" />
+                    个人中心
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccountOpen(false);
+                    openSettings();
+                  }}
+                  className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] text-zinc-700 hover:bg-zinc-50"
+                >
+                  <i className="fa-solid fa-gear w-4 text-center text-[11px] text-zinc-400" />
+                  偏好设置
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccountOpen(false);
+                    logout();
+                  }}
+                  className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] text-red-600 hover:bg-red-50"
+                >
+                  <i className="fa-solid fa-right-from-bracket w-4 text-center text-[11px]" />
+                  退出登录
+                </button>
+              </>
+            ) : (
               <button
                 type="button"
                 onClick={() => {
                   setAccountOpen(false);
-                  goView('me');
+                  requestLogin('account');
                 }}
-                className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] text-zinc-700 hover:bg-zinc-50"
+                className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] font-medium text-[#e0122f] hover:bg-red-50"
               >
-                <i className="fa-solid fa-user w-4 text-center text-[11px] text-zinc-400" />
-                个人中心
+                <i className="fa-solid fa-arrow-right-to-bracket w-4 text-center text-[11px]" />
+                登录
               </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => {
-                setAccountOpen(false);
-                openSettings();
-              }}
-              className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] text-zinc-700 hover:bg-zinc-50"
-            >
-              <i className="fa-solid fa-gear w-4 text-center text-[11px] text-zinc-400" />
-              偏好设置
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setAccountOpen(false);
-                logout();
-              }}
-              className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] text-red-600 hover:bg-red-50"
-            >
-              <i className="fa-solid fa-right-from-bracket w-4 text-center text-[11px]" />
-              退出登录
-            </button>
+            )}
           </div>
         ) : null}
         <button
@@ -355,7 +377,9 @@ export function AppShellSidebar() {
           </div>
           <div className="sidebar-footer-user-text min-w-0 flex-1">
             <p className="truncate text-[12px] font-semibold leading-snug">{user?.name ?? '未登录'}</p>
-            <p className="truncate text-[10px] leading-snug text-zinc-500">{roleLabel || '账号与设置'}</p>
+            <p className="truncate text-[10px] leading-snug text-zinc-500">
+              {roleLabel || (isAuthenticated ? '账号与设置' : '点击登录')}
+            </p>
           </div>
           {!sidebarCollapsed ? (
             <i

@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { GuestGateLock } from '@/components/auth/GuestGateLock';
 import { AgentPortrait } from '@/components/brand/AgentPortrait';
 import { CenterModal } from '@/components/center/CenterShell';
 import {
@@ -39,6 +40,8 @@ import {
   getRegionLabel,
 } from '@/domain/orgTaxonomy';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
+import { requireLogin } from '@/stores/authGateStore';
+import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 
 /**
@@ -336,6 +339,8 @@ export function CatalogAgentDetailModal({
   const toggleLike = useContentEngagementStore((state) => state.toggleLike);
   const toggleDislike = useContentEngagementStore((state) => state.toggleDislike);
   const getVote = useContentEngagementStore((state) => state.userVote);
+  const favorited = useMarketFavoriteStore((state) => state.isFavorite(agent.id, 'projects'));
+  const toggleFavorite = useMarketFavoriteStore((state) => state.toggle);
   void engagementById;
 
   const engagement = getEngagement(agent.id);
@@ -445,12 +450,13 @@ export function CatalogAgentDetailModal({
       (item.id !== 'preview' || hasPreview) && (item.id !== 'fit' || hasFit),
   );
   const activeTab = visibleTabs.some((item) => item.id === tab) ? tab : 'overview';
-
   const packageBlob = agent.packageBlob;
 
   /** 有运营上传的执行包就下发原包；没有才回落到前端即时生成的资源包 */
   const handleDownload = async () => {
-    bumpDownload(agent.id);
+    const currentAgent = useMarketplaceStore.getState().agents.find((item) => item.id === agent.id) ?? agent;
+    const packageBlob = currentAgent.packageBlob;
+    bumpDownload(currentAgent.id);
     if (packageBlob) {
       try {
         await downloadPackageBlob(packageBlob);
@@ -460,8 +466,27 @@ export function CatalogAgentDetailModal({
       }
       return;
     }
-    downloadAgentFile(agent);
-    onToast(`已下载 Agent 资源包：${agent.name}`);
+    downloadAgentFile(currentAgent);
+    onToast(`已下载 Agent 资源包：${currentAgent.name}`);
+  };
+
+  const requestDownload = () => {
+    const run = () => void handleDownload();
+    if (requireLogin('download', run)) run();
+  };
+
+  const requestFavorite = () => {
+    const item = {
+      id: agent.id,
+      kind: 'projects' as const,
+      title: agent.name,
+      icon: agent.icon || 'fa-robot',
+    };
+    const run = () => {
+      const on = toggleFavorite(item);
+      onToast(on ? `已收藏：${item.title}` : `已取消收藏：${item.title}`);
+    };
+    if (requireLogin('favorite', run)) run();
   };
 
   const copyText = async (text: string, success: string) => {
@@ -788,7 +813,7 @@ export function CatalogAgentDetailModal({
                           icon="fa-download"
                           label="下载执行包"
                           desc="获取可在本地复用的材料"
-                          onClick={handleDownload}
+                          onClick={requestDownload}
                         />
                         <PathRow
                           icon="fa-comment-dots"
@@ -944,7 +969,7 @@ export function CatalogAgentDetailModal({
                           ? `${formatBytes(packageBlob.size)} · 上传于 ${packageBlob.uploadedAt.slice(0, 10)}`
                           : `资源更新时间：${updatedAt}`
                       }
-                      onClick={handleDownload}
+                      onClick={requestDownload}
                     />
                   </div>
                   {packageBlob ? (
@@ -1004,7 +1029,7 @@ export function CatalogAgentDetailModal({
                       <td className="px-2 py-2.5">
                         <button
                           type="button"
-                          onClick={handleDownload}
+                          onClick={requestDownload}
                           className="text-[11px] font-semibold text-sky-700 hover:underline"
                         >
                           下载
@@ -1054,7 +1079,7 @@ export function CatalogAgentDetailModal({
                   if (!opened) onToast('浏览器拦截了新窗口，请允许弹窗后重试');
                 }}
                 className={cn(
-                  'flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[12px] font-semibold transition',
+                  'relative flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[12px] font-semibold transition',
                   primaryAction.disabledHint
                     ? 'cursor-not-allowed bg-zinc-100 text-zinc-400'
                     : 'bg-zinc-900 text-white hover:bg-zinc-800',
@@ -1062,6 +1087,7 @@ export function CatalogAgentDetailModal({
               >
                 <i className={cn('fa-solid text-[10px]', primaryAction.icon)} />
                 {primaryAction.label}
+                {primaryAction.id === 'experience' ? <GuestGateLock /> : null}
               </button>
               {primaryAction.disabledHint ? (
                 <p className="mt-2 text-[10px] leading-relaxed text-zinc-400">
@@ -1071,7 +1097,12 @@ export function CatalogAgentDetailModal({
             </section>
 
             <div className="grid grid-cols-2 gap-2 md:grid-cols-1">
-              <button type="button" onClick={handleDownload} className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-50">
+              <button type="button" onClick={requestFavorite} className="relative inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-50">
+                <i className={cn('text-[10px]', favorited ? 'fa-solid fa-star text-amber-500' : 'fa-regular fa-star text-zinc-400')} />
+                {favorited ? '已收藏' : '收藏'}
+                <GuestGateLock />
+              </button>
+              <button type="button" onClick={requestDownload} className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-50">
                 <i className="fa-solid fa-download text-[10px] text-zinc-400" />
                 下载资源包
               </button>
@@ -1183,25 +1214,35 @@ export function CatalogAgentDetailModal({
               <div className="mt-3 grid grid-cols-2 gap-2 border-t border-zinc-100 pt-3">
                 <button
                   type="button"
-                  onClick={() => toggleLike(agent.id)}
+                  onClick={() => {
+                    const contentId = agent.id;
+                    const run = () => toggleLike(contentId);
+                    if (requireLogin('like', run)) run();
+                  }}
                   className={cn(
-                    'inline-flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-medium transition',
+                    'relative inline-flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-medium transition',
                     vote === 'like' ? 'bg-sky-50 text-sky-700' : 'bg-zinc-50 text-zinc-500 hover:bg-zinc-100',
                   )}
                   aria-pressed={vote === 'like'}
                 >
                   <i className="fa-solid fa-thumbs-up text-[10px]" /> 点赞
+                  <GuestGateLock />
                 </button>
                 <button
                   type="button"
-                  onClick={() => toggleDislike(agent.id)}
+                  onClick={() => {
+                    const contentId = agent.id;
+                    const run = () => toggleDislike(contentId);
+                    if (requireLogin('dislike', run)) run();
+                  }}
                   className={cn(
-                    'inline-flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-medium transition',
+                    'relative inline-flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-medium transition',
                     vote === 'dislike' ? 'bg-zinc-200 text-zinc-800' : 'bg-zinc-50 text-zinc-500 hover:bg-zinc-100',
                   )}
                   aria-pressed={vote === 'dislike'}
                 >
                   <i className="fa-solid fa-thumbs-down text-[10px]" /> 点踩
+                  <GuestGateLock />
                 </button>
               </div>
             </section>

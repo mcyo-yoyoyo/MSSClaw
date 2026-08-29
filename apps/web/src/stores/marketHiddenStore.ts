@@ -18,14 +18,14 @@ type HiddenDoc = {
   byUserId?: Record<string, MarketHiddenKey[]>;
 };
 
-function userBucket(): string {
-  return getCurrentUserId() || 'anonymous';
+function userBucket(): string | null {
+  return getCurrentUserId() || null;
 }
 
 function persistForUser(keys: MarketHiddenKey[]) {
-  if (!canUsePlatformDocsApi()) return;
-  const ws = currentWorkspaceId();
   const uid = userBucket();
+  if (!uid || !canUsePlatformDocsApi()) return;
+  const ws = currentWorkspaceId();
   const mem = peekPlatformDocMemory<HiddenDoc>(ws, DOC_KIND) ?? {};
   const byUserId = { ...(mem.byUserId ?? {}), [uid]: keys };
   const payload: HiddenDoc = { byUserId };
@@ -45,13 +45,13 @@ export const useMarketHiddenStore = create<MarketHiddenState>((set, get) => ({
 
   hydrate: () => {
     void (async () => {
-      if (!canUsePlatformDocsApi()) {
+      const uid = userBucket();
+      if (!uid || !canUsePlatformDocsApi()) {
         set({ keys: [] });
         return;
       }
       try {
         const remote = await fetchPlatformDoc<HiddenDoc>(currentWorkspaceId(), DOC_KIND);
-        const uid = userBucket();
         const keys = Array.isArray(remote?.byUserId?.[uid]) ? remote.byUserId[uid] : [];
         if (remote) setPlatformDocMemory(currentWorkspaceId(), DOC_KIND, remote);
         set({ keys });

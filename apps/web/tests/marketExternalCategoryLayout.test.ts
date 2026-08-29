@@ -62,7 +62,7 @@ test('用户侧分类精选可跨 taxonomy 选入，并继续服从页面搜索�
   );
 });
 
-test('用户侧所有非全部筛选都显示按当前 Excel 分类排名过滤的更多区域', () => {
+test('用户侧所有非全部筛选都显示分类更多，并以人工排序覆盖 Excel 初始排名', () => {
   assert.match(
     source,
     /const showExternalCategoryMore =\s*isExternalCategory && Boolean\(externalToolLayout\)/,
@@ -75,11 +75,16 @@ test('用户侧所有非全部筛选都显示按当前 Excel 分类排名过滤�
     source,
     /listExternalCategoryRankedMore\(filteredCards, externalType/,
   );
+  assert.match(source, /orderExternalToolsByLayoutIds/);
+  assert.match(source, /categoryLayout\?\.overseasMoreOrderIds \?\? \[\]/);
+  assert.match(source, /categoryLayout\?\.domesticMoreOrderIds \?\? \[\]/);
+  assert.match(source, /rankedMore\.filter\(\(card\) => card\.region === 'overseas'\)/);
+  assert.match(source, /rankedMore\.filter\(\(card\) => card\.region === 'domestic'\)/);
   assert.match(
     source,
     /kind !== 'internal' && \(!isExternalCategory \|\| showExternalCategoryMore\) \? \(/,
   );
-  assert.match(source, /按清单分类排名/);
+  assert.match(source, /人工排序优先 · 新工具按清单分类排名追加/);
   assert.match(source, /showExternalCategoryMore \? '当前分类暂无更多工具。' : emptyHint/);
 });
 

@@ -18,6 +18,7 @@ import {
   LazyMemoryCenterPage,
   LazyPresentationConfigPage,
   LazyPortalContentOpsPage,
+  LazyPortalDataDashboardPage,
   LazyModelCatalogOpsPage,
   LazyExecutionHistoryPage,
   LazyApprovalCenterPage,
@@ -75,6 +76,7 @@ const VIEW_LABELS: Partial<Record<AppView, string>> = {
   presentation: '展示配置',
   'workspace-config': '租户配置',
   'portal-ops': '门户运营',
+  'portal-dashboard': '数据看板',
   'model-ops': '模型配置',
   executions: '执行历史',
   approvals: '审批中心',
@@ -270,6 +272,12 @@ function AppViewRouterContent({ appView, handlers }: AppViewRouterProps) {
       return (
         <LazyView label={label}>
           <LazyPortalContentOpsPage />
+        </LazyView>
+      );
+    case 'portal-dashboard':
+      return (
+        <LazyView label={label}>
+          <LazyPortalDataDashboardPage />
         </LazyView>
       );
     case 'model-ops':

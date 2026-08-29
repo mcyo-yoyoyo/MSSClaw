@@ -76,11 +76,12 @@ export function HomePage({
   const skills = useMarketplaceStore((s) => s.skills);
   const showToast = useMarketplaceStore((s) => s.showToast);
   const user = useSessionStore((s) => s.user);
+  const isGuest = useSessionStore((s) => s.isGuest);
   const executeAllowed = canExecuteChat(user?.platformRole);
   const navPreset = useNavPresentationStore((s) => s.preset);
   const allowScenarioRun = allowsMarketScenarioRun(navPreset);
-  const canRunSkills = allowScenarioRun && executeAllowed && Boolean(onInvokeSkill);
-  const canRunAgents = allowScenarioRun && executeAllowed && Boolean(onInvokeAgent);
+  const canRunSkills = allowScenarioRun && (executeAllowed || isGuest) && Boolean(onInvokeSkill);
+  const canRunAgents = allowScenarioRun && (executeAllowed || isGuest) && Boolean(onInvokeAgent);
   const engagementOf = useContentEngagementStore((s) => s.get);
   const engagementById = useContentEngagementStore((s) => s.byId);
   const bumpView = useContentEngagementStore((s) => s.bumpView);
@@ -365,7 +366,7 @@ export function HomePage({
   return (
     <div className="home-surface flex min-h-0 flex-1 flex-col overflow-y-auto scroll-hidden">
       <div className="page-canvas mx-auto flex w-full flex-1 flex-col overflow-x-visible py-3 md:py-4">
-        {!executeAllowed ? (
+        {!executeAllowed && !isGuest ? (
           <div className="mb-4 rounded-lg border border-amber-200/80 bg-amber-50 px-3 py-2 text-center text-[11px] leading-relaxed text-amber-900">
             当前为只读访客：可浏览货架，不可发起执行或提报
           </div>

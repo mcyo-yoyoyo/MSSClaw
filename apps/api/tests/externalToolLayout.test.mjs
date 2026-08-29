@@ -20,6 +20,8 @@ function validLayout(expectedRevision = 0) {
       search: {
         overseasFeaturedIds: ['tool-overseas-featured'],
         domesticFeaturedIds: ['tool-domestic-featured'],
+        overseasMoreOrderIds: ['tool-overseas-more'],
+        domesticMoreOrderIds: ['tool-domestic-more'],
       },
     },
   };
@@ -84,6 +86,8 @@ test('normalizes IDs, removes duplicates, and keeps only canonical fields', () =
       ' Search ': {
         overseasFeaturedIds: [' tool-a ', 'tool-a', 'tool-b'],
         domesticFeaturedIds: ['tool-b', ' tool-c ', 'tool-c'],
+        overseasMoreOrderIds: ['tool-a', ' tool-d ', 'tool-d'],
+        domesticMoreOrderIds: ['tool-c', 'tool-d', ' tool-e ', 'tool-e'],
         ignored: true,
       },
     },
@@ -101,12 +105,14 @@ test('normalizes IDs, removes duplicates, and keeps only canonical fields', () =
       search: {
         overseasFeaturedIds: ['tool-a', 'tool-b'],
         domesticFeaturedIds: ['tool-c'],
+        overseasMoreOrderIds: ['tool-d'],
+        domesticMoreOrderIds: ['tool-e'],
       },
     },
   });
 });
 
-test('accepts legacy category writes without domesticFeaturedIds and emits both lists', () => {
+test('accepts legacy category writes without additive fields and emits all four lists', () => {
   const legacyInput = validLayout();
   legacyInput.categories.search = {
     overseasFeaturedIds: ['tool-overseas-featured'],
@@ -117,21 +123,39 @@ test('accepts legacy category writes without domesticFeaturedIds and emits both 
   assert.deepEqual(normalized.categories.search, {
     overseasFeaturedIds: ['tool-overseas-featured'],
     domesticFeaturedIds: [],
+    overseasMoreOrderIds: [],
+    domesticMoreOrderIds: [],
   });
 });
 
-test('keeps category regions mutually exclusive with overseas taking priority', () => {
+test('keeps each category tool in only the first list with featured taking priority', () => {
   const input = validLayout();
   input.categories.search = {
     overseasFeaturedIds: ['tool-shared', 'tool-overseas-featured'],
-    domesticFeaturedIds: ['tool-shared', 'tool-domestic-featured'],
+    domesticFeaturedIds: [
+      'tool-shared',
+      'tool-domestic-featured',
+      'tool-cross-more',
+    ],
+    overseasMoreOrderIds: [
+      'tool-shared',
+      'tool-cross-more',
+      'tool-overseas-more',
+    ],
+    domesticMoreOrderIds: [
+      'tool-domestic-featured',
+      'tool-overseas-more',
+      'tool-domestic-more',
+    ],
   };
 
   const normalized = canonicalizeExternalToolLayoutInput(input);
 
   assert.deepEqual(normalized.categories.search, {
     overseasFeaturedIds: ['tool-shared', 'tool-overseas-featured'],
-    domesticFeaturedIds: ['tool-domestic-featured'],
+    domesticFeaturedIds: ['tool-domestic-featured', 'tool-cross-more'],
+    overseasMoreOrderIds: ['tool-overseas-more'],
+    domesticMoreOrderIds: ['tool-domestic-more'],
   });
 });
 
@@ -195,6 +219,13 @@ test('rejects invalid IDs and oversized lists before persistence', () => {
   assert.throws(
     () => canonicalizeExternalToolLayoutInput(invalidDomesticCategory),
     /invalid_external_tool_layout:categories\.search\.domesticFeaturedIds:array_required/,
+  );
+
+  const invalidCategoryMore = validLayout();
+  invalidCategoryMore.categories.search.overseasMoreOrderIds = 'tool-overseas-more';
+  assert.throws(
+    () => canonicalizeExternalToolLayoutInput(invalidCategoryMore),
+    /invalid_external_tool_layout:categories\.search\.overseasMoreOrderIds:array_required/,
   );
 });
 
@@ -276,6 +307,8 @@ test('GET keeps an existing external layout without consulting or applying legac
       search: {
         overseasFeaturedIds: ['tool-custom-overseas'],
         domesticFeaturedIds: ['tool-custom-domestic'],
+        overseasMoreOrderIds: ['tool-custom-overseas-more'],
+        domesticMoreOrderIds: ['tool-custom-domestic-more'],
       },
     },
   };
@@ -294,7 +327,7 @@ test('GET keeps an existing external layout without consulting or applying legac
   assert.equal(prisma.state().seededCreate, null);
 });
 
-test('GET adds an empty domestic category list to legacy data without persisting over it', async () => {
+test('GET adds empty additive category lists to legacy data without persisting over it', async () => {
   const existingPayload = {
     version: 1,
     revision: 7,
@@ -324,13 +357,15 @@ test('GET adds an empty domestic category list to legacy data without persisting
   assert.deepEqual(result.payload.categories.search, {
     overseasFeaturedIds: ['tool-custom-overseas'],
     domesticFeaturedIds: [],
+    overseasMoreOrderIds: [],
+    domesticMoreOrderIds: [],
     operatorNote: 'preserve-me',
   });
   assert.deepEqual(prisma.state().row.payload, existingPayload);
   assert.equal(prisma.state().seededCreate, null);
 });
 
-test('GET does not disguise a malformed stored domestic list as legacy missing data', async () => {
+test('GET does not disguise malformed stored category lists as legacy missing data', async () => {
   const existingPayload = {
     ...SEED_EXTERNAL_TOOL_LAYOUT,
     revision: 4,
@@ -338,6 +373,7 @@ test('GET does not disguise a malformed stored domestic list as legacy missing d
       search: {
         overseasFeaturedIds: ['tool-custom-overseas'],
         domesticFeaturedIds: 'malformed',
+        overseasMoreOrderIds: 'malformed-more',
       },
     },
   };
@@ -352,10 +388,12 @@ test('GET does not disguise a malformed stored domestic list as legacy missing d
   const result = await service.getDoc('ws-test', 'external-tool-layout');
 
   assert.equal(result.payload.categories.search.domesticFeaturedIds, 'malformed');
+  assert.equal(result.payload.categories.search.overseasMoreOrderIds, 'malformed-more');
+  assert.deepEqual(result.payload.categories.search.domesticMoreOrderIds, []);
   assert.deepEqual(prisma.state().row.payload, existingPayload);
 });
 
-test('legacy PUT preserves existing domestic selections but gives new categories an empty list', async () => {
+test('legacy PUT preserves existing category lists but gives new categories empty lists', async () => {
   const existingPayload = {
     ...SEED_EXTERNAL_TOOL_LAYOUT,
     revision: 2,
@@ -363,6 +401,14 @@ test('legacy PUT preserves existing domestic selections but gives new categories
       search: {
         overseasFeaturedIds: ['tool-existing-overseas'],
         domesticFeaturedIds: ['tool-existing-domestic'],
+        overseasMoreOrderIds: [
+          'tool-overseas-featured',
+          'tool-existing-overseas-more',
+        ],
+        domesticMoreOrderIds: [
+          'tool-existing-overseas-more',
+          'tool-existing-domestic-more',
+        ],
       },
     },
   };
@@ -375,6 +421,8 @@ test('legacy PUT preserves existing domestic selections but gives new categories
   const service = new PlatformDocsService(prisma, {});
   const legacyWrite = validLayout(2);
   delete legacyWrite.categories.search.domesticFeaturedIds;
+  delete legacyWrite.categories.search.overseasMoreOrderIds;
+  delete legacyWrite.categories.search.domesticMoreOrderIds;
   legacyWrite.categories.general = {
     overseasFeaturedIds: ['tool-new-overseas'],
   };
@@ -385,10 +433,14 @@ test('legacy PUT preserves existing domestic selections but gives new categories
     search: {
       overseasFeaturedIds: ['tool-overseas-featured'],
       domesticFeaturedIds: ['tool-existing-domestic'],
+      overseasMoreOrderIds: ['tool-existing-overseas-more'],
+      domesticMoreOrderIds: ['tool-existing-domestic-more'],
     },
     general: {
       overseasFeaturedIds: ['tool-new-overseas'],
       domesticFeaturedIds: [],
+      overseasMoreOrderIds: [],
+      domesticMoreOrderIds: [],
     },
   });
   assert.equal(saved.payload.revision, 3);
@@ -424,18 +476,22 @@ test('PUT increments revision and rejects a stale expectedRevision with currentR
   );
 });
 
-test('controller requires a workspace session to read external tool layout', async () => {
+test('controller lets guests read external tool layout without a session', async () => {
+  let meCalls = 0;
   const controller = new PlatformDocsController({
-    me: async () => ({ ok: false, error: '未登录' }),
-    getDoc: async () => {
-      throw new Error('must_not_read');
+    me: async () => {
+      meCalls += 1;
+      return { ok: false, error: '未登录' };
     },
+    getDoc: async (workspaceId, kind) => ({ workspaceId, kind }),
   });
 
-  await assert.rejects(
-    controller.getOne('ws-test', 'external-tool-layout'),
-    (error) => error?.getStatus?.() === 401,
-  );
+  // 游客模式：货架布局是门户展示数据，未登录也要能渲染
+  assert.deepEqual(await controller.getOne('ws-test', 'external-tool-layout'), {
+    workspaceId: 'ws-test',
+    kind: 'external-tool-layout',
+  });
+  assert.equal(meCalls, 0);
 });
 
 test('controller allows members to read but only super admins to write the layout', async () => {
@@ -453,7 +509,7 @@ test('controller allows members to read but only super admins to write the layou
     },
   });
 
-  assert.deepEqual(await controller.getOne('ws-test', 'external-tool-layout', 'Bearer ok'), {
+  assert.deepEqual(await controller.getOne('ws-test', 'external-tool-layout'), {
     workspaceId: 'ws-test',
     kind: 'external-tool-layout',
   });
@@ -472,27 +528,21 @@ test('controller allows members to read but only super admins to write the layou
   assert.deepEqual(savedPayload, validLayout());
 });
 
-test('controller requires a workspace session to read or write internal office scenes', async () => {
+test('controller opens internal office scenes for guest reads but still guards writes', async () => {
   let getCalls = 0;
   let putCalls = 0;
   const controller = new PlatformDocsController({
     me: async () => ({ ok: false, error: '未登录' }),
     getDoc: async () => {
       getCalls += 1;
+      return { ok: true };
     },
     putDoc: async () => {
       putCalls += 1;
     },
   });
 
-  await assert.rejects(
-    controller.getOne('ws-test', 'internal-office-scenes'),
-    (error) => {
-      assert.equal(error?.getStatus?.(), 401);
-      assert.equal(error?.getResponse?.().message, '未登录');
-      return true;
-    },
-  );
+  assert.deepEqual(await controller.getOne('ws-test', 'internal-office-scenes'), { ok: true });
   await assert.rejects(
     controller.putOne('ws-test', 'internal-office-scenes', { payload: { entries: [] } }),
     (error) => {
@@ -501,7 +551,7 @@ test('controller requires a workspace session to read or write internal office s
       return true;
     },
   );
-  assert.equal(getCalls, 0);
+  assert.equal(getCalls, 1);
   assert.equal(putCalls, 0);
 });
 

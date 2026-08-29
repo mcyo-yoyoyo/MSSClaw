@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { GuestGateLock } from '@/components/auth/GuestGateLock';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { CenterModal } from '@/components/center/CenterShell';
 import { ProjectDocsGallery } from '@/components/content/ProjectDocsGallery';
@@ -16,6 +17,7 @@ import {
 } from '@/domain/scenarioEnv';
 import type { ScenarioDemoPlan } from '@/domain/scenarioPipeline';
 import { ARCHITECTURE_DOC_KIND_LABELS } from '@/domain/scenarioArchitecture';
+import { requireLogin } from '@/stores/authGateStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import {
   EXECUTION_TRUST_META,
@@ -197,7 +199,8 @@ export function MarketAgentDetailModal({
   ];
 
   const handleDownload = () => {
-    onDownload();
+    const run = () => onDownload();
+    if (requireLogin('download', run)) run();
   };
 
   const handleRun = () => {
@@ -304,9 +307,13 @@ export function MarketAgentDetailModal({
           <div className="flex items-center gap-1">
             <button
               type="button"
-              onClick={() => toggleLike(scenarioId)}
+              onClick={() => {
+                const contentId = scenarioId;
+                const run = () => toggleLike(contentId);
+                if (requireLogin('like', run)) run();
+              }}
               className={cn(
-                'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition',
+                'relative inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition',
                 vote === 'like'
                   ? 'bg-sky-50 text-sky-800'
                   : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700',
@@ -314,12 +321,17 @@ export function MarketAgentDetailModal({
             >
               <i className="fa-solid fa-thumbs-up text-[10px]" />
               {formatToolInvokes(eng.likes)}
+              <GuestGateLock />
             </button>
             <button
               type="button"
-              onClick={() => toggleDislike(scenarioId)}
+              onClick={() => {
+                const contentId = scenarioId;
+                const run = () => toggleDislike(contentId);
+                if (requireLogin('dislike', run)) run();
+              }}
               className={cn(
-                'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition',
+                'relative inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition',
                 vote === 'dislike'
                   ? 'bg-zinc-100 text-zinc-800'
                   : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700',
@@ -327,6 +339,7 @@ export function MarketAgentDetailModal({
             >
               <i className="fa-solid fa-thumbs-down text-[10px]" />
               {formatToolInvokes(eng.dislikes)}
+              <GuestGateLock />
             </button>
           </div>
           <div className="flex items-center gap-2">

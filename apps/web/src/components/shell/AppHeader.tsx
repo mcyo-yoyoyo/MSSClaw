@@ -14,6 +14,8 @@ import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useSessionStore } from '@/stores/sessionStore';
+import { useAuthGateStore } from '@/stores/authGateStore';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 const TOP_SHELF_NAV: { view: AppView; label: string }[] = [
   { view: 'home', label: '首页' },
@@ -41,6 +43,8 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
   const expandAdminNav = useAppViewStore((s) => s.expandAdminNav);
   const openPalette = useCommandPaletteStore((s) => s.openPalette);
   const isViewEnabled = useNavPresentationStore((s) => s.isViewEnabled);
+  const roleEnabled = useNavPresentationStore((s) => s.roleEnabled);
+  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const pendingToolId = useNavigationIntentStore((s) => s.pendingToolId);
   const returnTarget = useNavigationIntentStore((s) => s.returnTarget);
   const tools = useMarketplaceStore((s) => s.tools);
@@ -60,10 +64,12 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
       : 'market-external';
   }, [appView, returnTarget, tools, pendingToolId]);
   const user = useSessionStore((s) => s.user);
+  const isGuest = useSessionStore((s) => s.isGuest);
+  const requestLogin = useAuthGateStore((s) => s.requestLogin);
   const isOpsShell = defaultShellPerspective(user?.platformRole) === 'ops';
   const adminItems = useMemo(
     () => ADMIN_MENU_ITEMS.filter((i) => isViewEnabled(i.view)),
-    [isViewEnabled],
+    [isViewEnabled, roleEnabled, user?.platformRole, workspaceId],
   );
   const canOpenAdmin = isOpsShell && adminItems.length > 0;
   const adminActive = isOpsOnlyView(appView);
@@ -146,6 +152,7 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
         >
           <i className="fa-solid fa-magnifying-glass text-[13px]" />
         </button>
+        {isGuest ? null : (
         <button
           type="button"
           onClick={(e) => {
@@ -171,21 +178,35 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
             </span>
           ) : null}
         </button>
-        <button
-          type="button"
-          onClick={() => goView('me')}
-          onMouseEnter={() => ROUTE_PREFETCH.me?.()}
-          className={cn(
-            'flex h-9 w-9 items-center justify-center rounded-lg transition',
-            appView === 'me' || appView === 'ai-tasks'
-              ? 'bg-zinc-100 text-zinc-900'
-              : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900',
-          )}
-          title="个人中心"
-          aria-label="个人中心"
-        >
-          <i className="fa-solid fa-circle-user text-[16px]" />
-        </button>
+        )}
+        {isGuest ? (
+          /* 游客：消息与个人中心收起，只给一个明确的登录入口 */
+          <button
+            type="button"
+            onClick={() => requestLogin('account')}
+            className="flex h-9 items-center gap-1.5 rounded-lg bg-[#e0122f] px-3 text-[12px] font-semibold text-white transition hover:bg-[#c01028]"
+            title="登录"
+          >
+            <i className="fa-solid fa-arrow-right-to-bracket text-[12px]" />
+            登录
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => goView('me')}
+            onMouseEnter={() => ROUTE_PREFETCH.me?.()}
+            className={cn(
+              'flex h-9 w-9 items-center justify-center rounded-lg transition',
+              appView === 'me' || appView === 'ai-tasks'
+                ? 'bg-zinc-100 text-zinc-900'
+                : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900',
+            )}
+            title="个人中心"
+            aria-label="个人中心"
+          >
+            <i className="fa-solid fa-circle-user text-[16px]" />
+          </button>
+        )}
       </div>
     </header>
   );

@@ -30,6 +30,7 @@ const OFFICE_SCENE_RANK_TABS = [
 ];
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import { ShelfSectionHead } from '@/components/market/ShelfRankSelect';
+import { requireLogin } from '@/stores/authGateStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
@@ -1149,14 +1150,18 @@ function SceneCardStats({
   const onToggleFavorite = (e: { stopPropagation: () => void }) => {
     e.stopPropagation();
     if (!primary) return;
-    const on = toggleFavorite({
+    const item = {
       id: primary.id,
       kind: 'internal',
       title: primary.name,
       icon: 'fa-cube',
       logoUrl: primary.logoUrl,
-    });
-    showToast(on ? `已收藏：${primary.name}` : `已取消收藏：${primary.name}`);
+    } as const;
+    const run = () => {
+      const on = toggleFavorite(item);
+      showToast(on ? `已收藏：${item.title}` : `已取消收藏：${item.title}`);
+    };
+    if (requireLogin('favorite', run)) run();
   };
 
   if (interactionMode === 'preview') {
@@ -1226,7 +1231,8 @@ function SceneCardStats({
         type="button"
         onClick={(ev) => {
           ev.stopPropagation();
-          toggleLike(engagementId);
+          const run = () => toggleLike(engagementId);
+          if (requireLogin('like', run)) run();
         }}
         title="点赞"
         aria-pressed={userVote === 'like'}
@@ -1242,7 +1248,8 @@ function SceneCardStats({
         type="button"
         onClick={(ev) => {
           ev.stopPropagation();
-          toggleDislike(engagementId);
+          const run = () => toggleDislike(engagementId);
+          if (requireLogin('dislike', run)) run();
         }}
         title="点踩"
         aria-pressed={userVote === 'dislike'}

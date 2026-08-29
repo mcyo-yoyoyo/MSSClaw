@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { GuestGateLock } from '@/components/auth/GuestGateLock';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { CenterModal } from '@/components/center/CenterShell';
 import { resolveToolLogoUrl } from '@/domain/toolLogo';
@@ -12,6 +13,7 @@ import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { TOOL_EXTERNAL_WARNING_RULES } from '@/domain/externalToolDelivery';
 import { useRecentMarketStore } from '@/stores/recentMarketStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
+import { requireLogin } from '@/stores/authGateStore';
 
 function resolveToolKind(tool: PrototypeToolSeed | null): MarketShelfKind {
   if (tool?.sourceType === 'internal' || tool?.tags?.includes('hw-internal')) {
@@ -120,14 +122,18 @@ export function MarketToolDetailModal({
   const onToggleFavorite = () => {
     if (previewOnly) return;
     if (!tool) return;
-    const on = toggleFavorite({
+    const item = {
       id: tool.id,
       kind,
       title: tool.name,
       icon: tool.icon,
       logoUrl: resolveToolLogoUrl(tool),
-    });
-    showToast(on ? `已收藏：${tool.name}` : `已取消收藏：${tool.name}`);
+    };
+    const run = () => {
+      const on = toggleFavorite(item);
+      showToast(on ? `已收藏：${item.title}` : `已取消收藏：${item.title}`);
+    };
+    if (requireLogin('favorite', run)) run();
   };
 
   if (!tool) {
@@ -248,7 +254,7 @@ export function MarketToolDetailModal({
                 type="button"
                 onClick={onToggleFavorite}
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition',
+                  'relative inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition',
                   isFav
                     ? 'bg-amber-50 text-amber-700'
                     : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700',
@@ -256,6 +262,7 @@ export function MarketToolDetailModal({
               >
                 <i className={cn(isFav ? 'fa-solid fa-star' : 'fa-regular fa-star', 'text-[10px]')} />
                 {isFav ? '已收藏' : '收藏'}
+                <GuestGateLock />
               </button>
             )}
             <div className="flex items-center justify-end gap-2">

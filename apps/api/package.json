@@ -10,6 +10,8 @@
     "test:ai-brief-dedupe": "npm run build --silent && node --test tests/aiBriefEmailRecipients.test.mjs",
     "test:ai-news-sync": "npm run build --silent && node --test tests/aiDailyNewsSync.test.mjs",
     "test:external-tool-layout": "npm run build --silent && node --test tests/externalToolLayout.test.mjs",
+    "test:market-engagement-auth": "npm run build --silent && node --test tests/marketEngagementAuth.test.mjs",
+    "test:portal-analytics": "npm run build --silent && node --test tests/portalAnalyticsGuest.test.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed"

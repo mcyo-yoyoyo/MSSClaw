@@ -64,6 +64,8 @@ import {
 import { AgentPortrait } from '@/components/brand/AgentPortrait';
 import { cn } from '@/lib/utils';
 import { useTemporaryWorkspaceBlobs } from '@/hooks/useTemporaryWorkspaceBlobs';
+import { useSessionStore } from '@/stores/sessionStore';
+import { requireLogin } from '@/stores/authGateStore';
 
 export type AgentEditorTarget = string | 'new' | null;
 
@@ -145,6 +147,7 @@ function normalizeAgent(agent: PrototypeAgentSeed): PrototypeAgentSeed {
 interface AgentEditorModalProps {
   target: AgentEditorTarget;
   onClose: () => void;
+  onLoginReplay?: (target: Exclude<AgentEditorTarget, null>) => void;
 }
 
 /** 多行文本 → 草稿数组：保存时再统一去空白，避免输入回车后空行被立即吞掉。 */
@@ -161,7 +164,8 @@ function compactObject<T extends object>(value: T): T | undefined {
   return Object.values(value).some((item) => item !== undefined) ? value : undefined;
 }
 
-export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
+export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditorModalProps) {
+  const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
   const agents = useMarketplaceStore((s) => s.agents);
   const skills = useMarketplaceStore((s) => s.skills);
   const upsertAgent = useMarketplaceStore((s) => s.upsertAgent);
@@ -325,6 +329,13 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
     setForm(existing ? normalizeAgent(existing) : emptyAgent());
   }, [target, agents]);
 
+  useEffect(() => {
+    if (!target || isAuthenticated) return;
+    const replayTarget = target;
+    onClose();
+    requireLogin('submit-agent', () => onLoginReplay?.(replayTarget));
+  }, [isAuthenticated, onClose, onLoginReplay, target]);
+
   /** 与「配置Skill」共用 marketplaceStore.skills，实时同步 */
   const mountableSkills = useMemo(() => {
     const q = skillQuery.trim().toLowerCase();
@@ -362,7 +373,7 @@ export function AgentEditorModal({ target, onClose }: AgentEditorModalProps) {
     [form.skillIds, skills],
   );
 
-  if (!target) return null;
+  if (!target || !isAuthenticated) return null;
 
   const isNew = target === 'new';
   const title = isNew

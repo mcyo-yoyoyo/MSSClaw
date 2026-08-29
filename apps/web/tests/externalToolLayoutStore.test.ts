@@ -18,6 +18,11 @@ type ExternalLayoutStoreState = {
     key: 'overseasFeaturedIds',
     ids: readonly string[],
   ) => void;
+  setCategoryList: (
+    categoryId: string,
+    ids: readonly string[],
+    key: 'overseasMoreOrderIds' | 'domesticMoreOrderIds',
+  ) => void;
 };
 
 type ExternalLayoutStore = {
@@ -114,6 +119,70 @@ test('一次拖放无需进入编辑模式即可生成草稿并完成一次 CAS 
     'tool-gemini',
     'tool-claude',
   ]);
+  assert.equal(layoutStore.getState().draft, null);
+  assert.equal(layoutStore.getState().dirty, false);
+  assert.equal(layoutStore.getState().saving, false);
+});
+
+test('分类更多排序生成完整分类草稿并完成一次 CAS 自动保存', async () => {
+  const workspaceId = 'ws-external-category-more-auto-save';
+  let serverDocument = createEmptyExternalToolLayoutDocument(8);
+  let putCalls = 0;
+  let getCalls = 0;
+
+  globalThis.fetch = (async (_input, init) => {
+    if (init?.method === 'PUT') {
+      putCalls += 1;
+      const body = JSON.parse(String(init.body)) as {
+        payload: ExternalToolLayoutDocument & { expectedRevision: number };
+      };
+      assert.equal(body.payload.expectedRevision, 8);
+      assert.deepEqual(body.payload.categories.search, {
+        overseasFeaturedIds: [],
+        domesticFeaturedIds: [],
+        overseasMoreOrderIds: ['tool-perplexity', 'tool-chatgpt'],
+        domesticMoreOrderIds: [],
+      });
+      serverDocument = {
+        version: 1,
+        revision: 9,
+        all: body.payload.all,
+        categories: body.payload.categories,
+      };
+      return jsonResponse({ payload: serverDocument });
+    }
+    getCalls += 1;
+    return jsonResponse({ payload: serverDocument });
+  }) as typeof fetch;
+
+  workspaceStore.setState({
+    workspaceId,
+    apiConnected: true,
+    apiStatus: 'connected',
+  });
+  assert.equal(await layoutStore.getState().hydrate(workspaceId), true);
+
+  layoutStore
+    .getState()
+    .setCategoryList(
+      'search',
+      ['tool-perplexity', 'tool-chatgpt'],
+      'overseasMoreOrderIds',
+    );
+  assert.equal(layoutStore.getState().dirty, true);
+  assert.deepEqual(
+    layoutStore.getState().draft?.categories.search?.overseasMoreOrderIds,
+    ['tool-perplexity', 'tool-chatgpt'],
+  );
+
+  assert.equal(await layoutStore.getState().saveDraft(), true);
+  assert.equal(putCalls, 1);
+  assert.equal(getCalls, 2);
+  assert.equal(layoutStore.getState().document?.revision, 9);
+  assert.deepEqual(
+    layoutStore.getState().document?.categories.search?.overseasMoreOrderIds,
+    ['tool-perplexity', 'tool-chatgpt'],
+  );
   assert.equal(layoutStore.getState().draft, null);
   assert.equal(layoutStore.getState().dirty, false);
   assert.equal(layoutStore.getState().saving, false);

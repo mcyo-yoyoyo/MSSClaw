@@ -5,7 +5,6 @@ import {
   normalizeEngagement,
   type ContentEngagement,
 } from '@/domain/contentEngagement';
-import { getCurrentUserId } from '@/domain/currentUser';
 import { canUsePlatformDocsApi, currentWorkspaceId } from '@/api/platformDocsApi';
 import {
   fetchMarketEngagementApi,
@@ -45,11 +44,7 @@ function runMutation(
   active?: boolean,
 ) {
   if (!canUsePlatformDocsApi()) return;
-  void mutateMarketEngagementApi(currentWorkspaceId(), id, {
-    action,
-    userId: getCurrentUserId() || 'anonymous',
-    active,
-  })
+  void mutateMarketEngagementApi(currentWorkspaceId(), id, { action, active })
     .then((result) => {
       const engagement = normalizeEngagement(result.engagement);
       set((state) => ({
@@ -77,10 +72,7 @@ export const useContentEngagementStore = create<ContentEngagementState>((set, ge
         return;
       }
       try {
-        const remote = await fetchMarketEngagementApi(
-          currentWorkspaceId(),
-          getCurrentUserId() || 'anonymous',
-        );
+        const remote = await fetchMarketEngagementApi(currentWorkspaceId());
         const byId = Object.fromEntries(
           Object.entries(remote.byId ?? {}).map(([id, value]) => [
             id,

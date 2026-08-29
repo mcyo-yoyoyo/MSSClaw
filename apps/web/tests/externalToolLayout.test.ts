@@ -11,14 +11,24 @@ import {
   parseExternalToolLayoutDocument,
   removeExternalToolCategoryFeatured,
   reorderExternalToolCategoryFeatured,
+  reorderExternalToolCategoryList,
   reorderExternalToolLayoutAllList,
   setExternalToolCategoryFeatured,
+  setExternalToolCategoryList,
   setExternalToolLayoutAllList,
   toExternalToolLayoutSavePayload,
   type ExternalToolLayoutAllListKey,
+  type ExternalToolCategoryListKey,
 } from '../src/domain/externalToolLayout.ts';
 
 const ALL_KEYS: ExternalToolLayoutAllListKey[] = [
+  'overseasFeaturedIds',
+  'domesticFeaturedIds',
+  'overseasMoreOrderIds',
+  'domesticMoreOrderIds',
+];
+
+const CATEGORY_KEYS: ExternalToolCategoryListKey[] = [
   'overseasFeaturedIds',
   'domesticFeaturedIds',
   'overseasMoreOrderIds',
@@ -53,6 +63,8 @@ test('remote parsing trims and de-duplicates IDs without inventing fallback rank
       general: {
         overseasFeaturedIds: ['claude', ' chatgpt '],
         domesticFeaturedIds: ['doubao', 'claude'],
+        overseasMoreOrderIds: ['chatgpt', 'perplexity'],
+        domesticMoreOrderIds: ['doubao', 'kimi'],
       },
       // Backward compatibility for snapshots written before domestic support.
       search: { overseasFeaturedIds: [] },
@@ -64,8 +76,12 @@ test('remote parsing trims and de-duplicates IDs without inventing fallback rank
   assert.deepEqual(parsed.all.domesticMoreOrderIds, ['kimi']);
   assert.deepEqual(parsed.categories.general?.overseasFeaturedIds, ['claude', 'chatgpt']);
   assert.deepEqual(parsed.categories.general?.domesticFeaturedIds, ['doubao']);
+  assert.deepEqual(parsed.categories.general?.overseasMoreOrderIds, ['perplexity']);
+  assert.deepEqual(parsed.categories.general?.domesticMoreOrderIds, ['kimi']);
   assert.deepEqual(parsed.categories.search?.overseasFeaturedIds, []);
   assert.deepEqual(parsed.categories.search?.domesticFeaturedIds, []);
+  assert.deepEqual(parsed.categories.search?.overseasMoreOrderIds, []);
+  assert.deepEqual(parsed.categories.search?.domesticMoreOrderIds, []);
 });
 
 test('remote parsing de-duplicates all four lists by canonical cross-region priority', () => {
@@ -215,8 +231,20 @@ test('parked slots are recalculated against configured anchors that still surviv
   );
 });
 
-test('category featured lists are isolated by category and region', () => {
+test('category featured and more lists are isolated, sortable, and mutually exclusive', () => {
   let layout = createEmptyExternalToolLayoutDocument();
+  layout = setExternalToolCategoryList(
+    layout,
+    'general',
+    ['more-a', 'more-b', 'more-c'],
+    'overseasMoreOrderIds',
+  );
+  layout = setExternalToolCategoryList(
+    layout,
+    'general',
+    ['domestic-more-a', 'domestic-more-b'],
+    'domesticMoreOrderIds',
+  );
   layout = setExternalToolCategoryFeatured(layout, 'general', ['a', 'b']);
   layout = setExternalToolCategoryFeatured(
     layout,
@@ -230,6 +258,24 @@ test('category featured lists are isolated by category and region', () => {
   assert.deepEqual(layout.categories.general?.domesticFeaturedIds, [
     'domestic-a',
     'domestic-b',
+  ]);
+  assert.deepEqual(layout.categories.general?.overseasMoreOrderIds, [
+    'more-a',
+    'more-b',
+    'more-c',
+  ]);
+
+  layout = reorderExternalToolCategoryList(
+    layout,
+    'general',
+    'more-c',
+    'more-a',
+    'overseasMoreOrderIds',
+  );
+  assert.deepEqual(layout.categories.general?.overseasMoreOrderIds, [
+    'more-c',
+    'more-a',
+    'more-b',
   ]);
 
   layout = reorderExternalToolCategoryFeatured(layout, 'general', 'b', 'a');
@@ -318,6 +364,8 @@ test('setting a category region wins and removes duplicate IDs from the other re
   assert.deepEqual(layout.categories.general, {
     overseasFeaturedIds: ['overseas'],
     domesticFeaturedIds: ['shared', 'domestic'],
+    overseasMoreOrderIds: [],
+    domesticMoreOrderIds: [],
   });
 });
 
@@ -368,10 +416,12 @@ test('clone and save payload do not mutate the confirmed snapshot', () => {
   clone.all.overseasFeaturedIds.push('b');
   clone.categories.general?.overseasFeaturedIds.push('b');
   clone.categories.general?.domesticFeaturedIds.push('domestic-a');
+  clone.categories.general?.overseasMoreOrderIds.push('more-a');
 
   assert.deepEqual(document.all.overseasFeaturedIds, ['a']);
   assert.deepEqual(document.categories.general?.overseasFeaturedIds, ['a']);
   assert.deepEqual(document.categories.general?.domesticFeaturedIds, []);
+  assert.deepEqual(document.categories.general?.overseasMoreOrderIds, []);
   assert.equal(externalToolLayoutsEqual(document, clone), false);
 
   const payload = toExternalToolLayoutSavePayload(clone, document.revision);
@@ -382,5 +432,7 @@ test('clone and save payload do not mutate the confirmed snapshot', () => {
   assert.deepEqual(payload.categories.general, {
     overseasFeaturedIds: ['a', 'b'],
     domesticFeaturedIds: ['domestic-a'],
+    overseasMoreOrderIds: ['more-a'],
+    domesticMoreOrderIds: [],
   });
 });

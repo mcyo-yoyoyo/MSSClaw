@@ -45,6 +45,7 @@ const VIEW_RBAC: Partial<Record<AppView, { module: ResourceModule; min: Permissi
   presentation: { module: 'settings', min: 'admin' },
   'workspace-config': { module: 'settings', min: 'admin' },
   'portal-ops': { module: 'settings', min: 'admin' },
+  'portal-dashboard': { module: 'settings', min: 'admin' },
   'model-ops': { module: 'settings', min: 'admin' },
   approvals: { module: 'agent', min: 'write' },
   executions: { module: 'agent', min: 'read' },

@@ -65,12 +65,16 @@ model PortalPageView {
   dateKey     String
   routeKey    String
   visitorHash String
+  visitorType String   @default("user")
+  journeyHash String?
   occurredAt  DateTime @default(now())
 
   @@id([workspaceId, eventId])
   @@index([workspaceId, dateKey])
   @@index([workspaceId, dateKey, routeKey])
   @@index([workspaceId, dateKey, visitorHash])
+  @@index([workspaceId, dateKey, visitorType])
+  @@index([workspaceId, dateKey, journeyHash])
 }
 
 /// 每日成功登录账号。复合主键保证同一账号当天重复登录只计为一人。
@@ -82,6 +86,25 @@ model PortalDailyLogin {
 
   @@id([workspaceId, dateKey, visitorHash])
   @@index([workspaceId, dateKey])
+}
+
+/// 游客登录墙与成功登录事件。journeyHash 关联同一浏览器，原始 visitorId 不落库。
+model PortalConversionEvent {
+  workspaceId String
+  eventId     String
+  dateKey     String
+  eventType   String
+  action      String?
+  routeKey    String?
+  journeyHash String
+  userHash    String?
+  occurredAt  DateTime @default(now())
+
+  @@id([workspaceId, eventId])
+  @@index([workspaceId, dateKey, eventType])
+  @@index([workspaceId, dateKey, journeyHash])
+  @@index([workspaceId, dateKey, action])
+  @@index([workspaceId, journeyHash, eventType, occurredAt])
 }
 
 /// AI 快讯邮件订阅。每个工作区内每位用户只有一条当前有效订阅。

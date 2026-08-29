@@ -31,7 +31,6 @@ import { PortalHowToOpsPanel } from '@/features/ops/PortalHowToOpsPanel';
 import { PortalMarketFeaturedPanel } from '@/features/ops/PortalMarketFeaturedPanel';
 import { PortalToolOpsPanel } from '@/features/ops/PortalToolOpsPanel';
 import { PortalStationAnnouncePanel } from '@/features/ops/PortalStationAnnouncePanel';
-import { PortalTrafficPanel } from '@/features/ops/PortalTrafficPanel';
 import { PortalAiNewsPanel } from '@/features/ops/PortalAiNewsPanel';
 import { PortalSceneCategoryPanel } from '@/features/ops/PortalSceneCategoryPanel';
 import { PortalBuildStatsCopyPanel } from '@/features/ops/PortalBuildStatsCopyPanel';
@@ -52,7 +51,6 @@ type OpsSurface =
   | 'featured'
   | 'tools'
   | 'extaxonomy'
-  | 'traffic'
   | 'announce'
   | 'ainews'
   | 'aibrief'
@@ -254,9 +252,7 @@ export function PortalContentOpsPage() {
                   ? '工具运营 · 点击卡片查看详情，拖拽后自动保存'
                 : opsSurface === 'extaxonomy'
                   ? '货架运营 · 外精选工具类型与工作场景字典'
-                  : opsSurface === 'traffic'
-                    ? '站点数据 · PV / UV 访问概览'
-                    : opsSurface === 'announce'
+                  : opsSurface === 'announce'
                       ? '站点触达 · 首页站内公告跑马灯'
                       : opsSurface === 'ainews'
                         ? '站点触达 · 每日 / 每周 AI 新闻'
@@ -286,10 +282,6 @@ export function PortalContentOpsPage() {
             ) : opsSurface === 'extaxonomy' ? (
               <>
                 调整外精选筛选条上的工具类型与工作场景名称、可见性、顺序及场景关联类型。编码保持稳定以兼容工具主数据。
-              </>
-            ) : opsSurface === 'traffic' ? (
-              <>
-                查看门户页面 PV、区间去重 UV、每日趋势与页面明细。统计按北京时间切日，历史数据自功能上线日起记录。
               </>
             ) : opsSurface === 'announce' ? (
               <>
@@ -368,7 +360,6 @@ export function PortalContentOpsPage() {
               { id: 'tools' as const, label: '工具运营', group: '货架' },
               { id: 'extaxonomy' as const, label: '外精选分类', group: '货架' },
               { id: 'howto' as const, label: '工具 How to', group: '货架' },
-              { id: 'traffic' as const, label: '访问数据', group: '站点' },
               { id: 'announce' as const, label: '站内公告', group: '站点' },
               { id: 'ainews' as const, label: 'AI新闻', group: '站点' },
               { id: 'aibrief' as const, label: 'AI快讯邮件', group: '站点' },
@@ -392,7 +383,7 @@ export function PortalContentOpsPage() {
           ))}
         </div>
         <p className="mb-4 text-[10px] leading-relaxed text-zinc-400">
-          分组：场景（内容/分类）→ 货架（上架 / 内部办公场景查看 / 外部工具排序精选 / 外精选分类 / How to）→ 站点（访问数据/公告/AI新闻/AI快讯邮件/建设口径）。工具主数据仍在「配置工具」。
+          分组：场景（内容/分类）→ 货架（上架 / 内部办公场景查看 / 外部工具排序精选 / 外精选分类 / How to）→ 站点（公告/AI新闻/AI快讯邮件/建设口径）。访问与互动指标请到左侧「数据看板」。工具主数据仍在「配置工具」。
         </p>
 
         {howtoToast ? (
@@ -407,7 +398,6 @@ export function PortalContentOpsPage() {
           <PortalToolOpsPanel />
         ) : null}
         {opsSurface === 'extaxonomy' ? <PortalExternalTaxonomyPanel /> : null}
-        {opsSurface === 'traffic' ? <PortalTrafficPanel /> : null}
         {opsSurface === 'announce' ? <PortalStationAnnouncePanel /> : null}
         {opsSurface === 'ainews' ? <PortalAiNewsPanel /> : null}
         {opsSurface === 'aibrief' ? <PortalAiBriefEmailPanel /> : null}

@@ -357,11 +357,14 @@ export class PersistenceService {
     return payload;
   }
 
+  /** userId 为空表示游客：只返回聚合计数，不带个人投票/收藏态 */
   async getMarketEngagement(workspaceId: string, userId: string) {
     await this.migrateLegacyMarketEngagement(workspaceId);
     const [metrics, interactions] = await Promise.all([
       this.prisma.marketEngagement.findMany({ where: { workspaceId } }),
-      this.prisma.marketUserInteraction.findMany({ where: { workspaceId, userId } }),
+      userId
+        ? this.prisma.marketUserInteraction.findMany({ where: { workspaceId, userId } })
+        : Promise.resolve([]),
     ]);
     return {
       byId: Object.fromEntries(metrics.map((row) => [row.contentId, this.toEngagement(row)])),
@@ -377,7 +380,8 @@ export class PersistenceService {
     contentId: string,
     input: { action: MarketEngagementAction; userId: string; active?: boolean },
   ) {
-    const userId = input.userId || 'anonymous';
+    // 游客（userId 为空）只允许 view / use 纯计数，控制器已拦截其余动作
+    const userId = input.userId;
     await this.migrateLegacyMarketEngagement(workspaceId);
 
     return this.prisma.$transaction(async (tx) => {
@@ -386,9 +390,11 @@ export class PersistenceService {
         create: { workspaceId, contentId },
         update: {},
       });
-      let interaction = await tx.marketUserInteraction.findUnique({
-        where: { workspaceId_userId_contentId: { workspaceId, userId, contentId } },
-      });
+      let interaction = userId
+        ? await tx.marketUserInteraction.findUnique({
+            where: { workspaceId_userId_contentId: { workspaceId, userId, contentId } },
+          })
+        : null;
 
       if (input.action === 'view' || input.action === 'use' || input.action === 'download') {
         const field = input.action === 'view' ? 'views' : input.action === 'use' ? 'uses' : 'downloads';

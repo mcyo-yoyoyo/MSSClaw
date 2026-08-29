@@ -67,14 +67,16 @@ test('工具运营内部页复用用户侧卡片并启用精简自动保存视�
   );
 });
 
-test('工具运营入口不再提供额外维护模式与上架跳转', () => {
+test('工具运营入口仅保留精选成员操作，不再提供额外维护模式与上架跳转', () => {
   assert.doesNotMatch(portalPanelSource, /上架管理/);
   assert.doesNotMatch(portalPanelSource, /onOpenShelfOps/);
   assert.doesNotMatch(
     portalPanelSource,
-    />\s*(?:维护排序|保存布局|加入精选|移出精选)\s*</,
-    '不能渲染额外维护按钮；业务规则注释不属于用户可见入口',
+    />\s*(?:维护排序|保存布局)\s*</,
+    '不能恢复额外维护模式或手动保存入口',
   );
+  assert.match(portalPanelSource, /['"]加入精选['"]/);
+  assert.match(portalPanelSource, /['"]移出精选['"]/);
 });
 
 test('独立配置入口保留完整维护模式', () => {
@@ -181,7 +183,7 @@ test('嵌入版复用已加载快照并自动更新无改动草稿', () => {
   );
 });
 
-test('外部工具全部筛选维护四个独立列表并在拖放后立即保存', () => {
+test('外部工具全部筛选维护四个独立列表并在操作后立即保存', () => {
   assert.match(portalPanelSource, /useExternalToolLayoutStore/);
   for (const listId of [
     'overseasFeaturedIds',
@@ -198,12 +200,18 @@ test('外部工具全部筛选维护四个独立列表并在拖放后立即保�
   assert.match(portalPanelSource, /const activeLayout:[\s\S]*?layoutDraft \?\? layoutDocument/);
   assert.match(
     portalPanelSource,
-    /const commitExternalDrop = async[\s\S]*?if \(!accepted\) return;[\s\S]*?await saveLayoutDraft\(\)/,
+    /const persistExternalLayoutChange = async[\s\S]*?await saveLayoutDraft\(\)/,
+    '按钮与排序必须共用同一条自动保存链路',
+  );
+  assert.match(
+    portalPanelSource,
+    /const changeFeaturedMembership =[\s\S]*?void persistExternalLayoutChange\(/,
+    '加入和移出精选不能只改本地状态，必须进入自动保存链路',
   );
   assert.equal(
     [...portalPanelSource.matchAll(/saveLayoutDraft\(\)/g)].length,
     1,
-    '一次拖放只能触发一次自动保存',
+    '加入、移出或一次拖放都只能经由一个自动保存出口',
   );
   assert.match(portalPanelSource, /const handleExternalPointerDrop =/);
   assert.match(
@@ -212,17 +220,12 @@ test('外部工具全部筛选维护四个独立列表并在拖放后立即保�
   );
   assert.match(
     portalPanelSource,
-    /resolveExternalDropTarget\(\s*selectedType,\s*drag,\s*candidate,?\s*\)/,
-    '实时让位与松手提交必须继续复用精选拖出剔除规则',
-  );
-  assert.match(
-    portalPanelSource,
     /const externalDragEnabled = Boolean\(activeLayout\) && !layoutLoading && !layoutSaving/,
-    '保存期间必须锁住拖拽，避免第二次修改被 store 静默忽略',
+    '保存期间必须锁住按钮和排序，避免第二次修改被 store 静默忽略',
   );
   assert.match(
     portalPanelSource,
-    /failedState\.workspaceId !== startedWorkspaceId[\s\S]*?cancelLayoutEdit\(\)[\s\S]*?hydrateLayout\(startedWorkspaceId\)/,
+    /failedState\.workspaceId !== expectedWorkspaceId[\s\S]*?cancelLayoutEdit\(\)[\s\S]*?hydrateLayout\(expectedWorkspaceId\)/,
     '自动保存失败后必须按工作区保护清理旧草稿并刷新服务器版本',
   );
 });
@@ -302,7 +305,7 @@ test('分类精选从全库解析，更多按当前分类排名过滤并排除�
   );
   assert.match(
     portalPanelSource,
-    /const categoryOverseasMore = categoryRankedMore\.filter\([\s\S]*?card\.region === 'overseas'[\s\S]*?const categoryDomesticMore = categoryRankedMore\.filter\([\s\S]*?card\.region === 'domestic'/,
+    /const categoryOverseasMore = orderExternalToolsByLayoutIds\([\s\S]*?categoryRankedMore\.filter\(\(card\) => card\.region === 'overseas'\)[\s\S]*?const categoryDomesticMore = orderExternalToolsByLayoutIds\([\s\S]*?categoryRankedMore\.filter\(\(card\) => card\.region === 'domestic'\)/,
     '分类更多必须把排名候选按地区拆分',
   );
   assert.doesNotMatch(
@@ -325,35 +328,83 @@ test('分类精选从全库解析，更多按当前分类排名过滤并排除�
     /items=\{visibleMore\(categoryOverseasMore\)\}[\s\S]*?items=\{visibleMore\(categoryDomesticMore\)\}/,
     '分类搜索不能重新引入未排名或已精选工具',
   );
-  assert.match(portalPanelSource, /dragEnabled=\{externalDragEnabled\}/);
-  assert.doesNotMatch(
+  assert.match(
     portalPanelSource,
-    /categories\[[^\]]+\][\s\S]{0,80}MoreOrderIds/,
-    '分类布局不能持久化更多排序',
+    /categories\[externalType\]\?\.overseasMoreOrderIds[\s\S]*?categories\[externalType\]\?\.domesticMoreOrderIds/,
+    '分类布局必须分别读取海外和国内更多排序',
   );
   assert.match(
     portalPanelSource,
-    /if \(listId === drag\.source && placement\.target !== drag\.source\) \{[\s\S]*?items\.filter\(\(item\) => item\.id !== drag\.cardId\)/,
-    '从更多拖入精选时，原列表必须即时收拢',
-  );
-  assert.doesNotMatch(
-    portalPanelSource,
-    /dragPlacement\?\.target === listId &&\s*!isCategoryMoreList\(listId\)/,
-    '分类更多也必须显示实时落点占位',
+    /const categoryOverseasMore = orderExternalToolsByLayoutIds\([\s\S]*?categoryOverseasMoreOrderIds[\s\S]*?const categoryDomesticMore = orderExternalToolsByLayoutIds\([\s\S]*?categoryDomesticMoreOrderIds/,
+    'Excel 分类候选必须先按地区拆分，再应用运营人工顺序',
   );
   assert.match(
     portalPanelSource,
-    /const featured = `category:\$\{selectedType\}:\$\{drag\.region\}:featured`;[\s\S]*?return target === featured \|\| \(target === more && drag\.source === featured\);/,
-    '分类更多必须允许拖入对应地区精选，精选也必须允许移回更多',
-  );
-  assert.match(
-    portalPanelSource,
-    /if \(target === featuredList\) \{[\s\S]*?setCategoryFeatured\([\s\S]*?return true;/,
-    '拖入精选必须更新分类精选配置',
+    /const dropCategory = \([\s\S]*?const moreList = `category:\$\{externalType\}:\$\{drag\.region\}:more`[\s\S]*?drag\.source !== target[\s\S]*?if \(isMore && search\.trim\(\)\) return false;[\s\S]*?writeCategoryList\(key, next\);/,
+    '分类更多只允许同列表排序，且搜索状态不能写入局部结果顺序',
   );
 });
 
-test('外部工具仅从手柄启动拖拽，精选卡拖出本精选区会解析为移除', () => {
+function toolDropGridInvocation(marker: string): string {
+  const markerIndex = portalPanelSource.indexOf(marker);
+  assert.ok(markerIndex >= 0, `必须渲染列表 ${marker}`);
+  const start = portalPanelSource.lastIndexOf('<ToolDropGrid', markerIndex);
+  const end = portalPanelSource.indexOf('/>', markerIndex);
+  assert.ok(start >= 0 && end > markerIndex, `${marker} 必须是完整的 ToolDropGrid`);
+  return portalPanelSource.slice(start, end + 2);
+}
+
+test('按钮负责进出精选，拖拽只在允许的本列表内排序', () => {
+  const allFeatured = [
+    toolDropGridInvocation('listId="overseasFeaturedIds"'),
+    toolDropGridInvocation('listId="domesticFeaturedIds"'),
+  ];
+  const allMore = [
+    toolDropGridInvocation('listId="overseasMoreOrderIds"'),
+    toolDropGridInvocation('listId="domesticMoreOrderIds"'),
+  ];
+  const categoryFeatured = [
+    toolDropGridInvocation('listId={`category:${externalType}:overseas:featured`}'),
+    toolDropGridInvocation('listId={`category:${externalType}:domestic:featured`}'),
+  ];
+  const categoryMore = [
+    toolDropGridInvocation('listId={`category:${externalType}:overseas:more`}'),
+    toolDropGridInvocation('listId={`category:${externalType}:domestic:more`}'),
+  ];
+
+  for (const source of [...allFeatured, ...categoryFeatured]) {
+    assert.match(source, /\bfeatured(?:\s|=\{true\})/);
+    assert.match(source, /sortable=\{externalDragEnabled\}/);
+    assert.match(source, /actionEnabled=\{externalDragEnabled\}/);
+    assert.match(source, /onRemoveFromFeatured=/);
+  }
+  for (const source of allMore) {
+    assert.match(source, /featured=\{false\}/);
+    assert.match(source, /sortable=\{externalDragEnabled && !search\.trim\(\)\}/);
+    assert.match(source, /actionEnabled=\{externalDragEnabled\}/);
+    assert.match(source, /onAddToFeatured=/);
+  }
+  for (const source of categoryMore) {
+    assert.match(source, /featured=\{false\}/);
+    assert.match(source, /sortable=\{externalDragEnabled && !search\.trim\(\)\}/);
+    assert.match(source, /actionEnabled=\{externalDragEnabled\}/);
+    assert.match(source, /onAddToFeatured=/);
+  }
+
+  const toolDropGridStart = portalPanelSource.indexOf('function ToolDropGrid');
+  const toolDropGridEnd = portalPanelSource.indexOf(
+    'function ToolListPanel',
+    toolDropGridStart,
+  );
+  assert.ok(toolDropGridStart >= 0 && toolDropGridEnd > toolDropGridStart);
+  const toolDropGridSource = portalPanelSource.slice(toolDropGridStart, toolDropGridEnd);
+  assert.match(toolDropGridSource, /['"]加入精选['"]/);
+  assert.match(toolDropGridSource, /['"]移出精选['"]/);
+  assert.match(
+    toolDropGridSource,
+    /onClick=\{\(event\) => \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?event\.stopPropagation\(\);[\s\S]*?onRemoveFromFeatured\(card, listId\);[\s\S]*?onAddToFeatured\(card, listId\);/,
+    '精选按钮不能触发卡片详情点击',
+  );
   assert.match(
     portalPanelSource,
     /data-tool-drag-handle[\s\S]*?onPointerDown=\{\(event\) => \{[\s\S]*?!event\.isPrimary \|\| event\.button !== 0[\s\S]*?onPointerStart\(/,
@@ -361,26 +412,12 @@ test('外部工具仅从手柄启动拖拽，精选卡拖出本精选区会解�
   );
   assert.match(
     portalPanelSource,
-    /const prepareExternalPointerDrag =[\s\S]*?dragSurface\.setPointerCapture\(pointerId\)/,
-    '由稳定的根拖拽面捕获指针，移出原卡片后仍能收到移动与松手事件',
-  );
-  assert.match(
-    portalPanelSource,
-    /const handleExternalPointerMoveCapture =[\s\S]*?startExternalDrag\(pointer\.drag\)[\s\S]*?const handleExternalPointerUpCapture =[\s\S]*?handleExternalPointerDrop\(/,
-  );
-  assert.match(
-    portalPanelSource,
-    /const handleExternalPointerDrop = async[\s\S]*?resolveExternalDragPlacementAtPoint\(/,
-    '松手必须复用与实时让位相同的屏幕落点解析规则',
-  );
-  assert.match(
-    portalPanelSource,
-    /const removalTarget = removalTargetForDrag\(selectedType, drag\);[\s\S]*?candidate !== drag\.source[\s\S]*?return removalTarget/,
-    '精选卡落在自身精选列表以外时必须转成对应更多列表，从精选中剔除',
+    /const handleExternalPointerDrop =[\s\S]*?const target = candidate === drag\.source \? candidate : null;[\s\S]*?if \(target\) void commitExternalDrop/,
+    '松手到其他列表或空白区必须取消，不能替代加入或移出按钮',
   );
 });
 
-test('外部工具拖拽预览持续跟随指针，并在结束或取消时卸载', () => {
+test('外部工具恢复简单跟手预览，pointerup 才一次性落位', () => {
   const updatePreviewStart = portalPanelSource.indexOf(
     'const updateExternalDragPreviewPosition',
   );
@@ -419,6 +456,11 @@ test('外部工具拖拽预览持续跟随指针，并在结束或取消时卸�
     /if \(moved && !pointer\.moved\)[\s\S]*?startExternalDrag\(pointer\.drag\);[\s\S]*?if \(pointer\.moved\) \{\s*updateExternalDragPreviewPosition\(\s*event\.clientX,\s*event\.clientY,\s*event\.currentTarget\.ownerDocument,\s*\);/,
     '越过阈值后每次 pointermove 都必须使用当前 clientX/clientY 刷新预览',
   );
+  assert.doesNotMatch(
+    pointerMoveSource,
+    /commitExternal(?:Drop|Mutation|LayoutChange)|saveLayoutDraft|setAllLayoutList|setCategoryFeatured|setCategoryList/,
+    'pointermove 只更新跟手预览，不能实时换位或保存',
+  );
 
   const previewMarker = 'data-testid="external-tool-drag-preview"';
   const previewMarkerIndex = portalPanelSource.indexOf(previewMarker);
@@ -456,7 +498,10 @@ test('外部工具拖拽预览持续跟随指针，并在结束或取消时卸�
   );
 
   const finishStart = portalPanelSource.indexOf('const finishExternalDrag');
-  const finishEnd = portalPanelSource.indexOf('const commitExternalDrop', finishStart);
+  const commitMatch = /const commitExternal(?:Drop|Mutation|LayoutChange)/.exec(
+    portalPanelSource.slice(finishStart),
+  );
+  const finishEnd = commitMatch ? finishStart + commitMatch.index : -1;
   assert.ok(finishStart >= 0 && finishEnd > finishStart, '必须保留统一拖拽结束逻辑');
   const finishSource = portalPanelSource.slice(finishStart, finishEnd);
   assert.match(
@@ -466,12 +511,12 @@ test('外部工具拖拽预览持续跟随指针，并在结束或取消时卸�
   );
   assert.match(
     portalPanelSource,
-    /const handleExternalPointerDrop = async[\s\S]*?expectedWorkspaceId: string,[\s\S]*?const placement = resolveExternalDragPlacementAtPoint\([\s\S]*?await animateExternalDrop\(placement, ownerDocument\);\s*if \(\s*useExternalToolLayoutStore\.getState\(\)\.workspaceId !== expectedWorkspaceId\s*\) \{\s*finishExternalDrag\(\);\s*return;\s*\}\s*finishExternalDrag\(\);\s*void commitExternalDrop\(\s*drag,\s*placement\.target,\s*placement\.beforeId,\s*expectedWorkspaceId,\s*\);/,
-    '落下动画后必须确认工作区未切换，再清理预览并提交同一 placement',
+    /const handleExternalPointerUpCapture =[\s\S]*?handleExternalPointerDrop\([\s\S]*?elementFromPoint\(event\.clientX, event\.clientY\)/,
+    '只有 pointerup 使用最终屏幕落点发起一次排序提交',
   );
   assert.match(
     portalPanelSource,
-    /const commitExternalDrop = async \([\s\S]*?expectedWorkspaceId: string,[\s\S]*?if \(liveLayoutState\.workspaceId !== expectedWorkspaceId\) return;/,
+    /const persistExternalLayoutChange = async \([\s\S]*?expectedWorkspaceId: string,[\s\S]*?liveLayoutState\.workspaceId !== expectedWorkspaceId/,
     '真正写入布局前必须再次校验拖拽开始时的工作区',
   );
   assert.match(
@@ -491,148 +536,22 @@ test('外部工具拖拽预览持续跟随指针，并在结束或取消时卸�
   );
 });
 
-test('外部工具拖起后浮起，并在同一列表内实时平滑让位', () => {
-  assert.match(
-    portalPanelSource,
-    /type ExternalDragPlacement = \{[\s\S]*?target: LayoutListId;[\s\S]*?beforeId: string \| null;[\s\S]*?\};/,
-    '实时让位状态必须明确记录目标列表和插入位置',
-  );
-  assert.match(
-    portalPanelSource,
-    /const \[externalDragPlacement, setExternalDragPlacement\]\s*=\s*useState<ExternalDragPlacement \| null>\(null\);/,
-  );
-  assert.match(
-    portalPanelSource,
-    /function dragPreviewLiftTransform[\s\S]*?scale\(1\.0[1-9]\d*\)/,
-    '拖起后的跟随卡片必须轻微放大，而不是缩小或保持原尺寸',
-  );
-
-  const toolDropGridStart = portalPanelSource.indexOf('function ToolDropGrid');
-  const toolDropGridEnd = portalPanelSource.indexOf(
-    'function ToolListPanel',
-    toolDropGridStart,
-  );
-  assert.ok(
-    toolDropGridStart >= 0 && toolDropGridEnd > toolDropGridStart,
-    '必须保留外部工具拖放网格',
-  );
-  const toolDropGridSource = portalPanelSource.slice(toolDropGridStart, toolDropGridEnd);
-  assert.match(
-    toolDropGridSource,
-    /previewExternalDropItems\([\s\S]*?dragPlacement[\s\S]*?draggedCard[\s\S]*?\)/,
-    '网格渲染顺序必须使用当前 placement 生成实时预览，而非等到松手才换位',
-  );
-  assert.match(toolDropGridSource, /data-tool-drag-lifted/);
-  assert.match(
-    toolDropGridSource,
-    /data-tool-drop-placeholder/,
-    '原位置与实时插入位必须有独立标记，才能形成桌面图标式让位反馈',
-  );
-  assert.match(
-    toolDropGridSource,
-    /\{shownItems\.length \? \(/,
-    '空列表也必须能渲染实时插入占位，不能被原始 items.length 短路',
-  );
-
-  const renderedGridCount = [...portalPanelSource.matchAll(/<ToolDropGrid\b/g)].length;
-  assert.ok(renderedGridCount > 0, '必须渲染外部工具拖放网格');
-  assert.equal(
-    [...portalPanelSource.matchAll(/dragPlacement=\{externalDragPlacement\}/g)].length,
-    renderedGridCount,
-    '全部与分类下的每个精选/更多列表都必须接收实时 placement',
-  );
-  assert.equal(
-    [...portalPanelSource.matchAll(/draggedCard=\{draggedExternalCard\}/g)].length,
-    renderedGridCount,
-    '跨精选与更多移动时，每个列表都必须能识别当前拖起卡片',
-  );
-
-  const placementUpdateStart = portalPanelSource.indexOf(
-    'const updateExternalDragPlacement',
-  );
-  const placementUpdateEnd = portalPanelSource.indexOf(
-    'const prepareExternalPointerDrag',
-    placementUpdateStart,
-  );
-  assert.ok(
-    placementUpdateStart >= 0 && placementUpdateEnd > placementUpdateStart,
-    '必须保留独立的实时落点更新逻辑',
-  );
-  const placementUpdateSource = portalPanelSource.slice(
-    placementUpdateStart,
-    placementUpdateEnd,
-  );
-  assert.match(placementUpdateSource, /resolveExternalDragPlacementAtPoint\(/);
-  assert.match(placementUpdateSource, /setExternalDragPlacement\(/);
-
-  const placementResolverStart = portalPanelSource.indexOf(
-    'function resolveExternalDragPlacementAtPoint',
-  );
-  const placementResolverEnd = portalPanelSource.indexOf(
-    'function animateExternalGridReflow',
-    placementResolverStart,
-  );
-  const placementResolverSource = portalPanelSource.slice(
-    placementResolverStart,
-    placementResolverEnd,
-  );
-  assert.match(
-    placementResolverSource,
-    /elementFromPoint\(clientX, clientY\)[\s\S]*?resolvePointerBeforeId\(/,
-    '实时预览和最终松手必须共用基于真实屏幕坐标的前后半区落点',
-  );
-
-  const pointerMoveStart = portalPanelSource.indexOf(
-    'const handleExternalPointerMoveCapture',
-  );
-  const pointerMoveEnd = portalPanelSource.indexOf(
-    'const handleExternalPointerUpCapture',
-    pointerMoveStart,
-  );
-  const pointerMoveSource = portalPanelSource.slice(pointerMoveStart, pointerMoveEnd);
-  assert.match(
-    pointerMoveSource,
-    /if \(pointer\.moved\) \{[\s\S]*?updateExternalDragPlacement\([\s\S]*?event\.clientX,[\s\S]*?event\.clientY,[\s\S]*?event\.currentTarget\.ownerDocument/,
-    '形成拖拽后，每次 pointermove 都必须刷新实时插入位置',
-  );
-  assert.doesNotMatch(
-    pointerMoveSource,
-    /commitExternalDrop|saveLayoutDraft|setAllLayoutList|setCategoryFeatured/,
-    '实时让位只能是本地预览，不能在移动过程中反复保存',
-  );
-
-  const reflowStart = portalPanelSource.indexOf('function animateExternalGridReflow');
-  const reflowEnd = portalPanelSource.indexOf('function ToolDropGrid', reflowStart);
-  assert.ok(
-    reflowStart >= 0 && reflowEnd > reflowStart,
-    '相邻卡片换位必须保留 FLIP 动画实现',
-  );
-  const reflowSource = portalPanelSource.slice(reflowStart, reflowEnd);
-  assert.match(reflowSource, /getBoundingClientRect\(\)/);
-  assert.match(
-    reflowSource,
-    /\.animate\([\s\S]*?transform:[\s\S]*?duration:[\s\S]*?easing:/,
-    'CSS Grid 重排必须使用位移动画，不能只依赖 transition class',
-  );
-  assert.match(
-    toolDropGridSource,
-    /animateExternalGridReflow\(/,
-    '每次预览顺序变化后必须触发网格 FLIP 动画',
-  );
-
-  const finishStart = portalPanelSource.indexOf('const finishExternalDrag');
-  const finishEnd = portalPanelSource.indexOf('const commitExternalDrop', finishStart);
-  const finishSource = portalPanelSource.slice(finishStart, finishEnd);
-  assert.match(
-    finishSource,
-    /setExternalDragPlacement\(null\);/,
-    '松手、取消或丢失指针捕获时必须同时清掉实时让位状态',
-  );
+test('外部排序不再渲染苹果式实时让位与落下吸附', () => {
+  assert.doesNotMatch(portalPanelSource, /type ExternalDragPlacement/);
+  assert.doesNotMatch(portalPanelSource, /previewExternalDropItems/);
+  assert.doesNotMatch(portalPanelSource, /animateExternalGridReflow/);
+  assert.doesNotMatch(portalPanelSource, /animateExternalDrop/);
+  assert.doesNotMatch(portalPanelSource, /data-tool-drop-placeholder/);
+  assert.doesNotMatch(portalPanelSource, /externalDragPlacement/);
 });
 
 test('运营卡片隐藏互动指标与详情按钮，整卡正文直接查看详情', () => {
   assert.match(portalPanelSource, /interactionMode="preview"/);
   assert.match(portalPanelSource, /showDefaultFooter=\{false\}/);
   assert.match(portalPanelSource, /onOpen=\{\(\) => onOpen\(card\)\}/);
-  assert.match(portalPanelSource, /拖入对应精选即加入；精选卡拖出精选区域即移出；松手后自动保存。/);
+  assert.match(
+    portalPanelSource,
+    /加入或移出精选[\s\S]{0,160}自动保存/,
+    '页面说明必须与显式按钮和自动保存语义一致',
+  );
 });

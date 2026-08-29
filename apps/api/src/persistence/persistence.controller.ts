@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   Header,
+  Headers,
   InternalServerErrorException,
   Logger,
   NotFoundException,
@@ -15,6 +16,7 @@ import {
   Query,
   Req,
   Res,
+  UnauthorizedException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import {
@@ -23,6 +25,7 @@ import {
   type PortalContentPayload,
 } from './persistence.service';
 import { BlobStoreService, packageArchiveMimeType } from './blob-store.service';
+import { PlatformDocsService } from './platform-docs.service';
 
 const MARKET_ENGAGEMENT_ACTIONS = new Set([
   'view',
@@ -32,6 +35,15 @@ const MARKET_ENGAGEMENT_ACTIONS = new Set([
   'like',
   'dislike',
 ]);
+
+/** 纯计数动作：游客浏览也应计入，无个人态写入 */
+const ANONYMOUS_MARKET_ENGAGEMENT_ACTIONS = new Set(['view', 'use']);
+
+function sessionToken(authorization?: string, xSessionToken?: string): string | undefined {
+  const raw = (authorization ?? '').trim();
+  if (raw.toLowerCase().startsWith('bearer ')) return raw.slice(7).trim() || undefined;
+  return (xSessionToken ?? '').trim() || undefined;
+}
 
 const UNSAFE_INLINE_MIME_TYPES = new Set([
   'application/ecmascript',
@@ -57,6 +69,7 @@ export class PersistenceController {
   constructor(
     private readonly persistence: PersistenceService,
     private readonly blobs: BlobStoreService,
+    private readonly docs: PlatformDocsService,
   ) {}
 
   @Get('sessions')
@@ -152,33 +165,62 @@ export class PersistenceController {
     return this.persistence.putMarketplace(workspaceId, body);
   }
 
+  /**
+   * 游客可读聚合计数；个人态（votes / favorites）仅在有效会话下返回。
+   * userId 一律由会话解析，不再信任调用方传参。
+   */
   @Get('market-engagement')
-  getMarketEngagement(
+  async getMarketEngagement(
     @Param('workspaceId') workspaceId: string,
-    @Query('userId') userId = 'anonymous',
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
   ) {
+    const userId = await this.optionalSessionUserId(workspaceId, authorization, xSessionToken);
     return this.persistence.getMarketEngagement(workspaceId, userId);
   }
 
+  /**
+   * view / use 允许游客计数；download / favorite / like / dislike 必须登录，
+   * 且 userId 只从会话解析，防止伪造他人身份写互动。
+   */
   @Post('market-engagement/:contentId/actions')
-  mutateMarketEngagement(
+  async mutateMarketEngagement(
     @Param('workspaceId') workspaceId: string,
     @Param('contentId') contentId: string,
     @Body()
     body: {
       action?: 'view' | 'use' | 'download' | 'favorite' | 'like' | 'dislike';
-      userId?: string;
       active?: boolean;
     },
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
   ) {
     if (!body?.action || !MARKET_ENGAGEMENT_ACTIONS.has(body.action)) {
       throw new BadRequestException('invalid_market_engagement_action');
     }
+    const action = body.action;
+    const userId = await this.optionalSessionUserId(workspaceId, authorization, xSessionToken);
+    if (!userId && !ANONYMOUS_MARKET_ENGAGEMENT_ACTIONS.has(action)) {
+      throw new UnauthorizedException('market_engagement_login_required');
+    }
     return this.persistence.mutateMarketEngagement(workspaceId, contentId, {
-      action: body.action,
-      userId: body.userId || 'anonymous',
+      action,
+      userId,
       active: body.active,
     });
+  }
+
+  /** 有会话返回 userId，游客返回空串；不抛错，供游客只读路径复用 */
+  private async optionalSessionUserId(
+    workspaceId: string,
+    authorization?: string,
+    xSessionToken?: string,
+  ): Promise<string> {
+    const token = sessionToken(authorization, xSessionToken);
+    if (!token) return '';
+    const session = await this.docs.me(token, workspaceId);
+    if (!session.ok) return '';
+    return String(session.user?.id ?? '').trim();
   }
 
   @Get('portal-content')

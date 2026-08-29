@@ -103,7 +103,11 @@ interface CanonicalExternalToolLayoutAll {
 interface CanonicalExternalToolLayoutCategory {
   overseasFeaturedIds: string[];
   domesticFeaturedIds: string[];
+  overseasMoreOrderIds: string[];
+  domesticMoreOrderIds: string[];
 }
+
+type ExternalToolLayoutCategoryListKey = keyof CanonicalExternalToolLayoutCategory;
 
 export interface CanonicalExternalToolLayoutInput {
   expectedRevision: number;
@@ -242,25 +246,44 @@ export function canonicalizeExternalToolLayoutInput(
       invalidExternalToolLayout(path, 'duplicate_normalized_id');
     }
     if (!isJsonObject(rawCategory)) invalidExternalToolLayout(path, 'object_required');
-    const overseasFeaturedIds = canonicalExternalToolIdList(
-      rawCategory.overseasFeaturedIds,
-      `${path}.overseasFeaturedIds`,
-    );
-    // During the additive rollout, old browser clients omit this field. Treat only
-    // an absent field as an empty list; a supplied value still follows strict validation.
-    const hasDomesticFeaturedIds = Object.prototype.hasOwnProperty.call(
-      rawCategory,
-      'domesticFeaturedIds',
-    );
-    const rawDomesticFeaturedIds = hasDomesticFeaturedIds
-      ? rawCategory.domesticFeaturedIds
-      : [];
-    const claimedCategoryIds = new Set(overseasFeaturedIds);
-    const domesticFeaturedIds = canonicalExternalToolIdList(
-      rawDomesticFeaturedIds,
-      `${path}.domesticFeaturedIds`,
-    ).filter((id) => !claimedCategoryIds.has(id));
-    categories[categoryId] = { overseasFeaturedIds, domesticFeaturedIds };
+    const claimedCategoryIds = new Set<string>();
+    const keepFirstCategoryListOccurrence = (ids: string[]): string[] =>
+      ids.filter((id) => {
+        if (claimedCategoryIds.has(id)) return false;
+        claimedCategoryIds.add(id);
+        return true;
+      });
+    const categoryList = (
+      key: ExternalToolLayoutCategoryListKey,
+      options: { allowMissing?: boolean } = {},
+    ): string[] => {
+      const hasField = Object.prototype.hasOwnProperty.call(rawCategory, key);
+      if (!hasField && !options.allowMissing) {
+        invalidExternalToolLayout(`${path}.${key}`, 'array_required');
+      }
+      return keepFirstCategoryListOccurrence(
+        canonicalExternalToolIdList(hasField ? rawCategory[key] : [], `${path}.${key}`),
+      );
+    };
+
+    // Featured lists claim a tool before either More list. Additive category fields may
+    // be absent only for old clients; any supplied value still follows strict validation.
+    const overseasFeaturedIds = categoryList('overseasFeaturedIds');
+    const domesticFeaturedIds = categoryList('domesticFeaturedIds', {
+      allowMissing: true,
+    });
+    const overseasMoreOrderIds = categoryList('overseasMoreOrderIds', {
+      allowMissing: true,
+    });
+    const domesticMoreOrderIds = categoryList('domesticMoreOrderIds', {
+      allowMissing: true,
+    });
+    categories[categoryId] = {
+      overseasFeaturedIds,
+      domesticFeaturedIds,
+      overseasMoreOrderIds,
+      domesticMoreOrderIds,
+    };
   }
 
   return {
@@ -275,37 +298,57 @@ export function canonicalizeExternalToolLayoutInput(
   };
 }
 
-function categoryIdsMissingDomesticFeaturedIds(payload: unknown): Set<string> {
+function categoryIdsMissingList(
+  payload: unknown,
+  key: ExternalToolLayoutCategoryListKey,
+): Set<string> {
   if (!isJsonObject(payload) || !isJsonObject(payload.categories)) return new Set();
   return new Set(
     Object.entries(payload.categories)
       .filter(
         ([, rawCategory]) =>
           isJsonObject(rawCategory) &&
-          !Object.prototype.hasOwnProperty.call(rawCategory, 'domesticFeaturedIds'),
+          !Object.prototype.hasOwnProperty.call(rawCategory, key),
       )
       .map(([rawCategoryId]) => rawCategoryId.trim().toLowerCase()),
   );
 }
 
-function storedCategoryDomesticFeaturedIds(
+function storedCategoryListIds(
   payload: unknown,
   categoryId: string,
-  overseasFeaturedIds: string[],
+  key: ExternalToolLayoutCategoryListKey,
 ): string[] {
   if (!isJsonObject(payload) || !isJsonObject(payload.categories)) return [];
   const storedCategoryEntry = Object.entries(payload.categories).find(
     ([rawCategoryId]) => rawCategoryId.trim().toLowerCase() === categoryId,
   );
   const rawCategory = storedCategoryEntry?.[1];
-  if (!isJsonObject(rawCategory) || rawCategory.domesticFeaturedIds === undefined) {
+  if (!isJsonObject(rawCategory) || rawCategory[key] === undefined) {
     return [];
   }
-  const claimedCategoryIds = new Set(overseasFeaturedIds);
   return canonicalExternalToolIdList(
-    rawCategory.domesticFeaturedIds,
-    `stored.categories.${categoryId}.domesticFeaturedIds`,
-  ).filter((id) => !claimedCategoryIds.has(id));
+    rawCategory[key],
+    `stored.categories.${categoryId}.${key}`,
+  );
+}
+
+function dedupeExternalToolCategoryLists(
+  category: CanonicalExternalToolLayoutCategory,
+): CanonicalExternalToolLayoutCategory {
+  const claimedIds = new Set<string>();
+  const keepFirstOccurrence = (ids: string[]): string[] =>
+    ids.filter((id) => {
+      if (claimedIds.has(id)) return false;
+      claimedIds.add(id);
+      return true;
+    });
+  return {
+    overseasFeaturedIds: keepFirstOccurrence(category.overseasFeaturedIds),
+    domesticFeaturedIds: keepFirstOccurrence(category.domesticFeaturedIds),
+    overseasMoreOrderIds: keepFirstOccurrence(category.overseasMoreOrderIds),
+    domesticMoreOrderIds: keepFirstOccurrence(category.domesticMoreOrderIds),
+  };
 }
 
 function defaultExternalToolLayoutSeed() {
@@ -577,6 +620,18 @@ function externalToolLayoutPayloadForRead(payload: unknown): unknown {
               )
                 ? rawCategory.domesticFeaturedIds
                 : [],
+              overseasMoreOrderIds: Object.prototype.hasOwnProperty.call(
+                rawCategory,
+                'overseasMoreOrderIds',
+              )
+                ? rawCategory.overseasMoreOrderIds
+                : [],
+              domesticMoreOrderIds: Object.prototype.hasOwnProperty.call(
+                rawCategory,
+                'domesticMoreOrderIds',
+              )
+                ? rawCategory.domesticMoreOrderIds
+                : [],
             },
           ];
         }),
@@ -823,7 +878,18 @@ export class PlatformDocsService {
   }
 
   private async putExternalToolLayoutDoc(workspaceId: string, payload: unknown) {
-    const legacyCategoryIds = categoryIdsMissingDomesticFeaturedIds(payload);
+    const missingDomesticFeaturedCategoryIds = categoryIdsMissingList(
+      payload,
+      'domesticFeaturedIds',
+    );
+    const missingOverseasMoreCategoryIds = categoryIdsMissingList(
+      payload,
+      'overseasMoreOrderIds',
+    );
+    const missingDomesticMoreCategoryIds = categoryIdsMissingList(
+      payload,
+      'domesticMoreOrderIds',
+    );
     const { expectedRevision, all, categories } = canonicalizeExternalToolLayoutInput(payload);
     const id = docId(workspaceId, 'external-tool-layout');
     const existing = await this.prisma.centerRecord.findUnique({ where: { id } });
@@ -839,18 +905,33 @@ export class PlatformDocsService {
       });
     }
 
-    // An old browser does not know the additive domestic field. Preserve the current
-    // domestic selection for categories it still submits, while a genuinely new category
-    // starts empty. This merge happens after the revision check and before the CAS write.
+    // An old browser does not know additive category fields. Preserve current values for
+    // categories it still submits, while genuinely new categories start empty. Re-run the
+    // four-list de-duplication after merging so newly featured tools always win over More.
     if (existing) {
-      for (const categoryId of legacyCategoryIds) {
-        const category = categories[categoryId];
-        if (!category) continue;
-        category.domesticFeaturedIds = storedCategoryDomesticFeaturedIds(
-          existing.payload,
-          categoryId,
-          category.overseasFeaturedIds,
-        );
+      for (const [categoryId, category] of Object.entries(categories)) {
+        if (missingDomesticFeaturedCategoryIds.has(categoryId)) {
+          category.domesticFeaturedIds = storedCategoryListIds(
+            existing.payload,
+            categoryId,
+            'domesticFeaturedIds',
+          );
+        }
+        if (missingOverseasMoreCategoryIds.has(categoryId)) {
+          category.overseasMoreOrderIds = storedCategoryListIds(
+            existing.payload,
+            categoryId,
+            'overseasMoreOrderIds',
+          );
+        }
+        if (missingDomesticMoreCategoryIds.has(categoryId)) {
+          category.domesticMoreOrderIds = storedCategoryListIds(
+            existing.payload,
+            categoryId,
+            'domesticMoreOrderIds',
+          );
+        }
+        categories[categoryId] = dedupeExternalToolCategoryLists(category);
       }
     }
 
@@ -979,7 +1060,12 @@ export class PlatformDocsService {
     return { kind: 'internal-office-scenes', payload: nextPayload };
   }
 
-  async login(body: { email?: string; password?: string; workspaceId?: string }) {
+  async login(body: {
+    email?: string;
+    password?: string;
+    workspaceId?: string;
+    visitorId?: string;
+  }) {
     const email = normalizedAccountEmail(body.email);
     const password = body.password ?? '';
     const workspaceId = body.workspaceId || 'ws-mss-ai';
@@ -1023,6 +1109,7 @@ export class PlatformDocsService {
       await this.portalAnalytics.recordDailyLogin({
         workspaceId,
         userId: String(user.id ?? ''),
+        visitorId: body.visitorId,
       });
     } catch (error) {
       this.logger.warn(

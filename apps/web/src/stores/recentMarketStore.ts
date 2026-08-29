@@ -31,8 +31,8 @@ type RecentDoc = {
   items?: RecentMarketItem[];
 };
 
-function userBucket(): string {
-  return getCurrentUserId() || 'anonymous';
+function userBucket(): string | null {
+  return getCurrentUserId() || null;
 }
 
 function pruneItems(items: RecentMarketItem[]): RecentMarketItem[] {
@@ -52,7 +52,7 @@ function takeLegacyLocal(): RecentMarketItem[] {
     const raw = localStorage.getItem(LEGACY_LS_KEY);
     if (!raw) return [];
     localStorage.removeItem(LEGACY_LS_KEY);
-    return readUserItems(JSON.parse(raw) as RecentDoc, userBucket());
+    return readUserItems(JSON.parse(raw) as RecentDoc, userBucket() ?? '');
   } catch {
     return [];
   }
@@ -60,9 +60,9 @@ function takeLegacyLocal(): RecentMarketItem[] {
 
 function persistForUser(items: RecentMarketItem[]) {
   const next = pruneItems(items);
-  if (!canUsePlatformDocsApi()) return next;
-  const ws = currentWorkspaceId();
   const uid = userBucket();
+  if (!uid || !canUsePlatformDocsApi()) return next;
+  const ws = currentWorkspaceId();
   const mem = peekPlatformDocMemory<RecentDoc>(ws, DOC_KIND) ?? {};
   const byUserId: Record<string, RecentMarketItem[]> = { ...(mem.byUserId ?? {}) };
   byUserId[uid] = next;
@@ -84,13 +84,13 @@ export const useRecentMarketStore = create<RecentMarketState>((set, get) => ({
   hydrate: () => {
     void (async () => {
       const leftover = takeLegacyLocal();
-      if (!canUsePlatformDocsApi()) {
+      const uid = userBucket();
+      if (!uid || !canUsePlatformDocsApi()) {
         set({ items: leftover });
         return;
       }
       try {
         const remote = await fetchPlatformDoc<RecentDoc>(currentWorkspaceId(), DOC_KIND);
-        const uid = userBucket();
         const items = readUserItems(remote, uid);
         if (remote) setPlatformDocMemory(currentWorkspaceId(), DOC_KIND, remote);
         if (items.length) {

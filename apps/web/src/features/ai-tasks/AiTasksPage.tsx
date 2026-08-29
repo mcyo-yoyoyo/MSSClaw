@@ -19,6 +19,7 @@ import { useConversationStore } from '@/stores/conversationStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { requireLogin } from '@/stores/authGateStore';
 
 /**
  * AI 任务：按 Agent / Skill 归类的历史执行会话（Codex 式左右分栏）。
@@ -28,6 +29,7 @@ import { useWorkspaceStore } from '@/stores/workspaceStore';
 export function AiTasksPage({ embedded = false }: { embedded?: boolean } = {}) {
   const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const platformRole = useSessionStore((s) => s.user?.platformRole);
+  const isGuest = useSessionStore((s) => s.isGuest);
   const executeAllowed = canExecuteChat(platformRole);
   const showToast = useMarketplaceStore((s) => s.showToast);
 
@@ -442,7 +444,15 @@ export function AiTasksPage({ embedded = false }: { embedded?: boolean } = {}) {
               draft={draft}
               onDraftChange={setDraft}
               onSend={(text) => {
-                void sendMessage(text, workspaceId);
+                const send = () => {
+                  const currentWorkspaceId = useWorkspaceStore.getState().workspaceId;
+                  void useConversationStore.getState().sendMessage(text, currentWorkspaceId);
+                };
+                if (!requireLogin('chat', send)) {
+                  setDraft('');
+                  return;
+                }
+                send();
                 setDraft('');
               }}
               isAgentTyping={isAgentTyping}
@@ -462,7 +472,7 @@ export function AiTasksPage({ embedded = false }: { embedded?: boolean } = {}) {
                   : undefined
               }
               onClearSandbox={clearSandbox}
-              aiAllowed={canUseWarRoomAi(chat) && executeAllowed}
+              aiAllowed={canUseWarRoomAi(chat) && (executeAllowed || isGuest)}
               previewCollapsed
               hideSkill
             />

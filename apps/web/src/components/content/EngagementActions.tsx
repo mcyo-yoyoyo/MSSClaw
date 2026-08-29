@@ -2,6 +2,7 @@ import type { MouseEvent } from 'react';
 import { cn } from '@/lib/utils';
 import type { ContentEngagement } from '@/domain/contentEngagement';
 import { heatScore } from '@/domain/contentEngagement';
+import { requireLogin } from '@/stores/authGateStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 
 interface EngagementActionsProps {
@@ -65,8 +66,11 @@ export function EngagementActions({
         title="点赞"
         onClick={(ev) => {
           stop(ev);
-          toggleLike(contentId);
-          onAfterAction?.('like');
+          const run = () => {
+            toggleLike(contentId);
+            onAfterAction?.('like');
+          };
+          if (requireLogin('like', run)) run();
         }}
         className={cn(
           'inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition',
@@ -81,8 +85,11 @@ export function EngagementActions({
         title="点踩"
         onClick={(ev) => {
           stop(ev);
-          toggleDislike(contentId);
-          onAfterAction?.('dislike');
+          const run = () => {
+            toggleDislike(contentId);
+            onAfterAction?.('dislike');
+          };
+          if (requireLogin('dislike', run)) run();
         }}
         className={cn(
           'inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition',
@@ -98,9 +105,12 @@ export function EngagementActions({
           title={onDownload ? '下载' : '下载 / 收藏副本'}
           onClick={(ev) => {
             stop(ev);
-            bumpDownload(contentId);
-            onDownload?.();
-            onAfterAction?.('download');
+            const run = () => {
+              bumpDownload(contentId);
+              onDownload?.();
+              onAfterAction?.('download');
+            };
+            if (requireLogin('download', run)) run();
           }}
           className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-zinc-400 transition hover:text-zinc-700"
         >

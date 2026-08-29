@@ -61,7 +61,12 @@ export const SEED_EXTERNAL_TOOL_LAYOUT = {
   },
   categories: {} as Record<
     string,
-    { overseasFeaturedIds: string[]; domesticFeaturedIds: string[] }
+    {
+      overseasFeaturedIds: string[];
+      domesticFeaturedIds: string[];
+      overseasMoreOrderIds: string[];
+      domesticMoreOrderIds: string[];
+    }
   >,
 };
 

@@ -25,6 +25,7 @@ export const APP_VIEWS = [
   'presentation',
   'workspace-config',
   'portal-ops',
+  'portal-dashboard',
   'model-ops',
   'executions',
   'approvals',
@@ -98,6 +99,7 @@ export const APP_VIEW_NAV: AppViewNavItem[] = [
  */
 export const ADMIN_MENU_VIEWS = [
   'portal-ops',
+  'portal-dashboard',
   'model-ops',
   'approvals',
   'executions',

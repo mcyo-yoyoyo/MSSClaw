@@ -2,17 +2,25 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   fetchPortalAnalyticsApi,
   type PortalAnalyticsReport,
+  type PortalAnalyticsTrafficCounts,
 } from '@/api/portalAnalyticsApi';
 import { StatCardGrid } from '@/components/center/CenterShell';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 type TrafficRangeDays = 1 | 7 | 30;
+type TrafficVisitorType = 'all' | 'user' | 'guest';
 
 const TRAFFIC_RANGES: Array<{ days: TrafficRangeDays; label: string }> = [
   { days: 1, label: '今天' },
   { days: 7, label: '近 7 天' },
   { days: 30, label: '近 30 天' },
+];
+
+const TRAFFIC_VISITOR_TYPES: Array<{ type: TrafficVisitorType; label: string }> = [
+  { type: 'all', label: '全部' },
+  { type: 'user', label: '登录' },
+  { type: 'guest', label: '游客' },
 ];
 
 const ROUTE_LABELS: Record<string, string> = {
@@ -33,6 +41,18 @@ const ROUTE_LABELS: Record<string, string> = {
   'portal-ops': '门户运营',
 };
 
+const GATE_ACTION_LABELS: Record<string, string> = {
+  like: '点赞',
+  dislike: '点踩',
+  favorite: '收藏',
+  download: '下载',
+  'submit-tool': '提交工具',
+  'submit-skill': '提交 Skill',
+  'submit-agent': '提交 Agent',
+  chat: '发起任务',
+  account: '进入个人工作台',
+};
+
 function formatCount(value: number) {
   return Math.max(0, value).toLocaleString('zh-CN');
 }
@@ -40,6 +60,11 @@ function formatCount(value: number) {
 function formatAverage(pv: number, uv: number) {
   if (uv <= 0) return '—';
   return (pv / uv).toFixed(2);
+}
+
+function formatPercent(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return '0%';
+  return `${(value * 100).toFixed(value >= 0.1 ? 1 : 2)}%`;
 }
 
 function formatRangeDate(value: string) {
@@ -67,10 +92,24 @@ function routeLabel(routeKey: string) {
   return ROUTE_LABELS[normalized] ?? routeKey;
 }
 
+function trafficCounts(
+  value: PortalAnalyticsTrafficCounts,
+  visitorType: TrafficVisitorType,
+): { pv: number; uv: number } {
+  if (visitorType === 'user') return { pv: value.userPv, uv: value.userUv };
+  if (visitorType === 'guest') return { pv: value.guestPv, uv: value.guestUv };
+  return { pv: value.pv, uv: value.uv };
+}
+
+function trafficLabel(visitorType: TrafficVisitorType): string {
+  return TRAFFIC_VISITOR_TYPES.find((item) => item.type === visitorType)?.label ?? '全部';
+}
+
 export function PortalTrafficPanel() {
   const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const apiConnected = useWorkspaceStore((s) => s.apiConnected);
   const [days, setDays] = useState<TrafficRangeDays>(7);
+  const [visitorType, setVisitorType] = useState<TrafficVisitorType>('all');
   const [report, setReport] = useState<PortalAnalyticsReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,19 +150,43 @@ export function PortalTrafficPanel() {
   );
   const pageRows = useMemo(
     () =>
-      [...(report?.pages ?? [])].sort(
-        (a, b) => b.pv - a.pv || b.uv - a.uv || a.routeKey.localeCompare(b.routeKey),
-      ),
-    [report?.pages],
+      [...(report?.pages ?? [])]
+        .filter((row) => {
+          const counts = trafficCounts(row, visitorType);
+          return counts.pv > 0 || counts.uv > 0;
+        })
+        .sort((a, b) => {
+          const aCounts = trafficCounts(a, visitorType);
+          const bCounts = trafficCounts(b, visitorType);
+          return (
+            bCounts.pv - aCounts.pv ||
+            bCounts.uv - aCounts.uv ||
+            a.routeKey.localeCompare(b.routeKey)
+          );
+        }),
+    [report?.pages, visitorType],
   );
+  const selectedTotals = report ? trafficCounts(report.totals, visitorType) : null;
   const hasTraffic = Boolean(
     report &&
-      (report.totals.pv > 0 ||
-        report.totals.uv > 0 ||
-        report.totals.todayLoginUsers > 0 ||
-        dailyRows.some((row) => row.pv > 0 || row.uv > 0) ||
-        pageRows.some((row) => row.pv > 0 || row.uv > 0)),
+      (Boolean(selectedTotals && (selectedTotals.pv > 0 || selectedTotals.uv > 0)) ||
+        (visitorType !== 'guest' && report.totals.todayLoginUsers > 0) ||
+        dailyRows.some((row) => {
+          const counts = trafficCounts(row, visitorType);
+          return counts.pv > 0 || counts.uv > 0;
+        }) ||
+        pageRows.some((row) => {
+          const counts = trafficCounts(row, visitorType);
+          return counts.pv > 0 || counts.uv > 0;
+        })),
   );
+  const selectedLabel = trafficLabel(visitorType);
+  const statItems: [string, string][] = [
+    ['登录用户 PV', formatCount(report?.totals.userPv ?? 0)],
+    ['登录用户 UV', formatCount(report?.totals.userUv ?? 0)],
+    ['游客 PV', formatCount(report?.totals.guestPv ?? 0)],
+    ['游客 UV', formatCount(report?.totals.guestUv ?? 0)],
+  ];
 
   return (
     <section className="space-y-4">
@@ -135,6 +198,28 @@ export function PortalTrafficPanel() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div
+            className="flex items-center gap-1 rounded-lg bg-zinc-100/80 p-0.5"
+            role="group"
+            aria-label="选择访客类型"
+          >
+            {TRAFFIC_VISITOR_TYPES.map((item) => (
+              <button
+                key={item.type}
+                type="button"
+                onClick={() => setVisitorType(item.type)}
+                aria-pressed={visitorType === item.type}
+                className={cn(
+                  'rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition',
+                  visitorType === item.type
+                    ? 'bg-white text-zinc-900 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-800',
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
           <div
             className="flex items-center gap-1 rounded-lg bg-zinc-100/80 p-0.5"
             role="group"
@@ -197,7 +282,7 @@ export function PortalTrafficPanel() {
 
       {loading ? (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="访问数据读取中">
-          {Array.from({ length: 5 }, (_, index) => (
+          {Array.from({ length: 4 }, (_, index) => (
             <div key={index} className="apple-card animate-pulse p-3">
               <div className="h-2.5 w-16 rounded bg-zinc-100" />
               <div className="mt-3 h-6 w-24 rounded bg-zinc-100" />
@@ -208,15 +293,22 @@ export function PortalTrafficPanel() {
 
       {report && !loading ? (
         <>
-          <StatCardGrid
-            items={[
-              ['PV 浏览量', formatCount(report.totals.pv)],
-              ['UV 独立访客', formatCount(report.totals.uv)],
-              ['今日登录人数', formatCount(report.totals.todayLoginUsers)],
-              ['人均浏览', formatAverage(report.totals.pv, report.totals.uv)],
-              ['统计周期', report.range.days === 1 ? '今天' : `${report.range.days} 天`],
-            ]}
-          />
+          <StatCardGrid items={statItems} />
+
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-zinc-200/80 bg-white px-4 py-3 text-[11px] text-zinc-500">
+            <span>
+              全部 PV <strong className="ml-1 font-semibold tabular-nums text-zinc-800">{formatCount(report.totals.pv)}</strong>
+            </span>
+            <span>
+              全部 UV <strong className="ml-1 font-semibold tabular-nums text-zinc-800">{formatCount(report.totals.uv)}</strong>
+            </span>
+            <span>
+              今日登录人数 <strong className="ml-1 font-semibold tabular-nums text-zinc-800">{formatCount(report.totals.todayLoginUsers)}</strong>
+            </span>
+            <span>
+              当前筛选人均浏览 <strong className="ml-1 font-semibold tabular-nums text-zinc-800">{formatAverage(selectedTotals?.pv ?? 0, selectedTotals?.uv ?? 0)}</strong>
+            </span>
+          </div>
 
           <div className="rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-[11px] leading-relaxed text-blue-900">
             <p>
@@ -225,6 +317,9 @@ export function PortalTrafficPanel() {
             </p>
             <p className="mt-1 text-blue-800/80">
               区间 UV 按整个统计周期去重，不等于每日 UV 相加；历史数据自功能上线日起累计。
+            </p>
+            <p className="mt-1 text-blue-800/80">
+              登录与游客口径按访问发生时的身份拆分；今日登录人数为账号登录指标，不计游客。
             </p>
           </div>
 
@@ -236,7 +331,7 @@ export function PortalTrafficPanel() {
             </div>
           ) : (
             <div className="grid gap-4 xl:grid-cols-2">
-              <TrafficTable title="日趋势">
+              <TrafficTable title={`日趋势 · ${selectedLabel}`}>
                 <table className="w-full min-w-[500px] text-left text-[12px]">
                   <thead className="sticky top-0 z-10 border-b border-zinc-100 bg-zinc-50 text-[11px] text-zinc-500">
                     <tr>
@@ -248,22 +343,25 @@ export function PortalTrafficPanel() {
                   </thead>
                   <tbody>
                     {dailyRows.length ? (
-                      dailyRows.map((row) => (
-                        <tr key={row.date} className="border-b border-zinc-50 last:border-0">
-                          <td className="whitespace-nowrap px-3 py-2.5 font-medium text-zinc-700">
-                            {formatRangeDate(row.date)}
-                          </td>
-                          <td className="px-3 py-2.5 text-right tabular-nums text-zinc-700">
-                            {formatCount(row.pv)}
-                          </td>
-                          <td className="px-3 py-2.5 text-right tabular-nums text-zinc-700">
-                            {formatCount(row.uv)}
-                          </td>
-                          <td className="px-3 py-2.5 text-right tabular-nums text-zinc-500">
-                            {formatAverage(row.pv, row.uv)}
-                          </td>
-                        </tr>
-                      ))
+                      dailyRows.map((row) => {
+                        const counts = trafficCounts(row, visitorType);
+                        return (
+                          <tr key={row.date} className="border-b border-zinc-50 last:border-0">
+                            <td className="whitespace-nowrap px-3 py-2.5 font-medium text-zinc-700">
+                              {formatRangeDate(row.date)}
+                            </td>
+                            <td className="px-3 py-2.5 text-right tabular-nums text-zinc-700">
+                              {formatCount(counts.pv)}
+                            </td>
+                            <td className="px-3 py-2.5 text-right tabular-nums text-zinc-700">
+                              {formatCount(counts.uv)}
+                            </td>
+                            <td className="px-3 py-2.5 text-right tabular-nums text-zinc-500">
+                              {formatAverage(counts.pv, counts.uv)}
+                            </td>
+                          </tr>
+                        );
+                      })
                     ) : (
                       <EmptyTableRow colSpan={4} label="暂无日趋势数据" />
                     )}
@@ -271,7 +369,7 @@ export function PortalTrafficPanel() {
                 </table>
               </TrafficTable>
 
-              <TrafficTable title="页面明细">
+              <TrafficTable title={`页面明细 · ${selectedLabel}`}>
                 <table className="w-full min-w-[500px] text-left text-[12px]">
                   <thead className="sticky top-0 z-10 border-b border-zinc-100 bg-zinc-50 text-[11px] text-zinc-500">
                     <tr>
@@ -283,29 +381,35 @@ export function PortalTrafficPanel() {
                   </thead>
                   <tbody>
                     {pageRows.length ? (
-                      pageRows.map((row) => (
-                        <tr key={row.routeKey} className="border-b border-zinc-50 last:border-0">
-                          <td className="max-w-[16rem] px-3 py-2.5">
-                            <p className="truncate font-medium text-zinc-700" title={row.routeKey}>
-                              {routeLabel(row.routeKey)}
-                            </p>
-                            {routeLabel(row.routeKey) !== row.routeKey ? (
-                              <p className="mt-0.5 truncate font-mono text-[9px] text-zinc-400">
-                                {row.routeKey}
+                      pageRows.map((row) => {
+                        const counts = trafficCounts(row, visitorType);
+                        return (
+                          <tr key={row.routeKey} className="border-b border-zinc-50 last:border-0">
+                            <td className="max-w-[16rem] px-3 py-2.5">
+                              <p
+                                className="truncate font-medium text-zinc-700"
+                                title={row.routeKey}
+                              >
+                                {routeLabel(row.routeKey)}
                               </p>
-                            ) : null}
-                          </td>
-                          <td className="px-3 py-2.5 text-right tabular-nums text-zinc-700">
-                            {formatCount(row.pv)}
-                          </td>
-                          <td className="px-3 py-2.5 text-right tabular-nums text-zinc-700">
-                            {formatCount(row.uv)}
-                          </td>
-                          <td className="px-3 py-2.5 text-right tabular-nums text-zinc-500">
-                            {formatAverage(row.pv, row.uv)}
-                          </td>
-                        </tr>
-                      ))
+                              {routeLabel(row.routeKey) !== row.routeKey ? (
+                                <p className="mt-0.5 truncate font-mono text-[9px] text-zinc-400">
+                                  {row.routeKey}
+                                </p>
+                              ) : null}
+                            </td>
+                            <td className="px-3 py-2.5 text-right tabular-nums text-zinc-700">
+                              {formatCount(counts.pv)}
+                            </td>
+                            <td className="px-3 py-2.5 text-right tabular-nums text-zinc-700">
+                              {formatCount(counts.uv)}
+                            </td>
+                            <td className="px-3 py-2.5 text-right tabular-nums text-zinc-500">
+                              {formatAverage(counts.pv, counts.uv)}
+                            </td>
+                          </tr>
+                        );
+                      })
                     ) : (
                       <EmptyTableRow colSpan={4} label="暂无页面明细数据" />
                     )}
@@ -314,6 +418,43 @@ export function PortalTrafficPanel() {
               </TrafficTable>
             </div>
           )}
+
+          {(report.gateFunnel ?? []).length ? (
+            <TrafficTable title="游客登录转化">
+              <table className="w-full min-w-[620px] text-left text-[12px]">
+                <thead className="sticky top-0 z-10 border-b border-zinc-100 bg-zinc-50 text-[11px] text-zinc-500">
+                  <tr>
+                    <th className="px-3 py-2 font-semibold">触发动作</th>
+                    <th className="px-3 py-2 text-right font-semibold">触发次数</th>
+                    <th className="px-3 py-2 text-right font-semibold">触发游客</th>
+                    <th className="px-3 py-2 text-right font-semibold">登录游客</th>
+                    <th className="px-3 py-2 text-right font-semibold">转化率</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.gateFunnel.map((row) => (
+                    <tr key={row.action} className="border-b border-zinc-50 last:border-0">
+                      <td className="px-3 py-2.5 font-medium text-zinc-700">
+                        {GATE_ACTION_LABELS[row.action] ?? row.action}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-zinc-700">
+                        {formatCount(row.hits)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-zinc-700">
+                        {formatCount(row.guestUv)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-zinc-700">
+                        {formatCount(row.convertedUv)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-emerald-700">
+                        {formatPercent(row.conversionRate)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TrafficTable>
+          ) : null}
         </>
       ) : null}
     </section>

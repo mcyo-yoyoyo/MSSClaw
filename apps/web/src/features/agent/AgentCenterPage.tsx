@@ -18,6 +18,8 @@ import { downloadAgentFile, downloadAllAgentsFile } from '@/domain/agentExport';
 import { getAgentPack } from '@/domain/agents/catalog';
 import { useBusinessScenarioCatalogStore } from '@/stores/businessScenarioCatalogStore';
 import { PACKAGE_UPLOAD_MAX_LABEL } from '@/domain/packageUpload';
+import { requireLogin } from '@/stores/authGateStore';
+import { GuestGateLock } from '@/components/auth/GuestGateLock';
 
 interface AgentCenterPageProps {
   onInvoke: (agent: PrototypeAgentSeed, prompt?: string) => void;
@@ -55,6 +57,12 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
   const list = filteredAgents();
+
+  const requestCreateAgent = () => {
+    const openEditor = () => setEditorTarget('new');
+    if (!requireLogin('submit-agent', openEditor)) return;
+    openEditor();
+  };
 
   const handleInvoke = (agent: PrototypeAgentSeed) => {
     bumpAgentInvokes(agent.id);
@@ -136,11 +144,12 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
               </div>
               <button
                 type="button"
-                onClick={() => setEditorTarget('new')}
-                className="apple-btn-primary rounded-xl px-4 py-2 text-[12px] font-semibold text-white transition"
+                onClick={requestCreateAgent}
+                className="apple-btn-primary relative rounded-xl px-4 py-2 text-[12px] font-semibold text-white transition"
               >
                 <i className="fa-solid fa-plus mr-1" />
                 创建 Agent
+                <GuestGateLock />
               </button>
             </>
           }
@@ -287,7 +296,11 @@ export function AgentCenterPage({ onInvoke }: AgentCenterPageProps) {
         />
       ) : null}
 
-      <AgentEditorModal target={editorTarget} onClose={() => setEditorTarget(null)} />
+      <AgentEditorModal
+        target={editorTarget}
+        onClose={() => setEditorTarget(null)}
+        onLoginReplay={(target) => setEditorTarget(target)}
+      />
     </div>
   );
 }

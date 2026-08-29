@@ -31,8 +31,8 @@ type FavoritesDoc = {
   items?: MarketFavoriteItem[];
 };
 
-function userBucket(): string {
-  return getCurrentUserId() || 'anonymous';
+function userBucket(): string | null {
+  return getCurrentUserId() || null;
 }
 
 function readUserItems(doc: FavoritesDoc | null | undefined, uid: string): MarketFavoriteItem[] {
@@ -43,9 +43,9 @@ function readUserItems(doc: FavoritesDoc | null | undefined, uid: string): Marke
 }
 
 function persistForUser(items: MarketFavoriteItem[]) {
-  if (!canUsePlatformDocsApi()) return;
-  const ws = currentWorkspaceId();
   const uid = userBucket();
+  if (!uid || !canUsePlatformDocsApi()) return;
+  const ws = currentWorkspaceId();
   const mem = peekPlatformDocMemory<FavoritesDoc>(ws, DOC_KIND) ?? {};
   const byUserId: Record<string, MarketFavoriteItem[]> = { ...(mem.byUserId ?? {}) };
   byUserId[uid] = items.slice(0, MAX);
@@ -56,7 +56,7 @@ function persistForUser(items: MarketFavoriteItem[]) {
 
 interface MarketFavoriteState {
   items: MarketFavoriteItem[];
-  hydrate: () => void;
+  hydrate: () => Promise<void>;
   isFavorite: (id: string, kind: MarketShelfKind) => boolean;
   toggle: (item: Omit<MarketFavoriteItem, 'at'>) => boolean;
   setNote: (id: string, kind: MarketShelfKind, note: string) => void;
@@ -65,29 +65,27 @@ interface MarketFavoriteState {
 export const useMarketFavoriteStore = create<MarketFavoriteState>((set, get) => ({
   items: [],
 
-  hydrate: () => {
-    void (async () => {
-      if (!canUsePlatformDocsApi()) {
-        set({ items: [] });
-        return;
-      }
-      try {
-        const remote = await fetchPlatformDoc<FavoritesDoc>(currentWorkspaceId(), DOC_KIND);
-        const uid = userBucket();
-        const list = readUserItems(remote, uid);
-        if (remote) setPlatformDocMemory(currentWorkspaceId(), DOC_KIND, remote);
-        set({ items: list });
-      } catch {
-        set({ items: [] });
-      }
-    })();
+  hydrate: async () => {
+    const uid = userBucket();
+    if (!uid || !canUsePlatformDocsApi()) {
+      set({ items: [] });
+      return;
+    }
+    try {
+      const remote = await fetchPlatformDoc<FavoritesDoc>(currentWorkspaceId(), DOC_KIND);
+      const list = readUserItems(remote, uid);
+      if (remote) setPlatformDocMemory(currentWorkspaceId(), DOC_KIND, remote);
+      set({ items: list });
+    } catch {
+      set({ items: [] });
+    }
   },
 
   isFavorite: (id, kind) =>
     get().items.some((x) => x.id === id && x.kind === kind),
 
   toggle: (item) => {
-    if (!canUsePlatformDocsApi()) return false;
+    if (!userBucket() || !canUsePlatformDocsApi()) return false;
     const previous = get().items;
     const exists = previous.some((x) => x.id === item.id && x.kind === item.kind);
     const next = exists
@@ -112,7 +110,7 @@ export const useMarketFavoriteStore = create<MarketFavoriteState>((set, get) => 
   },
 
   setNote: (id, kind, note) => {
-    if (!canUsePlatformDocsApi()) return;
+    if (!userBucket() || !canUsePlatformDocsApi()) return;
     const next = get().items.map((x) =>
       x.id === id && x.kind === kind ? { ...x, note: note.trim() || undefined } : x,
     );

@@ -13,6 +13,7 @@ import { useSpeechInput } from '@/hooks/useSpeechInput';
 import { HomeSlashMenu } from '@/components/home/HomeSlashMenu';
 import { HomePickerModal } from '@/components/home/HomePickerModal';
 import { LlmSettingsModal } from '@/components/home/LlmSettingsModal';
+import { GuestGateLock } from '@/components/auth/GuestGateLock';
 
 export interface SharedComposerProps {
   variant: 'landing' | 'workspace';
@@ -62,8 +63,10 @@ export function SharedComposer({
   const currentChatId = useConversationStore((s) => s.currentChatId);
   const chats = useConversationStore((s) => s.chats);
   const platformRole = useSessionStore((s) => s.user?.platformRole);
+  const isGuest = useSessionStore((s) => s.isGuest);
   const executeAllowed = canExecuteChat(platformRole);
-  const inputDisabled = disabled || !executeAllowed;
+  const inputDisabled = disabled || (!executeAllowed && !isGuest);
+  const modelDisabled = disabled || !executeAllowed;
   const config = useLlmConfigStore((s) => s.config);
   const selectModel = useLlmConfigStore((s) => s.selectModel);
   const modelOptions = useLlmConfigStore((s) => s.modelOptions);
@@ -137,7 +140,7 @@ export function SharedComposer({
   const handleSubmit = () => {
     const trimmed = value.trim();
     if (!trimmed || inputDisabled) return;
-    if (!executeAllowed) {
+    if (!executeAllowed && !isGuest) {
       notify(READONLY_EXECUTE_HINT);
       return;
     }
@@ -187,15 +190,17 @@ export function SharedComposer({
     textareaRef.current?.focus();
   };
 
-  const defaultPlaceholder = !executeAllowed
-    ? '只读模式：可浏览结果，不可发送执行'
+  const defaultPlaceholder = isGuest
+    ? '描述你要做的事，发送后登录即可继续…'
+    : !executeAllowed
+      ? '只读模式：可浏览结果，不可发送执行'
     : hideSkill
       ? '继续对话… @ Agent · Enter 发送'
       : landing
         ? '补充你的意图… / 调技能 · Enter 发送'
         : '继续对话… @ 专家 · / 技能 · Enter 发送';
 
-  const slashMenu = slashOpen && executeAllowed ? (
+  const slashMenu = slashOpen && (executeAllowed || isGuest) ? (
     <HomeSlashMenu
       mode={slashMode}
       query={getSlashQuery(value, slashMode)}
@@ -218,7 +223,7 @@ export function SharedComposer({
       >
         {!executeAllowed ? (
           <div className="mb-2 rounded-lg border border-amber-200/80 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
-            {READONLY_EXECUTE_HINT}
+            {isGuest ? '游客浏览中，发送任务时会先请你登录' : READONLY_EXECUTE_HINT}
           </div>
         ) : null}
         {menuPlacement === 'above' && slashOpen ? (
@@ -237,7 +242,7 @@ export function SharedComposer({
             rows={compactLanding ? 1 : landing ? 3 : 2}
             value={value}
             disabled={inputDisabled}
-            readOnly={!executeAllowed}
+            readOnly={!executeAllowed && !isGuest}
             onChange={(e) => {
               handleInput(e.target.value, e.target.selectionStart ?? e.target.value.length);
               autoGrow(e.target);
@@ -324,7 +329,7 @@ export function SharedComposer({
                     );
                   });
                 }}
-                disabled={inputDisabled}
+                disabled={modelDisabled}
                 className={cn(
                   'border border-zinc-200 bg-white text-zinc-800 disabled:opacity-60',
                   compactLanding
@@ -400,11 +405,12 @@ export function SharedComposer({
                 onClick={handleSubmit}
                 disabled={inputDisabled}
                 className={cn(
-                  'apple-btn-primary flex items-center justify-center text-white disabled:opacity-50',
+                  'apple-btn-primary relative flex items-center justify-center text-white disabled:opacity-50',
                   compactLanding ? 'h-5 w-5 rounded' : 'h-8 w-8 rounded-lg',
                 )}
               >
                 <i className={cn('fa-solid fa-arrow-up', compactLanding ? 'text-[10px]' : 'text-[13px]')} />
+                <GuestGateLock />
               </button>
             </div>
           </div>

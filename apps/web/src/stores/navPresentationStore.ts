@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { AppView } from '@/domain/appView';
+import { isGuestLoginGatedView } from '@/domain/guestAccess';
 import {
   buildRoleNavPreset,
   clampBusinessShellSlots,
@@ -141,7 +142,12 @@ export const useNavPresentationStore = create<NavPresentationState>((set, get) =
       return true;
     },
 
-    isViewEnabled: (view) => get().isSlotEnabled(view),
+    isViewEnabled: (view) => {
+      // 游客的 task / ai-tasks 是“可浏览、执行时登录”，不能沿用 viewer
+      // 在展示矩阵中的隐藏配置，否则路由会在登录墙之前先回退到首页。
+      if (useSessionStore.getState().isGuest && isGuestLoginGatedView(view)) return true;
+      return get().isSlotEnabled(view);
+    },
 
     getFallbackView: (requested) => {
       const { isViewEnabled } = get();

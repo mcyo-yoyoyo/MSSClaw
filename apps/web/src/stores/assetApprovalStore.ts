@@ -67,7 +67,9 @@ interface AssetApprovalState {
 }
 
 function userBucket() {
-  return getCurrentUserId() || 'anonymous';
+  const userId = getCurrentUserId();
+  if (!userId) throw new Error('asset_approval_requires_authenticated_user');
+  return userId;
 }
 
 function persistDoc(items: AssetApprovalRecord[], watchedByUserId: Record<string, ApprovalWatchItem[]>) {
@@ -246,7 +248,7 @@ export const useAssetApprovalStore = create<AssetApprovalState>((set, get) => ({
 
   hydrate: () => {
     void (async () => {
-      if (!canUsePlatformDocsApi()) {
+      if (!getCurrentUserId() || !canUsePlatformDocsApi()) {
         set({ history: [], watched: [] });
         return;
       }
@@ -269,13 +271,14 @@ export const useAssetApprovalStore = create<AssetApprovalState>((set, get) => ({
   },
 
   openApproval: (input) => {
+    const submitterUserId = userBucket();
     const now = Date.now();
     const req: AssetApprovalRequest = {
       kind: input.kind,
       assetId: input.assetId,
       assetName: input.assetName,
       submitterName: input.submitterName || getCurrentUserName() || '未知用户',
-      submitterUserId: getCurrentUserId() || undefined,
+      submitterUserId,
       stepIndex: 1,
       createdAt: now,
       reasons: input.reasons?.length ? input.reasons : ['publish_executable'],

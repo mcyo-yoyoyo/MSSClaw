@@ -40,6 +40,7 @@ import {
   uploadWorkspacePackage,
 } from '@/api/blobApi';
 import { currentWorkspaceId } from '@/api/platformDocsApi';
+import { requireLogin } from '@/stores/authGateStore';
 
 function slugCommand(name: string): string {
   const base = name
@@ -58,11 +59,14 @@ function slugCommand(name: string): string {
 export function MarketSkillSubmitModal({
   open,
   onClose,
+  onLoginReplay,
 }: {
   open: boolean;
   onClose: () => void;
+  onLoginReplay?: () => void;
 }) {
   const user = useSessionStore((s) => s.user);
+  const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
   const upsertSkill = useMarketplaceStore((s) => s.upsertSkill);
   const showToast = useMarketplaceStore((s) => s.showToast);
   const businessFilter = useMarketFilterStore((s) => s.businessFilter);
@@ -105,7 +109,13 @@ export function MarketSkillSubmitModal({
     setSubmitting(false);
   }, [open, user, businessFilter]);
 
-  if (!open) return null;
+  useEffect(() => {
+    if (!open || isAuthenticated) return;
+    onClose();
+    requireLogin('submit-skill', onLoginReplay);
+  }, [isAuthenticated, onClose, onLoginReplay, open]);
+
+  if (!open || !isAuthenticated) return null;
 
   const applyParsed = (parsed: PrototypeSkillSeed, fileLabel: string) => {
     setName(parsed.nameZh || parsed.name || '');

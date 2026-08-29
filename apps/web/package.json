@@ -16,6 +16,7 @@
     "test:external-tool-layout": "node --experimental-strip-types --test tests/externalToolLayout.test.ts",
     "test:external-tool-layout-store": "node --experimental-strip-types --test tests/externalToolLayoutStore.test.ts",
     "test:inbox-visibility": "node --experimental-strip-types --test tests/inboxVisibility.test.ts",
+    "test:guest-session": "node --experimental-strip-types --test tests/guestSession.test.ts",
     "test:agent-hub-search": "node --experimental-strip-types --test tests/agentHubSearch.test.ts",
     "test:ai-news-sync": "node --experimental-strip-types --test tests/aiNewsSync.test.ts",
     "test:skill-hub-search": "node --experimental-strip-types --test tests/skillHubSearch.test.ts",
@@ -26,6 +27,7 @@
     "test:market-shelf-card-layout": "node --experimental-strip-types --test tests/marketShelfCardLayout.test.ts",
     "test:market-external-category": "node --experimental-strip-types --test tests/marketExternalCategoryLayout.test.ts",
     "test:portal-tool-ops": "node --experimental-strip-types --test tests/portalToolOpsComposition.test.ts",
+    "test:portal-dashboard": "node --experimental-strip-types --test tests/portalEngagementMetrics.test.ts",
     "test:internal-office-scene-order": "node --experimental-strip-types --test tests/internalOfficeSceneOrder.test.ts",
     "smoke": "node scripts/smoke.mjs"
   },
