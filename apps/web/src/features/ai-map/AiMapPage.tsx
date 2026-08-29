@@ -544,7 +544,7 @@ export function AiMapPage({
             isAdmin ? (
               <>
                 前端预览：学习层展示门户运营上架的前沿洞察 / 场景案例 / 培训课件。新建、编辑、上下架请到
-                <strong className="font-semibold">系统设置 · 门户运营</strong>。
+                <strong className="font-semibold">运营设置 · 门户运营</strong>。
               </>
             ) : (
               <>{SCENARIO_JOURNEY_COPY.pageTip}</>

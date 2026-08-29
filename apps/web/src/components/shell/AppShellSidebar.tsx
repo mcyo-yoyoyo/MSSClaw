@@ -85,11 +85,15 @@ export function AppShellSidebar() {
   }, [isViewEnabled, roleEnabled, user?.platformRole, workspaceId]);
 
   const capabilityItems = useMemo(() => {
-    const merge = [...itemsBySection.platform, ...itemsBySection.ops];
     return sortByAdminMenuOrder(
-      merge.filter((i) => i.id !== 'ai-map' && i.id !== 'home'),
+      itemsBySection.platform.filter((i) => i.id !== 'ai-map' && i.id !== 'home'),
     );
-  }, [itemsBySection.platform, itemsBySection.ops]);
+  }, [itemsBySection.platform]);
+
+  const operationsItems = useMemo(
+    () => sortByAdminMenuOrder(itemsBySection.ops),
+    [itemsBySection.ops],
+  );
 
   const systemNavNodes = useMemo(() => {
     const sorted = sortByAdminMenuOrder(itemsBySection.system);
@@ -154,11 +158,14 @@ export function AppShellSidebar() {
 
   const isBusiness = perspective === 'business';
   const hasCapabilityBody = capabilityItems.length > 0;
+  const hasOperationsBody = operationsItems.length > 0;
   const hasSystemBody = systemNavNodes.length > 0;
 
-  /** 运营壳 + 配置页 → 能力/系统导航；其余（含业务壳全部）→ 三维筛选 */
+  /** 运营壳 + 配置页 → 能力/运营/系统导航；其余（含业务壳全部）→ 三维筛选 */
   const showOpsConfigNav =
-    !isBusiness && isOpsOnlyView(appView) && (hasCapabilityBody || hasSystemBody);
+    !isBusiness &&
+    isOpsOnlyView(appView) &&
+    (hasCapabilityBody || hasOperationsBody || hasSystemBody);
 
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = Number(window.localStorage.getItem('mss-sidebar-width'));
@@ -250,6 +257,18 @@ export function AppShellSidebar() {
                 collapsed={navSectionsCollapsed.platform}
                 onToggle={() => toggleNavSection('platform')}
                 items={capabilityItems}
+                activeView={appView}
+                onSelect={setAppView}
+                sidebarCollapsed={sidebarCollapsed}
+              />
+            ) : null}
+            {hasOperationsBody ? (
+              <NavSectionGroup
+                section="ops"
+                label={NAV_SECTION_LABELS.ops}
+                collapsed={navSectionsCollapsed.ops}
+                onToggle={() => toggleNavSection('ops')}
+                items={operationsItems}
                 activeView={appView}
                 onSelect={setAppView}
                 sidebarCollapsed={sidebarCollapsed}

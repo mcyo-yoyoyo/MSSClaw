@@ -94,7 +94,7 @@ export const APP_VIEW_NAV: AppViewNavItem[] = [
 ];
 
 /**
- * 顶栏「管理后台」下拉顺序；侧栏能力配置 / 系统设置内项与之对齐。
+ * 顶栏「管理后台」下拉顺序；侧栏能力配置 / 运营设置 / 系统设置内项与之对齐。
  * （提示词等未进下拉的项排在同段末尾）
  */
 export const ADMIN_MENU_VIEWS = [
@@ -128,18 +128,22 @@ export function sortByAdminMenuOrder<T extends { id: AppView }>(items: T[]): T[]
 }
 /**
  * 全角色统一的一级分类（侧栏与展示配置共用）：
- * 工作平台 → 能力配置 → 系统设置。
- * `ops` 仅保留兼容旧折叠状态，不再作为独立一级菜单。
+ * 工作平台 → 能力配置 → 运营设置 → 系统设置。
  */
 export const NAV_SECTION_LABELS: Record<NavSection, string> = {
   workspace: '工作平台',
   platform: '能力配置',
-  ops: '能力配置',
+  ops: '运营设置',
   system: '系统设置',
 };
 
 /** 侧栏实际渲染的一级分类顺序（全角色一致） */
-export const SIDEBAR_NAV_SECTIONS = ['workspace', 'platform', 'system'] as const satisfies readonly NavSection[];
+export const SIDEBAR_NAV_SECTIONS = [
+  'workspace',
+  'platform',
+  'ops',
+  'system',
+] as const satisfies readonly NavSection[];
 
 /** AppView 占位页（尚未实现的视图） */
 export const APP_VIEW_PLACEHOLDERS: Partial<

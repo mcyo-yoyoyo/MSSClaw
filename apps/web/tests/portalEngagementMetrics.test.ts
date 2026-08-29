@@ -90,9 +90,18 @@ test('数据看板是门户运营后的独立后台入口，访问数据不再�
     appViewSource,
     /export const ADMIN_MENU_VIEWS = \[[\s\S]*?'portal-ops',\s*'portal-dashboard',/,
   );
+  assert.match(appViewSource, /ops: '运营设置'/);
+  assert.match(
+    appViewSource,
+    /SIDEBAR_NAV_SECTIONS = \[\s*'workspace',\s*'platform',\s*'ops',\s*'system',?\s*\]/,
+  );
   assert.match(
     navPresentationSource,
-    /id: 'portal-dashboard',[\s\S]*?label: '数据看板',[\s\S]*?section: 'system',[\s\S]*?adminOnly: true/,
+    /id: 'portal-ops',[\s\S]*?label: '门户运营',[\s\S]*?section: 'ops'/,
+  );
+  assert.match(
+    navPresentationSource,
+    /id: 'portal-dashboard',[\s\S]*?label: '数据看板',[\s\S]*?section: 'ops',[\s\S]*?adminOnly: true/,
   );
   assert.match(routerSource, /case 'portal-dashboard':[\s\S]*?<LazyPortalDataDashboardPage \/>/);
   assert.doesNotMatch(portalOpsSource, /label: '访问数据'/);

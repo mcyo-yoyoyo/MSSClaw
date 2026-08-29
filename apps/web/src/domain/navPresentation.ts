@@ -16,7 +16,7 @@ export type NavSlotId = AppView | 'warroom';
 
 /**
  * 业务壳可配置槽位：仅「工作平台」相关。
- * 能力配置 / 系统设置属于运营壳，不应出现在业务用户/访客的展示配置里。
+ * 能力配置 / 运营设置 / 系统设置属于运营壳，不应出现在业务用户/访客的展示配置里。
  */
 export const BUSINESS_SHELL_SLOT_IDS: readonly NavSlotId[] = [
   'home',
@@ -141,7 +141,7 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
     subtitle: '样板间进阶深潜 · 内容由门户运营上架（业务默认可关）',
     icon: 'fa-map',
     section: 'platform',
-    /** 项目详情进阶；配置入口在系统设置 · 门户运营 */
+    /** 项目详情进阶；配置入口在运营设置 · 门户运营 */
     hiddenFromSidebar: true,
   },
   {
@@ -193,7 +193,7 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
     label: '门户运营',
     subtitle: '场景方案包 · 工具 How to',
     icon: 'fa-newspaper',
-    section: 'system',
+    section: 'ops',
     locked: true,
     adminOnly: true,
   },
@@ -202,7 +202,7 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
     label: '数据看板',
     subtitle: '登录 / 游客访问与内容互动指标',
     icon: 'fa-chart-line',
-    section: 'system',
+    section: 'ops',
     locked: true,
     adminOnly: true,
   },
@@ -297,7 +297,7 @@ function withAdminLocks(base: Record<NavSlotId, boolean>, role: PlatformRole): R
  * - 业务用户：工作平台 = 首页 · 三货架（任务记录仅标准/完整）
  * - 只读访客：工作平台 = 首页 · 三货架
  * - 能力开发：工作平台 + 仅「配置技能」（无专家/工具/知识/协作空间；完整产品再开）
- * - 平台运营：专家/技能/工具 + 系统治理项（展示/租户/组织/门户）
+ * - 平台运营：专家/技能/工具 + 运营/系统治理项（门户/展示/租户/组织）
  */
 function marketSlotsOn(base: Record<NavSlotId, boolean>): Record<NavSlotId, boolean> {
   return {
@@ -384,7 +384,7 @@ function mvpForRole(role: PlatformRole): Record<NavSlotId, boolean> {
 }
 
 /**
- * 业务壳硬约束（所有方案）：剥离能力配置/系统设置槽位。
+ * 业务壳硬约束（所有方案）：剥离能力配置/运营设置/系统设置槽位。
  * 业务用户侧栏只有工作平台；完整能力在运营/超管角色上配置。
  */
 export function clampBusinessShellSlots(matrix: RoleNavMatrix): RoleNavMatrix {

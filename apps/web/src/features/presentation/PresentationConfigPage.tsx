@@ -55,7 +55,7 @@ export function PresentationConfigPage() {
     );
   }
 
-  // 业务/访客：只配工作平台；能力配置/系统设置请切换到能力开发或平台运营
+  // 业务/访客：只配工作平台；能力配置/运营设置/系统设置请切换到能力开发或平台运营
   const configSections: readonly NavSection[] = isBusinessShellRole(editingRole)
     ? (['workspace'] as const)
     : SIDEBAR_NAV_SECTIONS;
