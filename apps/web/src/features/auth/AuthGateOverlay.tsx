@@ -55,7 +55,6 @@ export function AuthGateOverlay() {
         <LoginForm
           className="space-y-4 px-7 pb-7"
           hint={hint}
-          subtitle="登录后继续当前操作"
           onSuccess={finishLogin}
           footer={
             <button

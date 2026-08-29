@@ -26,7 +26,7 @@ const GATE_HINTS: Record<AuthGateAction, string> = {
   'submit-skill': '登录后即可提交 Skill',
   'submit-agent': '登录后即可提交 Agent',
   chat: '登录后即可发起任务',
-  account: '登录后进入你的个人工作台',
+  account: '',
 };
 
 const TRACKABLE_ROUTE_KEYS = new Set([

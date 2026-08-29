@@ -18,6 +18,7 @@ import {
   type WorkspaceMember,
 } from '@/domain/rbac';
 import { getDeptLabel, getRegionLabel, type DeptId, type RegionId } from '@/domain/orgTaxonomy';
+import { CenterModal } from '@/components/center/CenterShell';
 import {
   AUDIT_CATEGORY_LABELS,
   matchAuditLog,
@@ -25,14 +26,7 @@ import {
   type AuditLogQuery,
 } from '@/domain/auditLog';
 import { downloadAuditLogsExcel } from '@/domain/auditExport';
-import {
-  batchSetAccountPasswords,
-  generateTempPassword,
-  listCredentialEmails,
-  loadAuthPolicy,
-  setAccountPassword,
-  setAllowDemoPassword,
-} from '@/domain/accountCredentials';
+import { setAccountPassword } from '@/domain/accountCredentials';
 import {
   buildMemberImportTemplateCsv,
   downloadMemberImportTemplate,
@@ -129,8 +123,7 @@ function MembersAndOrgPanel({
   const [deptId, setDeptId] = useState<DeptId | ''>('');
   const [regionId, setRegionId] = useState<RegionId | ''>('');
   const [memberQuery, setMemberQuery] = useState('');
-  const [pwdTick, setPwdTick] = useState(0);
-  const [pwdOpen, setPwdOpen] = useState(false);
+  const [passwordMember, setPasswordMember] = useState<WorkspaceMember | null>(null);
 
   const filteredMembers = useMemo(() => {
     const query = memberQuery.trim().toLocaleLowerCase();
@@ -518,23 +511,10 @@ function MembersAndOrgPanel({
                         ) : null}
                         <button
                           type="button"
-                          onClick={() => {
-                            void (async () => {
-                              const temp = generateTempPassword();
-                              const r = await setAccountPassword(member.email, temp);
-                              if (r.ok) {
-                                window.alert(
-                                  `${member.email} 临时密码已重置为：\n${temp}\n\n请安全告知本人后立即销毁此提示。`,
-                                );
-                                setPwdTick((n) => n + 1);
-                              } else {
-                                window.alert(r.error);
-                              }
-                            })();
-                          }}
+                          onClick={() => setPasswordMember(member)}
                           className="rounded border border-zinc-200 px-2 py-0.5 text-[10px] font-semibold text-zinc-600 hover:bg-zinc-50"
                         >
-                          重置密码
+                          修改密码
                         </button>
                         <button
                           type="button"
@@ -564,38 +544,173 @@ function MembersAndOrgPanel({
         </div>
       </Section>
 
-      {canManage ? (
-        <section className="rounded-2xl border border-zinc-200/90 bg-white">
-          <button
-            type="button"
-            onClick={() => setPwdOpen((v) => !v)}
-            className="flex w-full items-center justify-between px-4 py-3 text-left"
-          >
-            <span>
-              <span className="text-[13px] font-semibold text-zinc-900">登录与密码</span>
-              <span className="mt-0.5 block text-[11px] text-zinc-400">
-                演示密码开关 · 批量改密（高级）
-              </span>
-            </span>
-            <i
-              className={cn(
-                'fa-solid fa-chevron-down text-[11px] text-zinc-400 transition',
-                pwdOpen && 'rotate-180',
-              )}
-            />
-          </button>
-          {pwdOpen ? (
-            <div className="border-t border-zinc-100 px-4 pb-4 pt-3">
-              <AccountPasswordAdminSection
-                members={members}
-                tick={pwdTick}
-                onChanged={() => setPwdTick((n) => n + 1)}
-              />
-            </div>
-          ) : null}
-        </section>
+      {passwordMember ? (
+        <PasswordChangeModal
+          member={passwordMember}
+          onClose={() => setPasswordMember(null)}
+        />
       ) : null}
     </div>
+  );
+}
+
+function PasswordChangeModal({
+  member,
+  onClose,
+}: {
+  member: WorkspaceMember;
+  onClose: () => void;
+}) {
+  const setToast = useSettingsStore((s) => s.setToast);
+  const [step, setStep] = useState<'edit' | 'confirm'>('edit');
+  const [nextPassword, setNextPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const close = () => {
+    if (!busy) onClose();
+  };
+
+  const goToConfirmation = () => {
+    const password = nextPassword.trim();
+    if (password.length < 6) {
+      setError('新密码至少 6 位');
+      return;
+    }
+    if (password !== confirmPassword.trim()) {
+      setError('两次输入的密码不一致');
+      return;
+    }
+    setNextPassword(password);
+    setError(null);
+    setStep('confirm');
+  };
+
+  const confirmChange = async () => {
+    setBusy(true);
+    const result = await setAccountPassword(member.email, nextPassword);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error);
+      setStep('edit');
+      return;
+    }
+    setToast(`${member.email} 的密码已修改`);
+    onClose();
+  };
+
+  return (
+    <CenterModal
+      open
+      title="修改密码"
+      onClose={close}
+      size="md"
+      fitContent
+      actions={
+        step === 'edit' ? (
+          <>
+            <button
+              type="button"
+              onClick={close}
+              className="rounded-lg border border-zinc-200 bg-white px-3.5 py-2 text-[12px] font-medium text-zinc-600 hover:bg-zinc-50"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              form="password-change-form"
+              className="rounded-lg bg-zinc-900 px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-zinc-800"
+            >
+              下一步
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setStep('edit');
+              }}
+              disabled={busy}
+              className="rounded-lg border border-zinc-200 bg-white px-3.5 py-2 text-[12px] font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
+            >
+              返回修改
+            </button>
+            <button
+              type="button"
+              onClick={() => void confirmChange()}
+              disabled={busy}
+              className="rounded-lg bg-zinc-900 px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"
+            >
+              {busy ? '保存中…' : '确认修改'}
+            </button>
+          </>
+        )
+      }
+    >
+      {step === 'edit' ? (
+        <form
+          id="password-change-form"
+          className="space-y-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            goToConfirmation();
+          }}
+        >
+          <p className="text-[12px] leading-relaxed text-zinc-500">
+            为 <span className="font-semibold text-zinc-800">{member.email}</span> 设置新的登录密码。
+          </p>
+          <label className="block text-[12px] font-medium text-zinc-700">
+            新密码
+            <input
+              type="password"
+              value={nextPassword}
+              onChange={(event) => {
+                setNextPassword(event.target.value);
+                if (error) setError(null);
+              }}
+              placeholder="请输入新密码（至少 6 位）"
+              autoFocus
+              className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-[13px] text-zinc-900 outline-none focus:border-zinc-400"
+            />
+          </label>
+          <label className="block text-[12px] font-medium text-zinc-700">
+            确认新密码
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(event) => {
+                setConfirmPassword(event.target.value);
+                if (error) setError(null);
+              }}
+              placeholder="请再次输入新密码"
+              className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-[13px] text-zinc-900 outline-none focus:border-zinc-400"
+            />
+          </label>
+          {error ? (
+            <p role="alert" className="text-[11px] text-red-600">
+              {error}
+            </p>
+          ) : null}
+        </form>
+      ) : (
+        <div className="space-y-3 text-[12px] leading-relaxed text-zinc-600">
+          <p>
+            确定要修改 <span className="font-semibold text-zinc-900">{member.email}</span> 的登录密码吗？
+          </p>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-800">
+            确认后原密码会立即失效，请确认已通过安全方式告知新密码。
+          </div>
+          {error ? (
+            <p role="alert" className="text-[11px] text-red-600">
+              {error}
+            </p>
+          ) : null}
+        </div>
+      )}
+    </CenterModal>
   );
 }
 
@@ -690,105 +805,6 @@ function BatchAccountImportSection() {
       >
         {busy ? '导入中…' : '开始导入'}
       </button>
-    </div>
-  );
-}
-
-function AccountPasswordAdminSection({
-  members,
-  tick,
-  onChanged,
-}: {
-  members: WorkspaceMember[];
-  tick: number;
-  onChanged: () => void;
-}) {
-  const [allowDemo, setAllowDemo] = useState(() => loadAuthPolicy().allowDemoPassword);
-  const [batchText, setBatchText] = useState(
-    '# 每行：邮箱,密码\nmcyo@huawei.com,ChangeMe123\n',
-  );
-  const [busy, setBusy] = useState(false);
-  const setToast = useSettingsStore((s) => s.setToast);
-
-  void tick;
-  const credCount = listCredentialEmails().length;
-  const activeEmails = members.filter((m) => m.status === 'active').map((m) => m.email);
-
-  return (
-    <div className="space-y-3">
-      <p className="text-[11px] leading-relaxed text-zinc-500">
-        密码保存在共享服务端（工作区 docs）。生产前请关闭演示密码，并为账号单独设密。已设密：{credCount}。
-      </p>
-      <label className="flex items-start gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-[12px] text-zinc-700">
-        <input
-          type="checkbox"
-          className="mt-0.5 accent-claw-600"
-          checked={allowDemo}
-          onChange={(e) => {
-            const next = e.target.checked;
-            setAllowDemo(next);
-            void setAllowDemoPassword(next);
-            setToast(
-              next
-                ? '已开启演示密码（未设密账号仍可用 mssclaw）'
-                : '已关闭演示密码：必须为账号单独设密',
-            );
-          }}
-        />
-        <span>
-          <span className="font-semibold">允许演示密码登录</span>
-          <span className="mt-0.5 block text-[11px] text-zinc-400">
-            默认开启便于试用；上线前请关闭。
-          </span>
-        </span>
-      </label>
-
-      <details className="rounded-xl border border-zinc-200 bg-white">
-        <summary className="cursor-pointer px-3 py-2 text-[12px] font-semibold text-zinc-700">
-          仅批量改密（已有账号）
-        </summary>
-        <div className="space-y-2 border-t border-zinc-100 px-3 py-2.5">
-          <textarea
-            rows={4}
-            value={batchText}
-            onChange={(e) => setBatchText(e.target.value)}
-            className="w-full rounded-lg border border-zinc-200 px-2.5 py-2 font-mono text-[11px] text-zinc-800"
-            spellCheck={false}
-          />
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                void (async () => {
-                  setBusy(true);
-                  const r = await batchSetAccountPasswords(batchText);
-                  setBusy(false);
-                  onChanged();
-                  setToast(
-                    r.fail.length
-                      ? `成功 ${r.ok} 条，失败 ${r.fail.length} 条`
-                      : `已批量设置 ${r.ok} 个账号密码`,
-                  );
-                })();
-              }}
-              className="rounded-lg bg-claw-600 px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
-            >
-              批量应用
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const lines = activeEmails.map((em) => `${em},${generateTempPassword()}`);
-                setBatchText(`# 临时密码草稿\n${lines.join('\n')}\n`);
-              }}
-              className="rounded-lg border border-zinc-200 px-3 py-1.5 text-[12px] font-medium text-zinc-700 hover:bg-zinc-50"
-            >
-              生成草稿
-            </button>
-          </div>
-        </div>
-      </details>
     </div>
   );
 }

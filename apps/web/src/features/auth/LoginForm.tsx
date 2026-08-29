@@ -1,6 +1,4 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { loadAuthPolicy } from '@/domain/accountCredentials';
-import { DEMO_PASSWORD } from '@/domain/authAccounts';
 import { MssZhishuMark } from '@/components/brand/MssZhishuMark';
 import { useSessionStore } from '@/stores/sessionStore';
 import { ensureAccountPasswordsReady } from '@/stores/settingsStore';
@@ -12,7 +10,6 @@ interface LoginFormProps {
   /** 登录墙场景下说明「为什么需要登录」 */
   hint?: string;
   title?: string;
-  subtitle?: string;
   onSuccess?: () => void | Promise<void>;
   /** 表单下方的次要操作（游客浏览 / 稍后再说） */
   footer?: React.ReactNode;
@@ -22,8 +19,7 @@ interface LoginFormProps {
 /** 登录表单：全屏登录页与登录墙浮层共用同一份逻辑 */
 export function LoginForm({
   hint,
-  title = '登录账号',
-  subtitle = '使用组织账号进入工作台',
+  title = '登录MSS AI提效平台',
   onSuccess,
   footer,
   className,
@@ -33,7 +29,6 @@ export function LoginForm({
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const demoAllowed = loadAuthPolicy().allowDemoPassword;
 
   useEffect(() => {
     void ensureAccountPasswordsReady();
@@ -59,7 +54,6 @@ export function LoginForm({
       <div className="flex flex-col items-center text-center">
         <MssZhishuMark size={56} />
         <h2 className="mt-3.5 text-[16px] font-semibold text-zinc-900">{title}</h2>
-        <p className="mt-1 text-[12px] text-zinc-500">{subtitle}</p>
       </div>
 
       {hint ? (
@@ -107,18 +101,6 @@ export function LoginForm({
       </button>
 
       {footer}
-
-      {demoAllowed ? (
-        <p className="text-center text-[11px] text-zinc-400">
-          当前角色账号初始密码均为{' '}
-          <span className="font-mono text-zinc-600">{DEMO_PASSWORD}</span>
-          （生产请在组织权限中改密或关闭演示策略）
-        </p>
-      ) : (
-        <p className="text-center text-[11px] text-zinc-400">
-          请使用平台运营为您配置的账号密码登录
-        </p>
-      )}
     </form>
   );
 }
