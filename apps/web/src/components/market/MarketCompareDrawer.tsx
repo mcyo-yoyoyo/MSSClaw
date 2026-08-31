@@ -27,12 +27,6 @@ export function MarketCompareDrawer({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-zinc-900/40 p-3 sm:items-center sm:p-6">
-      <button
-        type="button"
-        className="absolute inset-0 cursor-default"
-        aria-label="关闭对比"
-        onClick={() => setDrawerOpen(false)}
-      />
       <div className="relative z-10 flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl">
         <header className="flex items-start justify-between gap-3 border-b border-zinc-100 px-4 py-3.5 sm:px-5">
           <div>

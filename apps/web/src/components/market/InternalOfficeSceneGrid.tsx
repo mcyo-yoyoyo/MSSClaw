@@ -1071,12 +1071,6 @@ export function InternalOfficeSceneGrid({
 
       {picker ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-900/40 p-4 sm:items-center">
-          <button
-            type="button"
-            className="absolute inset-0 cursor-default"
-            aria-label="关闭工具选择"
-            onClick={() => setPicker(null)}
-          />
           <div className="relative z-10 w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-5 shadow-xl">
             <div className="flex items-start justify-between gap-3">
               <div>

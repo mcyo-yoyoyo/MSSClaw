@@ -113,11 +113,8 @@ export function HowToDrawer({
   onOpenGuide: (g: PlazaToolGuide) => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/20" onClick={onClose}>
-      <aside
-        className="flex h-full w-full max-w-[320px] flex-col border-l border-zinc-200 bg-white shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/20">
+      <aside className="flex h-full w-full max-w-[320px] flex-col border-l border-zinc-200 bg-white shadow-xl">
         <div className="flex items-start justify-between gap-3 border-b border-zinc-100 px-4 py-3.5">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-zinc-400">

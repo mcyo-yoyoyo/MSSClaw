@@ -52,11 +52,9 @@ export function TaskResourceExplorer({ onWorkspaceSwitch }: TaskResourceExplorer
 
   return (
     <>
-      <button
-        type="button"
-        aria-label="关闭资源浏览器"
+      <div
+        aria-hidden="true"
         className="fixed inset-0 z-[70] bg-black/20 backdrop-blur-[1px]"
-        onClick={close}
       />
       <div className="fixed left-0 top-12 z-[75] h-[calc(100vh-3rem)] shadow-2xl">
         <ResourceExplorer

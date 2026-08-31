@@ -36,12 +36,8 @@ export function AuthGateOverlay() {
       role="dialog"
       aria-modal="true"
       aria-label="登录"
-      onClick={close}
     >
-      <div
-        className="w-full max-w-[420px] rounded-2xl border border-zinc-200 bg-white shadow-[0_24px_60px_-24px_rgba(24,24,27,0.5)]"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="w-full max-w-[420px] rounded-2xl border border-zinc-200 bg-white shadow-[0_24px_60px_-24px_rgba(24,24,27,0.5)]">
         <div className="flex justify-end px-4 pt-4">
           <button
             type="button"

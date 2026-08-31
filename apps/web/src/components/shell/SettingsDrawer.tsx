@@ -17,11 +17,9 @@ export function SettingsDrawer() {
 
   return (
     <>
-      <button
-        type="button"
-        aria-label="关闭偏好设置"
+      <div
+        aria-hidden="true"
         className="fixed inset-0 z-[80] bg-black/25 backdrop-blur-[2px]"
-        onClick={closeSettings}
       />
       <aside
         ref={drawerRef}

@@ -41,10 +41,7 @@ export function AssetApprovalModal() {
   const title = approvalActionTitle(current.reasons);
 
   return (
-    <div
-      className="modal-backdrop fixed inset-0 z-[110] flex items-center justify-center p-4"
-      onClick={(e) => e.target === e.currentTarget && close()}
-    >
+    <div className="modal-backdrop fixed inset-0 z-[110] flex items-center justify-center p-4">
       <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-black/5 bg-white shadow-apple-lg">
         <div className="flex items-start justify-between border-b border-black/[0.06] px-5 py-4">
           <div>

@@ -199,17 +199,20 @@ export function App() {
     void bootstrap();
   }, [bootstrap, shellReady]);
 
-  // 游客直达个人域页面（#/me、#/messages）：回到首页并就地弹登录，登录后再送回去。
-  // 主动登出走同一路径，但只静默回首页——刚登出的人不该马上又被要求登录。
+  // 主动登出无论身处哪个页面都静默回首页；replace 避免后退又回到受限页面。
+  // 游客直达个人域页面（#/me、#/messages）时，再回首页并就地弹登录，登录后送回去。
   useEffect(() => {
-    if (!isGuest || !isGuestBlockedView(appView)) return;
-    const target = appView;
-    setAppView('home');
-    writeAppRouteToLocation({ view: 'home' }, true);
+    if (!isGuest) return;
     if (useSessionStore.getState().suppressGuestGate) {
+      setAppView('home');
+      writeAppRouteToLocation({ view: 'home' }, true);
       useSessionStore.getState().clearGuestGateSuppression();
       return;
     }
+    if (!isGuestBlockedView(appView)) return;
+    const target = appView;
+    setAppView('home');
+    writeAppRouteToLocation({ view: 'home' }, true);
     useAuthGateStore.getState().requestLogin('account', () => {
       writeAppRouteToLocation({ view: target });
       useAppViewStore.getState().setAppView(target);

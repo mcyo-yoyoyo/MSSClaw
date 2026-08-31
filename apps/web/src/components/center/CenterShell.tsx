@@ -53,7 +53,6 @@ export function CenterModal({
         fullscreen ? 'bg-black/55 p-2 md:p-3' : 'p-4',
         elevate ? 'z-[120]' : 'z-[100]',
       )}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
         className={cn(

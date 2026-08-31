@@ -87,10 +87,7 @@ export function CommandPalette({ handlers }: CommandPaletteProps) {
   if (!open) return null;
 
   return (
-    <div
-      className="modal-backdrop fixed inset-0 z-[110] flex items-start justify-center px-4 pt-[12vh]"
-      onClick={(e) => e.target === e.currentTarget && closePalette()}
-    >
+    <div className="modal-backdrop fixed inset-0 z-[110] flex items-start justify-center px-4 pt-[12vh]">
       <div ref={panelRef} className="w-full max-w-xl overflow-hidden rounded-2xl border border-black/5 bg-white shadow-apple-lg">
         <div className="flex items-center gap-3 border-b border-black/[0.06] px-4 py-3.5">
           <i className="fa-solid fa-terminal text-sm text-claw-600" />

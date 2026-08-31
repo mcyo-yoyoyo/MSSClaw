@@ -36,8 +36,6 @@ export function HomePickerModal({ type, onClose, onPickSkill, onPickAgent }: Hom
 
     <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/20 p-4 sm:items-center">
 
-      <button type="button" aria-label="关闭" className="absolute inset-0" onClick={onClose} />
-
       <div className="relative max-h-[70vh] w-full max-w-lg overflow-hidden rounded-2xl border border-black/5 bg-white shadow-apple-lg">
 
         <div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-3">
@@ -131,4 +129,3 @@ export function HomePickerModal({ type, onClose, onPickSkill, onPickAgent }: Hom
   );
 
 }
-

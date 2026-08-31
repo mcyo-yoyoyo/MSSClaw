@@ -56,7 +56,6 @@ export function WarRoomMembersModal({
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
-      <button type="button" aria-label="关闭" className="absolute inset-0" onClick={onClose} />
       <div
         ref={dialogRef}
         role="dialog"
