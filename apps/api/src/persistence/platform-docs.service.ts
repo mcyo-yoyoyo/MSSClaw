@@ -696,6 +696,63 @@ function normalizedAccountEmail(value: unknown): string {
     .replace(/@company\.com$/i, '@huawei.com');
 }
 
+interface StoredCredential {
+  salt: string;
+  hash: string;
+  updatedAt: string;
+}
+
+function docRevision(payload: unknown): number {
+  if (!isJsonObject(payload)) return 0;
+  const revision = payload.revision;
+  return typeof revision === 'number' && Number.isSafeInteger(revision) && revision >= 0
+    ? revision
+    : 0;
+}
+
+/**
+ * 凭证 key 统一归一化后再落库/读取。历史数据里存在大小写与 @company.com 的旧 key，
+ * 而登录按归一化邮箱查找——不统一就会出现「设了密码却查不到、默认口令仍可登录」。
+ */
+function normalizeCredentialMap(raw: unknown): Record<string, StoredCredential> {
+  if (!isJsonObject(raw)) return {};
+  const out: Record<string, StoredCredential> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!isJsonObject(value)) continue;
+    const salt = value.salt;
+    const hash = value.hash;
+    if (typeof salt !== 'string' || typeof hash !== 'string') continue;
+    const email = normalizedAccountEmail(key);
+    if (!email) continue;
+    const updatedAt = typeof value.updatedAt === 'string' ? value.updatedAt : '';
+    const prev = out[email];
+    if (prev && prev.updatedAt >= updatedAt) continue;
+    out[email] = { salt, hash, updatedAt };
+  }
+  return out;
+}
+
+function credentialsPayloadForRead(payload: unknown): {
+  policy: { allowDemoPassword: boolean };
+  credentials: Record<string, StoredCredential>;
+  revision: number;
+} {
+  const p = isJsonObject(payload) ? payload : {};
+  const policy = isJsonObject(p.policy) ? p.policy : {};
+  return {
+    policy: { allowDemoPassword: policy.allowDemoPassword !== false },
+    credentials: normalizeCredentialMap(p.credentials),
+    revision: docRevision(p),
+  };
+}
+
+function membersPayloadForRead(payload: unknown): {
+  members: Array<Record<string, unknown>>;
+  revision: number;
+} {
+  return { members: membersFromPayload(payload), revision: docRevision(payload) };
+}
+
 function membersFromPayload(payload: unknown): Array<Record<string, unknown>> {
   if (Array.isArray((payload as { members?: unknown } | null)?.members)) {
     return (payload as { members: unknown[] }).members.filter(isJsonObject);
@@ -703,9 +760,34 @@ function membersFromPayload(payload: unknown): Array<Record<string, unknown>> {
   return Array.isArray(payload) ? payload.filter(isJsonObject) : [];
 }
 
+const DEFAULT_WORKSPACE_ID = 'ws-mss-ai';
+const PROTOTYPE_WORKSPACE_ID = 'ws-cn-marketing';
+
+/**
+ * 只有这些工作区允许「按需播种默认成员 / 默认口令策略」。
+ *
+ * 任何请求都能让 ensureWorkspace 凭空建出一个工作区；如果它还能顺带播种出一份
+ * 含 super_admin 的默认成员表 + 允许演示口令的凭证表，攻击者就能在自造的空间里
+ * 用默认口令登录拿到令牌，再凭邮箱把身份带进真实空间——绕过真实空间设置的强密码。
+ */
+const SEEDABLE_ACCOUNT_WORKSPACE_IDS = new Set<string>([
+  DEFAULT_WORKSPACE_ID,
+  PROTOTYPE_WORKSPACE_ID,
+  ...WORKSPACE_CATALOGS.map((catalog) => catalog.workspace.id),
+]);
+
+/** 登录时通过的口令来源。跨工作区复用会话时据此判断目标空间的要求是否更严 */
+interface SessionAuthProvenance {
+  workspaceId: string;
+  method: 'password' | 'demo';
+  /** 通过的凭证指纹（salt+hash 的摘要），不含口令本身 */
+  credFingerprint: string | null;
+}
+
 interface StoredSessionEntry {
   user: Record<string, unknown>;
   expiresAt: string;
+  auth?: SessionAuthProvenance;
 }
 
 function authSessionsFromPayload(payload: unknown): Record<string, StoredSessionEntry> {
@@ -752,8 +834,9 @@ function hashPassword(password: string, salt: string): string {
   return sha256Hex(`${salt}:${password}`);
 }
 
-function randomSalt(): string {
-  return randomBytes(16).toString('hex');
+/** 凭证指纹：相同的持久化凭证记录必然一致，用于判断两个空间是否共享同一份凭证 */
+function credentialFingerprint(cred: { salt: string; hash: string }): string {
+  return sha256Hex(`${cred.salt}:${cred.hash}`);
 }
 
 function initialMarketDoc(kind: PlatformDocKind): unknown | undefined {
@@ -807,6 +890,12 @@ export class PlatformDocsService {
       if (kind === 'internal-office-scenes') {
         return { kind, payload: officeScenePayloadForRead(row.payload) };
       }
+      if (kind === 'auth-credentials') {
+        return { kind, payload: credentialsPayloadForRead(row.payload) };
+      }
+      if (kind === 'members') {
+        return { kind, payload: membersPayloadForRead(row.payload) };
+      }
       if (shouldUpgradeMarketDoc(kind, row.payload)) {
         const payload = initialMarketDoc(kind)!;
         await this.prisma.centerRecord.update({
@@ -834,6 +923,17 @@ export class PlatformDocsService {
     }
     if (kind === 'internal-office-scenes') {
       return this.putInternalOfficeScenesDoc(workspaceId, payload);
+    }
+    if (kind === 'auth-credentials') {
+      return this.putRevisionedDoc(workspaceId, 'auth-credentials', payload, (input) => {
+        const canonical = credentialsPayloadForRead(input);
+        return { policy: canonical.policy, credentials: canonical.credentials };
+      });
+    }
+    if (kind === 'members') {
+      return this.putRevisionedDoc(workspaceId, 'members', payload, (input) => ({
+        members: membersFromPayload(input),
+      }));
     }
     const id = docId(workspaceId, kind);
     await this.prisma.centerRecord.upsert({
@@ -863,6 +963,10 @@ export class PlatformDocsService {
         byKind[kind] = externalToolLayoutPayloadForRead(row.payload);
       } else if (row && kind === 'internal-office-scenes') {
         byKind[kind] = officeScenePayloadForRead(row.payload);
+      } else if (row && kind === 'auth-credentials') {
+        byKind[kind] = credentialsPayloadForRead(row.payload);
+      } else if (row && kind === 'members') {
+        byKind[kind] = membersPayloadForRead(row.payload);
       } else if (row && shouldUpgradeMarketDoc(kind, row.payload)) {
         const payload = initialMarketDoc(kind)!;
         await this.prisma.centerRecord.update({
@@ -875,6 +979,82 @@ export class PlatformDocsService {
       }
     }
     return { docs: byKind };
+  }
+
+  /**
+   * 带 revision 的 compare-and-swap 写入。成员表 / 密码表都是「整份覆盖」的文档，
+   * 没有版本校验时，两个管理员各自基于陈旧快照提交就会互相抹掉对方的改动。
+   */
+  private async putRevisionedDoc(
+    workspaceId: string,
+    kind: 'auth-credentials' | 'members',
+    payload: unknown,
+    canonicalize: (input: unknown) => Record<string, unknown>,
+  ) {
+    const expectedRevision = docRevision(payload);
+    const id = docId(workspaceId, kind);
+    const existing = await this.prisma.centerRecord.findUnique({ where: { id } });
+    const currentRevision = existing ? docRevision(existing.payload) : 0;
+
+    if (expectedRevision !== currentRevision) {
+      throw new ConflictException({
+        error: `${kind.replace(/-/g, '_')}_revision_conflict`,
+        expectedRevision,
+        currentRevision,
+      });
+    }
+
+    const nextPayload = {
+      ...canonicalize(payload),
+      revision: currentRevision + 1,
+    };
+
+    if (!existing) {
+      try {
+        await this.prisma.centerRecord.create({
+          data: {
+            id,
+            workspaceId,
+            kind: `doc:${kind}`,
+            payload: nextPayload as unknown as Prisma.InputJsonValue,
+          },
+        });
+      } catch (error) {
+        const raced = await this.prisma.centerRecord.findUnique({ where: { id } });
+        if (raced) {
+          throw new ConflictException({
+            error: `${kind.replace(/-/g, '_')}_revision_conflict`,
+            expectedRevision,
+            currentRevision: docRevision(raced.payload),
+          });
+        }
+        throw error;
+      }
+      return { kind, payload: nextPayload };
+    }
+
+    // revision 在 JSON payload 里，用条件更新完成 CAS，避免两个进程读到同一 revision 后互相覆盖。
+    const changed = await this.prisma.$executeRaw`
+      UPDATE "CenterRecord"
+      SET "payload" = ${JSON.stringify(nextPayload)}, "updatedAt" = ${Date.now()}
+      WHERE "id" = ${id}
+        AND CASE
+          WHEN json_type("payload", '$.revision') = 'integer'
+          THEN json_extract("payload", '$.revision')
+          ELSE 0
+        END = ${expectedRevision}
+    `;
+
+    if (changed !== 1) {
+      const raced = await this.prisma.centerRecord.findUnique({ where: { id } });
+      throw new ConflictException({
+        error: `${kind.replace(/-/g, '_')}_revision_conflict`,
+        expectedRevision,
+        currentRevision: raced ? docRevision(raced.payload) : 0,
+      });
+    }
+
+    return { kind, payload: nextPayload };
   }
 
   private async putExternalToolLayoutDoc(workspaceId: string, payload: unknown) {
@@ -1068,8 +1248,24 @@ export class PlatformDocsService {
   }) {
     const email = normalizedAccountEmail(body.email);
     const password = body.password ?? '';
-    const workspaceId = body.workspaceId || 'ws-mss-ai';
+    const workspaceId = body.workspaceId || DEFAULT_WORKSPACE_ID;
     if (!email || !password) throw new BadRequestException('email_and_password_required');
+
+    // 登录不得触发「工作区缺失即自动创建」：否则任意编造的 workspaceId 都会被建出来，
+    // 并连带播种默认管理员，成为绕过真实空间口令的登录入口。
+    if (!SEEDABLE_ACCOUNT_WORKSPACE_IDS.has(workspaceId)) {
+      const workspace = await this.prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { id: true },
+      });
+      const membersRow = await this.prisma.centerRecord.findUnique({
+        where: { id: docId(workspaceId, 'members') },
+        select: { id: true },
+      });
+      if (!workspace || !membersRow) {
+        return { ok: false, error: '工作区不存在或尚未开通' };
+      }
+    }
 
     const membersDoc = await this.getDoc(workspaceId, 'members');
     const members = membersFromPayload(membersDoc.payload);
@@ -1080,12 +1276,10 @@ export class PlatformDocsService {
     }
 
     const credsDoc = await this.getDoc(workspaceId, 'auth-credentials');
-    const credPayload = (credsDoc.payload ?? {}) as {
-      policy?: { allowDemoPassword?: boolean };
-      credentials?: Record<string, { salt: string; hash: string; updatedAt: string }>;
-    };
-    const allowDemo = credPayload.policy?.allowDemoPassword !== false;
-    const cred = credPayload.credentials?.[email];
+    // getDoc 已按归一化邮箱重建 key，这里直接查即可。
+    const credPayload = credentialsPayloadForRead(credsDoc.payload);
+    const allowDemo = credPayload.policy.allowDemoPassword !== false;
+    const cred = credPayload.credentials[email];
 
     let valid = false;
     if (cred?.salt && cred?.hash) {
@@ -1102,7 +1296,16 @@ export class PlatformDocsService {
 
     const token = randomBytes(24).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    await this.putSession(workspaceId, token, { user, expiresAt });
+    // 记录这张令牌到底通过了什么口令校验：跨工作区复用时要据此判断目标空间是否更严。
+    await this.putSession(workspaceId, token, {
+      user,
+      expiresAt,
+      auth: {
+        workspaceId,
+        method: cred ? 'password' : 'demo',
+        credFingerprint: cred ? credentialFingerprint(cred) : null,
+      },
+    });
 
     // 登录统计不可反向阻断认证；数据库暂时不可写时保留服务端日志，登录仍正常返回。
     try {
@@ -1127,6 +1330,12 @@ export class PlatformDocsService {
     if (new Date(resolved.session.expiresAt).getTime() < Date.now()) {
       await this.deleteSession(resolved.workspaceId, token);
       return { ok: false as const, error: '会话已过期，请重新登录' };
+    }
+    if (
+      resolved.workspaceId !== workspaceId &&
+      !(await this.sessionMayCrossWorkspace(workspaceId, resolved.session))
+    ) {
+      return { ok: false as const, error: '请在该工作区重新登录' };
     }
     const user = await this.authorizeSessionForWorkspace(workspaceId, resolved.session.user);
     if (!user) return { ok: false as const, error: '无权访问该工作区' };
@@ -1187,6 +1396,39 @@ export class PlatformDocsService {
     if (!doc) return null;
     const sessions = authSessionsFromPayload(doc.payload);
     return sessions[token] ?? null;
+  }
+
+  /**
+   * 令牌跨工作区复用的准入判断：**目标空间对该账号的口令要求不得严于签发时已通过的校验**。
+   *
+   * - 目标空间给这个账号配了密码：必须是同一份凭证（指纹一致）才放行；
+   *   否则等于用 A 空间的弱口令冒领 B 空间的强密码账号。
+   * - 目标空间没配密码：只有该空间本身就放行演示口令时才允许携带进来。
+   * 旧令牌没有来源信息，按最弱情况处理（等价于演示口令）。
+   */
+  private async sessionMayCrossWorkspace(
+    targetWorkspaceId: string,
+    session: StoredSessionEntry,
+  ): Promise<boolean> {
+    const email = normalizedAccountEmail(session.user?.email);
+    if (!email) return false;
+
+    const row = await this.prisma.centerRecord.findUnique({
+      where: { id: docId(targetWorkspaceId, 'auth-credentials') },
+      select: { payload: true },
+    });
+    const payload = credentialsPayloadForRead(
+      row?.payload ?? {
+        policy: { allowDemoPassword: SEEDABLE_ACCOUNT_WORKSPACE_IDS.has(targetWorkspaceId) },
+      },
+    );
+
+    const targetCred = payload.credentials[email];
+    if (!targetCred) return payload.policy.allowDemoPassword === true;
+
+    const auth = session.auth;
+    if (!auth || auth.method !== 'password' || !auth.credFingerprint) return false;
+    return auth.credFingerprint === credentialFingerprint(targetCred);
   }
 
   private async authorizeSessionForWorkspace(
@@ -1351,21 +1593,22 @@ export class PlatformDocsService {
     if (marketSeed !== undefined) {
       payload = marketSeed;
     } else if (kind === 'members') {
+      // 请求侧自动创建出来的工作区不得凭空获得一份含 super_admin 的默认成员表。
+      if (!SEEDABLE_ACCOUNT_WORKSPACE_IDS.has(workspaceId)) return { members: [] };
       payload = { members: SEED_MEMBERS };
     } else if (kind === 'auth-credentials') {
-      const credentials: Record<string, { salt: string; hash: string; updatedAt: string }> = {};
-      const now = new Date().toISOString();
-      for (const m of SEED_MEMBERS) {
-        const salt = randomSalt();
-        credentials[m.email] = {
-          salt,
-          hash: hashPassword('mssclaw', salt),
-          updatedAt: now,
-        };
+      // 不预先物化默认口令哈希：种子账号靠 allowDemoPassword 兜底即可登录，
+      // 而一旦落库成真实凭证，换库/迁移后就会静默「恢复」出一批默认密码，
+      // 也会让前端误判这些账号「已设密」。
+      // 同理：只有内置工作区默认放行演示口令，临时/自建空间一律不放行。
+      const allowDemoPassword = SEEDABLE_ACCOUNT_WORKSPACE_IDS.has(workspaceId);
+      if (!allowDemoPassword) {
+        return { policy: { allowDemoPassword: false }, credentials: {}, revision: 0 };
       }
       payload = {
         policy: { allowDemoPassword: true },
-        credentials,
+        credentials: {},
+        revision: 0,
       };
     } else if (kind === 'ai-news') {
       payload = { items: [] };

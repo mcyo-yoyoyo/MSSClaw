@@ -12,6 +12,17 @@ import {
 } from '@nestjs/common';
 import { PlatformDocsService } from './platform-docs.service';
 
+/** 仅 super_admin 可读：内含全站密码 salt + hash */
+const ADMIN_ONLY_DOC_KINDS = new Set(['auth-credentials']);
+
+/** 仅 super_admin 可写：平台级配置与账号体系 */
+const ADMIN_WRITABLE_DOC_KINDS = new Set([
+  'auth-credentials',
+  'members',
+  'external-tool-layout',
+  'internal-office-scenes',
+]);
+
 @Controller('workspaces/:workspaceId/docs')
 export class PlatformDocsController {
   constructor(private readonly docs: PlatformDocsService) {}
@@ -22,16 +33,31 @@ export class PlatformDocsController {
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-session-token') xSessionToken: string | undefined,
   ) {
-    await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
-    return this.docs.listDocs(workspaceId);
+    const user = await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
+    const result = await this.docs.listDocs(workspaceId);
+    if (String(user.platformRole ?? '') !== 'super_admin') {
+      // 全量文档里含密码表，非平台运营不得整包拿走。
+      for (const kind of ADMIN_ONLY_DOC_KINDS) delete result.docs[kind];
+    }
+    return result;
   }
 
   /**
-   * 门户展示类文档（货架布局 / 内部办公场景）对游客只读开放，
+   * 门户展示类文档（货架布局 / 内部办公场景等）对游客只读开放，
    * 否则未登录访客的市场货架会整体空白；写入仍限 super_admin（见 PUT）。
+   *
+   * 例外：auth-credentials 是全站密码表（salt + hash），只有 super_admin 能读。
    */
   @Get(':kind')
-  async getOne(@Param('workspaceId') workspaceId: string, @Param('kind') kind: string) {
+  async getOne(
+    @Param('workspaceId') workspaceId: string,
+    @Param('kind') kind: string,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    if (ADMIN_ONLY_DOC_KINDS.has(kind)) {
+      await this.requireSuperAdmin(workspaceId, kind, authorization, xSessionToken);
+    }
     return this.docs.getDoc(workspaceId, kind);
   }
 
@@ -43,23 +69,29 @@ export class PlatformDocsController {
     @Headers('authorization') authorization?: string,
     @Headers('x-session-token') xSessionToken?: string,
   ) {
-    if (kind === 'external-tool-layout' || kind === 'internal-office-scenes') {
-      const user = await this.requireWorkspaceMember(
-        workspaceId,
-        authorization,
-        xSessionToken,
-      );
-      if (String(user.platformRole ?? '') !== 'super_admin') {
-        throw new ForbiddenException(
-          kind === 'external-tool-layout'
-            ? 'external_tool_layout_admin_required'
-            : 'internal_office_scenes_admin_required',
-        );
-      }
+    if (ADMIN_WRITABLE_DOC_KINDS.has(kind)) {
+      await this.requireSuperAdmin(workspaceId, kind, authorization, xSessionToken);
     }
     const payload =
       body && typeof body === 'object' && 'payload' in body ? body.payload : body;
     return this.docs.putDoc(workspaceId, kind, payload ?? {});
+  }
+
+  private async requireSuperAdmin(
+    workspaceId: string,
+    kind: string,
+    authorization?: string,
+    xSessionToken?: string,
+  ): Promise<Record<string, unknown>> {
+    const user = await this.requireWorkspaceMember(
+      workspaceId,
+      authorization,
+      xSessionToken,
+    );
+    if (String(user.platformRole ?? '') !== 'super_admin') {
+      throw new ForbiddenException(`${kind.replace(/-/g, '_')}_admin_required`);
+    }
+    return user;
   }
 
   private async requireWorkspaceMember(

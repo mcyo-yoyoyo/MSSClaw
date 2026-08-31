@@ -35,7 +35,7 @@ import {
 import { getNavMetaLabel } from '@/domain/navPresentation';
 import { cn } from '@/lib/utils';
 import type { InviteMemberInput } from '@/stores/settingsStore';
-import { useSettingsStore } from '@/stores/settingsStore';
+import { initMissingAccountPasswords, useSettingsStore } from '@/stores/settingsStore';
 import { useWorkspaceConfigStore } from '@/stores/workspaceConfigStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useOrgTaxonomyStore } from '@/stores/orgTaxonomyStore';
@@ -124,6 +124,26 @@ function MembersAndOrgPanel({
   const [regionId, setRegionId] = useState<RegionId | ''>('');
   const [memberQuery, setMemberQuery] = useState('');
   const [passwordMember, setPasswordMember] = useState<WorkspaceMember | null>(null);
+  const [initPwdBusy, setInitPwdBusy] = useState(false);
+  const setMembersToast = useSettingsStore((s) => s.setToast);
+
+  /**
+   * 补齐默认口令：只写「当前尚未设过密码」的账号，不会碰已配置的密码。
+   * 必须由管理员显式触发——放在启动流程里跑会在凭证读取失败时重置全部密码。
+   */
+  const handleInitMissingPasswords = async () => {
+    setInitPwdBusy(true);
+    try {
+      const n = await initMissingAccountPasswords();
+      setMembersToast(
+        n > 0 ? `已为 ${n} 个未设密账号设置默认口令` : '没有需要补齐的账号',
+      );
+    } catch (error) {
+      setMembersToast(error instanceof Error ? error.message : '补齐默认口令失败');
+    } finally {
+      setInitPwdBusy(false);
+    }
+  };
 
   const filteredMembers = useMemo(() => {
     const query = memberQuery.trim().toLocaleLowerCase();
@@ -354,16 +374,29 @@ function MembersAndOrgPanel({
       <Section
         title={`成员列表 · ${filteredMembers.length}`}
         action={
-          <label className="relative w-full sm:w-64">
-            <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-zinc-400" />
-            <input
-              value={memberQuery}
-              onChange={(event) => setMemberQuery(event.target.value)}
-              placeholder="搜索姓名或邮箱"
-              aria-label="搜索成员姓名或邮箱"
-              className="h-9 w-full rounded-xl border border-zinc-200 bg-white pl-8 pr-3 text-[12px] font-normal text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-[#0071e3]/50 focus:ring-2 focus:ring-[#0071e3]/10"
-            />
-          </label>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            {canManage ? (
+              <button
+                type="button"
+                onClick={() => void handleInitMissingPasswords()}
+                disabled={initPwdBusy}
+                title="仅为尚未设置密码的账号补默认口令，不会修改已配置的密码"
+                className="h-9 shrink-0 rounded-xl border border-zinc-200 bg-white px-3 text-[12px] font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:opacity-50"
+              >
+                {initPwdBusy ? '补齐中…' : '补齐未设密账号'}
+              </button>
+            ) : null}
+            <label className="relative w-full sm:w-64">
+              <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-zinc-400" />
+              <input
+                value={memberQuery}
+                onChange={(event) => setMemberQuery(event.target.value)}
+                placeholder="搜索姓名或邮箱"
+                aria-label="搜索成员姓名或邮箱"
+                className="h-9 w-full rounded-xl border border-zinc-200 bg-white pl-8 pr-3 text-[12px] font-normal text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-[#0071e3]/50 focus:ring-2 focus:ring-[#0071e3]/10"
+              />
+            </label>
+          </div>
         }
       >
         <div className="overflow-x-auto rounded-xl border border-black/[0.06]">

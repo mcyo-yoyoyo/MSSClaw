@@ -19,15 +19,16 @@ import {
   generateTempPassword,
   setAccountPassword,
   migrateCredentialEmailDomain,
-  migrateInitAllPasswordsToMssclaw,
   ensureMissingPasswords,
+  hasCredential,
   hydrateAccountCredentials,
 } from '@/domain/accountCredentials';
 import { PROTOTYPE_WORKSPACE_ID } from '@/domain/prototype/constants';
 import {
   canUsePlatformDocsApi,
   fetchPlatformDoc,
-  scheduleSavePlatformDoc,
+  peekPlatformDocMemory,
+  savePlatformDoc,
   setPlatformDocMemory,
 } from '@/api/platformDocsApi';
 
@@ -39,25 +40,22 @@ function normalizeStoredMember(m: WorkspaceMember): WorkspaceMember {
   };
 }
 
-/** 启动时：当前角色账号密码统一初始化 / 补齐为 mssclaw */
-let accountPasswordsReady: Promise<void> | null = null;
-
-export function ensureAccountPasswordsReady(): Promise<void> {
-  if (!accountPasswordsReady) {
-    accountPasswordsReady = (async () => {
-      await hydrateAccountCredentials();
-      const emails = [
-        ...SEED_MEMBERS.map((m) => m.email),
-        ...buildLoginAccounts().map((a) => a.email),
-      ];
-      await migrateInitAllPasswordsToMssclaw(emails);
-      await ensureMissingPasswords(emails);
-    })();
-  }
-  return accountPasswordsReady;
+/**
+ * 为尚未设密的账号补默认口令。
+ *
+ * 只能由 super_admin 在「组织权限」里显式触发。严禁在模块加载或启动流程中自动调用：
+ * 启动时 apiConnected 还没就绪，凭证读不到就会被判定为「全员缺密码」，一旦此时 API
+ * 连上，就会把整份密码表覆盖成默认口令，抹掉管理员已配置的密码。
+ * ensureMissingPasswords 内部同样要求 hydration 成功，读不到即放弃。
+ */
+export async function initMissingAccountPasswords(): Promise<number> {
+  if (!(await hydrateAccountCredentials())) return 0;
+  const emails = [
+    ...SEED_MEMBERS.map((m) => m.email),
+    ...buildLoginAccounts().map((a) => a.email),
+  ];
+  return ensureMissingPasswords(emails);
 }
-
-void ensureAccountPasswordsReady();
 
 /** 合并种子账号（补齐核心种子；剔除已退役的 test1–10） */
 function isRetiredDemoMemberEmail(email: string): boolean {
@@ -98,24 +96,156 @@ function loadMembersSync(workspaceId: string): WorkspaceMember[] {
   return getMembersByWorkspace(workspaceId).map(normalizeStoredMember);
 }
 
-function persistMembers(workspaceId: string, members: WorkspaceMember[]) {
-  const payload = { members };
-  setPlatformDocMemory(workspaceId, 'members', payload);
-  if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc(workspaceId, 'members', payload).catch(() => {
-    /* toast via caller if needed */
-  });
+/**
+ * 已知的服务端成员文档版本。写入携带它，由服务端做 compare-and-swap，
+ * 避免两个管理员各自用陈旧快照整份覆盖（后写的会把先写的改动抹掉）。
+ */
+const knownMembersRevision = new Map<string, number>();
+/** 最近一次由服务端确认的成员快照；读/写失败时只允许回退展示，不能据此继续写。 */
+const confirmedMembersByWorkspace = new Map<string, WorkspaceMember[]>();
+/** 每个工作区独立串行化，避免无关工作区互相阻塞。 */
+const membersWriteQueues = new Map<string, Promise<void>>();
+/** hydrate、409 或网络失败都会推进代次，使已经排队的旧快照自动失效。 */
+const membersWriteGeneration = new Map<string, number>();
+const membersHydrationInflight = new Map<string, Promise<WorkspaceMember[]>>();
+
+const MEMBERS_NOT_READY_ERROR =
+  '尚未读取到服务端成员数据，已阻止保存以免覆盖现有成员。请刷新页面后重试。';
+
+function cloneMembers(members: WorkspaceMember[]): WorkspaceMember[] {
+  return members.map((member) => ({
+    ...member,
+    deptIds: [...(member.deptIds ?? [])],
+  }));
+}
+
+function membersGeneration(workspaceId: string): number {
+  return membersWriteGeneration.get(workspaceId) ?? 0;
+}
+
+function invalidateMembersAuthority(workspaceId: string): number {
+  const next = membersGeneration(workspaceId) + 1;
+  membersWriteGeneration.set(workspaceId, next);
+  knownMembersRevision.delete(workspaceId);
+  return next;
+}
+
+function fallbackMembers(workspaceId: string): WorkspaceMember[] {
+  const confirmed = confirmedMembersByWorkspace.get(workspaceId);
+  return confirmed ? cloneMembers(confirmed) : loadMembersSync(workspaceId);
+}
+
+function setMembersToastForWorkspace(workspaceId: string, toast: string) {
+  if (useSettingsStore.getState().workspaceId === workspaceId) {
+    useSettingsStore.setState({ toast });
+  }
+}
+
+function ensureMembersWritable(workspaceId: string): boolean {
+  if (canUsePlatformDocsApi() && knownMembersRevision.has(workspaceId)) return true;
+  setMembersToastForWorkspace(workspaceId, MEMBERS_NOT_READY_ERROR);
+  return false;
+}
+
+function revisionFromPayload(raw: unknown): number {
+  const r = (raw as { revision?: unknown } | null)?.revision;
+  return typeof r === 'number' && Number.isSafeInteger(r) && r >= 0 ? r : 0;
+}
+
+function isRevisionConflict(error: unknown): boolean {
+  return error instanceof Error && /_409$/.test(error.message);
+}
+
+function persistMembers(workspaceId: string, members: WorkspaceMember[]): boolean {
+  if (!ensureMembersWritable(workspaceId)) return false;
+
+  const generation = membersGeneration(workspaceId);
+  const previous = membersWriteQueues.get(workspaceId) ?? Promise.resolve();
+  let queued: Promise<void>;
+  queued = previous
+    .catch(() => undefined)
+    .then(async () => {
+      // 409、重新 hydrate 或网络失败后，旧队列里的整表快照一律作废。
+      if (membersGeneration(workspaceId) !== generation) return;
+      const revision = knownMembersRevision.get(workspaceId);
+      if (revision === undefined) return;
+
+      try {
+        await savePlatformDoc(workspaceId, 'members', { members, revision });
+        if (membersGeneration(workspaceId) !== generation) return;
+
+        const canonical = peekPlatformDocMemory<unknown>(workspaceId, 'members');
+        knownMembersRevision.set(workspaceId, revisionFromPayload(canonical));
+        confirmedMembersByWorkspace.set(
+          workspaceId,
+          cloneMembers(membersFromPayload(canonical ?? { members }, workspaceId)),
+        );
+      } catch (error) {
+        invalidateMembersAuthority(workspaceId);
+        if (!isRevisionConflict(error)) {
+          if (useSettingsStore.getState().workspaceId === workspaceId) {
+            useSettingsStore.setState({
+              members: fallbackMembers(workspaceId),
+              toast: '成员改动保存失败，已恢复到最近一次服务端数据，请重试',
+            });
+          }
+          return;
+        }
+
+        // 服务端已有更新的版本：拉回最新数据。代次已经推进，后续已排队的旧快照
+        // 会直接跳过，不能借用新的 revision 再次覆盖对方改动。
+        const fresh = await hydrateMembersFromServer(workspaceId);
+        if (useSettingsStore.getState().workspaceId === workspaceId) {
+          useSettingsStore.setState({
+            members: fresh,
+            toast: knownMembersRevision.has(workspaceId)
+              ? '成员数据已被其他管理员更新，已刷新为最新版本，请重新操作'
+              : '成员数据发生冲突，但刷新失败；已禁止继续保存，请刷新页面后重试',
+          });
+        }
+      }
+    })
+    .finally(() => {
+      if (membersWriteQueues.get(workspaceId) === queued) {
+        membersWriteQueues.delete(workspaceId);
+      }
+    });
+  membersWriteQueues.set(workspaceId, queued);
+  return true;
 }
 
 export async function hydrateMembersFromServer(workspaceId: string): Promise<WorkspaceMember[]> {
-  try {
-    const remote = await fetchPlatformDoc<unknown>(workspaceId, 'members');
-    const members = membersFromPayload(remote, workspaceId);
-    setPlatformDocMemory(workspaceId, 'members', { members });
-    return members;
-  } catch {
-    return loadMembersSync(workspaceId);
-  }
+  const active = membersHydrationInflight.get(workspaceId);
+  if (active) return active;
+
+  // hydrate 开始即冻结写入并淘汰旧队列；只有成功拿到服务端快照后才重新开放。
+  const generation = invalidateMembersAuthority(workspaceId);
+  const promise = (async () => {
+    try {
+      const remote = await fetchPlatformDoc<unknown>(workspaceId, 'members', { fresh: true });
+      if (remote == null) throw new Error('members_not_loaded');
+      if (membersGeneration(workspaceId) !== generation) return fallbackMembers(workspaceId);
+
+      const revision = revisionFromPayload(remote);
+      const members = membersFromPayload(remote, workspaceId);
+      knownMembersRevision.set(workspaceId, revision);
+      confirmedMembersByWorkspace.set(workspaceId, cloneMembers(members));
+      setPlatformDocMemory(workspaceId, 'members', { members, revision });
+      return members;
+    } catch {
+      if (membersGeneration(workspaceId) === generation) {
+        knownMembersRevision.delete(workspaceId);
+      }
+      return fallbackMembers(workspaceId);
+    }
+  })();
+  membersHydrationInflight.set(workspaceId, promise);
+  void promise.finally(() => {
+    if (membersHydrationInflight.get(workspaceId) === promise) {
+      membersHydrationInflight.delete(workspaceId);
+    }
+  });
+  return promise;
 }
 
 export interface InviteMemberInput {
@@ -169,16 +299,19 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       activeTab: 'members',
     });
     void hydrateMembersFromServer(workspaceId).then((members) => {
-      set({ workspaceId, members });
+      // 用户可能已切到另一个工作区；迟到的旧请求不能把当前成员面板切回去。
+      if (get().workspaceId === workspaceId) set({ members });
     });
   },
 
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   updateMemberRole: (memberId, role) => {
+    const workspaceId = get().workspaceId;
+    if (!ensureMembersWritable(workspaceId)) return;
     const member = get().members.find((m) => m.id === memberId);
     const members = get().members.map((m) => (m.id === memberId ? { ...m, role } : m));
-    persistMembers(get().workspaceId, members);
+    if (!persistMembers(workspaceId, members)) return;
     set({
       members,
       toast: member ? `已将 ${member.name} 的角色更新为 ${ROLE_LABELS[role]}` : '角色已更新',
@@ -186,6 +319,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   updateMemberOrg: (memberId, patch) => {
+    const workspaceId = get().workspaceId;
+    if (!ensureMembersWritable(workspaceId)) return;
     const members = get().members.map((m) =>
       m.id === memberId
         ? {
@@ -195,21 +330,37 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           }
         : m,
     );
-    persistMembers(get().workspaceId, members);
+    if (!persistMembers(workspaceId, members)) return;
     set({ members, toast: '成员组织归属已更新' });
   },
 
   setMemberStatus: (memberId, status) => {
     void (async () => {
+      const workspaceId = get().workspaceId;
+      if (!ensureMembersWritable(workspaceId)) return;
       const member = get().members.find((m) => m.id === memberId);
       const members = get().members.map((m) => (m.id === memberId ? { ...m, status } : m));
-      persistMembers(get().workspaceId, members);
-      if (status === 'active' && member) {
-        const temp = generateTempPassword();
-        await setAccountPassword(member.email, temp);
+      if (!persistMembers(workspaceId, members)) return;
+      // 只有「首次激活且从未设过密码」才发临时密码。对已激活成员或已设密账号再点启用，
+      // 绝不能把管理员配置好的密码换成随机串。
+      if (status === 'active' && member && member.status !== 'active') {
+        const hydrated = await hydrateAccountCredentials();
+        if (hydrated && !hasCredential(member.email)) {
+          const temp = generateTempPassword();
+          const pwd = await setAccountPassword(member.email, temp);
+          set({
+            members,
+            toast: pwd.ok
+              ? `已激活 ${member.email}，临时密码：${temp}（请另行告知用户）`
+              : `已激活 ${member.email}，但设密失败：${pwd.error}`,
+          });
+          return;
+        }
         set({
           members,
-          toast: `已激活 ${member.email}，临时密码：${temp}（请另行告知用户）`,
+          toast: hydrated
+            ? `已激活 ${member.email}（沿用原有密码）`
+            : `已激活 ${member.email}，密码配置未加载，如需设密请刷新后在「修改密码」中设置`,
         });
         return;
       }
@@ -224,6 +375,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   inviteMember: (input, roleArg) => {
     void (async () => {
+      const workspaceId = get().workspaceId;
+      if (!ensureMembersWritable(workspaceId)) return;
       const payload: InviteMemberInput =
         typeof input === 'string'
           ? { email: input, role: roleArg ?? 'business_user' }
@@ -255,7 +408,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           regionId: payload.regionId ?? null,
         },
       ];
-      persistMembers(get().workspaceId, members);
+      if (!persistMembers(workspaceId, members)) return;
 
       if (payload.activateNow) {
         const temp = payload.password?.trim() || generateTempPassword();
@@ -280,6 +433,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   batchImportAccounts: async (text) => {
+    const workspaceId = get().workspaceId;
+    if (!ensureMembersWritable(workspaceId)) {
+      return { ok: 0, updated: 0, fail: [{ line: '', error: MEMBERS_NOT_READY_ERROR }] };
+    }
     const roleAlias: Record<string, PlatformRole> = {
       super_admin: 'super_admin',
       平台运营: 'super_admin',
@@ -392,7 +549,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       ok += 1;
     }
 
-    persistMembers(get().workspaceId, members);
+    if (!persistMembers(workspaceId, members)) {
+      return { ok: 0, updated: 0, fail: [{ line: '', error: MEMBERS_NOT_READY_ERROR }] };
+    }
     set({
       members,
       toast: fail.length
@@ -403,6 +562,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   removeMember: (memberId) => {
+    const workspaceId = get().workspaceId;
+    if (!ensureMembersWritable(workspaceId)) return;
     const member = get().members.find((m) => m.id === memberId);
     if (!member) return;
     if (migrateDemoEmailDomain(member.email).toLowerCase() === 'mcyo@huawei.com') {
@@ -410,7 +571,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       return;
     }
     const members = get().members.filter((m) => m.id !== memberId);
-    persistMembers(get().workspaceId, members);
+    if (!persistMembers(workspaceId, members)) return;
     set({ members, toast: `已移除成员 ${member.name}` });
   },
 

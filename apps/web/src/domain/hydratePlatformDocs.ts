@@ -11,10 +11,18 @@ export async function hydrateAllPlatformDocs(workspaceId?: string): Promise<void
   const ws = workspaceId || currentWorkspaceId();
   if (!canUsePlatformDocsApi()) return;
 
-  await hydrateAccountCredentials(ws);
+  // 密码表只有 super_admin 能读（服务端 403）。非管理员不必发这一次请求，
+  // 读不到也不影响登录——鉴权由 Nest /auth/login 负责。
+  const { useSessionStore } = await import('@/stores/sessionStore');
+  if (useSessionStore.getState().user?.platformRole === 'super_admin') {
+    await hydrateAccountCredentials(ws);
+  }
   const members = await hydrateMembersFromServer(ws);
   const { useSettingsStore } = await import('@/stores/settingsStore');
-  useSettingsStore.setState({ workspaceId: ws, members });
+  // 工作区切换期间旧 hydrate 可能后返回；不能把成员面板切回旧空间。
+  if (currentWorkspaceId() === ws) {
+    useSettingsStore.setState({ workspaceId: ws, members });
+  }
 
   const { useNavPresentationStore } = await import('@/stores/navPresentationStore');
   const { useWorkspaceConfigStore } = await import('@/stores/workspaceConfigStore');

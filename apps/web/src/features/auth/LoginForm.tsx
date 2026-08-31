@@ -1,7 +1,6 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { MssZhishuMark } from '@/components/brand/MssZhishuMark';
 import { useSessionStore } from '@/stores/sessionStore';
-import { ensureAccountPasswordsReady } from '@/stores/settingsStore';
 
 const inputClass =
   'w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-[13px] text-zinc-900 placeholder:text-zinc-400 transition focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#e0122f]/15';
@@ -29,10 +28,6 @@ export function LoginForm({
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    void ensureAccountPasswordsReady();
-  }, []);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
