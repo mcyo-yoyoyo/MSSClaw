@@ -239,6 +239,46 @@ test('probe rejects HTTP errors and empty streams without exposing provider bodi
   assert.equal(emptyResult.diagnostics.sawDoneMarker, true);
 });
 
+test('probe unwraps nested undici causes instead of stopping at the wrapper', async () => {
+  const service = new ExecutionsService(fakePrisma({}));
+  // undici's terminated-state shape: the socket error the operator needs sits
+  // two levels down, behind `fetch failed` and a codeless DOMException.
+  globalThis.fetch = async () => {
+    const socketError = Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' });
+    const cancelled = Object.assign(new DOMException('Request was cancelled.'), { cause: socketError });
+    throw Object.assign(new TypeError('fetch failed'), { cause: cancelled });
+  };
+  const result = await service.testLlmConnection('ws-test', undefined, {
+    model: 'candidate-model',
+    baseUrl: 'http://candidate.example/v1',
+    apiKey: 'candidate-key',
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.diagnostics.networkCode, 'UND_ERR_SOCKET');
+  assert.match(result.diagnostics.networkSummary, /other side closed/);
+  assert.doesNotMatch(result.diagnostics.networkSummary, /fetch failed/);
+  assert.doesNotMatch(result.message, /candidate-key/);
+});
+
+test('probe surfaces AggregateError members from multi-address connects', async () => {
+  const service = new ExecutionsService(fakePrisma({}));
+  globalThis.fetch = async () => {
+    const aggregate = Object.assign(new AggregateError([
+      Object.assign(new Error('connect ENETUNREACH 2001:db8::1:443'), { code: 'ENETUNREACH' }),
+      Object.assign(new Error('connect ETIMEDOUT 10.0.0.8:443'), { code: 'ETIMEDOUT' }),
+    ], 'all connect attempts failed'));
+    throw Object.assign(new TypeError('fetch failed'), { cause: aggregate });
+  };
+  const result = await service.testLlmConnection('ws-test', undefined, {
+    model: 'candidate-model',
+    baseUrl: 'http://candidate.example/v1',
+    apiKey: 'candidate-key',
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.diagnostics.networkCode, 'ETIMEDOUT');
+  assert.match(result.diagnostics.networkSummary, /ENETUNREACH/);
+});
+
 test('probe reports safe network causes and timeout diagnostics', async () => {
   const service = new ExecutionsService(fakePrisma({}));
   globalThis.fetch = async () => {

@@ -111,21 +111,54 @@ async function safeUpstreamSummary(response: Response, secret?: string): Promise
   }
 }
 
+type ErrorChainNode = { message?: unknown; code?: unknown };
+
+/** Bounded, cycle-safe walk over `cause` chains and AggregateError members. */
+function flattenErrorChain(error: unknown, maxDepth = 6): ErrorChainNode[] {
+  const seen = new Set<object>();
+  const chain: ErrorChainNode[] = [];
+  const visit = (node: unknown, depth: number) => {
+    if (depth > maxDepth || !node || typeof node !== 'object' || seen.has(node)) return;
+    seen.add(node);
+    const current = node as ErrorChainNode & { cause?: unknown; errors?: unknown };
+    chain.push(current);
+    // Multi-address connects (Happy Eyeballs) fail as an AggregateError whose
+    // real codes live in `errors`, not in `cause`.
+    if (Array.isArray(current.errors)) {
+      for (const nested of current.errors.slice(0, 3)) visit(nested, depth + 1);
+    }
+    visit(current.cause, depth + 1);
+  };
+  visit(error, 0);
+  return chain;
+}
+
 function networkErrorDetails(error: unknown, secret?: string): {
   code?: string;
   summary: string;
 } {
   if (!error || typeof error !== 'object') return { summary: '网络请求失败' };
-  const root = error as { message?: unknown; code?: unknown; cause?: unknown };
-  const cause = root.cause;
-  const causeObject = cause && typeof cause === 'object' ? (cause as { message?: unknown; code?: unknown }) : undefined;
-  const codeValue = causeObject?.code ?? root.code;
-  const code =
-    typeof codeValue === 'string' && /^[A-Za-z0-9_.:-]{2,64}$/.test(codeValue)
-      ? codeValue
-      : undefined;
-  const rawSummary = causeObject?.message ?? root.message;
-  const summary = safeDiagnosticText(rawSummary, secret) || '网络请求失败';
+  // undici hides the actionable failure behind wrappers: `TypeError: fetch
+  // failed`, and — when the connection is torn down rather than aborted — a
+  // `DOMException: Request was cancelled.` in between. The code that tells an
+  // operator what to fix (ENOTFOUND / ECONNREFUSED / UND_ERR_SOCKET / a TLS
+  // error) can sit two or more levels down `cause`.
+  const chain = flattenErrorChain(error);
+
+  // DOMException carries a numeric `code`, so only string codes qualify. Later
+  // nodes are closer to the socket, so the deepest match is the most specific.
+  let code: string | undefined;
+  for (const node of chain) {
+    const value = node.code;
+    if (typeof value === 'string' && /^[A-Za-z0-9_.:-]{2,64}$/.test(value)) code = value;
+  }
+
+  const messages = [...new Set(chain.map((node) => safeDiagnosticText(node.message, secret)).filter(Boolean))];
+  // `fetch failed` carries no information once a concrete cause is present.
+  const meaningful = messages.length > 1 ? messages.filter((m) => !/^fetch failed$/i.test(m)) : messages;
+  const summary =
+    (meaningful.length ? meaningful : messages).join(' ← ').slice(0, MAX_DIAGNOSTIC_TEXT) || '网络请求失败';
+
   return { ...(code ? { code } : {}), summary };
 }
 
