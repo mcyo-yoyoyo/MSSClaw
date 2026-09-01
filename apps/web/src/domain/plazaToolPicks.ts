@@ -7,8 +7,9 @@ import {
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
 
 /**
- * 货架精选推荐：静态精选基线（每侧最多 2 个）。
- * 运营可在配置工具勾选 featuredInFindCases 追加/覆盖精选露出。
+ * @deprecated 仅供未挂载的旧版 HomeScenePortal 兼容。
+ * 当前 React 路由的外部工具精选统一由 external-tool-layout 提供，
+ * 不能将本文件作为运行时外部工具目录或精选来源。
  */
 export type PlazaToolPicks = {
   external: string[];
@@ -65,15 +66,13 @@ function allStaticPickIds(): Set<string> {
 
 const STATIC_PICK_IDS = allStaticPickIds();
 
-/** 未显式配置时：落在静态精选表内视为精选露出 */
+/** 旧版兼容：当前外部工具布局不读取此函数。 */
 export function resolveToolFeaturedInFindCases(tool: PrototypeToolSeed): boolean {
   if (typeof tool.featuredInFindCases === 'boolean') return tool.featuredInFindCases;
   return STATIC_PICK_IDS.has(tool.id);
 }
 
-/**
- * 货架精选工具：已上架到对应货架 ∩ 精选露出 ∩ 当前分类，静态序优先。
- */
+/** 旧版兼容：已上架到对应货架的旧精选工具。 */
 export function listFeaturedFindCaseTools(
   tools: PrototypeToolSeed[],
   categoryId: AiToolNavCategoryId,

@@ -1,15 +1,18 @@
 import { Injectable } from '@nestjs/common';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   AgentType,
+  ExecutionAssetType,
   ExecutionSource,
   ExecutionStep,
+  ExecutionUsage,
   StreamEvent,
-  StreamExecutionDto,
+  StreamExecutionRequest,
 } from './dto/stream-execution.dto';
 import { nestLlmConfigFromDoc, nestLlmConfigFromEnv, nestLlmExecutionStream, type NestLlmRuntimeConfig } from './llm.client';
+import { portalAnalyticsDateKey } from '../persistence/portal-analytics-time';
 
 const MARKETING_STEPS: ExecutionStep[] = [
   { skill: 'Intent_Parser', time: '120ms', label: '多模态意图识别', detail: '解析群聊上下文，提取实体与 Action。' },
@@ -81,7 +84,25 @@ type ExecutionRecord = {
   totalTime?: string;
   steps?: ExecutionStep[];
   error?: string;
+  assetId: string;
+  assetType: ExecutionAssetType;
+  usage?: ExecutionUsage;
+  /** Controller-resolved only; stripped before the record is exposed via list(). */
+  userId?: string;
 };
+
+function normalizeAssetType(value: unknown): ExecutionAssetType {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return normalized === 'tool' || normalized === 'skill' || normalized === 'agent'
+    ? normalized
+    : 'unknown';
+}
+
+function normalizeAssetId(value: unknown): string {
+  const id = String(value ?? '').trim();
+  if (!id || id.length > 200 || /[\u0000-\u001f\u007f]/.test(id)) return '';
+  return id;
+}
 
 @Injectable()
 export class ExecutionsService {
@@ -98,13 +119,16 @@ export class ExecutionsService {
     };
   }
 
-  async *createStream(params: StreamExecutionDto, signal?: AbortSignal): AsyncGenerator<StreamEvent> {
+  async *createStream(params: StreamExecutionRequest, signal?: AbortSignal): AsyncGenerator<StreamEvent> {
     if (signal?.aborted) return;
 
     const workspaceId = params.workspaceId || 'ws-mss-ai';
     const agentType = params.actionType ?? resolveAgentType(params.chatId, params.message);
     const agentName =
       params.agentName?.trim() || getAgentName(params.chatId, agentType);
+    const assetId = normalizeAssetId(params.assetId) || `chat:${normalizeAssetId(params.chatId) || 'unknown'}`;
+    const assetType = normalizeAssetType(params.assetType);
+    const userId = normalizeAssetId(params.userId) || undefined;
     const planSteps = (params.planSteps ?? []).map((s) => s.trim()).filter(Boolean);
     const executionId = `exec_${Date.now()}_${randomBytes(4).toString('hex')}`;
     const startedAt = new Date().toISOString();
@@ -122,9 +146,13 @@ export class ExecutionsService {
         agentType,
         agentName,
         status: 'error',
+        source: 'llm',
         startedAt,
         finishedAt: new Date().toISOString(),
         error: 'llm_not_configured',
+        assetId,
+        assetType,
+        userId,
       };
       await this.saveRecord(failed);
       yield {
@@ -148,6 +176,9 @@ export class ExecutionsService {
       status: 'running',
       source,
       startedAt,
+      assetId,
+      assetType,
+      userId,
     };
     await this.saveRecord(base);
 
@@ -180,13 +211,14 @@ export class ExecutionsService {
 
   private async *runLlmStream(
     base: ExecutionRecord,
-    params: StreamExecutionDto,
+    params: StreamExecutionRequest,
     agentType: AgentType,
     agentName: string,
     planSteps: string[],
     llmConfig: NestLlmRuntimeConfig,
     signal?: AbortSignal,
   ): AsyncGenerator<StreamEvent> {
+    let terminal = false;
     try {
       for await (const event of nestLlmExecutionStream({
         message: params.message,
@@ -215,6 +247,7 @@ export class ExecutionsService {
         yield event;
 
         if (event.type === 'done') {
+          terminal = true;
           await this.saveRecord({
             ...base,
             status: 'done',
@@ -222,17 +255,28 @@ export class ExecutionsService {
             finishedAt: new Date().toISOString(),
             totalTime: event.totalTime,
             steps: event.steps,
+            usage: event.usage,
           });
         }
         if (event.type === 'error') {
+          terminal = true;
           await this.saveRecord({
             ...base,
             status: 'error',
             source: 'llm',
             finishedAt: new Date().toISOString(),
             error: event.message,
+            usage: event.usage,
           });
         }
+      }
+      if (!terminal && signal?.aborted) {
+        await this.saveRecord({
+          ...base,
+          status: 'aborted',
+          source: 'llm',
+          finishedAt: new Date().toISOString(),
+        });
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'execution_failed';
@@ -249,7 +293,7 @@ export class ExecutionsService {
 
   private async *runScriptedStream(
     base: ExecutionRecord,
-    params: StreamExecutionDto,
+    params: StreamExecutionRequest,
     agentType: AgentType,
     agentName: string,
     planSteps: string[],
@@ -343,17 +387,49 @@ export class ExecutionsService {
   }
 
   private async saveRecord(record: ExecutionRecord) {
+    const { userId: _userId, ...publicRecord } = record;
     await this.prisma.centerRecord.upsert({
       where: { id: record.id },
       create: {
         id: record.id,
         workspaceId: record.workspaceId,
         kind: 'execution',
-        payload: record as unknown as Prisma.InputJsonValue,
+        payload: publicRecord as unknown as Prisma.InputJsonValue,
       },
       update: {
-        payload: record as unknown as Prisma.InputJsonValue,
+        payload: publicRecord as unknown as Prisma.InputJsonValue,
       },
     });
+    // Terminal records become one idempotent call fact for the analytics dashboard.
+    if (record.status !== 'running') {
+      await this.saveCallFact(record).catch(() => undefined);
+    }
+  }
+
+  private async saveCallFact(record: ExecutionRecord): Promise<void> {
+    const finishedAt = record.finishedAt ? new Date(record.finishedAt) : new Date();
+    const startedAt = new Date(record.startedAt);
+    // Scripted mode is a UI fallback and must not masquerade as provider latency.
+    const durationMs = record.source === 'llm' && Number.isFinite(startedAt.getTime())
+      ? Math.max(0, Math.round(finishedAt.getTime() - startedAt.getTime()))
+      : null;
+    const contentId = normalizeAssetId(record.assetId) || `chat:${record.chatId}`;
+    if (!contentId) return;
+    const eventId = `execution:${record.id}`;
+    const visitorHash = record.userId ? this.accountVisitorHash(record.workspaceId, record.userId) : null;
+    const visitorType = record.userId ? 'user' : 'guest';
+    await this.prisma.$executeRaw`
+      INSERT OR IGNORE INTO "MarketEngagementEvent"
+        ("id", "workspaceId", "eventId", "contentId", "assetType", "action", "dateKey", "visitorHash", "visitorType", "success", "durationMs", "inputTokens", "outputTokens", "errorCode", "occurredAt")
+      VALUES
+        (${randomUUID()}, ${record.workspaceId}, ${eventId}, ${contentId}, ${record.assetType}, ${'call'}, ${portalAnalyticsDateKey(finishedAt)}, ${visitorHash}, ${visitorType}, ${record.status === 'done'}, ${durationMs}, ${record.usage?.inputTokens ?? null}, ${record.usage?.outputTokens ?? null}, ${record.error?.slice(0, 200) ?? null}, ${finishedAt})
+    `;
+  }
+
+  private accountVisitorHash(workspaceId: string, userId: string): string {
+    // Keep call UVs joinable with page-view/login UVs without storing raw account IDs.
+    return createHash('sha256')
+      .update(`mss-claw:portal-uv:v1:${workspaceId}:account:${userId}`)
+      .digest('hex');
   }
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { CenterPageHeader, StatCardGrid } from '@/components/center/CenterShell';
+import { CenterModal, CenterPageHeader, StatCardGrid } from '@/components/center/CenterShell';
 import {
   normalizeLlmModelId,
   type PlatformLlmModel,
@@ -8,13 +8,23 @@ import {
 import { useLlmConfigStore } from '@/stores/llmConfigStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
-import { testLlmConnection } from '@/api/llmClient';
+import { testLlmConnection, type LlmTestResult } from '@/api/llmClient';
 
 /**
  * 平台运营 · 模型配置
  * 读写一律走后端 workspace docs（llm-config → DB），与对话选用同源联动。
  * API Key / Base URL 按模型独立配置，不共享。
  */
+function emptyPlatformModelDraft() {
+  return {
+    id: '',
+    label: '',
+    providerName: '',
+    baseUrl: '',
+    apiKey: '',
+  };
+}
+
 export function ModelCatalogOpsPage() {
   const config = useLlmConfigStore((s) => s.config);
   const syncing = useLlmConfigStore((s) => s.syncing);
@@ -29,14 +39,11 @@ export function ModelCatalogOpsPage() {
   const apiConnected = useWorkspaceStore((s) => s.apiConnected);
 
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
-  const [draft, setDraft] = useState({
-    id: '',
-    label: '',
-    providerName: '',
-    baseUrl: '',
-    apiKey: '',
-  });
+  const [draft, setDraft] = useState(emptyPlatformModelDraft);
+  const [addOpen, setAddOpen] = useState(false);
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [testingDraft, setTestingDraft] = useState(false);
+  const [draftTestResult, setDraftTestResult] = useState<LlmTestResult | null>(null);
 
   useEffect(() => {
     void hydrate({ fresh: true });
@@ -59,16 +66,18 @@ export function ModelCatalogOpsPage() {
     [config.platformModels],
   );
 
-  const runDb = async (label: string, fn: () => Promise<void>) => {
+  const runDb = async (label: string, fn: () => Promise<void>): Promise<boolean> => {
     if (!apiConnected) {
       showToast('共享 API 未连接，无法写入数据库');
-      return;
+      return false;
     }
     try {
       await fn();
       showToast(`${label}（已同步数据库）`);
+      return true;
     } catch {
       showToast(`失败：${useLlmConfigStore.getState().lastError || '无法写入数据库'}`);
+      return false;
     }
   };
 
@@ -79,7 +88,24 @@ export function ModelCatalogOpsPage() {
     );
   };
 
-  const handleAdd = () => {
+  const updateDraft = (patch: Partial<typeof draft>) => {
+    setDraft((current) => ({ ...current, ...patch }));
+    setDraftTestResult(null);
+  };
+
+  const openAddModel = () => {
+    setDraft(emptyPlatformModelDraft());
+    setDraftTestResult(null);
+    setAddOpen(true);
+  };
+
+  const closeAddModel = () => {
+    if (syncing || testingDraft) return;
+    setAddOpen(false);
+    setDraftTestResult(null);
+  };
+
+  const handleAdd = async () => {
     const id = normalizeLlmModelId(draft.id);
     if (!id) {
       showToast('请填写模型 ID（须与厂商 API 一致）');
@@ -89,8 +115,8 @@ export function ModelCatalogOpsPage() {
       showToast('请填写 OpenAI 兼容 Base URL');
       return;
     }
-    void runDb(`已加入平台目录：${id}`, async () => {
-      await upsertPlatformModel({
+    const saved = await runDb(`已加入平台目录：${id}`, () =>
+      upsertPlatformModel({
         id,
         label: draft.label.trim() || id,
         baseUrl: draft.baseUrl.trim(),
@@ -98,9 +124,25 @@ export function ModelCatalogOpsPage() {
         apiKey: draft.apiKey.trim(),
         enabled: true,
         source: 'platform',
-      });
-      setDraft({ id: '', label: '', providerName: '', baseUrl: '', apiKey: '' });
+      }),
+    );
+    if (saved) {
+      setDraft(emptyPlatformModelDraft());
+      setDraftTestResult(null);
+      setAddOpen(false);
+    }
+  };
+
+  const handleTestDraft = async () => {
+    setTestingDraft(true);
+    const result = await testLlmConnection({
+      model: normalizeLlmModelId(draft.id),
+      baseUrl: draft.baseUrl,
+      apiKey: draft.apiKey,
     });
+    setDraftTestResult(result);
+    showToast(result.message);
+    setTestingDraft(false);
   };
 
   const handleDelete = (m: PlatformLlmModel) => {
@@ -130,14 +172,25 @@ export function ModelCatalogOpsPage() {
         subtitle="平台目录 · 组织默认 · 按模型独立 API Key（后端 llm-config / 数据库）"
         tip="启停、删除与 Key 均写入工作区 docs；对话页拉取同一份配置。各模型 Key 互不共享。"
         actions={
-          <button
-            type="button"
-            disabled={!apiConnected || syncing}
-            onClick={() => void hydrate({ fresh: true }).then(() => showToast('已从数据库刷新'))}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-          >
-            {syncing ? '同步中…' : '从数据库刷新'}
-          </button>
+          <>
+            <button
+              type="button"
+              data-testid="model-add-button"
+              disabled={!apiConnected || syncing}
+              onClick={openAddModel}
+              className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"
+            >
+              <i className="fa-solid fa-plus mr-1 text-[10px]" />添加模型
+            </button>
+            <button
+              type="button"
+              disabled={!apiConnected || syncing}
+              onClick={() => void hydrate({ fresh: true }).then(() => showToast('已从数据库刷新'))}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              {syncing ? '同步中…' : '从数据库刷新'}
+            </button>
+          </>
         }
       />
 
@@ -290,75 +343,6 @@ export function ModelCatalogOpsPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-zinc-200/80 bg-white p-4 md:p-5">
-        <h3 className="mb-1 text-[14px] font-semibold text-zinc-900">添加平台模型</h3>
-        <p className="mb-3 text-[12px] text-zinc-500">
-          保存后写入数据库；请为该模型单独填写 API Key（可稍后在目录中补填）。
-        </p>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <label className="text-[11px] font-semibold text-zinc-500">
-            模型 ID
-            <input
-              value={draft.id}
-              disabled={!apiConnected}
-              onChange={(e) => setDraft((d) => ({ ...d, id: e.target.value }))}
-              placeholder="例如 glm-5.1"
-              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 font-mono text-[12px] outline-none focus:border-zinc-400 disabled:bg-zinc-50"
-            />
-          </label>
-          <label className="text-[11px] font-semibold text-zinc-500">
-            展示名
-            <input
-              value={draft.label}
-              disabled={!apiConnected}
-              onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
-              placeholder="例如 GLM 5.1 企业版"
-              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-[12px] outline-none focus:border-zinc-400 disabled:bg-zinc-50"
-            />
-          </label>
-          <label className="text-[11px] font-semibold text-zinc-500">
-            厂商 / 提供方
-            <input
-              value={draft.providerName}
-              disabled={!apiConnected}
-              onChange={(e) => setDraft((d) => ({ ...d, providerName: e.target.value }))}
-              placeholder="例如 智谱 / 自建网关"
-              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-[12px] outline-none focus:border-zinc-400 disabled:bg-zinc-50"
-            />
-          </label>
-          <label className="text-[11px] font-semibold text-zinc-500">
-            Base URL
-            <input
-              value={draft.baseUrl}
-              disabled={!apiConnected}
-              onChange={(e) => setDraft((d) => ({ ...d, baseUrl: e.target.value }))}
-              placeholder="https://…/v1"
-              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 font-mono text-[12px] outline-none focus:border-zinc-400 disabled:bg-zinc-50"
-            />
-          </label>
-          <label className="text-[11px] font-semibold text-zinc-500 sm:col-span-2">
-            API Key（该模型专用）
-            <input
-              type="password"
-              value={draft.apiKey}
-              disabled={!apiConnected}
-              onChange={(e) => setDraft((d) => ({ ...d, apiKey: e.target.value }))}
-              placeholder="sk-…"
-              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 font-mono text-[12px] outline-none focus:border-zinc-400 disabled:bg-zinc-50"
-              autoComplete="off"
-            />
-          </label>
-        </div>
-        <button
-          type="button"
-          disabled={!apiConnected || syncing}
-          onClick={handleAdd}
-          className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2 text-[12px] font-semibold text-zinc-800 hover:bg-zinc-100 disabled:opacity-50"
-        >
-          加入目录并写入数据库
-        </button>
-      </section>
-
       {config.customModels.length ? (
         <section className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50/60 p-4">
           <h3 className="text-[13px] font-semibold text-zinc-800">工作区扩展模型（库内只读）</h3>
@@ -378,6 +362,148 @@ export function ModelCatalogOpsPage() {
           </ul>
         </section>
       ) : null}
+
+      <CenterModal
+        open={addOpen}
+        title="添加平台模型"
+        onClose={closeAddModel}
+        size="lg"
+        fitContent
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={closeAddModel}
+              disabled={syncing || testingDraft}
+              className="rounded-lg border border-zinc-200 bg-white px-3.5 py-2 text-[12px] font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleAdd()}
+              disabled={!apiConnected || syncing || !draft.id.trim() || !draft.baseUrl.trim()}
+              className="rounded-lg bg-zinc-900 px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"
+            >
+              {syncing ? '保存中…' : '保存模型'}
+            </button>
+          </>
+        }
+      >
+        <div data-testid="model-add-modal" className="space-y-4">
+          <div className="rounded-xl border border-sky-100 bg-sky-50/70 px-3.5 py-3 text-[11px] leading-relaxed text-sky-900">
+            <p className="font-semibold">默认连接协议：OpenAI 兼容格式</p>
+            <p className="mt-1">认证方式：Bearer token</p>
+            <code className="mt-2 block rounded-lg bg-white/80 px-2.5 py-2 font-mono text-[10px] text-sky-950">
+              {'Authorization: Bearer <your-api-key>'}
+            </code>
+            <p className="mt-2 text-sky-800/75">
+              测试请求会发送到 Base URL 的 <code>/chat/completions</code> 接口。
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-[11px] font-semibold text-zinc-500">
+              模型 ID <span className="text-rose-500">*</span>
+              <input
+                value={draft.id}
+                disabled={!apiConnected || syncing}
+                onChange={(e) => updateDraft({ id: e.target.value })}
+                placeholder="例如 glm-5.1"
+                className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 font-mono text-[12px] outline-none focus:border-zinc-400 disabled:bg-zinc-50"
+                autoComplete="off"
+              />
+            </label>
+            <label className="text-[11px] font-semibold text-zinc-500">
+              展示名
+              <input
+                value={draft.label}
+                disabled={!apiConnected || syncing}
+                onChange={(e) => updateDraft({ label: e.target.value })}
+                placeholder="默认使用模型 ID"
+                className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-[12px] outline-none focus:border-zinc-400 disabled:bg-zinc-50"
+              />
+            </label>
+            <label className="text-[11px] font-semibold text-zinc-500">
+              厂商 / 提供方
+              <input
+                value={draft.providerName}
+                disabled={!apiConnected || syncing}
+                onChange={(e) => updateDraft({ providerName: e.target.value })}
+                placeholder="例如 OpenAI / 自建网关"
+                className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-[12px] outline-none focus:border-zinc-400 disabled:bg-zinc-50"
+              />
+            </label>
+            <label className="text-[11px] font-semibold text-zinc-500">
+              Base URL <span className="text-rose-500">*</span>
+              <input
+                type="url"
+                value={draft.baseUrl}
+                disabled={!apiConnected || syncing}
+                onChange={(e) => updateDraft({ baseUrl: e.target.value })}
+                placeholder="https://api.example.com/v1"
+                className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 font-mono text-[12px] outline-none focus:border-zinc-400 disabled:bg-zinc-50"
+                autoComplete="url"
+              />
+            </label>
+            <label className="text-[11px] font-semibold text-zinc-500 sm:col-span-2">
+              API Key
+              <span className="ml-1 font-normal text-zinc-400">可稍后在目录中补填</span>
+              <input
+                type="password"
+                value={draft.apiKey}
+                disabled={!apiConnected || syncing}
+                onChange={(e) => updateDraft({ apiKey: e.target.value })}
+                placeholder="输入供应商 API Key"
+                className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 font-mono text-[12px] outline-none focus:border-zinc-400 disabled:bg-zinc-50"
+                autoComplete="new-password"
+              />
+            </label>
+          </div>
+
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-[12px] font-semibold text-zinc-800">连接调试</p>
+                <p className="mt-0.5 text-[10px] text-zinc-500">
+                  使用当前填写的模型 ID、Base URL 和 API Key 发起一次最小请求。
+                </p>
+              </div>
+              <button
+                type="button"
+                data-testid="model-add-test-button"
+                onClick={() => void handleTestDraft()}
+                disabled={!apiConnected || syncing || testingDraft}
+                className="rounded-lg border border-sky-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-sky-800 hover:bg-sky-50 disabled:opacity-50"
+              >
+                {testingDraft ? '调试中…' : '调试连接'}
+              </button>
+            </div>
+            {draftTestResult ? (
+              <div
+                data-testid="model-add-test-result"
+                role={draftTestResult.ok ? 'status' : 'alert'}
+                className={cn(
+                  'mt-3 rounded-lg px-3 py-2 text-[11px] leading-relaxed',
+                  draftTestResult.ok
+                    ? 'bg-emerald-50 text-emerald-800'
+                    : 'bg-rose-50 text-rose-800',
+                )}
+              >
+                <i
+                  className={cn(
+                    'mr-1.5',
+                    draftTestResult.ok
+                      ? 'fa-solid fa-circle-check'
+                      : 'fa-solid fa-circle-exclamation',
+                  )}
+                />
+                {draftTestResult.ok ? draftTestResult.message : `调试失败：${draftTestResult.message}`}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </CenterModal>
     </div>
   );
 }

@@ -30,6 +30,19 @@ const LOCAL_CATALOGS: Record<CenterKind, Record<string, Record<string, unknown>[
   memory: MEMORY_CATALOG,
 };
 
+function isExternalToolPayload(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const tool = value as Record<string, unknown>;
+  const tags = Array.isArray(tool.tags) ? tool.tags.map(String) : [];
+  return (
+    tool.sourceType === 'external' ||
+    tool.marketShelf === 'external' ||
+    tool.category === 'external' ||
+    tags.includes('ai-saas') ||
+    tags.includes('external')
+  );
+}
+
 @Injectable()
 export class CenterRecordService {
   constructor(private readonly prisma: PrismaService) {}
@@ -51,7 +64,10 @@ export class CenterRecordService {
       byId.set(id, payload);
     }
 
-    // Marketplace is canonical for agent/skill/tool — overlay mapped items
+    // Marketplace is canonical for agent/skill/tool — overlay mapped items.
+    // 对 tool 而言，marketplace 已经存在就不再返回旧的外部 tool 投影，避免
+    // 「配置工具」和「工具运营」看到两份同名目录；内部连接器仍保留兼容读取。
+    let canonicalMarketplaceToolIds: Set<string> | null = null;
     if (kind === 'agent' || kind === 'skill' || kind === 'tool') {
       const marketRow = await this.prisma.centerRecord.findFirst({
         where: { workspaceId, kind: 'marketplace' },
@@ -61,19 +77,35 @@ export class CenterRecordService {
           kind,
           marketRow.payload as MarketplacePayload,
         );
+        if (kind === 'tool') {
+          canonicalMarketplaceToolIds = new Set(mapped.map((item) => String(item.id)));
+          for (const [id, payload] of byId) {
+            if (isExternalToolPayload(payload) && !canonicalMarketplaceToolIds.has(id)) {
+              byId.delete(id);
+            }
+          }
+        }
         for (const item of mapped) {
           byId.set(String(item.id), item);
         }
       }
     }
 
-    if (byId.size === 0) return local;
+    if (byId.size === 0) return canonicalMarketplaceToolIds ? [] : local;
 
     // Prefer local catalog order, then any DB/marketplace-only extras
     const ordered: Record<string, unknown>[] = [];
     const seen = new Set<string>();
     for (const item of local) {
       const id = String(item.id);
+      if (
+        canonicalMarketplaceToolIds &&
+        isExternalToolPayload(item) &&
+        !canonicalMarketplaceToolIds.has(id)
+      ) {
+        seen.add(id);
+        continue;
+      }
       ordered.push(byId.get(id) ?? item);
       seen.add(id);
     }
@@ -84,14 +116,37 @@ export class CenterRecordService {
   }
 
   async findOne(workspaceId: string, kind: CenterKind, id: string) {
+    let hasMarketplaceTools = false;
+    if (kind === 'tool') {
+      const marketRow = await this.prisma.centerRecord.findFirst({
+        where: { workspaceId, kind: 'marketplace' },
+      });
+      if (marketRow) {
+        hasMarketplaceTools = true;
+        const mapped = listMappedFromMarketplace(
+          kind,
+          marketRow.payload as MarketplacePayload,
+        );
+        const marketplaceTool = mapped.find((item) => String(item.id) === id);
+        if (marketplaceTool) return marketplaceTool;
+      }
+    }
+
     const row = await this.prisma.centerRecord.findFirst({
       where: { id, workspaceId, kind },
     });
 
-    if (row) return row.payload as Record<string, unknown>;
+    if (row) {
+      if (hasMarketplaceTools && isExternalToolPayload(row.payload)) {
+        throw new NotFoundException(`${kind} ${id} not found`);
+      }
+      return row.payload as Record<string, unknown>;
+    }
 
     const local = (LOCAL_CATALOGS[kind][workspaceId] ?? []).find((item) => item.id === id);
-    if (!local) throw new NotFoundException(`${kind} ${id} not found`);
+    if (!local || (hasMarketplaceTools && isExternalToolPayload(local))) {
+      throw new NotFoundException(`${kind} ${id} not found`);
+    }
     return local;
   }
 

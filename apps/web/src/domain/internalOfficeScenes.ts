@@ -92,14 +92,14 @@ function seedToolOrFallback(
   return resolveOfficeToolWithCatalog(base, catalog);
 }
 
-/** 配置工具主数据是否可用于前台办公场景（已发布且存在） */
+/** 配置工具主数据是否可用于前台办公场景（已上架且存在） */
 export function isOfficeCatalogToolEligible(
   catalog?: PrototypeToolSeed | null,
 ): boolean {
-  return Boolean(catalog && catalog.published !== false);
+  return Boolean(catalog && catalog.published === true);
 }
 
-/** 场景引用的去重工具（稳定顺序；含运营绑定；仅已发布主数据） */
+/** 场景引用的去重工具（稳定顺序；含运营绑定；仅已上架主数据） */
 export function listInternalOfficeCatalogTools(
   entries: InternalOfficeSceneCatalogEntry[] = getInternalOfficeSceneCatalog(),
   catalogTools: PrototypeToolSeed[] = [],

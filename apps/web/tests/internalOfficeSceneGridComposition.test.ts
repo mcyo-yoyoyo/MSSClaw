@@ -181,10 +181,11 @@ test('后台精简视图隐藏指标和详情按钮，仅保留底部手柄', ()
   );
 });
 
-test('员工助手默认保留，后台可显式隐藏整块预览', () => {
+test('员工助手仅在已上架主数据中展示，后台可显式隐藏整块预览', () => {
   assert.match(gridSource, /showAssistantChat = true/);
+  assert.match(gridSource, /tool\.published === true/);
   assert.match(
     gridSource,
-    /\{showAssistantChat \? \([\s\S]*?aria-label="员工助手"[\s\S]*?\) : null\}/,
+    /\{showAssistantChat && assistantToolAvailable \? \([\s\S]*?aria-label="员工助手"[\s\S]*?\) : null\}/,
   );
 });

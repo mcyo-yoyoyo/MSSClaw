@@ -1,7 +1,7 @@
 import type { ExecutionStep } from '@/domain/chat';
 import type { StreamEvent } from '@/domain/stream';
 import { parseSSEStream } from '@/domain/stream';
-import { apiUrl } from '@/api/client';
+import { apiAuthHeaders, apiUrl } from '@/api/client';
 import { isLlmConfigured, llmExecutionStream } from '@/api/llmClient';
 import { resolveAgentType } from '@/lib/utils';
 import { getSkillPack, getSkillPackByCommand } from '@/domain/skills/catalog';
@@ -25,6 +25,8 @@ const KNOWLEDGE_STEPS: ExecutionStep[] = [
   { skill: 'Cross_Encoder', time: '360ms', label: 'Rerank 语义重排', detail: '保留 Top-3 核心参考源。' },
   { skill: 'Knowledge_Synthesizer', time: '820ms', label: '抗幻觉摘要生成', detail: '注入溯源锚点并生成回答。' },
 ];
+
+type ExecutionAssetType = 'tool' | 'skill' | 'agent' | 'unknown';
 
 function shouldUseRemoteStream() {
   // 仅在共享 API 已探活成功时走 SSE，避免静态托管刷 404
@@ -173,6 +175,8 @@ export async function* streamExecution(params: {
   kbContext?: string;
   skillId?: string;
   skillName?: string;
+  /** 入口语义优先于自动挂载的主 Skill，避免 Agent 被记成 Skill。 */
+  assetType?: ExecutionAssetType;
 }): AsyncGenerator<StreamEvent> {
   const actionType = params.actionType ?? resolveAgentType(params.chatId, params.message);
   const agentName =
@@ -183,9 +187,19 @@ export async function* streamExecution(params: {
 
   if (shouldUseRemoteStream()) {
     try {
+      const assetType = params.assetType ?? (params.skillId ? 'skill' : params.agentId ? 'agent' : 'unknown');
+      const assetId = assetType === 'skill'
+        ? params.skillId
+        : assetType === 'agent'
+          ? params.agentId
+          : params.agentId || params.skillId;
       const response = await fetch(apiUrl('/api/v1/executions/stream'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+          ...apiAuthHeaders(),
+        },
         body: JSON.stringify({
           chatId: params.chatId,
           message: params.message,
@@ -195,6 +209,8 @@ export async function* streamExecution(params: {
           agentName,
           actionType,
           kbContext: params.kbContext,
+          assetId: assetId || params.chatId,
+          assetType,
         }),
         signal: params.signal,
       });

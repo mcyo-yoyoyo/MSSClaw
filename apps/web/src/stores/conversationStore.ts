@@ -19,6 +19,7 @@ import {
 } from '@/domain/plan';
 import {
   buildSystemPromptWithSkill,
+  getSkillById,
   getSkillPlanSteps,
   isSkillRunnable,
   resolveSkillFromText,
@@ -61,6 +62,7 @@ interface PendingTaskSubmit {
   chatId: string;
   message: string;
   autoSend?: boolean;
+  assetType?: 'skill' | 'agent' | 'unknown';
 }
 
 interface PendingPipeline {
@@ -71,6 +73,7 @@ interface PendingPipeline {
   planId: string;
   agentId?: string;
   skillId?: string;
+  assetType?: 'skill' | 'agent' | 'unknown';
 }
 
 /** 场景专家团：同会话顺序接力状态 */
@@ -113,7 +116,11 @@ interface ConversationState {
   setActiveModule: (module: ModuleId, resourceName?: string | null) => void;
   loadWorkspace: (workspaceId: string, defaultChatId: string, persistedChats?: Record<string, ChatConfig>) => void;
   switchChat: (chatId: string) => void;
-  sendMessage: (text: string, workspaceId?: string) => Promise<void>;
+  sendMessage: (
+    text: string,
+    workspaceId?: string,
+    assetType?: PendingTaskSubmit['assetType'],
+  ) => Promise<void>;
   approvePlan: (planId: string, steps: string[]) => Promise<void>;
   savePlanSteps: (planId: string, steps: string[]) => void;
   cancelStream: () => void;
@@ -143,6 +150,8 @@ interface ConversationState {
     taskSource?: import('@/domain/taskMeta').TaskSource;
     businessScenarioId?: import('@/domain/businessScenarios').BusinessScenarioId | 'all' | null;
     skillId?: string;
+    /** 自动投递时保留入口资产类型，不能从挂载的主 Skill 反推。 */
+    assetType?: PendingTaskSubmit['assetType'];
     discoverScenarioId?: string;
   }) => string;
   /** 专家团同会话接力：建一个任务，从 fromIndex 起自动顺序跑完 */
@@ -291,7 +300,7 @@ async function advanceExpertTeamRelay(get: () => ConversationState, set: StoreSe
     nextIndex,
     prevReply,
   );
-  await get().sendMessage(message);
+  await get().sendMessage(message, undefined, 'agent');
 }
 
 async function runApprovedPipeline(get: () => ConversationState, set: StoreSet) {
@@ -484,6 +493,7 @@ async function runApprovedPipeline(get: () => ConversationState, set: StoreSet) 
       kbContext,
       skillId: pipeline.skillId,
       skillName: skill?.name,
+      assetType: pipeline.assetType,
     })) {
       if (controller.signal.aborted) break;
       applyEvent(event);
@@ -606,7 +616,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     });
   },
 
-  sendMessage: async (text, _workspaceId) => {
+  sendMessage: async (text, _workspaceId, requestedAssetType) => {
     const trimmed = text.trim();
     const { currentChatId, chats, isAgentTyping, pendingPipeline } = get();
     if (!trimmed || isAgentTyping) return;
@@ -644,8 +654,13 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       skillBoundAgent;
     if (bound) set({ activeAgentId: bound.id });
 
-    // 消息未显式 /skill 时，自动挂载专家主 Skill
-    const skill = skillFromText ?? (bound ? getPrimarySkill(bound) : null);
+    // Skill 任务续聊沿用创建时的 Skill；只有没有 Skill 入口时才自动挂载专家主 Skill。
+    // 否则后续普通消息会把原 Skill 归因到绑定 Agent 的主 Skill。
+    const chatSkill = chat.taskSource === 'skill' ? getSkillById(chat.skillId) : null;
+    const skill =
+      skillFromText ??
+      chatSkill ??
+      (chat.taskSource === 'skill' ? null : bound ? getPrimarySkill(bound) : null);
     const skillPack = skill ? getSkillPack(skill.id) : null;
     const agentPack = bound ? getAgentPack(bound.id) : null;
 
@@ -718,6 +733,13 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
           planId,
           agentId: bound?.id ?? chat.agentId,
           skillId: skill?.id,
+          assetType:
+            requestedAssetType ??
+            (chat.taskSource === 'skill' || skillFromText
+              ? 'skill'
+              : bound || chat.taskSource === 'expert' || chat.taskSource === 'case_demo'
+                ? 'agent'
+                : 'unknown'),
         },
         chats: {
           ...state.chats,
@@ -986,6 +1008,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     taskSource,
     businessScenarioId,
     skillId,
+    assetType,
   }) => {
     if (!canExecuteChat()) {
       set({ pushToast: READONLY_EXECUTE_HINT });
@@ -1043,7 +1066,9 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
             currentChatId: id,
             activeModule: 'chat' as ModuleId,
             pendingPipeline: null,
-            pendingTaskSubmit: initialMessage ? { chatId: id, message: initialMessage, autoSend } : null,
+            pendingTaskSubmit: initialMessage
+              ? { chatId: id, message: initialMessage, autoSend, assetType }
+              : null,
             ...resetSandboxState(),
           }
         : {}),
@@ -1100,6 +1125,8 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       initialMessage,
       autoSend: true,
       switchTo: true,
+      taskSource: 'expert',
+      assetType: 'agent',
     });
 
     const chat = get().chats[id];
@@ -1318,9 +1345,14 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       (c) =>
         c.agentId === agentId &&
         !isWarRoom(c) &&
+        // Keep Skill and case-demo sessions separate: their mounted asset
+        // metadata is part of the audit trail and must not be rewritten.
+        (c.taskSource === 'expert' || (!c.taskSource && !c.skillId)) &&
         (!uid || c.ownerUserId === uid),
     );
-    if (existing) return existing.id;
+    if (existing) {
+      return existing.id;
+    }
     return get().createAgentTaskSession({
       title: agentName,
       agentName,
@@ -1436,6 +1468,6 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     if (!agent) return;
     const chatId = get().findOrCreateAgentSession(agent.id, agent.name, agent.icon);
     get().switchChat(chatId);
-    set({ pendingTaskSubmit: { chatId, message: ex.prompt, autoSend: true } });
+    set({ pendingTaskSubmit: { chatId, message: ex.prompt, autoSend: true, assetType: 'agent' } });
   },
 }));

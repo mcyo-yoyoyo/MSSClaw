@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate apps/web/src/domain/externalToolsCatalog.ts from CSV."""
+"""Generate legacy How-to seed metadata from CSV; runtime tools come from backend marketplace."""
 
 from __future__ import annotations
 
@@ -177,7 +177,7 @@ def main() -> None:
         )
 
     lines: list[str] = [
-        "/** Auto-generated from ai-tools-directory CSV. Do not hand-edit. */",
+        "/** Auto-generated from ai-tools-directory CSV. Legacy How-to seed content only; runtime tools come from marketplace API. */",
         "import type { ExternalToolCatalogEntry } from '@/domain/externalToolTaxonomy';",
         "",
         "export const EXTERNAL_TOOLS_CATALOG: ExternalToolCatalogEntry[] = [",

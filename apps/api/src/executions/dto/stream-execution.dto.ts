@@ -7,6 +7,21 @@ export interface StreamExecutionDto {
   agentName?: string;
   actionType?: AgentType;
   kbContext?: string;
+  /** 由前端选择的可执行资产；用户身份由控制器会话解析，不接受 body userId。 */
+  assetId?: string;
+  assetType?: ExecutionAssetType;
+}
+
+export type ExecutionAssetType = 'tool' | 'skill' | 'agent' | 'unknown';
+
+/** Controller-resolved context kept out of the public request body. */
+export type StreamExecutionRequest = StreamExecutionDto & {
+  userId?: string;
+};
+
+export interface ExecutionUsage {
+  inputTokens: number | null;
+  outputTokens: number | null;
 }
 
 export interface ExecutionStep {
@@ -32,6 +47,7 @@ export type StreamEvent =
       steps: ExecutionStep[];
       agentName: string;
       source?: ExecutionSource;
+      usage?: ExecutionUsage;
       followUp?: {
         role: 'other';
         name: string;
@@ -39,4 +55,4 @@ export type StreamEvent =
         text: string;
       };
     }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string; usage?: ExecutionUsage };

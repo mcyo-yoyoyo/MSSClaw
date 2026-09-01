@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import { json, urlencoded } from 'express';
 import type { Server } from 'http';
 import { AppModule } from './app.module';
+import { trustProxySetting } from './common/trust-proxy';
 
 const DEFAULT_HTTP_REQUEST_TIMEOUT_MS = 600_000;
 
@@ -34,6 +35,9 @@ async function bootstrap() {
   );
 
   app.setGlobalPrefix('api/v1');
+  // Nginx 示例通过 X-Forwarded-For 传递真实客户端 IP。只信任 loopback
+  // 反代，避免匿名 PV/行为限流把所有用户错误合并到 127.0.0.1，亦避免任意来源伪造头。
+  app.set('trust proxy', trustProxySetting(process.env.TRUST_PROXY));
 
   const corsOrigin = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
   app.enableCors({

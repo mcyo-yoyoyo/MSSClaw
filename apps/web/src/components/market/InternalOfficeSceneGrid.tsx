@@ -311,6 +311,7 @@ export function InternalOfficeSceneGrid({
     mode: PickerMode;
   } | null>(null);
   const sceneEntries = useInternalOfficeSceneCatalogStore((s) => s.entries);
+  const bumpExposure = useContentEngagementStore((s) => s.bumpExposure);
   const bumpView = useContentEngagementStore((s) => s.bumpView);
   const bumpUse = useContentEngagementStore((s) => s.bumpUse);
   const getEngagement = useContentEngagementStore((s) => s.get);
@@ -329,6 +330,7 @@ export function InternalOfficeSceneGrid({
     rotation: 0,
   });
   const internalCardNodesRef = useRef(new Map<string, HTMLElement>());
+  const exposedSceneIdsRef = useRef(new Set<string>());
   const internalPreviousRectsRef = useRef(new Map<string, DOMRect>());
   const internalReflowAnimationsRef = useRef(new Map<string, Animation>());
   const internalDragGenerationRef = useRef(0);
@@ -346,6 +348,11 @@ export function InternalOfficeSceneGrid({
         sourceOrder: index,
       })),
     [catalogTools, sceneEntries],
+  );
+
+  const assistantToolAvailable = useMemo(
+    () => catalogTools.some((tool) => tool.id === ASSISTANT_TOOL_ID && tool.published === true),
+    [catalogTools],
   );
 
   const assistantTool = useMemo(() => {
@@ -379,8 +386,8 @@ export function InternalOfficeSceneGrid({
     if (scene.tools.length === 1) {
       const tool = scene.tools[0]!;
       if (interactionMode === 'user') {
-        if (mode === 'experience') bumpUse(sceneEngagementId(scene.id));
-        else bumpView(sceneEngagementId(scene.id));
+        if (mode === 'experience') bumpUse(sceneEngagementId(scene.id), 'office-scene');
+        else bumpView(sceneEngagementId(scene.id), 'office-scene');
       }
       if (mode === 'experience') onExperience(tool);
       else if (mode === 'howto') onHowTo(tool);
@@ -395,8 +402,8 @@ export function InternalOfficeSceneGrid({
     const { mode } = picker;
     setPicker(null);
     if (interactionMode === 'user') {
-      if (mode === 'experience') bumpUse(sceneEngagementId(picker.scene.id));
-      else bumpView(sceneEngagementId(picker.scene.id));
+      if (mode === 'experience') bumpUse(sceneEngagementId(picker.scene.id), 'office-scene');
+      else bumpView(sceneEngagementId(picker.scene.id), 'office-scene');
     }
     if (mode === 'experience') onExperience(tool);
     else if (mode === 'howto') onHowTo(tool);
@@ -428,6 +435,29 @@ export function InternalOfficeSceneGrid({
     ? scenes.find((scene) => scene.id === pointerDraggingSceneId) ?? null
     : null;
   const internalLayoutSignature = shownScenes.map((scene) => scene.id).join('|');
+
+  useEffect(() => {
+    if (interactionMode !== 'user' || typeof IntersectionObserver === 'undefined') return;
+    const grid = internalSceneGridRef.current;
+    if (!grid) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const sceneId = (entry.target as HTMLElement).dataset.internalSceneCardId;
+          if (!sceneId || exposedSceneIdsRef.current.has(sceneId)) continue;
+          exposedSceneIdsRef.current.add(sceneId);
+          observer.unobserve(entry.target);
+          bumpExposure(sceneEngagementId(sceneId), 'office-scene');
+        }
+      },
+      { threshold: 0.1 },
+    );
+    grid
+      .querySelectorAll<HTMLElement>('[data-internal-scene-card-id]')
+      .forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, [bumpExposure, interactionMode, internalLayoutSignature]);
 
   useLayoutEffect(() => {
     internalPreviousRectsRef.current = animateInternalSceneGridReflow(
@@ -760,7 +790,7 @@ export function InternalOfficeSceneGrid({
   return (
     <>
       <section className="flex flex-col gap-5 pb-4">
-        {showAssistantChat ? (
+        {showAssistantChat && assistantToolAvailable ? (
           <button
             type="button"
             className="internal-assistant-chat shrink-0"
@@ -923,7 +953,7 @@ export function InternalOfficeSceneGrid({
                     </p>
                     {!hasTools ? (
                       <p className="mt-1 shrink-0 text-[10px] text-amber-700/80">
-                        暂无已发布工具，请运营绑定后体验
+                        暂无已上架工具，请运营绑定后体验
                       </p>
                     ) : null}
                   </button>
@@ -1136,7 +1166,7 @@ function SceneCardStats({
   const toggleLike = useContentEngagementStore((s) => s.toggleLike);
   const toggleDislike = useContentEngagementStore((s) => s.toggleDislike);
   const favorited = useMarketFavoriteStore((s) =>
-    primary ? s.isFavorite(primary.id, 'internal') : false,
+    primary ? s.isFavorite(primary.id, 'internal', 'tool') : false,
   );
   const toggleFavorite = useMarketFavoriteStore((s) => s.toggle);
   const showToast = useMarketplaceStore((s) => s.showToast);
@@ -1147,6 +1177,7 @@ function SceneCardStats({
     const item = {
       id: primary.id,
       kind: 'internal',
+      assetType: 'tool',
       title: primary.name,
       icon: 'fa-cube',
       logoUrl: primary.logoUrl,
@@ -1225,7 +1256,7 @@ function SceneCardStats({
         type="button"
         onClick={(ev) => {
           ev.stopPropagation();
-          const run = () => toggleLike(engagementId);
+          const run = () => toggleLike(engagementId, 'office-scene');
           if (requireLogin('like', run)) run();
         }}
         title="点赞"
@@ -1242,7 +1273,7 @@ function SceneCardStats({
         type="button"
         onClick={(ev) => {
           ev.stopPropagation();
-          const run = () => toggleDislike(engagementId);
+          const run = () => toggleDislike(engagementId, 'office-scene');
           if (requireLogin('dislike', run)) run();
         }}
         title="点踩"

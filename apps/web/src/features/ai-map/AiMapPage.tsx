@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type {
   PrototypeAgentSeed,
@@ -93,19 +93,93 @@ function LayerBadge({
   );
 }
 
+type CapabilityEngagementTarget = {
+  id: string;
+  assetType: 'tool' | 'skill' | 'agent';
+};
+
+function capabilityEngagementTarget(card: PortalMapCard): CapabilityEngagementTarget | null {
+  switch (card.action.type) {
+    case 'agent':
+      return { id: card.action.agentId, assetType: 'agent' };
+    case 'skill':
+      return { id: card.action.skillId, assetType: 'skill' };
+    case 'tool':
+      return { id: card.action.toolId, assetType: 'tool' };
+    case 'external': {
+      // External tool/Skill cards keep their source ID in the prefixed card ID.
+      const match = /^(tool|skill):(.+)$/.exec(card.id);
+      return match
+        ? { id: match[2], assetType: match[1] as 'tool' | 'skill' }
+        : null;
+    }
+    default:
+      return null;
+  }
+}
+
 function Quadrant({
   title,
   emptyHint,
   cards,
   onCard,
   hint,
+  trackEngagement = false,
+  exposureScope,
 }: {
   title: string;
   emptyHint: string;
   cards: PortalMapCard[];
   onCard: (card: PortalMapCard) => void;
   hint?: string;
+  trackEngagement?: boolean;
+  exposureScope?: string;
 }) {
+  const bumpExposure = useContentEngagementStore((state) => state.bumpExposure);
+  const bumpDetail = useContentEngagementStore((state) => state.bumpDetail);
+  const listRef = useRef<HTMLUListElement | null>(null);
+  const exposedRef = useRef(new Set<string>());
+  const visibleCards = useMemo(() => cards.slice(0, 6), [cards]);
+
+  useEffect(() => {
+    exposedRef.current.clear();
+  }, [exposureScope]);
+
+  useEffect(() => {
+    if (!trackEngagement || !listRef.current || typeof IntersectionObserver === 'undefined') {
+      return;
+    }
+    const cardById = new Map(visibleCards.map((card) => [card.id, card]));
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const cardId = (entry.target as HTMLElement).dataset.capabilityCard;
+          const card = cardId ? cardById.get(cardId) : undefined;
+          const target = card ? capabilityEngagementTarget(card) : null;
+          if (!target) continue;
+          const key = `${target.assetType}:${target.id}`;
+          if (exposedRef.current.has(key)) continue;
+          exposedRef.current.add(key);
+          bumpExposure(target.id, target.assetType);
+        }
+      },
+      { threshold: 0.1 },
+    );
+    listRef.current
+      .querySelectorAll<HTMLElement>('[data-capability-card]')
+      .forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, [bumpExposure, exposureScope, trackEngagement, visibleCards]);
+
+  const handleCard = (card: PortalMapCard) => {
+    if (trackEngagement) {
+      const target = capabilityEngagementTarget(card);
+      if (target) bumpDetail(target.id, target.assetType);
+    }
+    onCard(card);
+  };
+
   return (
     <section className="rounded-xl border border-zinc-200/80 bg-zinc-50/40 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -120,12 +194,12 @@ function Quadrant({
           {emptyHint}
         </p>
       ) : (
-        <ul className="space-y-1.5">
-          {cards.slice(0, 6).map((card) => (
-            <li key={card.id}>
+        <ul ref={listRef} className="space-y-1.5">
+          {visibleCards.map((card) => (
+            <li key={card.id} data-capability-card={card.id}>
               <button
                 type="button"
-                onClick={() => onCard(card)}
+                onClick={() => handleCard(card)}
                 className="flex w-full items-start gap-2 rounded-lg bg-white px-2 py-1.5 text-left transition hover:bg-zinc-50"
               >
                 <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-zinc-800 text-white">
@@ -261,6 +335,11 @@ export function AiMapPage({
   const [teamPlan, setTeamPlan] = useState<ScenarioDemoPlan | null>(null);
   const [inspectTarget, setInspectTarget] = useState<ScenarioLayerInspectTarget | null>(null);
   const isAdmin = isSystemAdmin(user?.platformRole);
+  const bumpExposure = useContentEngagementStore((state) => state.bumpExposure);
+  const bumpDetail = useContentEngagementStore((state) => state.bumpDetail);
+  const bumpRedirect = useContentEngagementStore((state) => state.bumpRedirect);
+  const envToolsListRef = useRef<HTMLDivElement | null>(null);
+  const exposedEnvToolsRef = useRef(new Set<string>());
 
   const openPortalEdit = (id: string) => {
     useNavigationIntentStore.getState().focusPortalEdit(id);
@@ -419,6 +498,43 @@ export function AiMapPage({
 
   const selected: ScenarioBundle | null = bundles.find((b) => b.id === selectedId) ?? null;
 
+  useEffect(() => {
+    exposedEnvToolsRef.current.clear();
+  }, [selected?.id]);
+
+  useEffect(() => {
+    const cards = selected?.envTools.slice(0, 6) ?? [];
+    if (
+      isAdmin ||
+      cards.length === 0 ||
+      !envToolsListRef.current ||
+      typeof IntersectionObserver === 'undefined'
+    ) {
+      return;
+    }
+    const cardById = new Map(cards.map((card) => [card.id, card]));
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const cardId = (entry.target as HTMLElement).dataset.capabilityCard;
+          const card = cardId ? cardById.get(cardId) : undefined;
+          const target = card ? capabilityEngagementTarget(card) : null;
+          if (!target) continue;
+          const key = `${target.assetType}:${target.id}`;
+          if (exposedEnvToolsRef.current.has(key)) continue;
+          exposedEnvToolsRef.current.add(key);
+          bumpExposure(target.id, target.assetType);
+        }
+      },
+      { threshold: 0.1 },
+    );
+    envToolsListRef.current
+      .querySelectorAll<HTMLElement>('[data-capability-card]')
+      .forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, [bumpExposure, isAdmin, selected?.envTools, selected?.id]);
+
   const narrativeCards = useMemo(() => {
     if (!selected) return [];
     return filterCardsByShowcaseTab(selected.cases, narrativeKind);
@@ -437,6 +553,10 @@ export function AiMapPage({
   };
 
   const openToolkitToolInspect = (card: PortalMapCard) => {
+    if (!isAdmin) {
+      const target = capabilityEngagementTarget(card);
+      if (target) bumpDetail(target.id, target.assetType);
+    }
     setInspectTarget({ kind: 'toolkit-tool', card });
   };
 
@@ -445,7 +565,11 @@ export function AiMapPage({
     setInspectTarget({ kind: 'toolkit-env', slot, env: selected.env });
   };
 
-  const openUrlKnow = (url: string, label: string) => {
+  const openUrlKnow = (url: string, label: string, card?: PortalMapCard) => {
+    if (!isAdmin && card) {
+      const target = capabilityEngagementTarget(card);
+      if (target) bumpRedirect(target.id, target.assetType);
+    }
     window.open(url, '_blank', 'noopener,noreferrer');
     showToast(`已打开了解：${label}`);
   };
@@ -524,8 +648,11 @@ export function AiMapPage({
       architectureDocs: bundle.architectureDocs,
       caseItems,
     });
-    const bump = useContentEngagementStore.getState().bumpDownload;
-    items.forEach((i) => bump(i.id));
+    if (!isAdmin) {
+      const bump = useContentEngagementStore.getState().bumpDownload;
+      bundle.skills.forEach((skill) => bump(skill.id, 'skill'));
+      bundle.agents.forEach((agent) => bump(agent.id, 'agent'));
+    }
     showToast('已下载学习包（含准备与打样参照）');
   };
 
@@ -899,12 +1026,13 @@ export function AiMapPage({
                       <p className="mb-1.5 text-[11px] font-medium text-zinc-500">
                         {SCENARIO_JOURNEY_COPY.envToolsCaption}
                       </p>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div ref={envToolsListRef} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         {selected.envTools.slice(0, 6).map((card) => (
                           <button
                             key={card.id}
                             type="button"
                             onClick={() => openToolkitToolInspect(card)}
+                            data-capability-card={card.id}
                             className="flex items-start gap-2 rounded-lg border border-zinc-100 px-3 py-2 text-left transition hover:border-zinc-300 hover:bg-zinc-50"
                           >
                             <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-zinc-800 text-white">
@@ -942,6 +1070,8 @@ export function AiMapPage({
                       emptyHint="待挂载业务专家"
                       cards={selected.agents}
                       onCard={openCapabilityInspect}
+                      trackEngagement={!isAdmin}
+                      exposureScope={selected.id}
                     />
                     <Quadrant
                       title="Skill"
@@ -949,6 +1079,8 @@ export function AiMapPage({
                       emptyHint="待挂载技能"
                       cards={selected.skills}
                       onCard={openCapabilityInspect}
+                      trackEngagement={!isAdmin}
+                      exposureScope={selected.id}
                     />
                     <Quadrant
                       title="Tool"
@@ -956,6 +1088,8 @@ export function AiMapPage({
                       emptyHint="待挂载连接器"
                       cards={selected.tools}
                       onCard={openCapabilityInspect}
+                      trackEngagement={!isAdmin}
+                      exposureScope={selected.id}
                     />
                   </div>
                   <div className="mt-3 border-t border-zinc-100 pt-3">

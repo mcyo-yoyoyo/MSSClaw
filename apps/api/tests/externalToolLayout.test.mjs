@@ -5,6 +5,10 @@ import {
   canonicalizeExternalToolLayoutInput,
   PlatformDocsService,
 } from '../dist/persistence/platform-docs.service.js';
+import {
+  dedupeMarketplaceTools,
+  PersistenceService,
+} from '../dist/persistence/persistence.service.js';
 import { PlatformDocsController } from '../dist/persistence/platform-docs.controller.js';
 
 function validLayout(expectedRevision = 0) {
@@ -27,7 +31,12 @@ function validLayout(expectedRevision = 0) {
   };
 }
 
-function fakePrisma(initialRow = null, executeResult = 1, auxiliaryRows = []) {
+function fakePrisma(
+  initialRow = null,
+  executeResult = 1,
+  auxiliaryRows = [],
+  workspaceExists = true,
+) {
   let row = initialRow;
   let seededCreate = null;
   let created = null;
@@ -36,7 +45,7 @@ function fakePrisma(initialRow = null, executeResult = 1, auxiliaryRows = []) {
 
   return {
     workspace: {
-      findUnique: async () => ({ id: 'ws-test' }),
+      findUnique: async () => (workspaceExists ? { id: 'ws-test' } : null),
     },
     centerRecord: {
       findUnique: async () => row,
@@ -68,6 +77,64 @@ function fakePrisma(initialRow = null, executeResult = 1, auxiliaryRows = []) {
     state: () => ({ row, seededCreate, created, executeCalls, findFirstCalls }),
   };
 }
+
+test('GET does not materialize a marketplace for an unknown workspace', async () => {
+  const prisma = fakePrisma(null, 1, [], false);
+  const service = new PersistenceService(prisma);
+
+  assert.equal(await service.getMarketplace('unknown-workspace'), null);
+  assert.equal(prisma.state().seededCreate, null);
+  assert.equal(prisma.state().row, null);
+});
+
+test('marketplace tools dedupe by ID without dropping the unpublished operational record', () => {
+  const unpublished = { id: 'tool-unlisted', name: '待上架工具', published: false };
+  const result = dedupeMarketplaceTools([
+    unpublished,
+    { id: 'tool-listed', name: '已上架工具', published: true },
+    { id: 'tool-unlisted', name: '重复目录副本', published: true },
+  ]);
+
+  assert.equal(result.changed, true);
+  assert.deepEqual(result.tools, [
+    unpublished,
+    { id: 'tool-listed', name: '已上架工具', published: true },
+  ]);
+  assert.equal(result.tools.some((tool) => tool.id === 'tool-unlisted'), true);
+  assert.equal(result.tools.find((tool) => tool.id === 'tool-unlisted').published, false);
+});
+
+test('catalog migration preserves external operational listing, title, heat, shelf, and order', () => {
+  const service = new PersistenceService({});
+  const result = service.enrichMarketplaceMetadata(
+    {
+      tools: [
+        {
+          id: 'tool-saas-chatgpt',
+          name: '运营维护名',
+          sourceType: 'external',
+          published: false,
+          marketShelf: 'internal',
+          marketTitle: '运营场景标题',
+          invokes: 42,
+          externalSortOrder: 900,
+        },
+      ],
+      externalCatalogVersion: 'old',
+      internalCatalogVersion: 'old',
+    },
+    true,
+  );
+  const chatgpt = result.payload.tools.find((tool) => tool.id === 'tool-saas-chatgpt');
+
+  assert.ok(chatgpt);
+  assert.equal(chatgpt.published, false);
+  assert.equal(chatgpt.name, '运营维护名');
+  assert.equal(chatgpt.marketTitle, '运营场景标题');
+  assert.equal(chatgpt.invokes, 42);
+  assert.equal(chatgpt.marketShelf, 'internal');
+  assert.equal(chatgpt.externalSortOrder, 900);
+});
 
 test('normalizes IDs, removes duplicates, and keeps only canonical fields', () => {
   const normalized = canonicalizeExternalToolLayoutInput({

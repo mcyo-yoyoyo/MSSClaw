@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { GuestGateLock } from '@/components/auth/GuestGateLock';
 import { AgentPortrait } from '@/components/brand/AgentPortrait';
@@ -335,12 +335,14 @@ export function CatalogAgentDetailModal({
   const skills = useMarketplaceStore((state) => state.skills);
   const getEngagement = useContentEngagementStore((state) => state.get);
   const engagementById = useContentEngagementStore((state) => state.byId);
+  const bumpDetail = useContentEngagementStore((state) => state.bumpDetail);
   const bumpDownload = useContentEngagementStore((state) => state.bumpDownload);
   const toggleLike = useContentEngagementStore((state) => state.toggleLike);
   const toggleDislike = useContentEngagementStore((state) => state.toggleDislike);
   const getVote = useContentEngagementStore((state) => state.userVote);
-  const favorited = useMarketFavoriteStore((state) => state.isFavorite(agent.id, 'projects'));
+  const favorited = useMarketFavoriteStore((state) => state.isFavorite(agent.id, 'projects', 'agent'));
   const toggleFavorite = useMarketFavoriteStore((state) => state.toggle);
+  const detailTrackedRef = useRef<string | null>(null);
   void engagementById;
 
   const engagement = getEngagement(agent.id);
@@ -452,11 +454,19 @@ export function CatalogAgentDetailModal({
   const activeTab = visibleTabs.some((item) => item.id === tab) ? tab : 'overview';
   const packageBlob = agent.packageBlob;
 
+  // 带管理操作的弹窗属于运营预览，不计入用户详情行为。
+  const trackDetail = !adminActions;
+  useEffect(() => {
+    if (!trackDetail || detailTrackedRef.current === agent.id) return;
+    detailTrackedRef.current = agent.id;
+    bumpDetail(agent.id, 'agent');
+  }, [agent.id, bumpDetail, trackDetail]);
+
   /** 有运营上传的执行包就下发原包；没有才回落到前端即时生成的资源包 */
   const handleDownload = async () => {
     const currentAgent = useMarketplaceStore.getState().agents.find((item) => item.id === agent.id) ?? agent;
     const packageBlob = currentAgent.packageBlob;
-    bumpDownload(currentAgent.id);
+    if (!adminActions) bumpDownload(currentAgent.id, 'agent');
     if (packageBlob) {
       try {
         await downloadPackageBlob(packageBlob);
@@ -479,6 +489,7 @@ export function CatalogAgentDetailModal({
     const item = {
       id: agent.id,
       kind: 'projects' as const,
+      assetType: 'agent' as const,
       title: agent.name,
       icon: agent.icon || 'fa-robot',
     };
@@ -1097,15 +1108,19 @@ export function CatalogAgentDetailModal({
             </section>
 
             <div className="grid grid-cols-2 gap-2 md:grid-cols-1">
-              <button type="button" onClick={requestFavorite} className="relative inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-50">
-                <i className={cn('text-[10px]', favorited ? 'fa-solid fa-star text-amber-500' : 'fa-regular fa-star text-zinc-400')} />
-                {favorited ? '已收藏' : '收藏'}
-                <GuestGateLock />
-              </button>
-              <button type="button" onClick={requestDownload} className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-50">
-                <i className="fa-solid fa-download text-[10px] text-zinc-400" />
-                下载资源包
-              </button>
+              {!adminActions ? (
+                <>
+                  <button type="button" onClick={requestFavorite} className="relative inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-50">
+                    <i className={cn('text-[10px]', favorited ? 'fa-solid fa-star text-amber-500' : 'fa-regular fa-star text-zinc-400')} />
+                    {favorited ? '已收藏' : '收藏'}
+                    <GuestGateLock />
+                  </button>
+                  <button type="button" onClick={requestDownload} className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-50">
+                    <i className="fa-solid fa-download text-[10px] text-zinc-400" />
+                    下载资源包
+                  </button>
+                </>
+              ) : null}
               <button type="button" onClick={() => setTab('howto')} className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-50">
                 <i className="fa-solid fa-book-open text-[10px] text-zinc-400" />
                 怎么使用
@@ -1211,40 +1226,42 @@ export function CatalogAgentDetailModal({
                   <p className="mt-0.5 text-[9px] text-zinc-400">点踩</p>
                 </div>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 border-t border-zinc-100 pt-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const contentId = agent.id;
-                    const run = () => toggleLike(contentId);
-                    if (requireLogin('like', run)) run();
-                  }}
-                  className={cn(
-                    'relative inline-flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-medium transition',
-                    vote === 'like' ? 'bg-sky-50 text-sky-700' : 'bg-zinc-50 text-zinc-500 hover:bg-zinc-100',
-                  )}
-                  aria-pressed={vote === 'like'}
-                >
-                  <i className="fa-solid fa-thumbs-up text-[10px]" /> 点赞
-                  <GuestGateLock />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const contentId = agent.id;
-                    const run = () => toggleDislike(contentId);
-                    if (requireLogin('dislike', run)) run();
-                  }}
-                  className={cn(
-                    'relative inline-flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-medium transition',
-                    vote === 'dislike' ? 'bg-zinc-200 text-zinc-800' : 'bg-zinc-50 text-zinc-500 hover:bg-zinc-100',
-                  )}
-                  aria-pressed={vote === 'dislike'}
-                >
-                  <i className="fa-solid fa-thumbs-down text-[10px]" /> 点踩
-                  <GuestGateLock />
-                </button>
-              </div>
+              {!adminActions ? (
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-zinc-100 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const contentId = agent.id;
+                      const run = () => toggleLike(contentId, 'agent');
+                      if (requireLogin('like', run)) run();
+                    }}
+                    className={cn(
+                      'relative inline-flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-medium transition',
+                      vote === 'like' ? 'bg-sky-50 text-sky-700' : 'bg-zinc-50 text-zinc-500 hover:bg-zinc-100',
+                    )}
+                    aria-pressed={vote === 'like'}
+                  >
+                    <i className="fa-solid fa-thumbs-up text-[10px]" /> 点赞
+                    <GuestGateLock />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const contentId = agent.id;
+                      const run = () => toggleDislike(contentId, 'agent');
+                      if (requireLogin('dislike', run)) run();
+                    }}
+                    className={cn(
+                      'relative inline-flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-medium transition',
+                      vote === 'dislike' ? 'bg-zinc-200 text-zinc-800' : 'bg-zinc-50 text-zinc-500 hover:bg-zinc-100',
+                    )}
+                    aria-pressed={vote === 'dislike'}
+                  >
+                    <i className="fa-solid fa-thumbs-down text-[10px]" /> 点踩
+                    <GuestGateLock />
+                  </button>
+                </div>
+              ) : null}
             </section>
           </div>
         </aside>

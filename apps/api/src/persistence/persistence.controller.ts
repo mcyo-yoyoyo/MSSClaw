@@ -18,9 +18,12 @@ import {
   Res,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import {
   PersistenceService,
+  MARKET_ENGAGEMENT_EVENT_ACTIONS,
+  type MarketEngagementEventAction,
   type MarketplacePayload,
   type PortalContentPayload,
 } from './persistence.service';
@@ -28,16 +31,40 @@ import { BlobStoreService, packageArchiveMimeType } from './blob-store.service';
 import { PlatformDocsService } from './platform-docs.service';
 
 const MARKET_ENGAGEMENT_ACTIONS = new Set([
+  'exposure',
+  'detail',
   'view',
   'use',
+  'redirect',
   'download',
   'favorite',
+  'unfavorite',
   'like',
+  'unlike',
   'dislike',
+  'undislike',
+  'favorite_cancel',
+  'like_cancel',
+  'dislike_cancel',
+  'call',
 ]);
 
 /** 纯计数动作：游客浏览也应计入，无个人态写入 */
-const ANONYMOUS_MARKET_ENGAGEMENT_ACTIONS = new Set(['view', 'use']);
+const ANONYMOUS_MARKET_ENGAGEMENT_ACTIONS = new Set([
+  'exposure',
+  'detail',
+  'view',
+  'use',
+  'redirect',
+]);
+const MARKET_ENGAGEMENT_EVENT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
+const GUEST_VISITOR_ID_RE =
+  /^guest:([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
+const MARKET_CONTENT_ID_CONTROL_RE = /[\u0000-\u001f\u007f]/;
+
+function trimmedString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
 
 function sessionToken(authorization?: string, xSessionToken?: string): string | undefined {
   const raw = (authorization ?? '').trim();
@@ -180,17 +207,27 @@ export class PersistenceController {
   }
 
   /**
-   * view / use 允许游客计数；download / favorite / like / dislike 必须登录，
+   * exposure / detail / view / use 允许游客计数；download / favorite / like / dislike 必须登录，
    * 且 userId 只从会话解析，防止伪造他人身份写互动。
-   */
+  */
   @Post('market-engagement/:contentId/actions')
+  // 匿名流量先按 IP 收口；服务内再按访客静默限流并设置数据库每日上限。
+  @Throttle({ default: { limit: 300, ttl: 60_000 } })
   async mutateMarketEngagement(
     @Param('workspaceId') workspaceId: string,
     @Param('contentId') contentId: string,
     @Body()
     body: {
-      action?: 'view' | 'use' | 'download' | 'favorite' | 'like' | 'dislike';
+      action?: MarketEngagementEventAction;
       active?: boolean;
+      eventId?: string;
+      visitorId?: string;
+      assetType?: 'tool' | 'skill' | 'agent' | 'office-scene' | 'unknown';
+      success?: boolean;
+      durationMs?: number;
+      inputTokens?: number;
+      outputTokens?: number;
+      errorCode?: string;
     },
     @Headers('authorization') authorization?: string,
     @Headers('x-session-token') xSessionToken?: string,
@@ -198,15 +235,97 @@ export class PersistenceController {
     if (!body?.action || !MARKET_ENGAGEMENT_ACTIONS.has(body.action)) {
       throw new BadRequestException('invalid_market_engagement_action');
     }
+    const normalizedContentId = contentId.trim();
+    if (
+      !normalizedContentId ||
+      normalizedContentId.length > 200 ||
+      MARKET_CONTENT_ID_CONTROL_RE.test(normalizedContentId)
+    ) {
+      throw new BadRequestException('invalid_market_engagement_content_id');
+    }
+    const eventId = trimmedString(body.eventId);
+    if (!MARKET_ENGAGEMENT_EVENT_ID_RE.test(eventId)) {
+      throw new BadRequestException('invalid_market_engagement_event_id');
+    }
     const action = body.action;
     const userId = await this.optionalSessionUserId(workspaceId, authorization, xSessionToken);
     if (!userId && !ANONYMOUS_MARKET_ENGAGEMENT_ACTIONS.has(action)) {
       throw new UnauthorizedException('market_engagement_login_required');
     }
-    return this.persistence.mutateMarketEngagement(workspaceId, contentId, {
-      action,
+    const guestVisitorId = userId ? undefined : this.requireGuestVisitorId(body.visitorId);
+    return this.persistence.mutateMarketEngagement(workspaceId, normalizedContentId, {
+      action: action as MarketEngagementEventAction,
       userId,
       active: body.active,
+      eventId,
+      visitorId: guestVisitorId,
+      assetType: body.assetType,
+      success: body.success,
+      durationMs: body.durationMs,
+      inputTokens: body.inputTokens,
+      outputTokens: body.outputTokens,
+      errorCode: body.errorCode,
+    });
+  }
+
+  /**
+   * 通用市场埋点入口。页面曝光、详情进入和互动统一走同一套会话/游客
+   * 身份校验、幂等键和限流；不让调用方传入任意 userId。
+   */
+  @Post('market-engagement/events')
+  @Throttle({ default: { limit: 300, ttl: 60_000 } })
+  async recordMarketEngagementEvent(
+    @Param('workspaceId') workspaceId: string,
+    @Body()
+    body: {
+      contentId?: string;
+      action?: MarketEngagementEventAction;
+      active?: boolean;
+      eventId?: string;
+      visitorId?: string;
+      assetType?: 'tool' | 'skill' | 'agent' | 'office-scene' | 'unknown';
+      success?: boolean;
+      durationMs?: number;
+      inputTokens?: number;
+      outputTokens?: number;
+      errorCode?: string;
+    },
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    const normalizedContentId = String(body?.contentId ?? '').trim();
+    if (
+      !normalizedContentId ||
+      normalizedContentId.length > 200 ||
+      MARKET_CONTENT_ID_CONTROL_RE.test(normalizedContentId)
+    ) {
+      throw new BadRequestException('invalid_market_engagement_content_id');
+    }
+    const action = String(body?.action ?? '').trim().toLowerCase();
+    if (!MARKET_ENGAGEMENT_ACTIONS.has(action) || !MARKET_ENGAGEMENT_EVENT_ACTIONS.has(action as MarketEngagementEventAction)) {
+      throw new BadRequestException('invalid_market_engagement_action');
+    }
+    const eventId = trimmedString(body?.eventId);
+    if (!MARKET_ENGAGEMENT_EVENT_ID_RE.test(eventId)) {
+      throw new BadRequestException('invalid_market_engagement_event_id');
+    }
+    const userId = await this.optionalSessionUserId(workspaceId, authorization, xSessionToken);
+    if (!userId && !ANONYMOUS_MARKET_ENGAGEMENT_ACTIONS.has(action)) {
+      throw new UnauthorizedException('market_engagement_login_required');
+    }
+    const guestVisitorId = userId ? undefined : this.requireGuestVisitorId(body?.visitorId);
+    return this.persistence.mutateMarketEngagement(workspaceId, normalizedContentId, {
+      action: action as MarketEngagementEventAction,
+      userId,
+      active: body?.active,
+      eventId,
+      visitorId: guestVisitorId,
+      assetType: body?.assetType,
+      success: body?.success,
+      durationMs: body?.durationMs,
+      inputTokens: body?.inputTokens,
+      outputTokens: body?.outputTokens,
+      errorCode: body?.errorCode,
     });
   }
 
@@ -221,6 +340,12 @@ export class PersistenceController {
     const session = await this.docs.me(token, workspaceId);
     if (!session.ok) return '';
     return String(session.user?.id ?? '').trim();
+  }
+
+  private requireGuestVisitorId(raw?: unknown): string {
+    const match = GUEST_VISITOR_ID_RE.exec(trimmedString(raw));
+    if (!match?.[1]) throw new BadRequestException('invalid_guest_visitor_id');
+    return match[1].toLowerCase();
   }
 
   @Get('portal-content')

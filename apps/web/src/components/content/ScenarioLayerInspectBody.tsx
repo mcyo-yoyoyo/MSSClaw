@@ -85,7 +85,7 @@ function ToolkitToolInspect({
   onOpenUrl,
 }: {
   card: PortalMapCard;
-  onOpenUrl?: (url: string, label: string) => void;
+  onOpenUrl?: (url: string, label: string, card?: PortalMapCard) => void;
 }) {
   const url =
     card.action.type === 'external'
@@ -111,7 +111,7 @@ function ToolkitToolInspect({
       {url && onOpenUrl ? (
         <button
           type="button"
-          onClick={() => onOpenUrl(url, card.title)}
+          onClick={() => onOpenUrl(url, card.title, card)}
           className="rounded-xl border border-black/8 px-3.5 py-2 text-[12px] font-medium transition hover:bg-black/[0.03]"
         >
           <i className="fa-solid fa-arrow-up-right-from-square mr-1 text-[10px]" />
@@ -237,7 +237,7 @@ export function ScenarioLayerInspectBody({
   onOpenUrl,
 }: {
   target: ScenarioLayerInspectTarget;
-  onOpenUrl?: (url: string, label: string) => void;
+  onOpenUrl?: (url: string, label: string, card?: PortalMapCard) => void;
 }) {
   if (target.kind === 'capability') {
     return <CapabilityInspect card={target.card} layerLabel={target.layerLabel} />;

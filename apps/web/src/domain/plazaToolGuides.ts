@@ -4,6 +4,7 @@
  * 运营可在「门户运营 · 工具 How to」维护。
  */
 
+// Retained only to provide legacy static How-to copy; it is never used to build tool cards.
 import { EXTERNAL_TOOLS_CATALOG } from '@/domain/externalToolsCatalog';
 
 export type PlazaGuideType = 'image' | 'pdf' | 'ppt' | 'video' | 'link' | 'text';

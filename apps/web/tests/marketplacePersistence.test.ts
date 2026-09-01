@@ -259,6 +259,48 @@ test('saveToolNow commits the edited tool only after the remote save succeeds', 
   assert.deepEqual(marketplaceStore.getState().tools, [editedTool]);
 });
 
+test('saveToolNow can directly persist external tool listing and unlisting', async () => {
+  const workspaceId = 'ws-test-tool-direct-unlist';
+  const calls: FetchCall[] = [];
+  const listedTool = {
+    id: 'tool-direct-unlist',
+    name: 'Direct unlist',
+    desc: '',
+    published: true,
+    marketShelf: 'external',
+  };
+  enableRemoteApi(workspaceId);
+  marketplaceStore.setState({
+    agents: [],
+    skills: [],
+    tools: [listedTool],
+    automations: [],
+    kbDocs: [],
+  });
+  globalThis.fetch = (async (input, init) => {
+    calls.push(readFetchCall(input, init));
+    return new Response(null, { status: 200 });
+  }) as typeof fetch;
+
+  assert.deepEqual(
+    await marketplaceStore.getState().saveToolNow({ ...listedTool, published: false }),
+    { synced: true },
+  );
+  assert.equal(calls[0]?.body.tools[0]?.published, false);
+  assert.equal(calls[0]?.body.tools[0]?.marketShelf, 'external');
+  assert.equal(marketplaceStore.getState().tools[0]?.published, false);
+
+  const unlistedTool = marketplaceStore.getState().tools[0];
+  assert.ok(unlistedTool);
+  assert.deepEqual(
+    await marketplaceStore.getState().saveToolNow({ ...unlistedTool, published: true }),
+    { synced: true },
+  );
+  assert.equal(calls[1]?.body.tools[0]?.published, true);
+  assert.equal(calls[1]?.body.tools[0]?.marketShelf, 'external');
+  assert.equal(marketplaceStore.getState().tools[0]?.published, true);
+});
+
 test('saveToolNow keeps the previous tool when the remote save fails', async () => {
   const workspaceId = 'ws-test-tool-failure';
   const originalTool = {

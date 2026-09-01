@@ -58,6 +58,35 @@ model MarketUserInteraction {
   @@index([workspaceId, userId, favorited])
 }
 
+/// 市场内容的行为事实。累计表只保存当前总量，本表用于按日期统计浏览、收藏、点赞、点踩与跳转趋势。
+model MarketEngagementEvent {
+  id            String   @id @default(uuid())
+  workspaceId   String
+  eventId       String?
+  contentId     String
+  assetType     String   @default("unknown")
+  action        String
+  dateKey       String
+  visitorHash   String?
+  visitorType   String   @default("user")
+  success       Boolean?
+  durationMs    Int?
+  inputTokens   Int?
+  outputTokens  Int?
+  errorCode     String?
+  occurredAt    DateTime @default(now())
+
+  @@unique([workspaceId, eventId])
+  @@index([workspaceId, dateKey, action])
+  @@index([workspaceId, dateKey, visitorHash])
+  @@index([workspaceId, visitorHash, occurredAt])
+  @@index([workspaceId, occurredAt])
+  @@index([workspaceId, contentId, occurredAt])
+  @@index([workspaceId, contentId, action, dateKey])
+  @@index([workspaceId, assetType, action, dateKey])
+  @@index([occurredAt])
+}
+
 /// 门户页面访问事实。eventId 保证同一次上报幂等，PV/UV 均由事实记录实时聚合。
 model PortalPageView {
   workspaceId String

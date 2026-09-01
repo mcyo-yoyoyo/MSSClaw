@@ -89,12 +89,12 @@ export function TaskCenterPage(_props: TaskCenterPageProps) {
     if (!pendingTaskSubmit || pendingTaskSubmit.chatId !== currentChatId) return;
     const pending = consumePendingTaskSubmit();
     if (!pending) return;
-    const key = `${pending.chatId}:${pending.message}:${pending.autoSend}`;
+    const key = `${pending.chatId}:${pending.message}:${pending.autoSend}:${pending.assetType ?? ''}`;
     if (pendingHandled.current === key) return;
     pendingHandled.current = key;
 
     if (pending.autoSend) {
-      void sendMessage(pending.message, workspaceId);
+      void sendMessage(pending.message, workspaceId, pending.assetType);
     } else {
       setDraft(pending.message);
     }

@@ -1,10 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { GuestGateLock } from '@/components/auth/GuestGateLock';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { CenterModal } from '@/components/center/CenterShell';
 import { resolveToolLogoUrl } from '@/domain/toolLogo';
-import { EXTERNAL_TOOLS_CATALOG } from '@/domain/externalToolsCatalog';
 import type { MarketShelfKind } from '@/domain/marketShelf';
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
@@ -28,36 +27,11 @@ function clipText(text: string, max = 220): string {
   return `${t.slice(0, max - 1).trimEnd()}…`;
 }
 
-/** 从官网材料里抽出「产品详细介绍」前两段，去掉操作步骤 */
-function extractOfficialIntro(guideBody?: string): string {
-  if (!guideBody?.trim()) return '';
-  const idx = guideBody.indexOf('产品详细介绍：');
-  let rest = (idx >= 0 ? guideBody.slice(idx + '产品详细介绍：'.length) : guideBody).trim();
-  rest = rest.split(/\n[1-4]\.\s/)[0] ?? rest;
-  rest = rest.split(/\n示例：/)[0] ?? rest;
-  const paras = rest
-    .split(/\n+/)
-    .map((p) => p.trim())
-    .filter((p) => p && !p.startsWith('卡片核心作用'));
-  return paras.slice(0, 2).join('');
-}
-
-function findCatalogTool(tool: PrototypeToolSeed) {
-  const name = tool.name.trim().toLocaleLowerCase();
-  return EXTERNAL_TOOLS_CATALOG.find(
-    (entry) => entry.id === tool.id || entry.name.trim().toLocaleLowerCase() === name,
-  );
-}
-
-/** 是什么：官网产品介绍精炼，不写使用场景清单 */
+/** 是什么：只使用 marketplace 工具主数据，不再从前端静态目录补写介绍 */
 function pickWhatItIs(tool: PrototypeToolSeed): string {
-  if (tool.productIntro?.trim()) return clipText(tool.productIntro, 1200);
-  const catalog = findCatalogTool(tool);
-  const official = extractOfficialIntro(catalog?.guideBody);
-  if (official) return clipText(official, 220);
   return clipText(
-    catalog?.productIntro?.trim() || tool.desc?.trim() || '',
-    220,
+    tool.productIntro?.trim() || tool.cardSummary?.trim() || tool.desc?.trim() || '',
+    tool.productIntro?.trim() ? 1200 : 220,
   );
 }
 
@@ -80,17 +54,29 @@ export function MarketToolDetailModal({
   const tools = useMarketplaceStore((s) => s.tools);
   const showToast = useMarketplaceStore((s) => s.showToast);
   const bumpToolInvokes = useMarketplaceStore((s) => s.bumpToolInvokes);
-  const bumpUse = useContentEngagementStore((s) => s.bumpUse);
+  const bumpDetail = useContentEngagementStore((s) => s.bumpDetail);
+  const bumpRedirect = useContentEngagementStore((s) => s.bumpRedirect);
   const pushRecent = useRecentMarketStore((s) => s.push);
   const favItems = useMarketFavoriteStore((s) => s.items);
   const toggleFavorite = useMarketFavoriteStore((s) => s.toggle);
+  const detailTrackedRef = useRef<string | null>(null);
 
   const [showExternalWarning, setShowExternalWarning] = useState(false);
   const previewOnly = interactionMode === 'preview';
 
-  const tool = tools.find((t) => t.id === toolId) ?? null;
+  // 用户侧详情也必须服从 published；只有门户运营的只读预览允许查看未上架工具。
+  const storedTool = tools.find((t) => t.id === toolId) ?? null;
+  const tool = storedTool && (previewOnly || storedTool.published) ? storedTool : null;
   const kind = resolveToolKind(tool);
-  const isFav = favItems.some((x) => x.id === toolId && x.kind === kind);
+  const isFav = favItems.some(
+    (x) => x.id === toolId && x.kind === kind && (!x.assetType || x.assetType === 'tool'),
+  );
+
+  useEffect(() => {
+    if (previewOnly || !tool || detailTrackedRef.current === tool.id) return;
+    detailTrackedRef.current = tool.id;
+    bumpDetail(tool.id, 'tool');
+  }, [bumpDetail, previewOnly, tool?.id]);
 
   const openUrl = () => {
     if (previewOnly) return;
@@ -102,12 +88,13 @@ export function MarketToolDetailModal({
     }
     const win = window.open(tool.homepageUrl, '_blank', 'noopener,noreferrer');
     bumpToolInvokes(tool.id);
-    bumpUse(tool.id);
+    bumpRedirect(tool.id, 'tool');
     pushRecent({
       id: tool.id,
       kind,
       title: tool.name,
       icon: tool.icon,
+      assetType: 'tool',
       logoUrl: resolveToolLogoUrl(tool),
     });
     if (!win) showToast('浏览器拦截了弹窗，请允许后重试');
@@ -125,6 +112,7 @@ export function MarketToolDetailModal({
     const item = {
       id: tool.id,
       kind,
+      assetType: 'tool' as const,
       title: tool.name,
       icon: tool.icon,
       logoUrl: resolveToolLogoUrl(tool),

@@ -20,6 +20,10 @@ const UUID_V4_RE =
 const GUEST_VISITOR_ID_RE =
   /^guest:([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
 
+function trimmedInput(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 function sessionToken(authorization?: string, xSessionToken?: string): string | undefined {
   const raw = (authorization ?? '').trim();
   if (raw.toLowerCase().startsWith('bearer ')) return raw.slice(7).trim() || undefined;
@@ -101,12 +105,14 @@ export class PortalAnalyticsController {
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-session-token') xSessionToken: string | undefined,
     @Query('days') days?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
     const user = await this.requireSession(workspaceId, authorization, xSessionToken);
     if (String(user.platformRole ?? '') !== 'super_admin') {
       throw new ForbiddenException('portal_analytics_admin_required');
     }
-    return this.analytics.getReport(workspaceId, days);
+    return this.analytics.getReport(workspaceId, days, from, to);
   }
 
   private async requireSession(
@@ -122,14 +128,17 @@ export class PortalAnalyticsController {
     return session.user;
   }
 
-  private requireGuestVisitorId(raw?: string): string {
-    const match = GUEST_VISITOR_ID_RE.exec(raw?.trim() ?? '');
+  private requireGuestVisitorId(raw?: unknown): string {
+    const match = GUEST_VISITOR_ID_RE.exec(trimmedInput(raw));
     if (!match?.[1]) throw new BadRequestException('invalid_guest_visitor_id');
     return match[1].toLowerCase();
   }
 
-  private optionalJourneyVisitorId(raw?: string): string | undefined {
-    const value = raw?.trim() ?? '';
+  private optionalJourneyVisitorId(raw?: unknown): string | undefined {
+    if (raw !== undefined && raw !== null && typeof raw !== 'string') {
+      throw new BadRequestException('invalid_portal_analytics_visitor_id');
+    }
+    const value = trimmedInput(raw);
     if (!value) return undefined;
     const guestMatch = GUEST_VISITOR_ID_RE.exec(value);
     if (guestMatch?.[1]) return guestMatch[1].toLowerCase();

@@ -2,11 +2,16 @@ import { apiAuthHeaders, apiUrl } from '@/api/client';
 import type { ContentEngagement } from '@/domain/contentEngagement';
 
 export type MarketUserVote = 'like' | 'dislike' | null;
+export type MarketAssetType = 'tool' | 'skill' | 'agent' | 'office-scene' | 'unknown';
 export type MarketEngagementAction =
+  | 'exposure'
+  | 'detail'
   | 'view'
   | 'use'
+  | 'redirect'
   | 'download'
   | 'favorite'
+  | 'unfavorite'
   | 'like'
   | 'dislike';
 
@@ -37,7 +42,13 @@ export async function fetchMarketEngagementApi(
 export async function mutateMarketEngagementApi(
   workspaceId: string,
   contentId: string,
-  input: { action: MarketEngagementAction; active?: boolean },
+  input: {
+    action: MarketEngagementAction;
+    active?: boolean;
+    eventId: string;
+    visitorId: string;
+    assetType?: MarketAssetType;
+  },
 ): Promise<MarketEngagementMutation> {
   const res = await fetch(
     apiUrl(

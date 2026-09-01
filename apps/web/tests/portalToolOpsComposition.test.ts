@@ -14,7 +14,14 @@ const lazyPagesSource = readFileSync(
   new URL('../src/features/lazyPages.ts', import.meta.url),
   'utf8',
 );
-
+const toolCenterSource = readFileSync(
+  new URL('../src/features/tool/ToolCenterPage.tsx', import.meta.url),
+  'utf8',
+);
+const toolEditorSource = readFileSync(
+  new URL('../src/components/center/ToolEditorModal.tsx', import.meta.url),
+  'utf8',
+);
 test('工具运营内部页复用用户侧卡片并启用精简自动保存视图', () => {
   assert.match(
     portalPanelSource,
@@ -67,9 +74,14 @@ test('工具运营内部页复用用户侧卡片并启用精简自动保存视�
   );
 });
 
-test('工具运营入口仅保留精选成员操作，不再提供额外维护模式与上架跳转', () => {
+test('工具运营只在工具卡片提供直接上下架按钮', () => {
   assert.doesNotMatch(portalPanelSource, /上架管理/);
   assert.doesNotMatch(portalPanelSource, /onOpenShelfOps/);
+  assert.doesNotMatch(
+    portalPanelSource,
+    /data-tool-listing-manager|external-tool-listing-manager|ExternalShelfStatusTabs|openExternalListingManager|externalOpsMode|externalShelfStatus/,
+    '不能增加顶部上下架入口或独立管理视图',
+  );
   assert.doesNotMatch(
     portalPanelSource,
     />\s*(?:维护排序|保存布局)\s*</,
@@ -77,6 +89,73 @@ test('工具运营入口仅保留精选成员操作，不再提供额外维护�
   );
   assert.match(portalPanelSource, /['"]加入精选['"]/);
   assert.match(portalPanelSource, /['"]移出精选['"]/);
+  assert.match(portalPanelSource, /data-external-list-mode={item\.id}/);
+  assert.match(portalPanelSource, /label: '更多'/);
+  assert.match(portalPanelSource, /label: '未上架'/);
+  assert.match(portalPanelSource, /listUnlistedExternalToolCards/);
+  assert.match(portalPanelSource, /data-unlisted-tool-id={card\.id}/);
+  assert.ok(
+    portalPanelSource.includes(
+      "data-tool-listing-action={`list-${saving ? 'saving' : 'direct'}`}",
+    ),
+    '未上架卡片必须显示直接上架按钮或保存中状态',
+  );
+  assert.ok(
+    portalPanelSource.includes(
+      "data-tool-listing-action={`unlist-${unlistingSaving ? 'saving' : 'direct'}`}",
+    ),
+    '已上架卡片必须显示直接下架按钮或保存中状态',
+  );
+  assert.doesNotMatch(
+    portalPanelSource,
+    /useAssetApprovalStore|approvalHistory|pendingToolListingIds|pendingToolUnlistingIds|上架审批中|下架审批中/,
+  );
+
+  const listStart = portalPanelSource.indexOf('const listTool =');
+  const listEnd = portalPanelSource.indexOf('const unlistTool =', listStart);
+  assert.ok(listStart >= 0 && listEnd > listStart);
+  const listSource = portalPanelSource.slice(listStart, listEnd);
+  assert.match(
+    listSource,
+    /savingToolListingIdsRef\.current\.has\(card\.id\)/,
+  );
+  assert.match(
+    listSource,
+    /try \{[\s\S]*?await marketplace\.saveToolNow\(\{ \.\.\.tool, published: true \}\)[\s\S]*?\} catch \{[\s\S]*?\} finally \{/,
+  );
+  assert.doesNotMatch(listSource, /openApproval|publish_executable|unpublish_skill/);
+
+  const unlistStart = portalPanelSource.indexOf('const unlistTool =');
+  const unlistEnd = portalPanelSource.indexOf('const startExternalDrag =', unlistStart);
+  assert.ok(unlistStart >= 0 && unlistEnd > unlistStart);
+  const unlistSource = portalPanelSource.slice(unlistStart, unlistEnd);
+  assert.match(
+    unlistSource,
+    /savingToolUnlistingIdsRef\.current\.has\(card\.id\)/,
+  );
+  assert.match(
+    unlistSource,
+    /try \{[\s\S]*?await marketplace\.saveToolNow\(\{ \.\.\.tool, published: false \}\)[\s\S]*?\} catch \{[\s\S]*?\} finally \{/,
+  );
+  assert.doesNotMatch(unlistSource, /openApproval|unpublish_skill/);
+  assert.equal(
+    [...portalPanelSource.matchAll(/savingListingIds=\{savingToolListingIds\}/g)].length,
+    2,
+  );
+  assert.equal([...portalPanelSource.matchAll(/onList=\{listTool\}/g)].length, 2);
+});
+
+test('配置工具统一显示上下架语义且新工具默认未上架', () => {
+  assert.doesNotMatch(toolCenterSource, /未发布|已发布|发布状态/);
+  assert.doesNotMatch(toolEditorSource, /未发布|已发布|发布状态/);
+  assert.match(toolCenterSource, /label: '未上架'/);
+  assert.match(toolCenterSource, /label: '已上架'/);
+  assert.match(toolCenterSource, /resolveConfiguredToolMarketShelf/);
+  assert.match(
+    toolEditorSource,
+    /function emptyTool[\s\S]*?published: false,[\s\S]*?marketShelf: asExternal \? 'external' : 'none'/,
+    '新增外部工具必须保留目标货架，但初始状态必须是未上架',
+  );
 });
 
 test('独立配置入口保留完整维护模式', () => {
@@ -372,6 +451,11 @@ test('按钮负责进出精选，拖拽只在允许的本列表内排序', () =>
     toolDropGridInvocation('listId={`category:${externalType}:domestic:more`}'),
   ];
 
+  for (const source of [...allFeatured, ...allMore, ...categoryFeatured, ...categoryMore]) {
+    assert.match(source, /savingUnlistingIds=\{savingToolUnlistingIds\}/);
+    assert.match(source, /onUnlist=\{unlistTool\}/);
+  }
+
   for (const source of [...allFeatured, ...categoryFeatured]) {
     assert.match(source, /\bfeatured(?:\s|=\{true\})/);
     assert.match(source, /sortable=\{externalDragEnabled\}/);
@@ -400,10 +484,37 @@ test('按钮负责进出精选，拖拽只在允许的本列表内排序', () =>
   const toolDropGridSource = portalPanelSource.slice(toolDropGridStart, toolDropGridEnd);
   assert.match(toolDropGridSource, /['"]加入精选['"]/);
   assert.match(toolDropGridSource, /['"]移出精选['"]/);
+  assert.match(toolDropGridSource, /unlistingSaving \? '下架中' : '下架'/);
+  const dragHandleIndex = toolDropGridSource.indexOf('data-tool-drag-handle');
+  const unlistButtonIndex = toolDropGridSource.indexOf('data-tool-listing-action');
+  const featuredButtonIndex = toolDropGridSource.indexOf('data-tool-featured-action');
+  assert.ok(
+    dragHandleIndex >= 0 && dragHandleIndex < unlistButtonIndex,
+    '排序按钮必须在下架按钮之前',
+  );
+  assert.ok(
+    unlistButtonIndex >= 0 && unlistButtonIndex < featuredButtonIndex,
+    '下架按钮必须在精选按钮之前',
+  );
+  assert.ok(
+    featuredButtonIndex >= 0,
+    '精选按钮必须与排序、下架同一组 footer actions 渲染',
+  );
   assert.match(
     toolDropGridSource,
     /onClick=\{\(event\) => \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?event\.stopPropagation\(\);[\s\S]*?onRemoveFromFeatured\(card, listId\);[\s\S]*?onAddToFeatured\(card, listId\);/,
     '精选按钮不能触发卡片详情点击',
+  );
+  assert.match(
+    toolDropGridSource,
+    /data-tool-listing-action=[\s\S]*?onPointerDown=\{\(event\) => event\.stopPropagation\(\)\}[\s\S]*?event\.preventDefault\(\);[\s\S]*?event\.stopPropagation\(\);[\s\S]*?onUnlist\(card\);/,
+    '下架按钮不能触发拖拽或卡片详情点击',
+  );
+  assert.match(toolDropGridSource, /<div className="flex items-center gap-1">/);
+  assert.equal(
+    [...toolDropGridSource.matchAll(/px-1\.5 py-1/g)].length,
+    3,
+    '1044px 下三枚操作按钮必须更紧凑',
   );
   assert.match(
     portalPanelSource,

@@ -141,18 +141,26 @@ export function getNavCategoryMeta(categoryId: AiToolNavCategoryId) {
 export type MarketShelfSlot = NonNullable<PrototypeToolSeed['marketShelf']>;
 
 /**
- * 解析工具上架货架。
- * - 未能力上架 → none
- * - 显式 `marketShelf` 优先
- * - 缺省：带 ai-saas / hw-internal 标签时，按 sourceType 归入外/内货架
+ * 解析工具配置的目标货架，不考虑当前是否已经上架。
+ * 显式 `none` 表示仅保留在配置目录，不进入门户“未上架”候选。
  */
-export function resolveToolMarketShelf(tool: PrototypeToolSeed): MarketShelfSlot {
-  if (!tool.published) return 'none';
-  if (tool.marketShelf) return tool.marketShelf;
+export function resolveConfiguredToolMarketShelf(
+  tool: PrototypeToolSeed,
+): MarketShelfSlot {
+  const explicit = tool.marketShelf;
+  if (explicit === 'external' || explicit === 'internal' || explicit === 'none') {
+    return explicit;
+  }
   const tags = tool.tags ?? [];
   if (!tags.includes('ai-saas') && !tags.includes('hw-internal')) return 'none';
   const src = tool.sourceType ?? (tags.includes('hw-internal') ? 'internal' : 'external');
   return src === 'internal' ? 'internal' : 'external';
+}
+
+/** 已上架工具的实际货架；未上架工具一律不进入用户侧货架。 */
+export function resolveToolMarketShelf(tool: PrototypeToolSeed): MarketShelfSlot {
+  if (!tool.published) return 'none';
+  return resolveConfiguredToolMarketShelf(tool);
 }
 
 /** 是否出现在外精选或公司工具货架（兼容旧 isHomeAiTool 调用点） */

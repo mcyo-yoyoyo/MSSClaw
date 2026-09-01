@@ -5,8 +5,8 @@
  * - 网页端工具：风险在“把内部信息传出去”
  * - 仅客户端工具（需下载安装，无网页端使用入口）：风险在“把未授权工具装进内网”
  *
- * EXTERNAL_TOOLS_CATALOG 由 CSV 自动生成、不可手改，所以形态在这里单独维护。
- * 运营也可在工具种子上写 deliveryForm 覆盖本表。
+ * 工具目录由 marketplace 快照提供；交付形态是独立的安全策略元数据，
+ * 运营也可在工具记录上写 deliveryForm 覆盖本表。
  */
 
 export type ToolDeliveryForm = 'web' | 'download_only';

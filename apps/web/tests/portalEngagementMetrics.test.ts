@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { buildPortalEngagementMetrics } from '../src/domain/portalEngagementMetrics.ts';
+import { buildPortalToolInventory } from '../src/domain/portalToolInventory.ts';
+import type { PrototypeToolSeed } from '../src/domain/prototype/types.ts';
 
 const appViewSource = readFileSync(new URL('../src/domain/appView.ts', import.meta.url), 'utf8');
 const navPresentationSource = readFileSync(
@@ -14,6 +16,10 @@ const routerSource = readFileSync(
 );
 const portalOpsSource = readFileSync(
   new URL('../src/features/ops/PortalContentOpsPage.tsx', import.meta.url),
+  'utf8',
+);
+const portalDashboardSource = readFileSync(
+  new URL('../src/features/ops/PortalTrafficPanel.tsx', import.meta.url),
   'utf8',
 );
 
@@ -85,6 +91,42 @@ test('同类型重复 ID 只计一次，缺失与无效计数按零处理', () =
   });
 });
 
+test('工具库存按来源归类并兼容旧货架，场景绑定工具按 ID 去重', () => {
+  const tool = (
+    id: string,
+    patch: Partial<PrototypeToolSeed> = {},
+  ): PrototypeToolSeed => ({
+    id,
+    name: id,
+    desc: id,
+    category: 'platform',
+    author: 'test',
+    published: true,
+    invokes: 0,
+    icon: 'fa-cube',
+    tags: [],
+    ...patch,
+  });
+  const result = buildPortalToolInventory(
+    [
+      tool('external', { sourceType: 'external', tags: ['ai-saas'] }),
+      tool('internal', { sourceType: 'internal', tags: ['hw-internal'] }),
+      tool('legacy-internal', { sourceType: undefined, tags: ['hw-internal'] }),
+      tool('draft', { published: false, sourceType: 'external' }),
+    ],
+    [{ toolIds: ['internal'] }, { toolIds: ['internal'] }, { toolIds: ['legacy-internal'] }],
+  );
+
+  assert.deepEqual(result, {
+    totalTools: 4,
+    publishedTools: 3,
+    externalTools: 2,
+    companyTools: 2,
+    officeScenes: 3,
+    boundTools: 2,
+  });
+});
+
 test('数据看板是门户运营后的独立后台入口，访问数据不再重复留在门户运营页', () => {
   assert.match(
     appViewSource,
@@ -106,4 +148,13 @@ test('数据看板是门户运营后的独立后台入口，访问数据不再�
   assert.match(routerSource, /case 'portal-dashboard':[\s\S]*?<LazyPortalDataDashboardPage \/>/);
   assert.doesNotMatch(portalOpsSource, /label: '访问数据'/);
   assert.doesNotMatch(portalOpsSource, /<PortalTrafficPanel \/>/);
+});
+
+test('数据看板只展示黑色指标，暂不渲染调用消耗与性能字段', () => {
+  for (const grayLabel of ['调用次数', '调用成功率', 'Token', 'P95', '消耗与性能']) {
+    assert.doesNotMatch(portalDashboardSource, new RegExp(grayLabel));
+  }
+  for (const blackLabel of ['总用户数', 'DAU', '访问 PV', '收藏总数', '官网跳转']) {
+    assert.match(portalDashboardSource, new RegExp(blackLabel));
+  }
 });

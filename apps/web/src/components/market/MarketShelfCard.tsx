@@ -13,7 +13,7 @@ import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useMarketCompareStore } from '@/stores/marketCompareStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 export function MarketShelfCard({
   card,
@@ -60,6 +60,9 @@ export function MarketShelfCard({
   const homeDense = Boolean(className?.includes('home-channel-card'));
   const primaryLabel = primaryLabelOverride ?? '详情';
   const previewOnly = interactionMode === 'preview';
+  const assetType =
+    card.assetType ??
+    (card.kind === 'external' || card.kind === 'internal' ? ('tool' as const) : undefined);
 
   const regionTone =
     card.kind === 'external' && card.region === 'overseas'
@@ -68,7 +71,7 @@ export function MarketShelfCard({
         ? 'domestic'
         : null;
 
-  const favorited = useMarketFavoriteStore((s) => s.isFavorite(card.id, card.kind));
+  const favorited = useMarketFavoriteStore((s) => s.isFavorite(card.id, card.kind, assetType));
   const toggleFavorite = useMarketFavoriteStore((s) => s.toggle);
   const compareSelected = useMarketCompareStore((s) => s.isSelected(card.id, card.kind));
   const toggleCompare = useMarketCompareStore((s) => s.toggle);
@@ -77,8 +80,32 @@ export function MarketShelfCard({
   const userVote = useContentEngagementStore((s) => s.userVotes[card.id] ?? null);
   const toggleLike = useContentEngagementStore((s) => s.toggleLike);
   const toggleDislike = useContentEngagementStore((s) => s.toggleDislike);
+  const bumpExposure = useContentEngagementStore((s) => s.bumpExposure);
   const bumpDownload = useContentEngagementStore((s) => s.bumpDownload);
   const canDownload = card.kind === 'projects';
+  const exposureRef = useRef<HTMLElement | null>(null);
+  const exposureTrackedRef = useRef(false);
+
+  useEffect(() => {
+    if (previewOnly || typeof IntersectionObserver === 'undefined') return;
+    const node = exposureRef.current;
+    if (!node) return;
+    let disposed = false;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (disposed || exposureTrackedRef.current || !entries.some((entry) => entry.isIntersecting)) return;
+        exposureTrackedRef.current = true;
+        observer.disconnect();
+        if (assetType) bumpExposure(card.id, assetType);
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(node);
+    return () => {
+      disposed = true;
+      observer.disconnect();
+    };
+  }, [assetType, bumpExposure, card.id, previewOnly]);
 
   const outcomeLine =
     card.kind === 'external' ? card.description : card.outcomeHint?.trim() || card.description;
@@ -94,6 +121,7 @@ export function MarketShelfCard({
     const item = {
       id: card.id,
       kind: card.kind,
+      ...(assetType ? { assetType } : {}),
       title: card.title,
       icon: card.icon,
       logoUrl: card.logoUrl,
@@ -110,16 +138,24 @@ export function MarketShelfCard({
     const contentId = card.id;
     const run = () => {
       const market = useMarketplaceStore.getState();
-      const skill = market.skills.find((s) => s.id === contentId);
+      const skill = assetType === 'skill'
+        ? market.skills.find((s) => s.id === contentId)
+        : assetType === 'agent'
+          ? undefined
+          : market.skills.find((s) => s.id === contentId);
       if (skill) {
-        bumpDownload(contentId);
+        bumpDownload(contentId, 'skill');
         downloadSkillFile(skill);
         market.showToast(`已下载技能包：${skill.name}`);
         return;
       }
-      const agent = market.agents.find((a) => a.id === contentId);
+      const agent = assetType === 'agent'
+        ? market.agents.find((a) => a.id === contentId)
+        : assetType === 'skill'
+          ? undefined
+          : market.agents.find((a) => a.id === contentId);
       if (agent) {
-        bumpDownload(contentId);
+        bumpDownload(contentId, 'agent');
         downloadAgentFile(agent);
         market.showToast(`已下载 Agent 包：${agent.name}`);
         return;
@@ -137,6 +173,7 @@ export function MarketShelfCard({
 
   return (
     <article
+      ref={exposureRef}
       className={cn(
         'group relative flex h-full flex-col rounded-2xl border border-zinc-200/90 bg-white transition duration-200',
         'hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-[0_10px_28px_-16px_rgba(24,24,27,0.35)]',
@@ -364,7 +401,7 @@ export function MarketShelfCard({
                 onClick={(ev) => {
                   ev.stopPropagation();
                   const contentId = card.id;
-                  const run = () => toggleLike(contentId);
+                  const run = () => toggleLike(contentId, assetType);
                   if (requireLogin('like', run)) run();
                 }}
                 title="点赞"
@@ -382,7 +419,7 @@ export function MarketShelfCard({
                 onClick={(ev) => {
                   ev.stopPropagation();
                   const contentId = card.id;
-                  const run = () => toggleDislike(contentId);
+                  const run = () => toggleDislike(contentId, assetType);
                   if (requireLogin('dislike', run)) run();
                 }}
                 title="点踩"

@@ -120,13 +120,13 @@ export function AiTasksPage({ embedded = false }: { embedded?: boolean } = {}) {
     if (!pendingTaskSubmit || pendingTaskSubmit.chatId !== currentChatId) return;
     const pending = consumePendingTaskSubmit();
     if (!pending) return;
-    const key = `${pending.chatId}:${pending.message}:${pending.autoSend}`;
+    const key = `${pending.chatId}:${pending.message}:${pending.autoSend}:${pending.assetType ?? ''}`;
     if (pendingHandled.current === key) return;
     pendingHandled.current = key;
     setComposeFocus(false);
 
     if (pending.autoSend) {
-      void sendMessage(pending.message, workspaceId);
+      void sendMessage(pending.message, workspaceId, pending.assetType);
     } else {
       setDraft(pending.message);
     }

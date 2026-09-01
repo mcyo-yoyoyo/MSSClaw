@@ -1,11 +1,13 @@
 import type { MarketShelfKind } from '@/domain/marketShelf';
 
 /**
- * 首页三列置顶（自上而下，各 3 条）。
- * 只影响首页橱窗，不改外部/内部/MSS 货架精选钉。
+ * 首页内部 / MSS 两列置顶（自上而下，各 3 条）。
+ * 外部工具精选改由 external-tool-layout 统一维护；这里不再保存外部工具 ID。
  */
-export const HOME_CHANNEL_PINS: Record<MarketShelfKind, readonly string[]> = {
-  external: ['tool-ext-codex', 'tool-saas-chatgpt', 'tool-saas-perplexity'],
+export const HOME_CHANNEL_PINS: Pick<
+  Record<MarketShelfKind, readonly string[]>,
+  'internal' | 'projects'
+> = {
   internal: ['tool-hw-assistant', 'tool-hw-cloudnote', 'tool-hw-w3-qa'],
   projects: ['price-offer-monitor', 'ecommerce-review', 'l10n-translation'],
 };

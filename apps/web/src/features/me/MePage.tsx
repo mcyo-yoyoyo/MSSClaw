@@ -10,7 +10,6 @@ import { AiTasksPage } from '@/features/ai-tasks/AiTasksPage';
 import { MarketSkillDetailModal } from '@/features/market/MarketSkillDetailModal';
 import { CatalogAgentDetailModal } from '@/features/market/CatalogAgentDetailModal';
 import { useAppViewStore } from '@/stores/appViewStore';
-import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
@@ -18,6 +17,8 @@ import { useRecentMarketStore } from '@/stores/recentMarketStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useAssetApprovalStore, type AssetApprovalRecord } from '@/stores/assetApprovalStore';
 import { skillDisplayName } from '@/domain/skillDisplay';
+import { resolveToolMarketShelf } from '@/domain/aiToolCategories';
+import type { MarketAssetType } from '@/api/marketEngagementApi';
 
 type KindFilter = MarketShelfKind | 'all';
 type MeTab = 'submissions' | 'favorites' | 'recent' | 'tasks';
@@ -28,6 +29,7 @@ type RowItem = {
   title: string;
   icon?: string;
   logoUrl?: string;
+  assetType?: Exclude<MarketAssetType, 'unknown'>;
   at?: number;
 };
 
@@ -55,16 +57,20 @@ function formatRelative(at?: number): string {
   return new Date(at).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
 }
 
+function isVisibleMeRow(item: RowItem, visibleToolKeys: ReadonlySet<string>): boolean {
+  return item.kind === 'projects' || visibleToolKeys.has(`${item.kind}:${item.id}`);
+}
+
 export function MePage() {
   const favorites = useMarketFavoriteStore((s) => s.items);
   const toggleFavorite = useMarketFavoriteStore((s) => s.toggle);
   const setNote = useMarketFavoriteStore((s) => s.setNote);
   const recent = useRecentMarketStore((s) => s.items);
   const pushRecent = useRecentMarketStore((s) => s.push);
-  const bumpView = useContentEngagementStore((s) => s.bumpView);
   const showToast = useMarketplaceStore((s) => s.showToast);
   const skills = useMarketplaceStore((s) => s.skills);
   const agents = useMarketplaceStore((s) => s.agents);
+  const tools = useMarketplaceStore((s) => s.tools);
   const approvalHistory = useAssetApprovalStore((s) => s.history);
   const hydrateApprovals = useAssetApprovalStore((s) => s.hydrate);
   const isViewEnabled = useNavPresentationStore((s) => s.isViewEnabled);
@@ -143,16 +149,38 @@ export function MePage() {
     return rows;
   }, [agents, approvalHistory, skills, user]);
 
+  const visibleToolKeys = useMemo(
+    () =>
+      new Set(
+        tools.flatMap((tool) => {
+          const shelf = resolveToolMarketShelf(tool);
+          return shelf === 'external' || shelf === 'internal'
+            ? [`${shelf}:${tool.id}`]
+            : [];
+        }),
+      ),
+    [tools],
+  );
   const favRows = useMemo(
-    () => (kindFilter === 'all' ? favorites : favorites.filter((x) => x.kind === kindFilter)),
-    [favorites, kindFilter],
+    () =>
+      (kindFilter === 'all' ? favorites : favorites.filter((x) => x.kind === kindFilter)).filter(
+        (item) => isVisibleMeRow(item, visibleToolKeys),
+      ),
+    [favorites, kindFilter, visibleToolKeys],
   );
   const recentRows = useMemo(
-    () => (kindFilter === 'all' ? recent : recent.filter((x) => x.kind === kindFilter)),
-    [recent, kindFilter],
+    () =>
+      (kindFilter === 'all' ? recent : recent.filter((x) => x.kind === kindFilter)).filter(
+        (item) => isVisibleMeRow(item, visibleToolKeys),
+      ),
+    [recent, kindFilter, visibleToolKeys],
   );
 
   const openItem = (item: RowItem) => {
+    if (!isVisibleMeRow(item, visibleToolKeys)) {
+      showToast('该工具已下架或不再位于当前货架');
+      return;
+    }
     if (item.kind === 'projects') {
       openMarketShelf('projects');
       return;
@@ -163,8 +191,8 @@ export function MePage() {
       title: item.title,
       icon: item.icon,
       logoUrl: item.logoUrl,
+      ...(item.assetType ? { assetType: item.assetType } : {}),
     });
-    bumpView(item.id);
     openMarketToolDetail(item.id, item.kind);
   };
 
@@ -188,8 +216,8 @@ export function MePage() {
 
   const tabs: { id: MeTab; label: string; count?: number; hidden?: boolean }[] = [
     { id: 'submissions', label: '我的提交', count: submissionRows.length },
-    { id: 'favorites', label: '我的收藏', count: favorites.length },
-    { id: 'recent', label: '最近浏览', count: recent.length },
+    { id: 'favorites', label: '我的收藏', count: favRows.length },
+    { id: 'recent', label: '最近浏览', count: recentRows.length },
     { id: 'tasks', label: '任务记录', hidden: !showTasks },
   ];
 
@@ -338,7 +366,7 @@ export function MePage() {
                     showToast(on ? `已收藏：${item.title}` : `已取消收藏：${item.title}`);
                   }}
                   onSaveNote={(note) => {
-                    setNote(item.id, item.kind, note);
+                    setNote(item.id, item.kind, note, item.assetType);
                     showToast(note.trim() ? '已保存备注' : '已清空备注');
                   }}
                 />

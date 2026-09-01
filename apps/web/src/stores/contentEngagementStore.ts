@@ -9,9 +9,11 @@ import { canUsePlatformDocsApi, currentWorkspaceId } from '@/api/platformDocsApi
 import {
   fetchMarketEngagementApi,
   mutateMarketEngagementApi,
+  type MarketAssetType,
   type MarketEngagementAction,
   type MarketUserVote,
 } from '@/api/marketEngagementApi';
+import { guestVisitorRef } from '@/domain/visitorIdentity';
 
 type UserVote = MarketUserVote;
 
@@ -22,12 +24,15 @@ interface ContentEngagementState {
   hydrate: () => void;
   get: (id: string) => ContentEngagement;
   userVote: (id: string) => UserVote;
-  bumpView: (id: string) => void;
-  bumpUse: (id: string) => void;
-  bumpDownload: (id: string) => void;
-  bumpFavorite: (id: string, delta: 1 | -1) => void;
-  toggleLike: (id: string) => void;
-  toggleDislike: (id: string) => void;
+  bumpExposure: (id: string, assetType?: MarketAssetType) => void;
+  bumpDetail: (id: string, assetType?: MarketAssetType) => void;
+  bumpView: (id: string, assetType?: MarketAssetType) => void;
+  bumpUse: (id: string, assetType?: MarketAssetType) => void;
+  bumpRedirect: (id: string, assetType?: MarketAssetType) => void;
+  bumpDownload: (id: string, assetType?: MarketAssetType) => void;
+  bumpFavorite: (id: string, delta: 1 | -1, assetType?: MarketAssetType) => void;
+  toggleLike: (id: string, assetType?: MarketAssetType) => void;
+  toggleDislike: (id: string, assetType?: MarketAssetType) => void;
   optimizationQueue: () => ContentEngagement[];
 }
 
@@ -37,14 +42,29 @@ type StoreSet = (
     | ((state: ContentEngagementState) => Partial<ContentEngagementState>),
 ) => void;
 
+function createMarketEngagementEventId(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+  return `eng-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
 function runMutation(
   set: StoreSet,
   id: string,
   action: MarketEngagementAction,
   active?: boolean,
+  assetType?: MarketAssetType,
 ) {
   if (!canUsePlatformDocsApi()) return;
-  void mutateMarketEngagementApi(currentWorkspaceId(), id, { action, active })
+  const input = {
+    action,
+    active,
+    eventId: createMarketEngagementEventId(),
+    visitorId: guestVisitorRef(),
+    ...(assetType ? { assetType } : {}),
+  };
+  void mutateMarketEngagementApi(currentWorkspaceId(), id, input)
     .then((result) => {
       const engagement = normalizeEngagement(result.engagement);
       set((state) => ({
@@ -89,12 +109,16 @@ export const useContentEngagementStore = create<ContentEngagementState>((set, ge
 
   get: (id) => get().byId[id] ?? emptyEngagement(id),
   userVote: (id) => get().userVotes[id] ?? null,
-  bumpView: (id) => runMutation(set, id, 'view'),
-  bumpUse: (id) => runMutation(set, id, 'use'),
-  bumpDownload: (id) => runMutation(set, id, 'download'),
-  bumpFavorite: (id, delta) => runMutation(set, id, 'favorite', delta > 0),
-  toggleLike: (id) => runMutation(set, id, 'like'),
-  toggleDislike: (id) => runMutation(set, id, 'dislike'),
+  bumpExposure: (id, assetType) => runMutation(set, id, 'exposure', undefined, assetType),
+  bumpDetail: (id, assetType) => runMutation(set, id, 'detail', undefined, assetType),
+  bumpView: (id, assetType) => runMutation(set, id, 'view', undefined, assetType),
+  bumpUse: (id, assetType) => runMutation(set, id, 'use', undefined, assetType),
+  bumpRedirect: (id, assetType) => runMutation(set, id, 'redirect', undefined, assetType),
+  bumpDownload: (id, assetType) => runMutation(set, id, 'download', undefined, assetType),
+  bumpFavorite: (id, delta, assetType) =>
+    runMutation(set, id, delta > 0 ? 'favorite' : 'unfavorite', delta > 0, assetType),
+  toggleLike: (id, assetType) => runMutation(set, id, 'like', undefined, assetType),
+  toggleDislike: (id, assetType) => runMutation(set, id, 'dislike', undefined, assetType),
 
   optimizationQueue: () =>
     Object.values(get().byId)

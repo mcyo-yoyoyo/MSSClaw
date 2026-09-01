@@ -135,6 +135,10 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  // 这里只使用 @lobehub/icons 的纯数据子路径；预构建整个包会误扫它未安装的可选 UI peer。
+  optimizeDeps: {
+    exclude: ['@lobehub/icons'],
+  },
   build: {
     rollupOptions: {
       output: {

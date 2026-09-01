@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { MarketShelfKind } from '@/domain/marketShelf';
+import type { MarketAssetType } from '@/api/marketEngagementApi';
 import { getCurrentUserId } from '@/domain/currentUser';
 import { RETIRED_DEMO_TOOL_IDS } from '@/domain/prototype/tools';
 import {
@@ -22,8 +23,20 @@ export type RecentMarketItem = {
   title: string;
   icon?: string;
   logoUrl?: string;
+  /** 资产看板维度；场景项目卡可不传。 */
+  assetType?: Exclude<MarketAssetType, 'unknown'>;
   at: number;
 };
+
+/**
+ * Recent history is keyed by the catalog asset, not just the display shelf.
+ * Keep legacy rows without assetType compatible while allowing a same-ID
+ * Skill and Agent to coexist once both rows carry their explicit type.
+ */
+function sameRecentAsset(a: RecentMarketItem, b: RecentMarketItem): boolean {
+  if (a.id !== b.id || a.kind !== b.kind) return false;
+  return !a.assetType || !b.assetType || a.assetType === b.assetType;
+}
 
 type RecentDoc = {
   byUserId?: Record<string, RecentMarketItem[]>;
@@ -113,7 +126,7 @@ export const useRecentMarketStore = create<RecentMarketState>((set, get) => ({
     if (RETIRED.has(item.id)) return;
     const next = persistForUser([
       { ...item, at: Date.now() },
-      ...get().items.filter((x) => !(x.id === item.id && x.kind === item.kind)),
+      ...get().items.filter((x) => !sameRecentAsset(x, item as RecentMarketItem)),
     ]);
     set({ items: next });
   },

@@ -1,18 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
-import {
-  listExternalCategoryRankedMore,
-  orderExternalFeaturedItems,
-  splitExternalFeaturedItemsByRegion,
-} from '@/domain/externalFeaturedOrder';
+import { listExternalCategoryRankedMore } from '@/domain/externalFeaturedOrder';
 import { orderExternalToolsByLayoutIds } from '@/domain/externalToolLayout';
 import {
   applyMarketFeaturedPins,
   listMarketProjectCards,
   listMarketToolCards,
   MARKET_SHELF_META,
-  qualifiesAsFeaturedContent,
   splitFeaturedAndRest,
   type MarketShelfCard as MarketShelfCardModel,
   type MarketShelfKind,
@@ -180,8 +175,7 @@ export function MarketShelfPage({
   const getEngagement = useContentEngagementStore((s) => s.get);
   const engagementById = useContentEngagementStore((s) => s.byId);
   const bumpDownload = useContentEngagementStore((s) => s.bumpDownload);
-  const bumpView = useContentEngagementStore((s) => s.bumpView);
-  const bumpUse = useContentEngagementStore((s) => s.bumpUse);
+  const bumpRedirect = useContentEngagementStore((s) => s.bumpRedirect);
   const guideRecords = usePlazaToolGuideStore((s) => s.records);
   const featuredPins = useMarketFeaturedStore((s) => s.pins);
   const externalToolLayout = useExternalToolLayoutStore((s) => s.document);
@@ -191,6 +185,7 @@ export function MarketShelfPage({
   const externalTaxonomy = useExternalTaxonomyCatalogStore((s) => s.catalog);
   const hydrateFeaturedPins = useMarketFeaturedStore((s) => s.hydrate);
   const workspaceId = useWorkspaceStore((s) => s.workspaceId);
+  const apiConnected = useWorkspaceStore((s) => s.apiConnected);
 
   const [showcaseId, setShowcaseId] = useState<string | null>(null);
   const [howTo, setHowTo] = useState<{ title: string; guides: PlazaToolGuide[] } | null>(null);
@@ -239,14 +234,22 @@ export function MarketShelfPage({
 
   useEffect(() => {
     ensurePlazaToolGuidesBootstrapped();
-    hydrateFeaturedPins();
+    // 旧 market-featured 仅服务 MSS 场景卡；外部 / 内部货架不再读取它。
+    if (kind === 'projects') hydrateFeaturedPins();
     hydrateFavorites();
     hydrateHidden();
     useBusinessScenarioCatalogStore.getState().hydrate();
     // 内部办公推荐的办公场景网格读该字典；启动时若未连后端会是空的，进页面再拉一次
     useInternalOfficeSceneCatalogStore.getState().hydrate();
     hydrateBuildStatsCopy();
-  }, [hydrateFeaturedPins, hydrateFavorites, hydrateHidden, hydrateBuildStatsCopy]);
+  }, [
+    hydrateFeaturedPins,
+    hydrateFavorites,
+    hydrateHidden,
+    hydrateBuildStatsCopy,
+    workspaceId,
+    kind,
+  ]);
 
   useEffect(() => {
     setExternalType('all');
@@ -256,12 +259,12 @@ export function MarketShelfPage({
   }, [kind]);
 
   useEffect(() => {
-    if (kind !== 'external') return;
+    if (kind !== 'external' || !apiConnected) return;
     const layoutState = useExternalToolLayoutStore.getState();
     if (layoutState.loading || layoutState.saving || layoutState.dirty) return;
     if (layoutState.workspaceId === workspaceId && layoutState.document) return;
     void hydrateExternalToolLayout(workspaceId);
-  }, [kind, workspaceId, hydrateExternalToolLayout]);
+  }, [kind, workspaceId, apiConnected, hydrateExternalToolLayout]);
 
   /** 运营隐藏类型后，清除已失效的筛选态 */
   useEffect(() => {
@@ -371,7 +374,7 @@ export function MarketShelfPage({
 
     let working = raw;
     if (kind === 'external') {
-      // raw 已先执行发布状态与账号可见性过滤；运营精选可跨 taxonomy 标签选入，
+      // raw 已先执行上架状态与账号可见性过滤；运营精选可跨 taxonomy 标签选入，
       // 但仍必须继续经过下方统一的搜索、收藏与隐藏过滤。
       const categoryFeaturedIds =
         externalType === 'all'
@@ -398,10 +401,12 @@ export function MarketShelfPage({
       }));
     }
 
+    // 外部工具精选只由 external-tool-layout 决定；旧 market-featured 文档仅保留
+    // MSS 场景卡兼容，不再参与外部工具的用户侧陈列。
     const pinned =
-      kind === 'internal'
-        ? working.map((c) => ({ ...c, featured: false }))
-        : applyMarketFeaturedPins(working, featuredPins[kind] ?? []);
+      kind === 'projects'
+        ? applyMarketFeaturedPins(working, featuredPins.projects ?? [])
+        : working.map((c) => ({ ...c, featured: false }));
 
     const ordered =
       kind === 'projects' && !(featuredPins.projects?.length)
@@ -445,13 +450,9 @@ export function MarketShelfPage({
     }
     next = next.filter((c) => !hiddenKeys.includes(`${c.kind}:${c.id}`));
     const ranked = sortByRankMode(next, rankMode, getEngagement);
-    return kind === 'external' && rankMode === 'excel_order'
-      ? orderExternalFeaturedItems(
-          ranked,
-          featuredPins.external ?? [],
-          (card) => card.sourceOrder,
-        )
-      : ranked;
+    // 布局加载前仍按 marketplace 自身的目录顺序展示；布局加载后由下方
+    // externalAllLayoutSplit 应用运营排序，二者都不读取旧的 market-featured。
+    return ranked;
   }, [
     scopedCards,
     search,
@@ -462,7 +463,8 @@ export function MarketShelfPage({
     getEngagement,
     engagementById,
     kind,
-    featuredPins.external,
+    externalType,
+    externalToolLayout,
   ]);
 
   const isAgentHub = kind === 'projects' && mssSurface === 'projects';
@@ -661,6 +663,7 @@ export function MarketShelfPage({
       return {
         id: s.id,
         kind: 'projects' as const,
+        assetType: 'skill' as const,
         title: skillDisplayName(s),
         description: (s.desc || '').replace(/^【[^】]+】/, '').trim(),
         outcomeHint: (s.desc || '').replace(/^【[^】]+】/, '').trim() || skillDisplayName(s),
@@ -710,6 +713,7 @@ export function MarketShelfPage({
       return {
         id: agent.id,
         kind: 'projects' as const,
+        assetType: 'agent' as const,
         title: agent.name,
         description: agent.desc,
         outcomeHint: agent.desc,
@@ -761,10 +765,47 @@ export function MarketShelfPage({
   }, [orgSelection]);
 
   const featuredLimit = 8;
+  const externalAllLayoutSplit = useMemo(() => {
+    const allLayout = externalToolLayout?.all;
+    if (kind !== 'external' || externalType !== 'all' || !allLayout) return null;
+
+    const visibleById = new Map(filteredCards.map((card) => [card.id, card]));
+    const selectRegion = (
+      configuredIds: readonly string[],
+      region: 'overseas' | 'domestic',
+    ) =>
+      configuredIds
+        .flatMap((id) => {
+          const card = visibleById.get(id);
+          return card?.region === region ? [card] : [];
+        })
+        .slice(0, 4);
+    const overseasFeatured = selectRegion(allLayout.overseasFeaturedIds, 'overseas');
+    const domesticFeatured = selectRegion(allLayout.domesticFeaturedIds, 'domestic');
+    const featuredIds = new Set(
+      [...overseasFeatured, ...domesticFeatured].map((card) => card.id),
+    );
+    const orderMore = (
+      region: 'overseas' | 'domestic',
+      explicitIds: readonly string[],
+    ) =>
+      orderExternalToolsByLayoutIds(
+        filteredCards.filter(
+          (card) => card.region === region && !featuredIds.has(card.id),
+        ),
+        explicitIds,
+      );
+
+    return {
+      featured: [...overseasFeatured, ...domesticFeatured],
+      rest: [
+        ...orderMore('overseas', allLayout.overseasMoreOrderIds),
+        ...orderMore('domestic', allLayout.domesticMoreOrderIds),
+      ],
+    };
+  }, [kind, externalType, externalToolLayout, filteredCards]);
   const externalFeaturedSplit =
-    kind === 'external'
-      ? splitExternalFeaturedItemsByRegion(filteredCards, qualifiesAsFeaturedContent)
-      : null;
+    kind === 'external' && externalAllLayoutSplit ? externalAllLayoutSplit : null;
   const { featured, rest } =
     externalFeaturedSplit ?? splitFeaturedAndRest(filteredCards, featuredLimit);
   const isExternalCategory = kind === 'external' && externalType !== 'all';
@@ -892,11 +933,8 @@ export function MarketShelfPage({
       title: card.title,
       icon: card.icon,
       logoUrl: card.logoUrl,
+      ...(card.assetType ? { assetType: card.assetType } : {}),
     });
-  };
-
-  const trackToolClick = (id: string) => {
-    bumpView(id);
   };
 
   const executeProject = (bundle?: ScenarioBundle | null) => {
@@ -947,7 +985,6 @@ export function MarketShelfPage({
   };
 
   const openCard = (card: MarketShelfCardModel) => {
-    trackToolClick(card.id);
     if (card.kind === 'projects') {
       const agent = agents.find((item) => item.id === card.id);
       if (agent) {
@@ -968,7 +1005,6 @@ export function MarketShelfPage({
   const openAgentDetail = (card: MarketShelfCardModel) => {
     const agent = agents.find((item) => item.id === card.id);
     if (!agent) return;
-    trackToolClick(card.id);
     rememberCard(card);
     setAgentDetail(agent);
   };
@@ -978,19 +1014,17 @@ export function MarketShelfPage({
     tab?: 'overview' | 'howto',
   ) => {
     const catalog = tools.find((t) => t.id === tool.id);
-    // 员工助手下载页允许在主数据暂缺时仍按 id 打开（场景预留入口）
-    const allowAssistantFallback = tool.id === 'tool-hw-assistant';
-    if ((!catalog || catalog.published === false) && !allowAssistantFallback) {
+    if (!catalog || catalog.published !== true) {
       showToast('该工具主数据不存在或已下架');
       return;
     }
-    trackToolClick(tool.id);
     pushRecent({
       id: tool.id,
       kind: 'internal',
       title: catalog?.name?.trim() || tool.name,
       icon: 'fa-cube',
       logoUrl: tool.logoUrl || catalog?.logoUrl,
+      assetType: 'tool',
     });
     openMarketToolDetail(tool.id, 'internal', tab ? { tab } : undefined);
   };
@@ -1027,7 +1061,8 @@ export function MarketShelfPage({
       architectureDocs: bundle?.architectureDocs ?? [],
       caseItems: items.filter((i) => i.type === 'case'),
     });
-    items.forEach((i) => bumpDownload(i.id));
+    (bundle?.skills ?? []).forEach((skill) => bumpDownload(skill.id, 'skill'));
+    (bundle?.agents ?? []).forEach((agent) => bumpDownload(agent.id, 'agent'));
     rememberCard(card);
     showToast(`已下载学习包：${card.title}`);
   };
@@ -1082,7 +1117,7 @@ export function MarketShelfPage({
           showToast('该 Skill 已不在当前工作区，请刷新后重试');
           return;
         }
-        bumpDownload(latestSkill.id);
+        bumpDownload(latestSkill.id, 'skill');
         downloadSkillFile(latestSkill);
         const reason = !isSkillCallable(latestSkill)
           ? '该 Skill 已发布展示，但尚未启用在线调用'
@@ -1102,6 +1137,7 @@ export function MarketShelfPage({
         title: currentSkill.name,
         description: currentSkill.desc,
         icon: currentSkill.icon || 'fa-cube',
+        assetType: 'skill',
         badges: [],
         featured: resolveSkillFeaturedInMssMarket(currentSkill),
         heat: currentSkill.invokes ?? 0,
@@ -1114,6 +1150,72 @@ export function MarketShelfPage({
     } catch {
       showToast(executionTrustFailMessage(trust));
     }
+  };
+
+  /**
+   * 卡片「调用」必须进入任务体验页；不能复用带下载兜底的在线试用入口。
+   * customer 等展示预设可能关闭 canRunSkills，但已上架可调用 Skill 仍应走
+   * onInvokeSkill → App.performInvokeSkill 的真实体验链路。
+   */
+  const invokeSkillExperience = (skill: PrototypeSkillSeed) => {
+    const currentSkill = useMarketplaceStore
+      .getState()
+      .skills.find((item) => item.id === skill.id);
+    if (!currentSkill) {
+      showToast('该 Skill 已不在当前工作区，请刷新后重试');
+      return;
+    }
+    if (!isSkillRunnable(currentSkill)) {
+      const reason = !isSkillCallable(currentSkill)
+        ? '该 Skill 尚未启用在线调用'
+        : !hasSkillExecutionBody(currentSkill)
+          ? '该 Skill 缺少执行正文，暂不可调用'
+          : '该 Skill 暂不可调用';
+      showToast(reason);
+      return;
+    }
+    if (!onInvokeSkill) {
+      showToast('当前工作区暂未配置 Skill 体验入口');
+      return;
+    }
+    try {
+      onInvokeSkill(currentSkill);
+      rememberCard({
+        id: currentSkill.id,
+        kind: 'projects',
+        title: currentSkill.name,
+        description: currentSkill.desc,
+        icon: currentSkill.icon || 'fa-cube',
+        assetType: 'skill',
+        badges: [],
+        featured: resolveSkillFeaturedInMssMarket(currentSkill),
+        heat: currentSkill.invokes ?? 0,
+        hasHowto: true,
+        runnable: true,
+        executionTrust: resolveSkillExecutionTrust(true),
+        primaryAction: 'detail',
+      });
+      showToast(`已进入 AI 任务试用：${currentSkill.name}`);
+    } catch {
+      showToast('进入 Skill 体验失败，请重试');
+    }
+  };
+
+  const renderSkillInvokeAction = (skill: PrototypeSkillSeed | undefined) => {
+    if (!skill || !isSkillCallable(skill)) return null;
+    return (
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          invokeSkillExperience(skill);
+        }}
+        aria-label={`调用 ${skillDisplayName(skill)}`}
+        className="w-full rounded-lg bg-zinc-900 py-1.5 text-[10px] font-semibold text-white transition hover:bg-zinc-800"
+      >
+        <i className="fa-solid fa-play mr-1" />调用
+      </button>
+    );
   };
 
   const emptyHint =
@@ -1361,7 +1463,7 @@ export function MarketShelfPage({
               onOpenDetail={(tool) => openInternalToolDetail(tool)}
               onHowTo={(tool) => openInternalToolDetail(tool, 'howto')}
               onEmptyAction={(scene) =>
-                showToast(`「${scene.label}」暂无已发布工具，请运营完成绑定`)
+                showToast(`「${scene.label}」暂无已上架工具，请运营完成绑定`)
               }
               onExperience={(tool) => {
                 if (!tool.homepageUrl || tool.homepageUrl === '#') {
@@ -1369,17 +1471,17 @@ export function MarketShelfPage({
                   openInternalToolDetail(tool, 'howto');
                   return;
                 }
-                trackToolClick(tool.id);
                 pushRecent({
                   id: tool.id,
                   kind: 'internal',
                   title: tool.name,
                   icon: 'fa-cube',
                   logoUrl: tool.logoUrl,
+                  assetType: 'tool',
                 });
                 const win = window.open(tool.homepageUrl, '_blank', 'noopener,noreferrer');
                 bumpToolInvokes(tool.id);
-                bumpUse(tool.id);
+                bumpRedirect(tool.id, 'tool');
                 if (!win) showToast('浏览器拦截了弹窗，请允许后重试');
                 else showToast(`已打开：${tool.name}`);
               }}
@@ -1486,6 +1588,7 @@ export function MarketShelfPage({
                           showHot
                           onOpen={() => skill && setSkillDetail(skill)}
                           onPrimary={() => skill && setSkillDetail(skill)}
+                          footerActions={renderSkillInvokeAction(skill)}
                         />
                       );
                     }
@@ -1600,6 +1703,7 @@ export function MarketShelfPage({
                       card={c}
                       onOpen={() => skill && setSkillDetail(skill)}
                       onPrimary={() => skill && setSkillDetail(skill)}
+                      footerActions={renderSkillInvokeAction(skill)}
                     />
                   );
                 }

@@ -62,7 +62,7 @@ export function PortalMarketFeaturedPanel() {
   }, []);
 
   const publishedTools = useMemo(
-    () => tools.filter((t) => t.published !== false),
+    () => tools.filter((t) => t.published === true),
     [tools],
   );
 
@@ -199,7 +199,7 @@ export function PortalMarketFeaturedPanel() {
           placeholder={
             kind === 'projects'
               ? `搜索场景…`
-              : '搜索已发布工具…'
+              : '搜索已上架工具…'
           }
           className="min-w-[220px] flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-zinc-400"
         />
@@ -290,7 +290,7 @@ export function PortalMarketFeaturedPanel() {
           })}
           {!assignList.length ? (
             <li className="px-3 py-10 text-center text-[12px] text-zinc-400">
-              无匹配的已发布工具。请先在「配置工具」发布工具。
+              无匹配的已上架工具。请先在「配置工具」完成工具上架。
             </li>
           ) : null}
         </ul>

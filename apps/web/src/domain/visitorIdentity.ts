@@ -3,7 +3,8 @@
  * 与登录身份正交，登录后仍保留，便于把注册事件关联回原访客。
  */
 const VISITOR_ID_KEY = 'mssclaw_visitor_id';
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function randomUuid(): string {
   if (typeof globalThis.crypto?.randomUUID === 'function') {

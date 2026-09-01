@@ -260,7 +260,8 @@ export function HomeScenePortal({
   const focusCase = useNavigationIntentStore((s) => s.focusCase);
   const engagementOf = useContentEngagementStore((s) => s.get);
   const engagementById = useContentEngagementStore((s) => s.byId);
-  const bumpView = useContentEngagementStore((s) => s.bumpView);
+  const bumpDetail = useContentEngagementStore((s) => s.bumpDetail);
+  const bumpRedirect = useContentEngagementStore((s) => s.bumpRedirect);
 
   const affiliation = useMemo(
     () => ({
@@ -349,13 +350,13 @@ export function HomeScenePortal({
 
   const openTool = (toolId: string) => {
     const tool = tools.find((t) => t.id === toolId);
-    if (!tool?.homepageUrl) {
+    if (!tool?.homepageUrl || tool.homepageUrl === '#') {
       showToast('暂无入口链接');
       return;
     }
     const win = window.open(tool.homepageUrl, '_blank', 'noopener,noreferrer');
     useMarketplaceStore.getState().bumpToolInvokes(toolId);
-    useContentEngagementStore.getState().bumpUse(toolId);
+    bumpRedirect(toolId, 'tool');
     if (!win) {
       showToast('浏览器拦截了弹窗，请允许本站弹窗后重试，或复制链接手动打开');
       return;
@@ -372,7 +373,7 @@ export function HomeScenePortal({
   };
 
   const openScenario = (scenarioId: string) => {
-    bumpView(scenarioId);
+    bumpDetail(scenarioId);
     setShowcaseScenarioId(scenarioId);
   };
 
@@ -451,7 +452,8 @@ export function HomeScenePortal({
       caseItems,
     });
     const bump = useContentEngagementStore.getState().bumpDownload;
-    items.forEach((i) => bump(i.id));
+    (bundle?.skills ?? []).forEach((skill) => bump(skill.id, 'skill'));
+    (bundle?.agents ?? []).forEach((agent) => bump(agent.id, 'agent'));
     showToast('已下载学习包（含准备与打样参照）');
   };
 

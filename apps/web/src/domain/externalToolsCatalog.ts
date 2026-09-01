@@ -1,4 +1,4 @@
-/** Auto-generated from ai-tools-directory CSV. Do not hand-edit. */
+/** Auto-generated from ai-tools-directory CSV. Legacy How-to seed content only; runtime tools come from marketplace API. */
 import type { ExternalToolCatalogEntry } from '@/domain/externalToolTaxonomy';
 
 export const EXTERNAL_TOOLS_CATALOG: ExternalToolCatalogEntry[] = [

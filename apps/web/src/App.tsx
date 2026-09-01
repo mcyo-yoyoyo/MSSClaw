@@ -364,7 +364,7 @@ export function App() {
     // 无外部 prompt 时使用专家演示任务并自动发送（挂载主 Skill）
     const message = (prompt?.trim() || buildAgentDemoPrompt(agent)).trim();
     useConversationStore.setState({
-      pendingTaskSubmit: { chatId, message, autoSend: true },
+      pendingTaskSubmit: { chatId, message, autoSend: true, assetType: 'agent' },
     });
     goToTaskWithTransit(message, chatId);
   }, [findOrCreateAgentSession, switchChat, goToTaskWithTransit, sessionsReady]);
@@ -407,6 +407,7 @@ export function App() {
       agentIcon: boundAgent?.icon ?? currentSkill.icon,
       skillId: currentSkill.id,
       taskSource: 'skill',
+      assetType: 'skill',
       initialMessage,
       autoSend: Boolean(initialMessage.trim()),
       switchTo: true,

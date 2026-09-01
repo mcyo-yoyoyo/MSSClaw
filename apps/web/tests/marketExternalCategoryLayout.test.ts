@@ -6,18 +6,37 @@ const source = readFileSync(
   new URL('../src/features/market/MarketShelfPage.tsx', import.meta.url),
   'utf8',
 );
+const homeSource = readFileSync(
+  new URL('../src/features/home/HomePage.tsx', import.meta.url),
+  'utf8',
+);
 const layoutStoreSource = readFileSync(
   new URL('../src/stores/externalToolLayoutStore.ts', import.meta.url),
   'utf8',
 );
 
-test('用户侧外部工具全部筛选保持原有货架逻辑', () => {
-  assert.match(source, /splitExternalFeaturedItemsByRegion/);
-  assert.match(source, /featuredPins\.external/);
+test('首页外部精选与市场页共用全局布局，布局未加载时不伪造工具', () => {
+  assert.match(homeSource, /useExternalToolLayoutStore/);
+  assert.match(homeSource, /const externalLayout = externalToolLayout\?\.all/);
+  assert.match(homeSource, /externalLayout\.overseasFeaturedIds/);
+  assert.match(homeSource, /externalLayout\.domesticFeaturedIds/);
+  assert.match(homeSource, /: \[\]/);
+  assert.doesNotMatch(homeSource, /HOME_CHANNEL_PINS\.external/);
+  assert.doesNotMatch(homeSource, /EXTERNAL_TOOLS_CATALOG/);
+  assert.doesNotMatch(homeSource, /featuredPins\.external/);
+});
+
+test('用户侧外部工具全部筛选读取工具运营的全局布局', () => {
+  assert.match(source, /externalAllLayoutSplit/);
+  assert.match(source, /externalToolLayout\?\.all/);
+  assert.match(source, /allLayout\.overseasFeaturedIds/);
+  assert.match(source, /allLayout\.domesticFeaturedIds/);
+  assert.match(source, /allLayout\.overseasMoreOrderIds/);
+  assert.match(source, /allLayout\.domesticMoreOrderIds/);
   assert.doesNotMatch(
     source,
-    /externalToolLayout\?\.all/,
-    '本次窄改不能让“全部”筛选消费管理后台四列表布局',
+    /featuredPins\.external|splitExternalFeaturedItemsByRegion|orderExternalFeaturedItems/,
+    '外部工具精选不能再回退到旧 market-featured 文档',
   );
 });
 

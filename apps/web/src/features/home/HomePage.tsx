@@ -8,7 +8,6 @@ import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { HOME_CHANNEL_PINS } from '@/domain/homeChannelPins';
-import { orderExternalFeaturedItems } from '@/domain/externalFeaturedOrder';
 import {
   applyMarketFeaturedPins,
   listInternalOfficeMarketCards,
@@ -46,8 +45,9 @@ import { useMarketFilterStore } from '@/stores/marketFilterStore';
 import { useRecentMarketStore } from '@/stores/recentMarketStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useMarketHiddenStore } from '@/stores/marketHiddenStore';
-import { useMarketFeaturedStore } from '@/stores/marketFeaturedStore';
+import { useExternalToolLayoutStore } from '@/stores/externalToolLayoutStore';
 import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { greetingForNow } from '@/domain/timeGreeting';
 import { emptyOrgPerspectiveSelection } from '@/domain/orgAxisTags';
 import { getBusinessScenarioMeta } from '@/domain/businessScenarios';
@@ -84,7 +84,6 @@ export function HomePage({
   const canRunAgents = allowScenarioRun && (executeAllowed || isGuest) && Boolean(onInvokeAgent);
   const engagementOf = useContentEngagementStore((s) => s.get);
   const engagementById = useContentEngagementStore((s) => s.byId);
-  const bumpView = useContentEngagementStore((s) => s.bumpView);
   const tools = useMarketplaceStore((s) => s.tools);
   const marketSearch = useMarketFilterStore((s) => s.search);
   const favoritesOnly = useMarketFilterStore((s) => s.favoritesOnly);
@@ -95,8 +94,10 @@ export function HomePage({
   const favoriteItems = useMarketFavoriteStore((s) => s.items);
   const hiddenKeys = useMarketHiddenStore((s) => s.keys);
   const hydrateHidden = useMarketHiddenStore((s) => s.hydrate);
-  const hydrateFeaturedPins = useMarketFeaturedStore((s) => s.hydrate);
-  const featuredPins = useMarketFeaturedStore((s) => s.pins);
+  const externalToolLayout = useExternalToolLayoutStore((s) => s.document);
+  const hydrateExternalToolLayout = useExternalToolLayoutStore((s) => s.hydrate);
+  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
+  const apiConnected = useWorkspaceStore((s) => s.apiConnected);
   const officeSceneEntries = useInternalOfficeSceneCatalogStore((s) => s.entries);
   const guideRecords = usePlazaToolGuideStore((s) => s.records);
   const pendingBusinessScenario = useNavigationIntentStore((s) => s.pendingBusinessScenario);
@@ -108,9 +109,16 @@ export function HomePage({
     hydrateRecent();
     hydrateFavorites();
     hydrateHidden();
-    hydrateFeaturedPins();
     ensurePlazaToolGuidesBootstrapped();
-  }, [hydrateRecent, hydrateFavorites, hydrateHidden, hydrateFeaturedPins]);
+    if (workspaceId && apiConnected) void hydrateExternalToolLayout(workspaceId);
+  }, [
+    hydrateRecent,
+    hydrateFavorites,
+    hydrateHidden,
+    hydrateExternalToolLayout,
+    workspaceId,
+    apiConnected,
+  ]);
 
   useEffect(() => {
     if (!user) return;
@@ -154,16 +162,28 @@ export function HomePage({
     const eng = (id: string) => engagementOf(id);
     const org = emptyOrgPerspectiveSelection();
 
-    const externalPins = featuredPins.external ?? [];
-    const external = orderExternalFeaturedItems(
-      applyMarketFeaturedPins(
-        listMarketToolCards(tools, 'external', viewer, org, 'all', eng, howtoToolIds).filter(
-          qualifiesAsFeaturedContent,
-        ),
-        externalPins,
-      ),
-      externalPins,
+    const externalCandidates = listMarketToolCards(
+      tools,
+      'external',
+      viewer,
+      org,
+      'all',
+      eng,
+      howtoToolIds,
     );
+    const externalLayout = externalToolLayout?.all;
+    const externalById = new Map(externalCandidates.map((card) => [card.id, card]));
+    // 首页外精选与市场页、工具运营共用 external-tool-layout；布局未加载时不
+    // 使用旧 market-featured 或前端静态目录伪造精选。
+    const external = externalLayout
+      ? [
+          ...externalLayout.overseasFeaturedIds,
+          ...externalLayout.domesticFeaturedIds,
+        ].flatMap((id) => {
+          const card = externalById.get(id);
+          return card ? [card] : [];
+        })
+      : [];
     const internal = applyMarketFeaturedPins(
       listInternalOfficeMarketCards(tools, eng, howtoToolIds, officeSceneEntries),
       [...HOME_CHANNEL_PINS.internal],
@@ -187,6 +207,7 @@ export function HomePage({
           return {
             id: skill.id,
             kind: 'projects',
+            assetType: 'skill',
             title: skillDisplayName(skill),
             description: skillDisplayDesc(skill).replace(/^【[^】]+】/, '').trim(),
             outcomeHint: skillDisplayDesc(skill).replace(/^【[^】]+】/, '').trim(),
@@ -237,6 +258,7 @@ export function HomePage({
           return {
             id: agent.id,
             kind: 'projects',
+            assetType: 'agent',
             title: agent.name,
             description: agent.desc,
             outcomeHint: agent.desc,
@@ -276,7 +298,7 @@ export function HomePage({
     tools,
     skills,
     agents,
-    featuredPins,
+    externalToolLayout,
     viewer,
     engagementOf,
     engagementById,
@@ -336,6 +358,7 @@ export function HomePage({
       title: card.title,
       icon: card.icon,
       logoUrl: card.logoUrl,
+      ...(card.assetType ? { assetType: card.assetType } : {}),
     });
   };
 
@@ -344,13 +367,11 @@ export function HomePage({
       const target = resolveHomeProjectDetailTarget(card.id, skills, agents);
       if (target?.kind === 'skill') {
         rememberCard(card);
-        bumpView(card.id);
         setSkillDetail(target.item);
         return;
       }
       if (target?.kind === 'agent') {
         rememberCard(card);
-        bumpView(card.id);
         setAgentDetail(target.item);
         return;
       }
@@ -359,7 +380,6 @@ export function HomePage({
       return;
     }
     rememberCard(card);
-    bumpView(card.id);
     openMarketToolDetail(card.id, card.kind);
   };
 

@@ -1,4 +1,9 @@
-import type { AgentType, ExecutionStep, StreamEvent } from './dto/stream-execution.dto';
+import type {
+  AgentType,
+  ExecutionStep,
+  ExecutionUsage,
+  StreamEvent,
+} from './dto/stream-execution.dto';
 
 export type LlmChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
@@ -128,6 +133,46 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function tokenCount(value: unknown): number | null {
+  const parsed =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && value.trim()
+        ? Number(value)
+        : Number.NaN;
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+/** OpenAI-compatible providers use prompt/completion_tokens; Anthropic-style
+ * gateways commonly expose input/output_tokens. Keep missing halves null. */
+function usageFromChunk(value: unknown): ExecutionUsage | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  const inputTokens =
+    tokenCount(raw.prompt_tokens) ??
+    tokenCount(raw.input_tokens) ??
+    tokenCount(raw.promptTokens) ??
+    tokenCount(raw.inputTokens);
+  const outputTokens =
+    tokenCount(raw.completion_tokens) ??
+    tokenCount(raw.output_tokens) ??
+    tokenCount(raw.completionTokens) ??
+    tokenCount(raw.outputTokens);
+  if (inputTokens === null && outputTokens === null) return undefined;
+  return { inputTokens, outputTokens };
+}
+
+function mergeUsage(
+  previous: ExecutionUsage | undefined,
+  next: ExecutionUsage | undefined,
+): ExecutionUsage | undefined {
+  if (!next) return previous;
+  return {
+    inputTokens: next.inputTokens ?? previous?.inputTokens ?? null,
+    outputTokens: next.outputTokens ?? previous?.outputTokens ?? null,
+  };
+}
+
 /** OpenAI-compatible SSE chat completions → StreamEvent */
 export async function* nestLlmExecutionStream(params: {
   message: string;
@@ -182,6 +227,9 @@ export async function* nestLlmExecutionStream(params: {
       max_tokens: cfg.maxTokens,
       temperature: 0.5,
       stream: true,
+      // OpenAI-compatible gateways that support usage append it to the final
+      // SSE chunk. Unsupported gateways simply omit the field.
+      stream_options: { include_usage: true },
     }),
     signal,
   });
@@ -198,29 +246,48 @@ export async function* nestLlmExecutionStream(params: {
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let usage: ExecutionUsage | undefined;
 
-  while (true) {
-    if (signal?.aborted) return;
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? '';
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith('data:')) continue;
-      const payload = trimmed.slice(5).trim();
-      if (!payload || payload === '[DONE]') continue;
-      try {
-        const json = JSON.parse(payload) as {
-          choices?: { delta?: { content?: string } }[];
-        };
-        const delta = json.choices?.[0]?.delta?.content;
+  const parseLine = (line: string): string | undefined => {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('data:')) return undefined;
+    const payload = trimmed.slice(5).trim();
+    if (!payload || payload === '[DONE]') return undefined;
+    try {
+      const json = JSON.parse(payload) as {
+        choices?: { delta?: { content?: string } }[];
+        usage?: unknown;
+      };
+      usage = mergeUsage(usage, usageFromChunk(json.usage));
+      return json.choices?.[0]?.delta?.content;
+    } catch {
+      return undefined;
+    }
+  };
+
+  try {
+    while (true) {
+      if (signal?.aborted) return;
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        const delta = parseLine(line);
         if (delta) yield { type: 'token', content: delta };
-      } catch {
-        /* skip */
       }
     }
+    buffer += decoder.decode();
+    if (buffer.trim()) {
+      const delta = parseLine(buffer);
+      if (delta) yield { type: 'token', content: delta };
+    }
+  } catch (error) {
+    if (signal?.aborted) return;
+    const message = error instanceof Error ? error.message : 'llm_stream_read_failed';
+    yield { type: 'error', message, ...(usage ? { usage } : {}) };
+    return;
   }
 
   const elapsed = ((Date.now() - started) / 1000).toFixed(2);
@@ -231,5 +298,6 @@ export async function* nestLlmExecutionStream(params: {
     steps: planStepsToExecutionSteps(planSteps),
     agentName: params.agentName,
     source: 'llm',
+    ...(usage ? { usage } : {}),
   };
 }

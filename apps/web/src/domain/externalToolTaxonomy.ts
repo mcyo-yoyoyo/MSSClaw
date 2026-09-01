@@ -87,7 +87,7 @@ export const EXTERNAL_FILTER_MODES: { id: ExternalFilterMode; label: string }[] 
   { id: 'type', label: '按工具类型' },
 ];
 
-/** 货架去重后保留的 Top 80（近重复 / 弱替代不进前台） */
+/** 历史静态目录中已下线的重复项；仅用于清理旧缓存，不参与运行时货架数据。 */
 export const EXTERNAL_TOOL_SHELF_EXCLUDE_IDS = [
   'tool-ext-google-ai-mode',
   'tool-ext-you-com',
@@ -109,48 +109,6 @@ export const EXTERNAL_TOOL_SHELF_EXCLUDE_IDS = [
   'tool-saas-pika',
   'tool-ext-hermes-agent',
   'tool-ext-genspark',
-] as const;
-
-const EXTERNAL_TOOL_SHELF_EXCLUDE = new Set<string>(EXTERNAL_TOOL_SHELF_EXCLUDE_IDS);
-
-export function isExternalToolOnShelf(id: string): boolean {
-  return !EXTERNAL_TOOL_SHELF_EXCLUDE.has(id);
-}
-
-/** 首屏精选：海外 4 + 国内 4（一排 2 个、共两排） */
-export const DEFAULT_EXTERNAL_FEATURED_OVERSEAS = [
-  'tool-saas-chatgpt',
-  'tool-saas-claude',
-  'tool-saas-gemini',
-  'tool-saas-perplexity',
-] as const;
-
-export const DEFAULT_EXTERNAL_FEATURED_DOMESTIC = [
-  'tool-saas-doubao',
-  'tool-saas-deepseek',
-  'tool-saas-kimi',
-  'tool-saas-tongyi',
-] as const;
-
-/** 旧默认 12 钉，hydrate 时迁到新 8 钉 */
-export const LEGACY_EXTERNAL_FEATURED_PINS = [
-  'tool-saas-chatgpt',
-  'tool-saas-gemini',
-  'tool-ext-codex',
-  'tool-saas-claude',
-  'tool-saas-perplexity',
-  'tool-saas-gamma',
-  'tool-saas-workbuddy',
-  'tool-saas-doubao',
-  'tool-saas-deepseek',
-  'tool-saas-kimi',
-  'tool-saas-tongyi',
-  'tool-ext-wps-ai',
-] as const;
-
-export const DEFAULT_EXTERNAL_FEATURED_PINS = [
-  ...DEFAULT_EXTERNAL_FEATURED_OVERSEAS,
-  ...DEFAULT_EXTERNAL_FEATURED_DOMESTIC,
 ] as const;
 
 export interface ExternalToolCatalogEntry {

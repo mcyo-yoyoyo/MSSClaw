@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { GuestGateLock } from '@/components/auth/GuestGateLock';
 import { ToolLogo } from '@/components/brand/ToolLogo';
@@ -154,12 +154,20 @@ export function MarketAgentDetailModal({
   const [focusItemId, setFocusItemId] = useState<string | undefined>(items[0]?.id);
   const getEngagement = useContentEngagementStore((s) => s.get);
   const engagementById = useContentEngagementStore((s) => s.byId);
+  const bumpDetail = useContentEngagementStore((s) => s.bumpDetail);
+  const detailTrackedRef = useRef<string | null>(null);
   const toggleLike = useContentEngagementStore((s) => s.toggleLike);
   const toggleDislike = useContentEngagementStore((s) => s.toggleDislike);
   const getVote = useContentEngagementStore((s) => s.userVote);
   void engagementById;
   const eng = getEngagement(scenarioId);
   const vote = getVote(scenarioId);
+
+  useEffect(() => {
+    if (detailTrackedRef.current === scenarioId) return;
+    detailTrackedRef.current = scenarioId;
+    bumpDetail(scenarioId);
+  }, [bumpDetail, scenarioId]);
 
   const env = useMemo(
     () => bundle?.env ?? getScenarioEnv(scenarioId) ?? null,

@@ -13,7 +13,10 @@ import { InternalOfficeSceneGrid } from '@/components/market/InternalOfficeScene
 import { MarketShelfCard } from '@/components/market/MarketShelfCard';
 import { searchCapabilitiesByIntent } from '@/domain/capabilityIntentSearch';
 import { listExternalCategoryRankedMore } from '@/domain/externalFeaturedOrder';
-import { listVisibleExternalToolTypes } from '@/domain/externalTaxonomyCatalog';
+import {
+  listVisibleExternalToolTypes,
+  toolMatchesExternalTypeCatalog,
+} from '@/domain/externalTaxonomyCatalog';
 import {
   insertExternalToolIdBefore,
   mergeExternalToolLayoutVisibleAndParkedIds,
@@ -25,6 +28,7 @@ import {
 import type { ExternalToolTypeId } from '@/domain/externalToolTaxonomy';
 import {
   listMarketToolCards,
+  listUnlistedExternalToolCards,
   type MarketShelfCard as MarketShelfCardModel,
 } from '@/domain/marketShelf';
 import { emptyOrgPerspectiveSelection } from '@/domain/orgAxisTags';
@@ -40,6 +44,7 @@ import { useSessionStore } from '@/stores/sessionStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 type ToolOpsKind = 'internal' | 'external';
+type ExternalListMode = 'listed' | 'unlisted';
 type ExternalRegion = 'overseas' | 'domestic';
 type LayoutListId =
   | ExternalToolLayoutAllListKey
@@ -154,6 +159,8 @@ function ToolDropGrid({
   onPointerStart,
   onAddToFeatured,
   onRemoveFromFeatured,
+  savingUnlistingIds,
+  onUnlist,
   emptyText,
   showHot = false,
   dense = false,
@@ -173,6 +180,8 @@ function ToolDropGrid({
   ) => void;
   onAddToFeatured: (card: MarketShelfCardModel, listId: LayoutListId) => void;
   onRemoveFromFeatured: (card: MarketShelfCardModel, listId: LayoutListId) => void;
+  savingUnlistingIds: ReadonlySet<string>;
+  onUnlist: (card: MarketShelfCardModel) => void | Promise<void>;
   emptyText: string;
   showHot?: boolean;
   dense?: boolean;
@@ -196,6 +205,7 @@ function ToolDropGrid({
           {items.map((card) => {
             const region = card.region === 'domestic' ? 'domestic' : 'overseas';
             const dragging = dragState?.cardId === card.id && dragState.source === listId;
+            const unlistingSaving = savingUnlistingIds.has(card.id);
             return (
               <div
                 key={card.id}
@@ -214,60 +224,87 @@ function ToolDropGrid({
                   onOpen={() => onOpen(card)}
                   showDefaultFooter={false}
                   footerActions={
-                    <div className="flex items-center justify-between gap-2 border-t border-zinc-100 pt-2">
-                      {sortable ? (
-                        <span
-                          data-tool-drag-handle
-                          role="button"
-                          tabIndex={0}
-                          aria-label={`拖动${card.title}调整顺序`}
-                          title="按住拖动调整当前列表顺序"
-                          className="inline-flex touch-none select-none items-center gap-1 rounded-lg border border-zinc-200 bg-white px-2 py-1 text-[10px] font-semibold text-zinc-600 cursor-grab active:cursor-grabbing"
-                          onPointerDown={(event) => {
-                            if (!event.isPrimary || event.button !== 0) return;
-                            event.preventDefault();
-                            event.stopPropagation();
-                            onPointerStart(
-                              { cardId: card.id, source: listId, region },
-                              event.pointerId,
-                              event.clientX,
-                              event.clientY,
-                            );
-                          }}
+                    <div className="space-y-1.5 border-t border-zinc-100 pt-2">
+                      <div className="flex items-center gap-1">
+                        {sortable ? (
+                          <span
+                            data-tool-drag-handle
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`拖动${card.title}调整顺序`}
+                            title="按住拖动调整当前列表顺序"
+                            className="inline-flex touch-none select-none items-center gap-1 rounded-lg border border-zinc-200 bg-white px-1.5 py-1 text-[10px] font-semibold text-zinc-600 cursor-grab active:cursor-grabbing"
+                            onPointerDown={(event) => {
+                              if (!event.isPrimary || event.button !== 0) return;
+                              event.preventDefault();
+                              event.stopPropagation();
+                              onPointerStart(
+                                { cardId: card.id, source: listId, region },
+                                event.pointerId,
+                                event.clientX,
+                                event.clientY,
+                              );
+                            }}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            }}
+                          >
+                            <i className="fa-solid fa-grip-vertical" />
+                            排序
+                          </span>
+                        ) : (
+                          <span />
+                        )}
+                        <button
+                          type="button"
+                          disabled={unlistingSaving}
+                          data-tool-listing-action={`unlist-${unlistingSaving ? 'saving' : 'direct'}`}
+                          onPointerDown={(event) => event.stopPropagation()}
                           onClick={(event) => {
                             event.preventDefault();
                             event.stopPropagation();
+                            void onUnlist(card);
                           }}
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-lg border px-1.5 py-1 text-[10px] font-semibold transition',
+                            unlistingSaving
+                              ? 'cursor-not-allowed border-amber-100 bg-amber-50 text-amber-400'
+                              : 'border-amber-200 bg-white text-amber-700 hover:bg-amber-50',
+                          )}
                         >
-                          <i className="fa-solid fa-grip-vertical" />
-                          排序
-                        </span>
-                      ) : (
-                        <span />
-                      )}
-                      <button
-                        type="button"
-                        disabled={!actionEnabled}
-                        data-tool-featured-action={featured ? 'remove' : 'add'}
-                        onPointerDown={(event) => event.stopPropagation()}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          if (featured) onRemoveFromFeatured(card, listId);
-                          else onAddToFeatured(card, listId);
-                        }}
-                        className={cn(
-                          'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold transition',
-                          actionEnabled
-                            ? featured
-                              ? 'border-red-200 bg-white text-red-600 hover:bg-red-50'
-                              : 'border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800'
-                            : 'cursor-not-allowed border-zinc-100 bg-zinc-50 text-zinc-300',
-                        )}
-                      >
-                        <i className={featured ? 'fa-solid fa-minus' : 'fa-solid fa-plus'} />
-                        {featured ? '移出精选' : '加入精选'}
-                      </button>
+                          <i
+                            className={cn(
+                              'fa-solid',
+                              unlistingSaving ? 'fa-spinner fa-spin' : 'fa-arrow-down',
+                            )}
+                          />
+                          {unlistingSaving ? '下架中' : '下架'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!actionEnabled}
+                          data-tool-featured-action={featured ? 'remove' : 'add'}
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            if (featured) onRemoveFromFeatured(card, listId);
+                            else onAddToFeatured(card, listId);
+                          }}
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-lg border px-1.5 py-1 text-[10px] font-semibold transition',
+                            actionEnabled
+                              ? featured
+                                ? 'border-red-200 bg-white text-red-600 hover:bg-red-50'
+                                : 'border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800'
+                              : 'cursor-not-allowed border-zinc-100 bg-zinc-50 text-zinc-300',
+                          )}
+                        >
+                          <i className={featured ? 'fa-solid fa-minus' : 'fa-solid fa-plus'} />
+                          {featured ? '移出精选' : '加入精选'}
+                        </button>
+                      </div>
                     </div>
                   }
                 />
@@ -319,6 +356,126 @@ function ToolListPanel({
   );
 }
 
+function ExternalListingTabs({
+  mode,
+  listedCount,
+  unlistedCount,
+  onChange,
+}: {
+  mode: ExternalListMode;
+  listedCount: number;
+  unlistedCount: number;
+  onChange: (mode: ExternalListMode) => void;
+}) {
+  return (
+    <div
+      className="mb-3 inline-flex items-center gap-1 rounded-xl bg-zinc-100 p-1"
+      role="tablist"
+      aria-label="外部工具上下架状态"
+    >
+      {(
+        [
+          { id: 'listed' as const, label: '更多', count: listedCount },
+          { id: 'unlisted' as const, label: '未上架', count: unlistedCount },
+        ] as const
+      ).map((item) => {
+        const active = mode === item.id;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            data-external-list-mode={item.id}
+            onClick={() => onChange(item.id)}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold transition',
+              active
+                ? 'bg-zinc-900 text-white shadow-sm'
+                : 'text-zinc-500 hover:bg-white hover:text-zinc-800',
+            )}
+          >
+            {item.label}
+            <span
+              className={cn(
+                'font-normal tabular-nums',
+                active ? 'text-white/70' : 'text-zinc-400',
+              )}
+            >
+              {item.count}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function UnlistedToolGrid({
+  items,
+  savingListingIds,
+  onList,
+  onOpen,
+  emptyText,
+}: {
+  items: MarketShelfCardModel[];
+  savingListingIds: ReadonlySet<string>;
+  onList: (card: MarketShelfCardModel) => void | Promise<void>;
+  onOpen: (card: MarketShelfCardModel) => void;
+  emptyText: string;
+}) {
+  return items.length ? (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+      {items.map((card) => {
+        const saving = savingListingIds.has(card.id);
+        return (
+          <div key={card.id} data-unlisted-tool-id={card.id} className="min-w-0">
+            <MarketShelfCard
+              card={card}
+              variant="compact"
+              enableCompare={false}
+              interactionMode="preview"
+              onOpen={() => onOpen(card)}
+              showDefaultFooter={false}
+              footerActions={
+                <div className="flex items-center justify-between gap-2 border-t border-zinc-100 pt-2">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700">
+                    <i className={cn('fa-solid', saving ? 'fa-spinner fa-spin' : 'fa-circle')} />
+                    {saving ? '上架中' : '未上架'}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    data-tool-listing-action={`list-${saving ? 'saving' : 'direct'}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void onList(card);
+                    }}
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[10px] font-semibold transition',
+                      saving
+                        ? 'cursor-not-allowed border-amber-100 bg-amber-50 text-amber-400'
+                        : 'border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800',
+                    )}
+                  >
+                    <i className={cn('fa-solid', saving ? 'fa-spinner fa-spin' : 'fa-arrow-up')} />
+                    {saving ? '上架中' : '上架'}
+                  </button>
+                </div>
+              }
+            />
+          </div>
+        );
+      })}
+    </div>
+  ) : (
+    <div className="flex min-h-24 items-center justify-center rounded-2xl border border-dashed border-black/10 bg-white/45 px-3 py-8 text-center text-[12px] text-[#86868b]">
+      {emptyText}
+    </div>
+  );
+}
+
 export function PortalToolOpsPanel() {
   const tools = useMarketplaceStore((state) => state.tools);
   const showToast = useMarketplaceStore((state) => state.showToast);
@@ -362,6 +519,7 @@ export function PortalToolOpsPanel() {
   const [kind, setKind] = useState<ToolOpsKind>('internal');
   const [search, setSearch] = useState('');
   const [externalType, setExternalType] = useState<ExternalToolTypeId | 'all'>('all');
+  const [externalListMode, setExternalListMode] = useState<ExternalListMode>('listed');
   const [previewToolId, setPreviewToolId] = useState<string | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
@@ -381,6 +539,14 @@ export function PortalToolOpsPanel() {
   } | null>(null);
   const [internalDrag, setInternalDrag] = useState<InternalSceneDragState | null>(null);
   const internalDragRef = useRef<InternalSceneDragState | null>(null);
+  const [savingToolUnlistingIds, setSavingToolUnlistingIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const savingToolUnlistingIdsRef = useRef<Set<string>>(new Set());
+  const [savingToolListingIds, setSavingToolListingIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const savingToolListingIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const visibleTypes = listVisibleExternalToolTypes(externalTaxonomy);
@@ -403,6 +569,7 @@ export function PortalToolOpsPanel() {
     externalPointerDragRef.current = null;
     setInternalDrag(null);
     internalDragRef.current = null;
+    setExternalListMode('listed');
   }, [workspaceId]);
 
   const viewer = useMemo(
@@ -455,6 +622,22 @@ export function PortalToolOpsPanel() {
       })),
     );
   }, [tools, viewer, getEngagement, engagementById, howtoToolIds]);
+
+  const unlistedExternalCards = useMemo(
+    () =>
+      sortBySourceOrder(
+        listUnlistedExternalToolCards(
+          tools,
+          viewer,
+          getEngagement,
+          howtoToolIds,
+        ).map((card) => ({
+          ...card,
+          sourceOrder: card.externalSortOrder,
+        })),
+      ),
+    [tools, viewer, getEngagement, engagementById, howtoToolIds],
+  );
 
   const externalStats = useMemo(
     () => ({
@@ -545,6 +728,45 @@ export function PortalToolOpsPanel() {
   }, [search, externalCards]);
   const visibleMore = (cards: MarketShelfCardModel[]) =>
     searchIds ? cards.filter((card) => searchIds.has(card.id)) : cards;
+
+  const typeMatchedUnlistedCards = useMemo(
+    () =>
+      externalType === 'all'
+        ? unlistedExternalCards
+        : unlistedExternalCards.filter((card) =>
+            toolMatchesExternalTypeCatalog(
+              card.toolTypeIds?.length ? card.toolTypeIds : card.toolTypeId,
+              externalType,
+              externalTaxonomy,
+            ),
+          ),
+    [externalTaxonomy, externalType, unlistedExternalCards],
+  );
+  const unlistedSearchIds = useMemo(() => {
+    if (!search.trim()) return null;
+    return new Set(
+      searchCapabilitiesByIntent(
+        search,
+        typeMatchedUnlistedCards,
+        typeMatchedUnlistedCards.length,
+      ).map((match) => match.card.id),
+    );
+  }, [search, typeMatchedUnlistedCards]);
+  const visibleUnlistedCards = unlistedSearchIds
+    ? typeMatchedUnlistedCards.filter((card) => unlistedSearchIds.has(card.id))
+    : typeMatchedUnlistedCards;
+  const unlistedOverseasCards = visibleUnlistedCards.filter(
+    (card) => card.region === 'overseas',
+  );
+  const unlistedDomesticCards = visibleUnlistedCards.filter(
+    (card) => card.region === 'domestic',
+  );
+  const unlistedOverseasCount = typeMatchedUnlistedCards.filter(
+    (card) => card.region === 'overseas',
+  ).length;
+  const unlistedDomesticCount = typeMatchedUnlistedCards.filter(
+    (card) => card.region === 'domestic',
+  ).length;
 
   const visibleAllLists: Record<ExternalToolLayoutAllListKey, string[]> = {
     overseasFeaturedIds: allOverseasFeatured.map((card) => card.id),
@@ -755,6 +977,72 @@ export function PortalToolOpsPanel() {
   const removeFromFeatured = (card: MarketShelfCardModel, listId: LayoutListId) =>
     changeFeaturedMembership(card, listId, false);
 
+  const listTool = async (card: MarketShelfCardModel) => {
+    if (savingToolListingIdsRef.current.has(card.id)) return;
+
+    const marketplace = useMarketplaceStore.getState();
+    const tool = marketplace.tools.find((item) => item.id === card.id);
+    if (!tool) {
+      showToast(`未找到工具「${card.title}」，请刷新后重试`);
+      return;
+    }
+    if (tool.published) {
+      showToast(`「${card.title}」已经上架`);
+      return;
+    }
+
+    savingToolListingIdsRef.current = new Set(savingToolListingIdsRef.current).add(card.id);
+    setSavingToolListingIds(savingToolListingIdsRef.current);
+    try {
+      const result = await marketplace.saveToolNow({ ...tool, published: true });
+      showToast(
+        result.synced
+          ? `「${card.title}」已上架并保存`
+          : `「${card.title}」上架保存失败，请稍后重试`,
+      );
+    } catch {
+      showToast(`「${card.title}」上架保存失败，请稍后重试`);
+    } finally {
+      const next = new Set(savingToolListingIdsRef.current);
+      next.delete(card.id);
+      savingToolListingIdsRef.current = next;
+      setSavingToolListingIds(next);
+    }
+  };
+
+  const unlistTool = async (card: MarketShelfCardModel) => {
+    if (savingToolUnlistingIdsRef.current.has(card.id)) return;
+
+    const marketplace = useMarketplaceStore.getState();
+    const tool = marketplace.tools.find((item) => item.id === card.id);
+    if (!tool) {
+      showToast(`未找到工具「${card.title}」，请刷新后重试`);
+      return;
+    }
+    if (!tool.published) {
+      showToast(`「${card.title}」已经下架`);
+      return;
+    }
+
+    savingToolUnlistingIdsRef.current = new Set(savingToolUnlistingIdsRef.current).add(card.id);
+    setSavingToolUnlistingIds(savingToolUnlistingIdsRef.current);
+    try {
+      const result = await marketplace.saveToolNow({ ...tool, published: false });
+      showToast(
+        result.synced
+          ? `「${card.title}」已下架并保存`
+          : `「${card.title}」下架保存失败，请稍后重试`,
+      );
+    } catch {
+      showToast(`「${card.title}」下架保存失败，请稍后重试`);
+    } finally {
+      const next = new Set(savingToolUnlistingIdsRef.current);
+      next.delete(card.id);
+      savingToolUnlistingIdsRef.current = next;
+      setSavingToolUnlistingIds(next);
+    }
+  };
+
   const startExternalDrag = (nextDrag: DragState) => {
     dragStateRef.current = nextDrag;
     setDragState(nextDrag);
@@ -956,11 +1244,45 @@ export function PortalToolOpsPanel() {
     setKind(next);
     setSearch('');
     setExternalType('all');
+    setExternalListMode('listed');
     setPreviewToolId(null);
     finishExternalDrag();
     setInternalDrag(null);
     internalDragRef.current = null;
   };
+
+  const unlistedRegionPanels = (
+    <div className="grid gap-4 lg:grid-cols-2" data-testid="unlisted-external-tools">
+      <ToolListPanel
+        title="海外工具"
+        subtitle="UNLISTED"
+        count={unlistedOverseasCount}
+        tone="overseas"
+      >
+        <UnlistedToolGrid
+          items={unlistedOverseasCards}
+          savingListingIds={savingToolListingIds}
+          onList={listTool}
+          onOpen={(card) => setPreviewToolId(card.id)}
+          emptyText={search.trim() ? '没有匹配的未上架海外工具' : '暂无未上架海外工具'}
+        />
+      </ToolListPanel>
+      <ToolListPanel
+        title="国内工具"
+        subtitle="UNLISTED"
+        count={unlistedDomesticCount}
+        tone="domestic"
+      >
+        <UnlistedToolGrid
+          items={unlistedDomesticCards}
+          savingListingIds={savingToolListingIds}
+          onList={listTool}
+          onOpen={(card) => setPreviewToolId(card.id)}
+          emptyText={search.trim() ? '没有匹配的未上架国内工具' : '暂无未上架国内工具'}
+        />
+      </ToolListPanel>
+    </div>
+  );
 
   return (
     <div
@@ -974,7 +1296,11 @@ export function PortalToolOpsPanel() {
     >
       <div className="rounded-2xl border border-zinc-200/90 bg-white p-3 shadow-[0_8px_24px_-20px_rgba(24,24,27,0.3)]">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="inline-flex w-fit rounded-xl bg-zinc-100 p-1" role="tablist" aria-label="工具运营分类">
+          <div
+            className="inline-flex w-fit rounded-xl bg-zinc-100 p-1"
+            role="tablist"
+            aria-label="工具运营分类"
+          >
             {(
               [
                 {
@@ -1047,7 +1373,7 @@ export function PortalToolOpsPanel() {
         ) : (
           <p className="mt-2.5 flex items-center gap-1.5 text-[10px] leading-relaxed text-zinc-400">
             <i className="fa-regular fa-hand" />
-            点击按钮加入或移出精选；拖动“排序”手柄调整当前列表顺序；操作后自动保存。
+            已上架工具可加入或移出精选并自动保存，也可拖动手柄调整排序；卡片可直接上下架并保存，无需审批。
           </p>
         )}
       </div>
@@ -1130,7 +1456,7 @@ export function PortalToolOpsPanel() {
             onExperience={(tool) => setPreviewToolId(tool.id)}
             onEmptyAction={(scene) =>
               showToast(
-                `「${scene.label}」暂无已发布工具，请到「配置办公场景」完成绑定`,
+                `「${scene.label}」暂无已上架工具，请到「配置办公场景」完成绑定`,
               )
             }
           />
@@ -1177,6 +1503,8 @@ export function PortalToolOpsPanel() {
                     onPointerStart={prepareExternalPointerDrag}
                     onAddToFeatured={addToFeatured}
                     onRemoveFromFeatured={removeFromFeatured}
+                    savingUnlistingIds={savingToolUnlistingIds}
+                    onUnlist={unlistTool}
                     emptyText="暂无海外精选"
                     showHot
                     onOpen={(card) => setPreviewToolId(card.id)}
@@ -1193,6 +1521,8 @@ export function PortalToolOpsPanel() {
                     onPointerStart={prepareExternalPointerDrag}
                     onAddToFeatured={addToFeatured}
                     onRemoveFromFeatured={removeFromFeatured}
+                    savingUnlistingIds={savingToolUnlistingIds}
+                    onUnlist={unlistTool}
                     emptyText="暂无国内精选"
                     showHot
                     onOpen={(card) => setPreviewToolId(card.id)}
@@ -1202,46 +1532,54 @@ export function PortalToolOpsPanel() {
             </section>
 
             <section>
-              <div className="mb-3 flex items-baseline gap-2">
-                <h2 className="text-[17px] font-semibold text-[#1d1d1f]">更多</h2>
-                <span className="text-[12px] text-[#86868b]">
-                  {allOverseasMore.length + allDomesticMore.length}
-                </span>
-              </div>
-              <div className="grid gap-4 lg:grid-cols-2">
-                <ToolListPanel title="海外工具" subtitle="MORE" count={allOverseasMore.length} tone="overseas">
-                  <ToolDropGrid
-                    items={visibleMore(allOverseasMore)}
-                    listId="overseasMoreOrderIds"
-                    sortable={externalDragEnabled && !search.trim()}
-                    featured={false}
-                    actionEnabled={externalDragEnabled}
-                    dragState={dragState}
-                    onPointerStart={prepareExternalPointerDrag}
-                    onAddToFeatured={addToFeatured}
-                    onRemoveFromFeatured={removeFromFeatured}
-                    emptyText={search.trim() ? '没有匹配的海外工具' : '暂无更多海外工具'}
-                    dense
-                    onOpen={(card) => setPreviewToolId(card.id)}
-                  />
-                </ToolListPanel>
-                <ToolListPanel title="国内工具" subtitle="MORE" count={allDomesticMore.length} tone="domestic">
-                  <ToolDropGrid
-                    items={visibleMore(allDomesticMore)}
-                    listId="domesticMoreOrderIds"
-                    sortable={externalDragEnabled && !search.trim()}
-                    featured={false}
-                    actionEnabled={externalDragEnabled}
-                    dragState={dragState}
-                    onPointerStart={prepareExternalPointerDrag}
-                    onAddToFeatured={addToFeatured}
-                    onRemoveFromFeatured={removeFromFeatured}
-                    emptyText={search.trim() ? '没有匹配的国内工具' : '暂无更多国内工具'}
-                    dense
-                    onOpen={(card) => setPreviewToolId(card.id)}
-                  />
-                </ToolListPanel>
-              </div>
+              <ExternalListingTabs
+                mode={externalListMode}
+                listedCount={allOverseasMore.length + allDomesticMore.length}
+                unlistedCount={typeMatchedUnlistedCards.length}
+                onChange={setExternalListMode}
+              />
+              {externalListMode === 'listed' ? (
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <ToolListPanel title="海外工具" subtitle="MORE" count={allOverseasMore.length} tone="overseas">
+                    <ToolDropGrid
+                      items={visibleMore(allOverseasMore)}
+                      listId="overseasMoreOrderIds"
+                      sortable={externalDragEnabled && !search.trim()}
+                      featured={false}
+                      actionEnabled={externalDragEnabled}
+                      dragState={dragState}
+                      onPointerStart={prepareExternalPointerDrag}
+                      onAddToFeatured={addToFeatured}
+                      onRemoveFromFeatured={removeFromFeatured}
+                      savingUnlistingIds={savingToolUnlistingIds}
+                      onUnlist={unlistTool}
+                      emptyText={search.trim() ? '没有匹配的海外工具' : '暂无更多海外工具'}
+                      dense
+                      onOpen={(card) => setPreviewToolId(card.id)}
+                    />
+                  </ToolListPanel>
+                  <ToolListPanel title="国内工具" subtitle="MORE" count={allDomesticMore.length} tone="domestic">
+                    <ToolDropGrid
+                      items={visibleMore(allDomesticMore)}
+                      listId="domesticMoreOrderIds"
+                      sortable={externalDragEnabled && !search.trim()}
+                      featured={false}
+                      actionEnabled={externalDragEnabled}
+                      dragState={dragState}
+                      onPointerStart={prepareExternalPointerDrag}
+                      onAddToFeatured={addToFeatured}
+                      onRemoveFromFeatured={removeFromFeatured}
+                      savingUnlistingIds={savingToolUnlistingIds}
+                      onUnlist={unlistTool}
+                      emptyText={search.trim() ? '没有匹配的国内工具' : '暂无更多国内工具'}
+                      dense
+                      onOpen={(card) => setPreviewToolId(card.id)}
+                    />
+                  </ToolListPanel>
+                </div>
+              ) : (
+                unlistedRegionPanels
+              )}
             </section>
           </>
         ) : (
@@ -1265,6 +1603,8 @@ export function PortalToolOpsPanel() {
                     onPointerStart={prepareExternalPointerDrag}
                     onAddToFeatured={addToFeatured}
                     onRemoveFromFeatured={removeFromFeatured}
+                    savingUnlistingIds={savingToolUnlistingIds}
+                    onUnlist={unlistTool}
                     emptyText="暂无海外精选"
                     showHot
                     onOpen={(card) => setPreviewToolId(card.id)}
@@ -1281,6 +1621,8 @@ export function PortalToolOpsPanel() {
                     onPointerStart={prepareExternalPointerDrag}
                     onAddToFeatured={addToFeatured}
                     onRemoveFromFeatured={removeFromFeatured}
+                    savingUnlistingIds={savingToolUnlistingIds}
+                    onUnlist={unlistTool}
                     emptyText="暂无国内精选"
                     showHot
                     onOpen={(card) => setPreviewToolId(card.id)}
@@ -1290,60 +1632,68 @@ export function PortalToolOpsPanel() {
             </section>
 
             <section>
-              <div className="mb-3 flex items-baseline gap-2">
-                <h2 className="text-[17px] font-semibold text-[#1d1d1f]">更多</h2>
-                <span className="text-[12px] text-[#86868b]">
-                  {categoryOverseasMore.length + categoryDomesticMore.length}
-                </span>
-              </div>
-              <div className="grid gap-4 lg:grid-cols-2">
-                <ToolListPanel
-                  title="海外工具"
-                  subtitle="MORE"
-                  count={categoryOverseasMore.length}
-                  tone="overseas"
-                >
-                  <ToolDropGrid
-                    items={visibleMore(categoryOverseasMore)}
-                    listId={`category:${externalType}:overseas:more`}
-                    sortable={externalDragEnabled && !search.trim()}
-                    featured={false}
-                    actionEnabled={externalDragEnabled}
-                    dragState={dragState}
-                    onPointerStart={prepareExternalPointerDrag}
-                    onAddToFeatured={addToFeatured}
-                    onRemoveFromFeatured={removeFromFeatured}
-                    emptyText={
-                      search.trim() ? '没有匹配的海外工具' : '暂无更多海外工具'
-                    }
-                    dense
-                    onOpen={(card) => setPreviewToolId(card.id)}
-                  />
-                </ToolListPanel>
-                <ToolListPanel
-                  title="国内工具"
-                  subtitle="MORE"
-                  count={categoryDomesticMore.length}
-                  tone="domestic"
-                >
-                  <ToolDropGrid
-                    items={visibleMore(categoryDomesticMore)}
-                    listId={`category:${externalType}:domestic:more`}
-                    sortable={externalDragEnabled && !search.trim()}
-                    featured={false}
-                    actionEnabled={externalDragEnabled}
-                    dragState={dragState}
-                    onPointerStart={prepareExternalPointerDrag}
-                    onAddToFeatured={addToFeatured}
-                    onRemoveFromFeatured={removeFromFeatured}
-                    emptyText={
-                      search.trim() ? '没有匹配的国内工具' : '暂无更多国内工具'
-                    }
-                    dense
-                    onOpen={(card) => setPreviewToolId(card.id)}
-                  />
-                </ToolListPanel>
-              </div>
+              <ExternalListingTabs
+                mode={externalListMode}
+                listedCount={categoryOverseasMore.length + categoryDomesticMore.length}
+                unlistedCount={typeMatchedUnlistedCards.length}
+                onChange={setExternalListMode}
+              />
+              {externalListMode === 'listed' ? (
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <ToolListPanel
+                    title="海外工具"
+                    subtitle="MORE"
+                    count={categoryOverseasMore.length}
+                    tone="overseas"
+                  >
+                    <ToolDropGrid
+                      items={visibleMore(categoryOverseasMore)}
+                      listId={`category:${externalType}:overseas:more`}
+                      sortable={externalDragEnabled && !search.trim()}
+                      featured={false}
+                      actionEnabled={externalDragEnabled}
+                      dragState={dragState}
+                      onPointerStart={prepareExternalPointerDrag}
+                      onAddToFeatured={addToFeatured}
+                      onRemoveFromFeatured={removeFromFeatured}
+                      savingUnlistingIds={savingToolUnlistingIds}
+                      onUnlist={unlistTool}
+                      emptyText={
+                        search.trim() ? '没有匹配的海外工具' : '暂无更多海外工具'
+                      }
+                      dense
+                      onOpen={(card) => setPreviewToolId(card.id)}
+                    />
+                  </ToolListPanel>
+                  <ToolListPanel
+                    title="国内工具"
+                    subtitle="MORE"
+                    count={categoryDomesticMore.length}
+                    tone="domestic"
+                  >
+                    <ToolDropGrid
+                      items={visibleMore(categoryDomesticMore)}
+                      listId={`category:${externalType}:domestic:more`}
+                      sortable={externalDragEnabled && !search.trim()}
+                      featured={false}
+                      actionEnabled={externalDragEnabled}
+                      dragState={dragState}
+                      onPointerStart={prepareExternalPointerDrag}
+                      onAddToFeatured={addToFeatured}
+                      onRemoveFromFeatured={removeFromFeatured}
+                      savingUnlistingIds={savingToolUnlistingIds}
+                      onUnlist={unlistTool}
+                      emptyText={
+                        search.trim() ? '没有匹配的国内工具' : '暂无更多国内工具'
+                      }
+                      dense
+                      onOpen={(card) => setPreviewToolId(card.id)}
+                    />
+                  </ToolListPanel>
+                </div>
+              ) : (
+                unlistedRegionPanels
+              )}
             </section>
           </>
         )}

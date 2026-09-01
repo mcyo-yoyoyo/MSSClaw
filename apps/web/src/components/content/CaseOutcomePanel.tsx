@@ -8,7 +8,6 @@ import {
 } from '@/domain/casePreview';
 import { EngagementActions } from '@/components/content/EngagementActions';
 import { requireLogin } from '@/stores/authGateStore';
-import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 
 interface CaseOutcomePanelProps {
   card: CaseOutcomeCard;
@@ -241,9 +240,7 @@ export function CaseOutcomePanel({
           <button
             type="button"
             onClick={() => {
-              const contentId = card.id;
               const run = () => {
-                useContentEngagementStore.getState().bumpDownload(contentId);
                 onDownload();
               };
               if (requireLogin('download', run)) run();

@@ -4,6 +4,7 @@
  */
 
 import {
+  resolveConfiguredToolMarketShelf,
   resolveToolMarketShelf,
 } from '@/domain/aiToolCategories';
 import { resolveToolLogoUrl } from '@/domain/toolLogo';
@@ -75,6 +76,8 @@ export type MarketPrimaryAction = 'open' | 'howto' | 'detail' | 'run';
 export type MarketShelfCard = {
   id: string;
   kind: MarketShelfKind;
+  /** 看板埋点使用的黑色指标资产类型；业务场景卡不传。 */
+  assetType?: 'tool' | 'skill' | 'agent' | 'office-scene';
   title: string;
   description: string;
   /** 外部工具：厂商名（弱化展示在产品名下） */
@@ -263,7 +266,7 @@ function projectMatchesFilters(
   return true;
 }
 
-export function listMarketToolCards(
+function listMarketToolCardsFromCandidates(
   tools: PrototypeToolSeed[],
   kind: 'external' | 'internal',
   viewer: AssetViewerContext,
@@ -273,7 +276,6 @@ export function listMarketToolCards(
   howtoToolIds?: Set<string>,
 ): MarketShelfCard[] {
   return tools
-    .filter((t) => resolveToolMarketShelf(t) === kind)
     .filter((t) => canViewAsset(t, viewer))
     .filter((t) => toolMatchesFilters(t, org, business))
     .map((t) => {
@@ -333,6 +335,47 @@ export function listMarketToolCards(
       };
     })
     .sort((a, b) => Number(b.featured) - Number(a.featured) || b.heat - a.heat);
+}
+
+export function listMarketToolCards(
+  tools: PrototypeToolSeed[],
+  kind: 'external' | 'internal',
+  viewer: AssetViewerContext,
+  org: OrgPerspectiveSelection = emptyOrgPerspectiveSelection(),
+  business: BusinessScenarioId | 'all' = 'all',
+  engagementOf?: (id: string) => ContentEngagement,
+  howtoToolIds?: Set<string>,
+): MarketShelfCard[] {
+  return listMarketToolCardsFromCandidates(
+    tools.filter((tool) => resolveToolMarketShelf(tool) === kind),
+    kind,
+    viewer,
+    org,
+    business,
+    engagementOf,
+    howtoToolIds,
+  );
+}
+
+/** 门户运营的“未上架”候选：只取明确配置到外部货架、但尚未审批上架的工具。 */
+export function listUnlistedExternalToolCards(
+  tools: PrototypeToolSeed[],
+  viewer: AssetViewerContext,
+  engagementOf?: (id: string) => ContentEngagement,
+  howtoToolIds?: Set<string>,
+): MarketShelfCard[] {
+  return listMarketToolCardsFromCandidates(
+    tools.filter(
+      (tool) =>
+        !tool.published && resolveConfiguredToolMarketShelf(tool) === 'external',
+    ),
+    'external',
+    viewer,
+    emptyOrgPerspectiveSelection(),
+    'all',
+    engagementOf,
+    howtoToolIds,
+  );
 }
 
 /** 首页 / 对齐公司货架：办公场景引用的工具卡（链接优先配置工具主数据） */
@@ -485,7 +528,10 @@ export interface CrossShelfMarketOptions {
   };
 }
 
-/** 首页 / 跨货架：外部 + 内部 + 项目，合并筛选与运营置顶 */
+/** 首页 / 跨货架：外部 + 内部 + 项目，合并筛选与运营置顶。
+ * 外部工具精选已迁移到 external-tool-layout；featuredPins.external 仅为旧调用兼容，
+ * 不再参与外部排序或筛选。
+ */
 export function listCrossShelfMarketCards(opts: CrossShelfMarketOptions): MarketShelfCard[] {
   const {
     tools,
@@ -499,9 +545,14 @@ export function listCrossShelfMarketCards(opts: CrossShelfMarketOptions): Market
     featuredPins,
   } = opts;
 
-  const external = applyMarketFeaturedPins(
-    listMarketToolCards(tools, 'external', viewer, org, business, engagementOf, howtoToolIds),
-    featuredPins.external,
+  const external = listMarketToolCards(
+    tools,
+    'external',
+    viewer,
+    org,
+    business,
+    engagementOf,
+    howtoToolIds,
   );
   const internal = applyMarketFeaturedPins(
     listMarketToolCards(tools, 'internal', viewer, org, business, engagementOf, howtoToolIds),

@@ -312,8 +312,8 @@ export interface PrototypeToolSeed extends AssetOwnershipFields {
   /** 能力上架：进入工具目录 / 可被技能挂载 */
   published: boolean;
   /**
-   * 精选露出：可出现在对应货架「精选推荐」。
-   * 未设置时回退 PLAZA_TOOL_PICKS 静态精选。
+   * 旧版工具精选兼容字段；当前外部工具精选只读取 external-tool-layout。
+   * 新的运营配置不应再依赖此字段。
    */
   featuredInFindCases?: boolean;
   /** 货架业务场景筛选；缺省回退 toolBusinessScenarios 静态映射 */

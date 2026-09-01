@@ -1,8 +1,4 @@
 import { create } from 'zustand';
-import {
-  DEFAULT_EXTERNAL_FEATURED_PINS,
-  LEGACY_EXTERNAL_FEATURED_PINS,
-} from '@/domain/externalToolTaxonomy';
 import type { MarketShelfKind } from '@/domain/marketShelf';
 import {
   canUsePlatformDocsApi,
@@ -25,29 +21,15 @@ const EMPTY: MarketFeaturedPins = {
 };
 
 function defaultPins(): MarketFeaturedPins {
-  return {
-    ...EMPTY,
-    external: [...DEFAULT_EXTERNAL_FEATURED_PINS],
-    internal: [],
-    projects: [],
-  };
+  return { ...EMPTY };
 }
 
-function sameIdList(a: string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((id, i) => id === b[i]);
-}
-
+/** 外部工具精选已迁移到 external-tool-layout；这里仅兼容 MSS 场景卡置顶。 */
 function normalizePins(parsed: Partial<MarketFeaturedPins> | null | undefined): MarketFeaturedPins {
   if (!parsed) return defaultPins();
-  const rawExternal = Array.isArray(parsed.external)
-    ? parsed.external.slice(0, MAX_PER_KIND)
-    : [];
-  const external =
-    !rawExternal.length || sameIdList(rawExternal, LEGACY_EXTERNAL_FEATURED_PINS)
-      ? [...DEFAULT_EXTERNAL_FEATURED_PINS]
-      : rawExternal;
   return {
-    external,
+    // 忽略历史 market-featured.pins.external，避免它成为第二个外部精选来源。
+    external: [],
     internal: Array.isArray(parsed.internal) ? parsed.internal.slice(0, MAX_PER_KIND) : [],
     projects: Array.isArray(parsed.projects) ? parsed.projects.slice(0, MAX_PER_KIND) : [],
   };
@@ -55,7 +37,10 @@ function normalizePins(parsed: Partial<MarketFeaturedPins> | null | undefined): 
 
 function persist(pins: MarketFeaturedPins) {
   if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc(currentWorkspaceId(), 'market-featured', { pins });
+  void scheduleSavePlatformDoc(currentWorkspaceId(), 'market-featured', {
+    // 外部工具布局不再写入旧文档；保留 internal/projects 仅为兼容历史场景卡。
+    pins: { ...pins, external: [] },
+  });
 }
 
 function currentHydrationKey() {
@@ -126,7 +111,8 @@ export const useMarketFeaturedStore = create<MarketFeaturedState>((set, get) => 
     markLocalMutation();
     const pins = {
       ...get().pins,
-      [kind]: ids.slice(0, MAX_PER_KIND),
+      [kind]: kind === 'external' ? [] : ids.slice(0, MAX_PER_KIND),
+      external: [],
     };
     persist(pins);
     set({ pins });
@@ -134,11 +120,15 @@ export const useMarketFeaturedStore = create<MarketFeaturedState>((set, get) => 
 
   togglePin: (kind, id) => {
     markLocalMutation();
+    if (kind === 'external') {
+      set((state) => ({ pins: { ...state.pins, external: [] } }));
+      return;
+    }
     const cur = get().pins[kind] ?? [];
     const next = cur.includes(id)
       ? cur.filter((x) => x !== id)
       : [...cur, id].slice(0, MAX_PER_KIND);
-    const pins = { ...get().pins, [kind]: next };
+    const pins = { ...get().pins, external: [], [kind]: next };
     persist(pins);
     set({ pins });
   },

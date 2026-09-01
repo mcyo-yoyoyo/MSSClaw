@@ -43,6 +43,7 @@ import { useMarketFeaturedStore } from '@/stores/marketFeaturedStore';
 import { useStationAnnouncementStore } from '@/stores/stationAnnouncementStore';
 import { useAiNewsStore } from '@/stores/aiNewsStore';
 import { useAiBriefEmailCopyStore } from '@/stores/aiBriefEmailCopyStore';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 type EditorTarget = string | 'new' | null;
 type OpsSurface =
@@ -100,6 +101,7 @@ export function PortalContentOpsPage() {
   const howtoToast = usePlazaToolGuideStore((s) => s.toast);
   const dismissHowtoToast = usePlazaToolGuideStore((s) => s.dismissToast);
   const bootstrapHowto = usePlazaToolGuideStore((s) => s.bootstrap);
+  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
 
   useEffect(() => {
     bootstrapHowto();
@@ -110,7 +112,7 @@ export function PortalContentOpsPage() {
     useStationAnnouncementStore.getState().hydrate();
     useAiNewsStore.getState().hydrate();
     useAiBriefEmailCopyStore.getState().hydrate();
-  }, [bootstrapHowto]);
+  }, [bootstrapHowto, workspaceId]);
 
   useEffect(() => {
     if (!howtoToast) return;
@@ -277,7 +279,7 @@ export function PortalContentOpsPage() {
               </>
             ) : opsSurface === 'tools' ? (
               <>
-                内部工具复用用户侧「内部办公推荐」卡片；外部工具按筛选项维护精选与顺序。点击卡片查看详情，拖动左下角手柄后自动保存。工具主数据与上下架仍分别在「配置工具」「货架运营」维护。
+                内部工具复用用户侧「内部办公推荐」卡片；外部工具按筛选项维护精选与顺序。点击卡片查看详情，拖动左下角手柄后自动保存；工具可直接上下架并保存，无需审批。
               </>
             ) : opsSurface === 'extaxonomy' ? (
               <>

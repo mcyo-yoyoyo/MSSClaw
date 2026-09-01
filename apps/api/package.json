@@ -12,8 +12,9 @@
     "test:external-tool-layout": "npm run build --silent && node --test tests/externalToolLayout.test.mjs",
     "test:account-credentials": "npm run build --silent && node --test tests/accountCredentials.test.mjs",
     "test:auth-workspace-isolation": "npm run build --silent && node --test tests/authWorkspaceIsolation.test.mjs",
-    "test:market-engagement-auth": "npm run build --silent && node --test tests/marketEngagementAuth.test.mjs",
-    "test:portal-analytics": "npm run build --silent && node --test tests/portalAnalyticsGuest.test.mjs",
+    "test:market-engagement-auth": "npm run build --silent && node --test tests/marketEngagementAuth.test.mjs tests/marketEngagementEvents.test.mjs tests/marketEngagementCatalog.test.mjs tests/marketEngagementSqlite.test.mjs",
+    "test:market-engagement-sqlite": "npm run build --silent && node --test tests/marketEngagementSqlite.test.mjs",
+    "test:portal-analytics": "npm run build --silent && node --test tests/portalAnalyticsGuest.test.mjs tests/trustProxy.test.mjs tests/portalAnalyticsSqlite.test.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed"

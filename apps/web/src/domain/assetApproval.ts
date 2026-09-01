@@ -63,7 +63,8 @@ export const ASSET_APPROVAL_REASON_LABELS: Record<AssetApprovalReason, string> =
   publish_executable: '发布资产（终审后前台展示）',
   visibility_public: '公开可见（跨部门/领域）',
   update_version: '版本更新上架',
-  unpublish_skill: '下架 Skill（全部版本隐藏）',
+  // 保留历史 reason id；工具与 Skill 共用该下架审批事由。
+  unpublish_skill: '下架资产（终审后前台隐藏）',
 };
 
 export type SkillUnpublishMode = 'all' | 'versions';

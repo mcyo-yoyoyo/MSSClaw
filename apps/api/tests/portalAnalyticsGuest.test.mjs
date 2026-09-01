@@ -26,8 +26,8 @@ function analyticsStub() {
       calls.gateHits.push(input);
       return { accepted: true, date: '2026-08-28' };
     },
-    getReport: async (workspaceId, days) => {
-      calls.reports.push({ workspaceId, days });
+    getReport: async (workspaceId, days, from, to) => {
+      calls.reports.push({ workspaceId, days, from, to });
       return { ok: true };
     },
   };
@@ -49,13 +49,16 @@ function controllerWith(session = { ok: false, error: '未登录' }) {
   };
 }
 
-function recordingPrisma(queryRows) {
+function recordingPrisma(queryRows, centerRows = []) {
   const executeCalls = [];
   const queryCalls = [];
   return {
     executeCalls,
     queryCalls,
     prisma: {
+      centerRecord: {
+        findMany: async () => centerRows,
+      },
       $executeRaw: async (strings, ...values) => {
         executeCalls.push({ sql: strings.join('?'), values });
         return 1;
@@ -121,6 +124,37 @@ test('anonymous page views reject missing, unprefixed and non-v4 visitor IDs', a
       (error) => error?.getStatus?.() === 400,
     );
     assert.equal(analytics.calls.pageViews.length, 0);
+  }
+});
+
+test('analytics inputs reject non-string values as bad requests', async () => {
+  for (const field of ['eventId', 'routeKey', 'rawVisitorId', 'journeyVisitorId']) {
+    const db = recordingPrisma();
+    const service = new PortalAnalyticsService(db.prisma);
+    await assert.rejects(
+      service.recordPageView(
+        pageInput({ [field]: {} }),
+      ),
+      (error) => error?.getStatus?.() === 400,
+    );
+    assert.equal(db.executeCalls.length, 0);
+  }
+
+  for (const field of ['eventId', 'action', 'routeKey', 'visitorId']) {
+    const db = recordingPrisma();
+    const service = new PortalAnalyticsService(db.prisma);
+    await assert.rejects(
+      service.recordGateHit({
+        workspaceId: 'ws-test',
+        eventId: 'gate-00001',
+        action: 'favorite',
+        routeKey: 'market-tool',
+        visitorId: VISITOR_UUID,
+        [field]: {},
+      }),
+      (error) => error?.getStatus?.() === 400,
+    );
+    assert.equal(db.executeCalls.length, 0);
   }
 });
 
@@ -195,7 +229,24 @@ test('analytics report remains restricted to super_admin', async () => {
 
   const admin = controllerWith({ ok: true, user: { id: 'admin', platformRole: 'super_admin' } });
   await admin.controller.getReport('ws-test', 'Bearer token', undefined, '30');
-  assert.deepEqual(admin.analytics.calls.reports, [{ workspaceId: 'ws-test', days: '30' }]);
+  assert.deepEqual(admin.analytics.calls.reports, [
+    { workspaceId: 'ws-test', days: '30', from: undefined, to: undefined },
+  ]);
+
+  await admin.controller.getReport(
+    'ws-test',
+    'Bearer token',
+    undefined,
+    undefined,
+    '2026-08-01',
+    '2026-08-31',
+  );
+  assert.deepEqual(admin.analytics.calls.reports[1], {
+    workspaceId: 'ws-test',
+    days: undefined,
+    from: '2026-08-01',
+    to: '2026-08-31',
+  });
 });
 
 test('page-view writes hash guest/account separately and share one browser journey hash', async () => {
@@ -377,6 +428,20 @@ test('reports expose guest/user splits and a time-ordered gate conversion funnel
     if (sql.includes('AS "convertedUv"')) {
       return [{ action: 'favorite', hits: 8, guestUv: 4, convertedUv: 1 }];
     }
+    if (sql.includes('FROM "MarketEngagement" AS m')) {
+      return [{
+        views: 120,
+        favorites: 18,
+        likes: 42,
+        dislikes: 6,
+        redirects: 75,
+        trackingStartedAt: new Date('2026-08-31T01:00:00.000Z'),
+        updatedAt: new Date('2026-08-31T02:00:00.000Z'),
+      }];
+    }
+    if (sql.includes('FROM "MarketEngagementEvent" AS e')) {
+      return [{ date: today, views: 9, favorites: 2, likes: 3, dislikes: 1, redirects: 4 }];
+    }
     throw new Error(`unexpected query: ${sql}`);
   });
   const report = await new PortalAnalyticsService(db.prisma).getReport('ws-test', 1);
@@ -395,9 +460,225 @@ test('reports expose guest/user splits and a time-ordered gate conversion funnel
   assert.deepEqual(report.gateFunnel, [
     { action: 'favorite', hits: 8, guestUv: 4, convertedUv: 1, conversionRate: 0.25 },
   ]);
+  assert.deepEqual(report.behavior.totals, {
+    views: 9,
+    favorites: 2,
+    likes: 3,
+    dislikes: 1,
+    redirects: 4,
+    downloads: 0,
+  });
+  assert.deepEqual(report.behavior.currentTotals, {
+    views: 120,
+    favorites: 18,
+    likes: 42,
+    dislikes: 6,
+    redirects: 75,
+    downloads: 0,
+  });
+  assert.equal(report.behavior.series[0].date, today);
+  assert.equal(report.behavior.trackingStartedAt, '2026-08-31T01:00:00.000Z');
   const funnelSql = db.queryCalls.find((call) => call.sql.includes('AS "convertedUv"')).sql;
   assert.match(funnelSql, /l\."occurredAt" >= g\."occurredAt"/);
   const totalSql = db.queryCalls.find((call) => call.sql.includes('MAX("occurredAt")')).sql;
   assert.match(totalSql, /p\."visitorType" = 'user' THEN p\."visitorHash"/);
   assert.match(totalSql, /l\."occurredAt" >= p\."occurredAt"/);
+});
+
+test('custom ranges are inclusive, bounded and reject invalid dates', async () => {
+  const db = recordingPrisma(({ sql }) => {
+    if (sql.includes('MAX("occurredAt")')) return [{}];
+    if (sql.includes('PortalDailyLogin')) return [{ users: 0 }];
+    if (sql.includes('FROM "MarketEngagement" AS m')) return [{}];
+    return [];
+  });
+  const service = new PortalAnalyticsService(db.prisma);
+  const report = await service.getReport(
+    'ws-test',
+    undefined,
+    '2026-08-29',
+    '2026-08-31',
+  );
+  assert.deepEqual(report.range, {
+    days: 3,
+    from: '2026-08-29',
+    to: '2026-08-31',
+  });
+  assert.deepEqual(report.series.map((row) => row.date), [
+    '2026-08-29',
+    '2026-08-30',
+    '2026-08-31',
+  ]);
+  assert.deepEqual(report.behavior.series.map((row) => row.date), [
+    '2026-08-29',
+    '2026-08-30',
+    '2026-08-31',
+  ]);
+
+  for (const [from, to] of [
+    ['2026-08-31', undefined],
+    ['2026-08-31', '2026-08-30'],
+    ['2026-02-30', '2026-03-01'],
+    ['2026-05-01', '2026-08-31'],
+    ['2026-08-31', '2999-01-01'],
+  ]) {
+    await assert.rejects(
+      service.getReport('ws-test', undefined, from, to),
+      (error) => error?.getStatus?.() === 400,
+    );
+  }
+});
+
+test('black asset report excludes portal-content and treats only explicit redirect as redirect', async () => {
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+  const centerRows = [
+    {
+      id: 'tool-company',
+      kind: 'tool',
+      payload: { id: 'tool-company', name: '公司工具', sourceType: 'company', published: true },
+    },
+    {
+      id: 'tool-other',
+      kind: 'tool',
+      payload: { id: 'tool-other', name: '其他工具', published: true },
+    },
+    {
+      id: 'portal-only',
+      kind: 'portal-content',
+      payload: { items: [{ id: 'portal-only', name: '门户内容' }] },
+    },
+  ];
+  const db = recordingPrisma(({ sql }) => {
+    if (sql.includes('MAX("occurredAt")')) return [{}];
+    if (sql.includes('GROUP BY p."dateKey"') || sql.includes('GROUP BY p."routeKey"')) return [];
+    if (sql.includes('MIN("eventAt")')) {
+      return [{ visitorHash: 'user-hash', firstDate: today, firstAt: new Date(), lastAt: new Date() }];
+    }
+    if (sql.includes('PortalDailyLogin')) return [{ users: 0 }];
+    if (sql.includes('AS "convertedUv"')) return [];
+    if (sql.includes('GROUP BY "dateKey", "visitorHash"')) return [];
+    if (sql.includes('GROUP BY e."dateKey", e."contentId"')) {
+      return [
+        {
+          date: today,
+          contentId: 'tool-company',
+          assetType: 'unknown',
+          views: 2,
+          favorites: 1,
+          likes: 1,
+          dislikes: 0,
+          redirects: 3,
+          downloads: 2,
+        },
+        {
+          date: today,
+          contentId: 'portal-only',
+          assetType: 'tool',
+          views: 200,
+          favorites: 200,
+          likes: 200,
+          dislikes: 0,
+          redirects: 200,
+          downloads: 200,
+        },
+        {
+          date: today,
+          contentId: 'tool-company',
+          assetType: 'agent',
+          views: 500,
+          favorites: 500,
+          likes: 500,
+          dislikes: 500,
+          redirects: 500,
+          downloads: 500,
+        },
+      ];
+    }
+    if (sql.includes('m."contentId" AS "contentId"')) {
+      return [
+        {
+          contentId: 'tool-company',
+          views: 10,
+          favorites: 2,
+          likes: 3,
+          dislikes: 1,
+          redirects: 4,
+          downloads: 5,
+          updatedAt: new Date(),
+        },
+        {
+          contentId: 'portal-only',
+          views: 1000,
+          favorites: 1000,
+          likes: 1000,
+          dislikes: 0,
+          redirects: 1000,
+          downloads: 1000,
+          updatedAt: new Date(),
+        },
+      ];
+    }
+    if (sql.includes('AS "events"')) {
+      return [
+        { contentId: 'tool-company', assetType: 'unknown', action: 'use', events: 50, uv: 50 },
+        { contentId: 'tool-company', assetType: 'unknown', action: 'redirect', events: 2, uv: 2 },
+        { contentId: 'tool-company', assetType: 'agent', action: 'redirect', events: 500, uv: 500 },
+        { contentId: 'portal-only', assetType: 'tool', action: 'redirect', events: 999, uv: 999 },
+      ];
+    }
+    if (sql.includes('e."visitorHash" AS "visitorHash"')) {
+      return [
+        { contentId: 'tool-company', assetType: 'unknown', visitorHash: 'visitor-1', downloads: 2 },
+        { contentId: 'tool-company', assetType: 'agent', visitorHash: 'visitor-forged', downloads: 500 },
+        { contentId: 'portal-only', assetType: 'tool', visitorHash: 'visitor-2', downloads: 999 },
+      ];
+    }
+    if (sql.includes('AND "action" = \'call\'')) {
+      return [
+        { contentId: 'tool-company', assetType: 'unknown', visitorHash: 'visitor-1', success: 1, durationMs: 10, inputTokens: 1, outputTokens: 2 },
+        { contentId: 'tool-company', assetType: 'agent', visitorHash: 'visitor-forged', success: 1, durationMs: 10, inputTokens: 500, outputTokens: 500 },
+        { contentId: 'portal-only', assetType: 'tool', visitorHash: 'visitor-2', success: 1, durationMs: 10, inputTokens: 100, outputTokens: 100 },
+      ];
+    }
+    if (sql.includes('FROM "MarketEngagement" AS m')) {
+      return [{ views: 10, favorites: 2, likes: 3, dislikes: 1, redirects: 4, downloads: 5 }];
+    }
+    return [];
+  }, centerRows);
+
+  const report = await new PortalAnalyticsService(db.prisma).getReport('ws-test', 1);
+  assert.equal(report.assets.summary.company, 1);
+  assert.deepEqual(report.assets.rows.map((row) => row.contentId), ['tool-company', 'tool-other']);
+  assert.equal(report.assets.rows[0].redirects, 2);
+  assert.deepEqual(report.behavior.totals, {
+    views: 2,
+    favorites: 1,
+    likes: 1,
+    dislikes: 0,
+    redirects: 3,
+    downloads: 2,
+  });
+  assert.deepEqual(report.behavior.currentTotals, {
+    views: 10,
+    favorites: 2,
+    likes: 3,
+    dislikes: 1,
+    redirects: 4,
+    downloads: 5,
+  });
+  assert.deepEqual(report.behavior.downloads, {
+    count: 2,
+    uv: 1,
+    currentCount: 5,
+    currentUv: 0,
+  });
+  assert.equal(report.calls.total, 1);
+  assert.equal(report.overview.d1Retention, null);
+  assert.equal(report.overview.d7Retention, null);
+  assert.equal(report.overview.d30Retention, null);
 });

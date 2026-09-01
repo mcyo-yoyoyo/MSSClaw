@@ -1,5 +1,4 @@
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
-import { buildExternalToolSeedsFromCatalog } from '@/domain/buildExternalToolSeeds';
 import { EXTERNAL_TOOL_SHELF_EXCLUDE_IDS } from '@/domain/externalToolTaxonomy';
 import { internalToolAssetUrl } from '@/domain/toolLogo';
 
@@ -20,7 +19,7 @@ export const RETIRED_DEMO_TOOL_IDS = [
   ...EXTERNAL_TOOL_SHELF_EXCLUDE_IDS,
 ] as const;
 
-/** 门户 Tool 种子：公司内部 AI（外部 SaaS 见 CSV catalog） */
+/** 门户 Tool 种子：仅保留离线兼容的公司内部工具；外部工具统一来自 marketplace API。 */
 const CORE_PROTOTYPE_TOOLS: PrototypeToolSeed[] = [
   // —— 业界常用 AI 工具架（场景导航默认展示；有 ai-saas 标签时由 catalog 覆盖）——
   {
@@ -762,11 +761,10 @@ const CORE_PROTOTYPE_TOOLS: PrototypeToolSeed[] = [
   },
 ];
 
-/** 外部 SaaS 以 CSV catalog 为准；仅保留公司内部工具种子 */
-export const PROTOTYPE_TOOLS: PrototypeToolSeed[] = [
-  ...CORE_PROTOTYPE_TOOLS.filter((t) => !t.tags?.includes('ai-saas')),
-  ...buildExternalToolSeedsFromCatalog(),
-];
+/** 外部工具不再从前端静态目录灌入，避免离线种子绕过数据库的上架状态。 */
+export const PROTOTYPE_TOOLS: PrototypeToolSeed[] = CORE_PROTOTYPE_TOOLS.filter(
+  (t) => !t.tags?.includes('ai-saas'),
+);
 
 export function pruneRetiredDemoTools(
   tools: PrototypeToolSeed[],

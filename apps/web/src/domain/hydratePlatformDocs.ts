@@ -38,8 +38,8 @@ export async function hydrateAllPlatformDocs(workspaceId?: string): Promise<void
   const { useInternalOfficeSceneCatalogStore } = await import(
     '@/stores/internalOfficeSceneCatalogStore'
   );
+  const { useExternalToolLayoutStore } = await import('@/stores/externalToolLayoutStore');
   const { useOrgTaxonomyStore } = await import('@/stores/orgTaxonomyStore');
-  const { useMarketFeaturedStore } = await import('@/stores/marketFeaturedStore');
   const { useMarketFavoriteStore } = await import('@/stores/marketFavoriteStore');
   const { useRecentMarketStore } = await import('@/stores/recentMarketStore');
   const { useMarketHiddenStore } = await import('@/stores/marketHiddenStore');
@@ -59,8 +59,8 @@ export async function hydrateAllPlatformDocs(workspaceId?: string): Promise<void
   useBusinessScenarioCatalogStore.getState().hydrate();
   useExternalTaxonomyCatalogStore.getState().hydrate();
   useInternalOfficeSceneCatalogStore.getState().hydrate();
+  useExternalToolLayoutStore.getState().hydrate(ws);
   useOrgTaxonomyStore.getState().hydrate();
-  useMarketFeaturedStore.getState().hydrate();
   useMarketFavoriteStore.getState().hydrate();
   useRecentMarketStore.getState().hydrate();
   useMarketHiddenStore.getState().hydrate();

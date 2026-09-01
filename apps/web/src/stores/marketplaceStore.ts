@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { backfillAgentSeedMetadata } from '@/domain/prototype/agents';
-import { pruneRetiredDemoTools } from '@/domain/prototype/tools';
 import type {
   PrototypeAgentSeed,
   PrototypeAutomation,
@@ -228,7 +227,9 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
       set({
         ...snapshot,
         agents: backfillAgentSeedMetadata(snapshot.agents ?? []),
-        tools: pruneRetiredDemoTools(snapshot.tools ?? []),
+        // API marketplace 是工具唯一运行时来源；未上架/下架状态由服务端快照保留，
+        // 不能再用前端静态目录或 retired 列表二次过滤。
+        tools: snapshot.tools ?? [],
         ready: true,
         loadError: null,
       });

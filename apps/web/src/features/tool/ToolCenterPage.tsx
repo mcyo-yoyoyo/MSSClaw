@@ -15,7 +15,7 @@ import { SharedCatalogEmptyHint } from '@/components/common/SharedCatalogEmptyHi
 import { AssetAccentMark, assetAccentBorderStyle } from '@/components/brand/AssetAccentMark';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { resolveToolLogoUrl } from '@/domain/toolLogo';
-import { resolveToolMarketShelf } from '@/domain/aiToolCategories';
+import { resolveConfiguredToolMarketShelf } from '@/domain/aiToolCategories';
 import {
   emptyEngagement,
   type ContentEngagement,
@@ -40,15 +40,18 @@ const TOOL_PUBLISH_FILTERS: Array<{
   value: Exclude<ToolPublishFilter, 'all'>;
   label: string;
 }> = [
-  { value: 'unpublished', label: '未发布' },
-  { value: 'published', label: '已发布' },
+  { value: 'unpublished', label: '未上架' },
+  { value: 'published', label: '已上架' },
 ];
 
-function matchesToolType(tool: Parameters<typeof resolveToolMarketShelf>[0], filter: ToolTypeFilter) {
+function matchesToolType(
+  tool: Parameters<typeof resolveConfiguredToolMarketShelf>[0],
+  filter: ToolTypeFilter,
+) {
   if (filter === 'all') return true;
   if (filter === 'overseas') return tool.sourceType === 'external' && tool.region === 'overseas';
   if (filter === 'domestic') return tool.sourceType === 'external' && tool.region === 'domestic';
-  return resolveToolMarketShelf(tool) === 'internal';
+  return resolveConfiguredToolMarketShelf(tool) === 'internal';
 }
 
 function matchesToolPublishStatus(
@@ -173,10 +176,12 @@ export function ToolCenterPage() {
     // 口径：后端 engagement 记录。tool.invokes 带演示种子基数，不作统计口径。
     const sum = (pick: (e: ContentEngagement) => number) =>
       tools.reduce((n, t) => n + pick(engagementById[t.id] ?? emptyEngagement(t.id)), 0);
-    const company = tools.filter((t) => resolveToolMarketShelf(t) === 'internal').length;
+    const company = tools.filter(
+      (t) => resolveConfiguredToolMarketShelf(t) === 'internal',
+    ).length;
     return [
       ['Tool 总数', tools.length],
-      ['已发布', pub],
+      ['已上架', pub],
       ['外部工具', external],
       ['公司工具', company],
       // uses 记的是「跳转官网」：详情页 / 货架 / 首页场景三处打开外链时累加
@@ -249,7 +254,7 @@ export function ToolCenterPage() {
               })}
             </div>
             <span className="mx-0.5 hidden h-5 w-px bg-zinc-200 sm:block" aria-hidden="true" />
-            <div className="flex items-center gap-1.5" role="group" aria-label="发布状态">
+            <div className="flex items-center gap-1.5" role="group" aria-label="上下架状态">
               {TOOL_PUBLISH_FILTERS.map((option) => {
                 const active = toolPublishFilter === option.value;
                 const count = tools.filter(
@@ -316,7 +321,7 @@ export function ToolCenterPage() {
         <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
           {list.length ? (
             list.map((t) => {
-              const shelf = resolveToolMarketShelf(t);
+              const shelf = resolveConfiguredToolMarketShelf(t);
               const showLogo = shelf === 'external' || shelf === 'internal';
               return (
                 <div
@@ -350,7 +355,7 @@ export function ToolCenterPage() {
                                 : 'bg-zinc-100 text-zinc-500',
                             )}
                           >
-                            {t.published ? '已发布' : '未发布'}
+                            {t.published ? '已上架' : '未上架'}
                           </span>
                           {(t.sourceType === 'external' || isAiSaasTool(t)) && (
                             <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700">

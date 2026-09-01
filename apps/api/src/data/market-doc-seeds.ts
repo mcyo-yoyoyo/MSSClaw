@@ -4,6 +4,56 @@
  * 前端只读取平台文档接口；这些值仅在工作区首次创建相应文档时写入数据库。
  * 后续运营修改均以数据库中的文档为准。
  */
+export const SEED_MARKET_ENGAGEMENT_STATIC_CONTENT_IDS = [
+  // apps/web/src/domain/portalMap.ts · FEATURED_SCENARIOS
+  'marketing-intel',
+  'knowledge-qa',
+  'price-offer-monitor',
+  'ecommerce-review',
+  'l10n-translation',
+  'retail-training',
+  'customer-service',
+  'ops-analytics',
+  'fulfillment-settlement',
+  'knowledge-deposit',
+  'hr-interview',
+  // apps/web/src/domain/prototype/portalContent.ts · PROTOTYPE_PORTAL_CONTENT
+  'portal-case-latam-price',
+  'portal-case-apac-voc',
+  'portal-case-eu-compliance',
+  'portal-insight-q3-campaign',
+  'portal-insight-apac-review',
+  'portal-train-nova-coach',
+  'portal-train-hr-resume',
+  'portal-news-ai-frontier',
+  'portal-news-mea-so',
+  'portal-case-service-sop',
+  'portal-insight-retail-pi',
+  'portal-train-quality-audit',
+  'portal-news-ext-tools',
+  'portal-case-channel-rebate',
+  'portal-playbook-price-offer',
+  'portal-playbook-review-relay',
+  'portal-insight-russia-dos',
+  'portal-train-ppt-office',
+  'portal-news-latam-launch',
+  'portal-case-hr-batch',
+  'portal-insight-sentiment',
+  'portal-train-rag-service',
+  'portal-case-service-battery',
+  'portal-playbook-l10n-pack',
+  'portal-case-l10n-sku',
+  'portal-news-l10n-glossary',
+  'portal-case-retail-coach-gold',
+  'portal-playbook-retail-coach',
+  'portal-case-so-mea-gold',
+  'portal-case-fulfillment-recon',
+  'portal-playbook-fulfillment',
+  'portal-case-knowledge-archive',
+  'portal-playbook-knowledge',
+  'portal-train-knowledge-rag',
+] as const;
+
 export const SEED_EXTERNAL_TAXONOMY = {
   version: 2,
   types: [

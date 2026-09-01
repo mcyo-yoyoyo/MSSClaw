@@ -215,6 +215,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
         card: {
           id: s.id,
           kind: 'projects',
+          assetType: 'skill',
           title: skillDisplayName(s),
           description: skillDisplayDesc(s).replace(/^【[^】]+】/, '').trim() || '暂无描述',
           outcomeHint: skillDisplayDesc(s).replace(/^【[^】]+】/, '').trim() || skillDisplayName(s),
@@ -515,12 +516,22 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
               <div key={s.id}>
                 <MarketShelfCard
                   card={card}
+                  interactionMode="preview"
+                  showDefaultFooter={false}
                   primaryLabel="详情"
                   onOpen={() => setDetail(s)}
                   onPrimary={() => setDetail(s)}
                   footerActions={
-                    <div className="grid grid-cols-5 gap-1.5">
-                      <button type="button" onClick={() => handleInvoke(s)} className="rounded-lg bg-zinc-900 py-1.5 text-[10px] font-semibold text-white">调用</button>
+                    <div className={cn('grid gap-1.5', isSkillCallable(s) ? 'grid-cols-5' : 'grid-cols-4')}>
+                      {isSkillCallable(s) ? (
+                        <button
+                          type="button"
+                          onClick={() => handleInvoke(s)}
+                          className="rounded-lg bg-zinc-900 py-1.5 text-[10px] font-semibold text-white"
+                        >
+                          调用
+                        </button>
+                      ) : null}
                       <button type="button" onClick={() => { downloadSkillFile(s); showToast(`已下载 Skill 包 ${skillDisplayName(s)}.skill.zip`); }} className="rounded-lg bg-zinc-100 py-1.5 text-[10px] font-medium text-zinc-600">下载</button>
                       <button type="button" onClick={() => setEditorTarget(s.id)} className="rounded-lg bg-zinc-100 py-1.5 text-[10px] font-medium text-zinc-600">编辑</button>
                       <button type="button" onClick={() => setOpsRequest({ skill: s, kind: 'update' })} className="rounded-lg bg-sky-50 py-1.5 text-[10px] font-medium text-sky-900">更新</button>

@@ -1,13 +1,13 @@
 /**
- * AI工具完整清单-1.0.5.xlsx · 工具目录（A1:M90）的后端快照。
+ * 外部工具统一目录种子。
  *
- * 规则：同名产品合并；toolTypeIds 保留多分类；externalCategoryRanks 保留分类内排序。
- * 请通过源 Excel 重新生成，不要手工维护条目内容。
+ * 运行时权威是 workspace marketplace 快照；此清单只用于首次初始化和显式目录版本迁移。
+ * 同名产品合并；toolTypeIds 保留多分类；externalCategoryRanks 保留分类内排序。
  */
-/** 源表版本 + 后端身份迁移版本；后缀变化会触发一次数据库快照修复。 */
-export const EXTERNAL_TOOLS_EXCEL_VERSION = '1.0.5-stable-id-1';
+export const EXTERNAL_TOOLS_EXCEL_VERSION = '1.1.0-canonical-external-tools';
 export const EXTERNAL_TOOLS_EXCEL = [
   {
+    "id": "tool-saas-chatgpt",
     "name": "ChatGPT",
     "company": "OpenAI",
     "region": "overseas",
@@ -47,6 +47,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-comments"
   },
   {
+    "id": "tool-saas-claude",
     "name": "Claude",
     "company": "Anthropic",
     "region": "overseas",
@@ -77,6 +78,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-comments"
   },
   {
+    "id": "tool-saas-deepseek",
     "name": "DeepSeek",
     "company": "深度求索",
     "region": "domestic",
@@ -107,6 +109,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-comments"
   },
   {
+    "id": "tool-saas-kimi",
     "name": "Kimi",
     "company": "月之暗面",
     "region": "domestic",
@@ -140,6 +143,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-file-powerpoint"
   },
   {
+    "id": "tool-saas-perplexity",
     "name": "Perplexity",
     "company": "Perplexity AI",
     "region": "overseas",
@@ -170,6 +174,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-magnifying-glass"
   },
   {
+    "id": "tool-saas-metaso",
     "name": "秘塔AI搜索",
     "company": "秘塔科技",
     "region": "domestic",
@@ -200,6 +205,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-magnifying-glass"
   },
   {
+    "id": "tool-ext-notebooklm",
     "name": "NotebookLM",
     "company": "Google",
     "region": "overseas",
@@ -233,6 +239,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-file-powerpoint"
   },
   {
+    "id": "tool-saas-notion-ai",
     "name": "Notion AI",
     "company": "Notion",
     "region": "overseas",
@@ -263,6 +270,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-book"
   },
   {
+    "id": "tool-saas-gamma",
     "name": "Gamma",
     "company": "Gamma Tech",
     "region": "overseas",
@@ -293,6 +301,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-file-powerpoint"
   },
   {
+    "id": "tool-saas-midjourney",
     "name": "Midjourney",
     "company": "Midjourney, Inc.",
     "region": "overseas",
@@ -326,6 +335,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-video"
   },
   {
+    "id": "tool-saas-jimeng",
     "name": "即梦AI",
     "company": "字节跳动",
     "region": "domestic",
@@ -359,6 +369,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-video"
   },
   {
+    "id": "tool-saas-runway",
     "name": "Runway",
     "company": "Runway AI",
     "region": "overseas",
@@ -389,6 +400,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-video"
   },
   {
+    "id": "tool-ext-elevenlabs",
     "name": "ElevenLabs",
     "company": "ElevenLabs",
     "region": "overseas",
@@ -419,6 +431,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-microphone"
   },
   {
+    "id": "tool-ext-t1fd65bfeda",
     "name": "飞书妙记",
     "company": "飞书",
     "region": "domestic",
@@ -449,6 +462,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-users"
   },
   {
+    "id": "tool-saas-cursor",
     "name": "Cursor",
     "company": "Anysphere",
     "region": "overseas",
@@ -479,6 +493,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-code"
   },
   {
+    "id": "tool-ext-t03d8f35876",
     "name": "通义灵码",
     "company": "阿里云",
     "region": "domestic",
@@ -509,6 +524,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-code"
   },
   {
+    "id": "tool-ext--coze",
     "name": "扣子 Coze",
     "company": "字节跳动",
     "region": "domestic",
@@ -539,6 +555,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-robot"
   },
   {
+    "id": "tool-saas-gemini",
     "name": "Gemini",
     "company": "Google",
     "region": "overseas",
@@ -577,6 +594,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-book"
   },
   {
+    "id": "tool-ext-grok",
     "name": "Grok",
     "company": "xAI",
     "region": "overseas",
@@ -607,6 +625,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-comments"
   },
   {
+    "id": "tool-saas-doubao",
     "name": "豆包",
     "company": "字节跳动",
     "region": "domestic",
@@ -643,6 +662,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-book"
   },
   {
+    "id": "tool-saas-tongyi",
     "name": "Qwen",
     "company": "阿里云",
     "region": "domestic",
@@ -673,6 +693,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-comments"
   },
   {
+    "id": "tool-ext-ai",
     "name": "纳米AI",
     "company": "360 集团",
     "region": "domestic",
@@ -703,6 +724,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-magnifying-glass"
   },
   {
+    "id": "tool-ext-t8563e24dc0",
     "name": "得到大脑",
     "company": "得到",
     "region": "domestic",
@@ -733,6 +755,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-book"
   },
   {
+    "id": "tool-ext-grammarly",
     "name": "Grammarly",
     "company": "Grammarly",
     "region": "overseas",
@@ -763,6 +786,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-book"
   },
   {
+    "id": "tool-ext-beautiful-ai",
     "name": "Beautiful.ai",
     "company": "Beautiful.ai",
     "region": "overseas",
@@ -793,6 +817,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-file-powerpoint"
   },
   {
+    "id": "tool-ext-wps-ai",
     "name": "WPS AI",
     "company": "金山办公",
     "region": "domestic",
@@ -823,6 +848,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-file-powerpoint"
   },
   {
+    "id": "tool-ext-te06e975987",
     "name": "讯飞智文",
     "company": "科大讯飞",
     "region": "domestic",
@@ -853,6 +879,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-file-powerpoint"
   },
   {
+    "id": "tool-saas-tongyi-2",
     "name": "Qwen Image",
     "company": "阿里云",
     "region": "domestic",
@@ -883,6 +910,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-image"
   },
   {
+    "id": "tool-ext-google-flow-veo",
     "name": "Google Flow / Veo",
     "company": "Google DeepMind",
     "region": "overseas",
@@ -913,6 +941,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-video"
   },
   {
+    "id": "tool-ext-heygen",
     "name": "HeyGen",
     "company": "HeyGen",
     "region": "overseas",
@@ -943,6 +972,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-video"
   },
   {
+    "id": "tool-saas-kling",
     "name": "可灵AI",
     "company": "快手",
     "region": "domestic",
@@ -976,6 +1006,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-image"
   },
   {
+    "id": "tool-ext-suno",
     "name": "Suno",
     "company": "Suno, Inc.",
     "region": "overseas",
@@ -1006,6 +1037,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-microphone"
   },
   {
+    "id": "tool-ext-mureka",
     "name": "Mureka",
     "company": "昆仑万维",
     "region": "domestic",
@@ -1036,6 +1068,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-microphone"
   },
   {
+    "id": "tool-ext-otter-ai",
     "name": "Otter.ai",
     "company": "Otter.ai",
     "region": "overseas",
@@ -1066,6 +1099,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-users"
   },
   {
+    "id": "tool-ext-zoom-ai-companion",
     "name": "Zoom AI Companion",
     "company": "Zoom",
     "region": "overseas",
@@ -1096,6 +1130,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-users"
   },
   {
+    "id": "tool-ext--ai",
     "name": "腾讯会议 AI",
     "company": "腾讯",
     "region": "domestic",
@@ -1126,6 +1161,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-users"
   },
   {
+    "id": "tool-ext-t13eee22e20",
     "name": "通义听悟",
     "company": "阿里云",
     "region": "domestic",
@@ -1156,6 +1192,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-users"
   },
   {
+    "id": "tool-saas-workbuddy",
     "name": "WorkBuddy",
     "company": "腾讯云",
     "region": "domestic",
@@ -1186,6 +1223,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-robot"
   },
   {
+    "id": "tool-ext-codex",
     "name": "Codex",
     "company": "OpenAI",
     "region": "overseas",
@@ -1219,6 +1257,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-code"
   },
   {
+    "id": "tool-saas-claude-code",
     "name": "Claude Code",
     "company": "Anthropic",
     "region": "overseas",
@@ -1252,6 +1291,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-code"
   },
   {
+    "id": "tool-saas-copilot",
     "name": "GitHub Copilot",
     "company": "GitHub / Microsoft",
     "region": "overseas",
@@ -1282,6 +1322,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-code"
   },
   {
+    "id": "tool-saas-trae",
     "name": "TRAE",
     "company": "字节跳动",
     "region": "domestic",
@@ -1312,6 +1353,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-code"
   },
   {
+    "id": "tool-ext--codebuddy",
     "name": "腾讯 CodeBuddy",
     "company": "腾讯云",
     "region": "domestic",
@@ -1342,6 +1384,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-code"
   },
   {
+    "id": "tool-ext-dify",
     "name": "Dify",
     "company": "LangGenius",
     "region": "domestic",
@@ -1372,6 +1415,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-robot"
   },
   {
+    "id": "tool-ext-synthesia",
     "name": "Synthesia",
     "company": "Synthesia",
     "region": "overseas",
@@ -1402,6 +1446,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-video"
   },
   {
+    "id": "tool-ext-fireflies-ai",
     "name": "Fireflies.ai",
     "company": "Fireflies.ai",
     "region": "overseas",
@@ -1432,6 +1477,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-users"
   },
   {
+    "id": "tool-ext-ima",
     "name": "ima",
     "company": "腾讯",
     "region": "domestic",
@@ -1462,6 +1508,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-book"
   },
   {
+    "id": "tool-ext-meta-ai",
     "name": "Meta AI",
     "company": "Meta",
     "region": "overseas",
@@ -1492,6 +1539,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-comments"
   },
   {
+    "id": "tool-saas-yuanbao",
     "name": "腾讯元宝",
     "company": "腾讯",
     "region": "domestic",
@@ -1521,6 +1569,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-comments"
   },
   {
+    "id": "tool-ext-ai-3",
     "name": "天工AI",
     "company": "昆仑万维",
     "region": "domestic",
@@ -1550,6 +1599,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-magnifying-glass"
   },
   {
+    "id": "tool-ext-obsidian",
     "name": "Obsidian",
     "company": "Obsidian",
     "region": "overseas",
@@ -1580,6 +1630,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-book"
   },
   {
+    "id": "tool-ext-aippt",
     "name": "AiPPT",
     "company": "AiPPT",
     "region": "domestic",
@@ -1609,6 +1660,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-file-powerpoint"
   },
   {
+    "id": "tool-saas-chatgpt-2",
     "name": "ChatGPT Images 2.0",
     "company": "OpenAI",
     "region": "overseas",
@@ -1639,6 +1691,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-image"
   },
   {
+    "id": "tool-ext-nano-banana-2",
     "name": "Nano Banana 2",
     "company": "Google DeepMind",
     "region": "overseas",
@@ -1669,6 +1722,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-image"
   },
   {
+    "id": "tool-saas-flux",
     "name": "FLUX.2",
     "company": "Black Forest Labs",
     "region": "overseas",
@@ -1699,6 +1753,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-image"
   },
   {
+    "id": "tool-ext-liblibai",
     "name": "LiblibAI",
     "company": "北京奇点星宇",
     "region": "domestic",
@@ -1728,6 +1783,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-image"
   },
   {
+    "id": "tool-ext-ai-8",
     "name": "海螺AI",
     "company": "MiniMax",
     "region": "domestic",
@@ -1757,6 +1813,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-video"
   },
   {
+    "id": "tool-saas-wanxiang",
     "name": "通义万相视频",
     "company": "阿里云",
     "region": "domestic",
@@ -1787,6 +1844,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-video"
   },
   {
+    "id": "tool-ext-minimax-audio",
     "name": "MiniMax Audio",
     "company": "MiniMax",
     "region": "domestic",
@@ -1817,6 +1875,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-microphone"
   },
   {
+    "id": "tool-ext-cosyvoice",
     "name": "CosyVoice",
     "company": "阿里巴巴 FunAudioLLM",
     "region": "domestic",
@@ -1847,6 +1906,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-microphone"
   },
   {
+    "id": "tool-ext-tf7ed573b17",
     "name": "钉钉闪记",
     "company": "钉钉",
     "region": "domestic",
@@ -1876,6 +1936,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-users"
   },
   {
+    "id": "tool-ext-t0956c4653b",
     "name": "讯飞听见",
     "company": "科大讯飞",
     "region": "domestic",
@@ -1905,6 +1966,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-users"
   },
   {
+    "id": "tool-saas-windsurf",
     "name": "Windsurf",
     "company": "Windsurf",
     "region": "overseas",
@@ -1935,6 +1997,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-code"
   },
   {
+    "id": "tool-ext-codegeex",
     "name": "CodeGeeX",
     "company": "智谱",
     "region": "domestic",
@@ -1965,6 +2028,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-code"
   },
   {
+    "id": "tool-ext-openclaw",
     "name": "OpenClaw",
     "company": "OpenClaw Foundation",
     "region": "overseas",
@@ -1995,6 +2059,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-robot"
   },
   {
+    "id": "tool-ext-hermes-agent",
     "name": "Hermes Agent",
     "company": "Nous Research",
     "region": "overseas",
@@ -2025,6 +2090,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-robot"
   },
   {
+    "id": "tool-ext-genspark",
     "name": "Genspark",
     "company": "MainFunc",
     "region": "overseas",
@@ -2054,6 +2120,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-robot"
   },
   {
+    "id": "tool-ext-manus",
     "name": "Manus",
     "company": "Manus",
     "region": "overseas",
@@ -2084,6 +2151,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-robot"
   },
   {
+    "id": "tool-excel-qwen-work",
     "name": "Qwen Work",
     "company": "阿里",
     "region": "domestic",
@@ -2114,6 +2182,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-robot"
   },
   {
+    "id": "tool-excel-trae-work",
     "name": "Trae Work",
     "company": "字节",
     "region": "domestic",
@@ -2145,6 +2214,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-robot"
   },
   {
+    "id": "tool-excel-kimi-work",
     "name": "Kimi Work",
     "company": "月之暗面",
     "region": "domestic",
@@ -2176,6 +2246,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-robot"
   },
   {
+    "id": "tool-excel-libtv",
     "name": "LibTV",
     "company": "LiblibAI",
     "region": "domestic",
@@ -2207,6 +2278,7 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "icon": "fa-video"
   },
   {
+    "id": "tool-excel-stable-diffusion",
     "name": "Stable Diffusion",
     "company": "Stability AI",
     "region": "overseas",
@@ -2239,6 +2311,2683 @@ export const EXTERNAL_TOOLS_EXCEL = [
     "docsUrl": "https://stability.ai/guides",
     "mediaUrl": "https://stability.ai/",
     "icon": "fa-image"
+  },
+  {
+    "id": "tool-ext-deepl",
+    "name": "DeepL",
+    "company": "DeepL SE",
+    "region": "overseas",
+    "toolTypeId": "writing",
+    "toolTypeIds": [
+      "writing"
+    ],
+    "toolTypeLabels": [
+      "写作与翻译"
+    ],
+    "externalCategoryRanks": {
+      "writing": 1
+    },
+    "externalSortOrder": 89,
+    "externalSortRank": 1,
+    "cardSummary": "面向专业沟通的机器翻译与多语言写作优化平台",
+    "productIntro": "面向专业沟通的机器翻译与多语言写作优化平台。",
+    "bestFor": "跨语言邮件、正式文档、本地化与英文表达润色",
+    "coreCapabilities": [
+      "文档翻译",
+      "术语表",
+      "DeepL Write",
+      "企业安全"
+    ],
+    "homepageUrl": "https://www.deepl.com/",
+    "docsUrl": "https://support.deepl.com/",
+    "mediaUrl": "https://www.deepl.com/en/features",
+    "icon": "fa-pen"
+  },
+  {
+    "id": "tool-ext-power-bi-copilot",
+    "name": "Power BI Copilot",
+    "company": "Microsoft",
+    "region": "overseas",
+    "toolTypeId": "data",
+    "toolTypeIds": [
+      "data"
+    ],
+    "toolTypeLabels": [
+      "数据分析"
+    ],
+    "externalCategoryRanks": {
+      "data": 1
+    },
+    "externalSortOrder": 90,
+    "externalSortRank": 1,
+    "cardSummary": "在 Power BI 中以自然语言创建报表、摘要和数据洞察",
+    "productIntro": "在 Power BI 中以自然语言创建报表、摘要和数据洞察。",
+    "bestFor": "经营看板、管理层摘要、探索式分析和报表搭建",
+    "coreCapabilities": [
+      "自然语言问数",
+      "报表生成",
+      "叙述摘要",
+      "数据模型协作"
+    ],
+    "homepageUrl": "https://powerbi.microsoft.com/",
+    "docsUrl": "https://learn.microsoft.com/en-us/power-bi/create-reports/copilot-introduction",
+    "mediaUrl": "https://powerbi.microsoft.com/en-us/copilot/",
+    "icon": "fa-chart-line"
+  },
+  {
+    "id": "tool-ext-n8n",
+    "name": "n8n",
+    "company": "n8n GmbH",
+    "region": "overseas",
+    "toolTypeId": "agent",
+    "toolTypeIds": [
+      "agent"
+    ],
+    "toolTypeLabels": [
+      "智能体"
+    ],
+    "externalCategoryRanks": {
+      "agent": 1
+    },
+    "externalSortOrder": 91,
+    "externalSortRank": 1,
+    "cardSummary": "可视化编排应用、数据和 AI 智能体流程的低代码自动化平台",
+    "productIntro": "可视化编排应用、数据和 AI 智能体流程的低代码自动化平台。",
+    "bestFor": "跨系统流程、内容管线、通知同步和企业 AI 工作流",
+    "coreCapabilities": [
+      "工作流编排",
+      "AI Agent",
+      "自托管",
+      "丰富连接器"
+    ],
+    "homepageUrl": "https://n8n.io/",
+    "docsUrl": "https://docs.n8n.io/",
+    "mediaUrl": "https://n8n.io/ai/",
+    "icon": "fa-robot"
+  },
+  {
+    "id": "tool-ext-google-ai-mode",
+    "name": "Google AI Mode",
+    "company": "Google",
+    "region": "overseas",
+    "toolTypeId": "search",
+    "toolTypeIds": [
+      "search"
+    ],
+    "toolTypeLabels": [
+      "AI搜索与研究"
+    ],
+    "externalCategoryRanks": {
+      "search": 1
+    },
+    "externalSortOrder": 92,
+    "externalSortRank": 1,
+    "cardSummary": "在 Google 搜索中用生成式 AI 完成多步骤提问、比较和网页探索",
+    "productIntro": "在 Google 搜索中用生成式 AI 完成多步骤提问、比较和网页探索。",
+    "bestFor": "开放网络检索、旅行与购物比较、复杂问题的多轮追问",
+    "coreCapabilities": [
+      "多步骤搜索",
+      "追问",
+      "网页链接",
+      "视觉搜索"
+    ],
+    "homepageUrl": "https://search.google/ways-to-search/ai-mode/",
+    "docsUrl": "https://support.google.com/websearch/answer/16011537",
+    "mediaUrl": "https://search.google/ways-to-search/ai-mode/",
+    "icon": "fa-magnifying-glass"
+  },
+  {
+    "id": "tool-ext-you-com",
+    "name": "You.com",
+    "company": "You.com",
+    "region": "overseas",
+    "toolTypeId": "search",
+    "toolTypeIds": [
+      "search"
+    ],
+    "toolTypeLabels": [
+      "AI搜索与研究"
+    ],
+    "externalCategoryRanks": {
+      "search": 1
+    },
+    "externalSortOrder": 93,
+    "externalSortRank": 1,
+    "cardSummary": "面向个人与企业的可定制 AI 搜索、研究与答案 API 平台",
+    "productIntro": "面向个人与企业的可定制 AI 搜索、研究与答案 API 平台。",
+    "bestFor": "网页研究、企业搜索集成、可控来源和多模型问答",
+    "coreCapabilities": [
+      "AI Search",
+      "Research",
+      "来源控制",
+      "Search API"
+    ],
+    "homepageUrl": "https://you.com/",
+    "docsUrl": "https://documentation.you.com/",
+    "mediaUrl": "https://you.com/platform",
+    "icon": "fa-magnifying-glass"
+  },
+  {
+    "id": "tool-ext-readwise-reader",
+    "name": "Readwise Reader",
+    "company": "Readwise",
+    "region": "overseas",
+    "toolTypeId": "knowledge",
+    "toolTypeIds": [
+      "knowledge"
+    ],
+    "toolTypeLabels": [
+      "知识管理与写作"
+    ],
+    "externalCategoryRanks": {
+      "knowledge": 1
+    },
+    "externalSortOrder": 94,
+    "externalSortRank": 1,
+    "cardSummary": "集中阅读网页、PDF、邮件与电子书并通过 AI 进行提炼和回顾",
+    "productIntro": "集中阅读网页、PDF、邮件与电子书并通过 AI 进行提炼和回顾。",
+    "bestFor": "个人知识输入、长文阅读、标注沉淀与间隔复习",
+    "coreCapabilities": [
+      "稍后读",
+      "Ghostreader AI",
+      "高亮同步",
+      "每日回顾"
+    ],
+    "homepageUrl": "https://readwise.io/read",
+    "docsUrl": "https://docs.readwise.io/reader/docs",
+    "mediaUrl": "https://readwise.io/read",
+    "icon": "fa-book"
+  },
+  {
+    "id": "tool-ext-glean",
+    "name": "Glean",
+    "company": "Glean Technologies",
+    "region": "overseas",
+    "toolTypeId": "knowledge",
+    "toolTypeIds": [
+      "knowledge"
+    ],
+    "toolTypeLabels": [
+      "知识管理与写作"
+    ],
+    "externalCategoryRanks": {
+      "knowledge": 1
+    },
+    "externalSortOrder": 95,
+    "externalSortRank": 1,
+    "cardSummary": "面向企业内部数据、知识与应用的 AI 搜索和工作助手平台",
+    "productIntro": "面向企业内部数据、知识与应用的 AI 搜索和工作助手平台。",
+    "bestFor": "跨系统企业搜索、知识问答、专家发现与内部智能体",
+    "coreCapabilities": [
+      "企业搜索",
+      "权限感知",
+      "Glean Assistant",
+      "Agent Builder"
+    ],
+    "homepageUrl": "https://www.glean.com/",
+    "docsUrl": "https://docs.glean.com/",
+    "mediaUrl": "https://www.glean.com/product/assistant",
+    "icon": "fa-book"
+  },
+  {
+    "id": "tool-ext-writer",
+    "name": "WRITER",
+    "company": "Writer, Inc.",
+    "region": "overseas",
+    "toolTypeId": "writing",
+    "toolTypeIds": [
+      "writing"
+    ],
+    "toolTypeLabels": [
+      "写作与翻译"
+    ],
+    "externalCategoryRanks": {
+      "writing": 1
+    },
+    "externalSortOrder": 96,
+    "externalSortRank": 1,
+    "cardSummary": "面向企业治理、品牌一致性与业务智能体的生成式 AI 平台",
+    "productIntro": "面向企业治理、品牌一致性与业务智能体的生成式 AI 平台。",
+    "bestFor": "企业内容生产、品牌规范、受控知识与部门智能体",
+    "coreCapabilities": [
+      "企业写作",
+      "品牌规则",
+      "知识图谱",
+      "AI Studio"
+    ],
+    "homepageUrl": "https://writer.com/",
+    "docsUrl": "https://dev.writer.com/",
+    "mediaUrl": "https://writer.com/product/",
+    "icon": "fa-pen"
+  },
+  {
+    "id": "tool-ext-canva-magic-studio",
+    "name": "Canva Magic Studio",
+    "company": "Canva",
+    "region": "overseas",
+    "toolTypeId": "ppt",
+    "toolTypeIds": [
+      "ppt"
+    ],
+    "toolTypeLabels": [
+      "演示与文档"
+    ],
+    "externalCategoryRanks": {
+      "ppt": 1
+    },
+    "externalSortOrder": 97,
+    "externalSortRank": 1,
+    "cardSummary": "在 Canva 内生成并编辑演示、文档、图片和品牌内容",
+    "productIntro": "在 Canva 内生成并编辑演示、文档、图片和品牌内容。",
+    "bestFor": "品牌演示、社媒物料、协作文档与快速视觉排版",
+    "coreCapabilities": [
+      "Magic Design",
+      "演示生成",
+      "品牌套件",
+      "协作编辑"
+    ],
+    "homepageUrl": "https://www.canva.com/magic/",
+    "docsUrl": "https://www.canva.com/help/using-magic-studio/",
+    "mediaUrl": "https://www.canva.com/magic/",
+    "icon": "fa-file-powerpoint"
+  },
+  {
+    "id": "tool-ext-adobe-firefly",
+    "name": "Adobe Firefly",
+    "company": "Adobe",
+    "region": "overseas",
+    "toolTypeId": "image",
+    "toolTypeIds": [
+      "image"
+    ],
+    "toolTypeLabels": [
+      "图像与设计"
+    ],
+    "externalCategoryRanks": {
+      "image": 1
+    },
+    "externalSortOrder": 98,
+    "externalSortRank": 1,
+    "cardSummary": "面向商业创意工作流的生成式图像、视频与设计平台",
+    "productIntro": "面向商业创意工作流的生成式图像、视频与设计平台。",
+    "bestFor": "品牌创意、商业设计、Adobe 工作流与可控图像编辑",
+    "coreCapabilities": [
+      "文本生图",
+      "生成式填充",
+      "文本效果",
+      "Creative Cloud 集成"
+    ],
+    "homepageUrl": "https://www.adobe.com/products/firefly.html",
+    "docsUrl": "https://helpx.adobe.com/firefly/get-set-up/learn-the-basics/adobe-firefly-faq.html",
+    "mediaUrl": "https://www.adobe.com/products/firefly/features.html",
+    "icon": "fa-image"
+  },
+  {
+    "id": "tool-saas-ideogram",
+    "name": "Ideogram",
+    "company": "Ideogram AI",
+    "region": "overseas",
+    "toolTypeId": "image",
+    "toolTypeIds": [
+      "image"
+    ],
+    "toolTypeLabels": [
+      "图像与设计"
+    ],
+    "externalCategoryRanks": {
+      "image": 1
+    },
+    "externalSortOrder": 99,
+    "externalSortRank": 1,
+    "cardSummary": "以文字排版、海报创意和可控图像生成见长的视觉平台",
+    "productIntro": "以文字排版、海报创意和可控图像生成见长的视觉平台。",
+    "bestFor": "含文字海报、品牌概念、社媒视觉和快速构图",
+    "coreCapabilities": [
+      "文字渲染",
+      "Style Reference",
+      "Magic Fill",
+      "Canvas"
+    ],
+    "homepageUrl": "https://ideogram.ai/",
+    "docsUrl": "https://docs.ideogram.ai/",
+    "mediaUrl": "https://ideogram.ai/",
+    "icon": "fa-image"
+  },
+  {
+    "id": "tool-ext-recraft",
+    "name": "Recraft",
+    "company": "Recraft",
+    "region": "overseas",
+    "toolTypeId": "image",
+    "toolTypeIds": [
+      "image"
+    ],
+    "toolTypeLabels": [
+      "图像与设计"
+    ],
+    "externalCategoryRanks": {
+      "image": 1
+    },
+    "externalSortOrder": 100,
+    "externalSortRank": 1,
+    "cardSummary": "专注设计一致性、品牌视觉与矢量资产的 AI 创作平台",
+    "productIntro": "专注设计一致性、品牌视觉与矢量资产的 AI 创作平台。",
+    "bestFor": "品牌系统、矢量图标、营销素材和系列视觉一致性",
+    "coreCapabilities": [
+      "矢量生成",
+      "品牌风格",
+      "图像编辑",
+      "Mockup"
+    ],
+    "homepageUrl": "https://www.recraft.ai/",
+    "docsUrl": "https://www.recraft.ai/docs",
+    "mediaUrl": "https://www.recraft.ai/blog/introducing-recraft-v4-design-taste-meets-image-generation",
+    "icon": "fa-image"
+  },
+  {
+    "id": "tool-ext-udio",
+    "name": "Udio",
+    "company": "Uncharted Labs",
+    "region": "overseas",
+    "toolTypeId": "audio",
+    "toolTypeIds": [
+      "audio"
+    ],
+    "toolTypeLabels": [
+      "音频与语音"
+    ],
+    "externalCategoryRanks": {
+      "audio": 1
+    },
+    "externalSortOrder": 101,
+    "externalSortRank": 1,
+    "cardSummary": "通过文本提示创作、延展和编辑高质量音乐的生成平台",
+    "productIntro": "通过文本提示创作、延展和编辑高质量音乐的生成平台。",
+    "bestFor": "音乐创作探索、风格迭代、短配乐和歌曲原型",
+    "coreCapabilities": [
+      "文本生成音乐",
+      "音频延展",
+      "局部编辑",
+      "风格提示"
+    ],
+    "homepageUrl": "https://www.udio.com/",
+    "docsUrl": "https://www.udio.com/guide",
+    "mediaUrl": "https://www.udio.com/",
+    "icon": "fa-microphone"
+  },
+  {
+    "id": "tool-ext-descript",
+    "name": "Descript",
+    "company": "Descript",
+    "region": "overseas",
+    "toolTypeId": "audio",
+    "toolTypeIds": [
+      "audio"
+    ],
+    "toolTypeLabels": [
+      "音频与语音"
+    ],
+    "externalCategoryRanks": {
+      "audio": 1
+    },
+    "externalSortOrder": 102,
+    "externalSortRank": 1,
+    "cardSummary": "通过编辑文字稿来剪辑播客与视频，并用 AI 完成声音和画面处理",
+    "productIntro": "通过编辑文字稿来剪辑播客与视频，并用 AI 完成声音和画面处理。",
+    "bestFor": "播客剪辑、访谈视频、字幕、降噪与快速内容再利用",
+    "coreCapabilities": [
+      "文本式剪辑",
+      "AI 共同编辑",
+      "声音修复",
+      "字幕与片段"
+    ],
+    "homepageUrl": "https://www.descript.com/",
+    "docsUrl": "https://help.descript.com/",
+    "mediaUrl": "https://www.descript.com/underlord",
+    "icon": "fa-microphone"
+  },
+  {
+    "id": "tool-ext-granola",
+    "name": "Granola",
+    "company": "Granola",
+    "region": "overseas",
+    "toolTypeId": "meeting",
+    "toolTypeIds": [
+      "meeting"
+    ],
+    "toolTypeLabels": [
+      "会议与协作"
+    ],
+    "externalCategoryRanks": {
+      "meeting": 1
+    },
+    "externalSortOrder": 103,
+    "externalSortRank": 1,
+    "cardSummary": "将个人笔记与会议音频结合，生成结构自然、可编辑的会议记录",
+    "productIntro": "将个人笔记与会议音频结合，生成结构自然、可编辑的会议记录。",
+    "bestFor": "一对一、访谈、客户沟通和不希望机器人入会的场景",
+    "coreCapabilities": [
+      "无机器人记录",
+      "增强个人笔记",
+      "会议模板",
+      "团队共享"
+    ],
+    "homepageUrl": "https://www.granola.ai/",
+    "docsUrl": "https://help.granola.ai/",
+    "mediaUrl": "https://www.granola.ai/",
+    "icon": "fa-users"
+  },
+  {
+    "id": "tool-ext-tableau-agent",
+    "name": "Tableau Agent",
+    "company": "Salesforce",
+    "region": "overseas",
+    "toolTypeId": "data",
+    "toolTypeIds": [
+      "data"
+    ],
+    "toolTypeLabels": [
+      "数据分析"
+    ],
+    "externalCategoryRanks": {
+      "data": 1
+    },
+    "externalSortOrder": 104,
+    "externalSortRank": 1,
+    "cardSummary": "在 Tableau 中通过自然语言探索数据、创建可视化和解释洞察",
+    "productIntro": "在 Tableau 中通过自然语言探索数据、创建可视化和解释洞察。",
+    "bestFor": "自助 BI、可视化探索、仪表板制作与业务问题追问",
+    "coreCapabilities": [
+      "自然语言分析",
+      "可视化生成",
+      "计算辅助",
+      "洞察解释"
+    ],
+    "homepageUrl": "https://www.tableau.com/products/tableau-agent",
+    "docsUrl": "https://help.tableau.com/current/online/en-us/tableau_gai_einstein.htm",
+    "mediaUrl": "https://www.tableau.com/products/tableau-agent",
+    "icon": "fa-chart-line"
+  },
+  {
+    "id": "tool-ext-hex",
+    "name": "Hex",
+    "company": "Hex Technologies",
+    "region": "overseas",
+    "toolTypeId": "data",
+    "toolTypeIds": [
+      "data"
+    ],
+    "toolTypeLabels": [
+      "数据分析"
+    ],
+    "externalCategoryRanks": {
+      "data": 1
+    },
+    "externalSortOrder": 105,
+    "externalSortRank": 1,
+    "cardSummary": "把 SQL、Python、数据应用与 AI 分析协作整合在同一工作区",
+    "productIntro": "把 SQL、Python、数据应用与 AI 分析协作整合在同一工作区。",
+    "bestFor": "分析团队协作、可复现研究、数据应用和技术型问数",
+    "coreCapabilities": [
+      "Notebook",
+      "SQL 与 Python",
+      "Hex AI",
+      "数据应用"
+    ],
+    "homepageUrl": "https://hex.tech/",
+    "docsUrl": "https://learn.hex.tech/docs",
+    "mediaUrl": "https://hex.tech/product/ai/",
+    "icon": "fa-chart-line"
+  },
+  {
+    "id": "tool-ext-julius-ai",
+    "name": "Julius AI",
+    "company": "Julius AI",
+    "region": "overseas",
+    "toolTypeId": "data",
+    "toolTypeIds": [
+      "data"
+    ],
+    "toolTypeLabels": [
+      "数据分析"
+    ],
+    "externalCategoryRanks": {
+      "data": 1
+    },
+    "externalSortOrder": 106,
+    "externalSortRank": 1,
+    "cardSummary": "用自然语言分析表格、生成图表并执行统计与预测任务",
+    "productIntro": "用自然语言分析表格、生成图表并执行统计与预测任务。",
+    "bestFor": "快速表格分析、统计检验、可视化和非技术人员问数",
+    "coreCapabilities": [
+      "文件分析",
+      "图表生成",
+      "统计分析",
+      "预测模型"
+    ],
+    "homepageUrl": "https://julius.ai/",
+    "docsUrl": "https://help.julius.ai/",
+    "mediaUrl": "https://julius.ai/",
+    "icon": "fa-chart-line"
+  },
+  {
+    "id": "tool-ext-zapier-ai",
+    "name": "Zapier AI",
+    "company": "Zapier",
+    "region": "overseas",
+    "toolTypeId": "agent",
+    "toolTypeIds": [
+      "agent"
+    ],
+    "toolTypeLabels": [
+      "智能体"
+    ],
+    "externalCategoryRanks": {
+      "agent": 1
+    },
+    "externalSortOrder": 107,
+    "externalSortRank": 1,
+    "cardSummary": "连接数千款应用，通过自然语言构建自动化流程与业务智能体",
+    "productIntro": "连接数千款应用，通过自然语言构建自动化流程与业务智能体。",
+    "bestFor": "跨 SaaS 自动化、营销运营、销售流程和无代码智能体",
+    "coreCapabilities": [
+      "应用连接",
+      "Zapier Agents",
+      "AI Actions",
+      "无代码工作流"
+    ],
+    "homepageUrl": "https://zapier.com/ai",
+    "docsUrl": "https://help.zapier.com/",
+    "mediaUrl": "https://zapier.com/agents",
+    "icon": "fa-robot"
+  },
+  {
+    "id": "tool-ext-make-ai-agents",
+    "name": "Make AI Agents",
+    "company": "Make",
+    "region": "overseas",
+    "toolTypeId": "agent",
+    "toolTypeIds": [
+      "agent"
+    ],
+    "toolTypeLabels": [
+      "智能体"
+    ],
+    "externalCategoryRanks": {
+      "agent": 1
+    },
+    "externalSortOrder": 108,
+    "externalSortRank": 1,
+    "cardSummary": "以可视化场景编排应用、数据和可审计 AI 智能体流程",
+    "productIntro": "以可视化场景编排应用、数据和可审计 AI 智能体流程。",
+    "bestFor": "复杂业务流程、系统集成、可视化调试和运营自动化",
+    "coreCapabilities": [
+      "可视化编排",
+      "AI Agents",
+      "应用连接器",
+      "运行监控"
+    ],
+    "homepageUrl": "https://www.make.com/en/ai-agents",
+    "docsUrl": "https://help.make.com/",
+    "mediaUrl": "https://www.make.com/en/ai-agents",
+    "icon": "fa-robot"
+  },
+  {
+    "id": "tool-saas-ms-copilot",
+    "name": "Microsoft 365 Copilot",
+    "company": "Microsoft",
+    "region": "overseas",
+    "toolTypeId": "general",
+    "toolTypeIds": [
+      "general"
+    ],
+    "toolTypeLabels": [
+      "通用AI助手"
+    ],
+    "externalCategoryRanks": {
+      "general": 1
+    },
+    "externalSortOrder": 109,
+    "externalSortRank": 1,
+    "cardSummary": "贯穿 Word、Excel、PowerPoint、Outlook 与 Teams 的企业级 AI 办公助手",
+    "productIntro": "贯穿 Word、Excel、PowerPoint、Outlook 与 Teams 的企业级 AI 办公助手。",
+    "bestFor": "Office 文档协作、邮件与会议总结、数据分析、研究报告和工作智能体",
+    "coreCapabilities": [
+      "Office 应用协作",
+      "Researcher",
+      "Analyst",
+      "自定义 Agents"
+    ],
+    "homepageUrl": "https://m365.cloud.microsoft/",
+    "docsUrl": "https://support.microsoft.com/en-us/microsoft-365-copilot/",
+    "mediaUrl": "https://www.microsoft.com/en-us/microsoft-365-copilot",
+    "icon": "fa-comments"
+  },
+  {
+    "id": "tool-ext-elicit",
+    "name": "Elicit",
+    "company": "Elicit",
+    "region": "overseas",
+    "toolTypeId": "search",
+    "toolTypeIds": [
+      "search"
+    ],
+    "toolTypeLabels": [
+      "AI搜索与研究"
+    ],
+    "externalCategoryRanks": {
+      "search": 1
+    },
+    "externalSortOrder": 110,
+    "externalSortRank": 1,
+    "cardSummary": "面向科学研究的论文检索、证据提取与系统综述工作台",
+    "productIntro": "面向科学研究的论文检索、证据提取与系统综述工作台。",
+    "bestFor": "学术检索、文献综述、论文对比、证据提取和系统性研究",
+    "coreCapabilities": [
+      "论文语义检索",
+      "研究报告",
+      "数据提取",
+      "系统综述"
+    ],
+    "homepageUrl": "https://elicit.com/",
+    "docsUrl": "https://support.elicit.com/",
+    "mediaUrl": "https://elicit.com/solutions/systematic-review",
+    "icon": "fa-magnifying-glass"
+  },
+  {
+    "id": "tool-ext-consensus",
+    "name": "Consensus",
+    "company": "Consensus",
+    "region": "overseas",
+    "toolTypeId": "search",
+    "toolTypeIds": [
+      "search"
+    ],
+    "toolTypeLabels": [
+      "AI搜索与研究"
+    ],
+    "externalCategoryRanks": {
+      "search": 1
+    },
+    "externalSortOrder": 111,
+    "externalSortRank": 1,
+    "cardSummary": "以同行评审论文为依据生成答案与研究综述的学术搜索引擎",
+    "productIntro": "以同行评审论文为依据生成答案与研究综述的学术搜索引擎。",
+    "bestFor": "科研事实核验、证据共识判断、论文发现和带引用的学术问答",
+    "coreCapabilities": [
+      "学术搜索",
+      "论文引用",
+      "研究综合",
+      "质量指标"
+    ],
+    "homepageUrl": "https://consensus.app/",
+    "docsUrl": "https://help.consensus.app/",
+    "mediaUrl": "https://consensus.app/home/blog/welcome-to-consensus/",
+    "icon": "fa-magnifying-glass"
+  },
+  {
+    "id": "tool-ext-napkin-ai",
+    "name": "Napkin AI",
+    "company": "Napkin AI",
+    "region": "overseas",
+    "toolTypeId": "ppt",
+    "toolTypeIds": [
+      "ppt"
+    ],
+    "toolTypeLabels": [
+      "演示与文档"
+    ],
+    "externalCategoryRanks": {
+      "ppt": 1
+    },
+    "externalSortOrder": 112,
+    "externalSortRank": 1,
+    "cardSummary": "把文字内容快速转成可编辑的信息图、流程图与演示视觉",
+    "productIntro": "把文字内容快速转成可编辑的信息图、流程图与演示视觉。",
+    "bestFor": "PPT 逻辑图、信息图、流程图、概念可视化和商业叙事",
+    "coreCapabilities": [
+      "文本转视觉",
+      "图示编辑",
+      "品牌样式",
+      "PPT / SVG 导出"
+    ],
+    "homepageUrl": "https://www.napkin.ai/",
+    "docsUrl": "https://help.napkin.ai/",
+    "mediaUrl": "https://www.napkin.ai/",
+    "icon": "fa-file-powerpoint"
+  },
+  {
+    "id": "tool-ext-figma-ai",
+    "name": "Figma AI",
+    "company": "Figma",
+    "region": "overseas",
+    "toolTypeId": "image",
+    "toolTypeIds": [
+      "image"
+    ],
+    "toolTypeLabels": [
+      "图像与设计"
+    ],
+    "externalCategoryRanks": {
+      "image": 1
+    },
+    "externalSortOrder": 113,
+    "externalSortRank": 1,
+    "cardSummary": "在协同设计空间中生成设计方向、编辑图像并构建高保真原型",
+    "productIntro": "在协同设计空间中生成设计方向、编辑图像并构建高保真原型。",
+    "bestFor": "界面设计、交互原型、视觉探索、设计系统和产品协作",
+    "coreCapabilities": [
+      "设计智能体",
+      "图像编辑",
+      "Figma Make",
+      "协同迭代"
+    ],
+    "homepageUrl": "https://www.figma.com/ai/",
+    "docsUrl": "https://help.figma.com/hc/en-us/articles/23870272542231-Use-AI-tools-in-Figma-Design",
+    "mediaUrl": "https://www.figma.com/ai/",
+    "icon": "fa-image"
+  },
+  {
+    "id": "tool-ext-fathom",
+    "name": "Fathom",
+    "company": "Fathom",
+    "region": "overseas",
+    "toolTypeId": "meeting",
+    "toolTypeIds": [
+      "meeting"
+    ],
+    "toolTypeLabels": [
+      "会议与协作"
+    ],
+    "externalCategoryRanks": {
+      "meeting": 1
+    },
+    "externalSortOrder": 114,
+    "externalSortRank": 1,
+    "cardSummary": "为 Zoom、Google Meet 与 Teams 自动记录、转写并总结会议",
+    "productIntro": "为 Zoom、Google Meet 与 Teams 自动记录、转写并总结会议。",
+    "bestFor": "个人会议记录、重点片段回看、行动项提取和 CRM 更新",
+    "coreCapabilities": [
+      "自动转写",
+      "即时摘要",
+      "行动项",
+      "会议搜索"
+    ],
+    "homepageUrl": "https://fathom.video/",
+    "docsUrl": "https://help.fathom.video/",
+    "mediaUrl": "https://fathom.video/for/teams",
+    "icon": "fa-users"
+  },
+  {
+    "id": "tool-ext-replit-agent",
+    "name": "Replit Agent",
+    "company": "Replit",
+    "region": "overseas",
+    "toolTypeId": "code",
+    "toolTypeIds": [
+      "code"
+    ],
+    "toolTypeLabels": [
+      "编程开发"
+    ],
+    "externalCategoryRanks": {
+      "code": 1
+    },
+    "externalSortOrder": 115,
+    "externalSortRank": 1,
+    "cardSummary": "从自然语言需求出发，在云端创建、测试并发布完整应用",
+    "productIntro": "从自然语言需求出发，在云端创建、测试并发布完整应用。",
+    "bestFor": "零配置原型、全栈应用、快速验证、在线协作和一键发布",
+    "coreCapabilities": [
+      "应用生成",
+      "云端开发",
+      "自动调试",
+      "一键发布"
+    ],
+    "homepageUrl": "https://replit.com/ai",
+    "docsUrl": "https://docs.replit.com/category/replit-apps",
+    "mediaUrl": "https://replit.com/blog/introducing-replit-agent",
+    "icon": "fa-code"
+  },
+  {
+    "id": "tool-ext-lovable",
+    "name": "Lovable",
+    "company": "Lovable",
+    "region": "overseas",
+    "toolTypeId": "code",
+    "toolTypeIds": [
+      "code"
+    ],
+    "toolTypeLabels": [
+      "编程开发"
+    ],
+    "externalCategoryRanks": {
+      "code": 1
+    },
+    "externalSortOrder": 116,
+    "externalSortRank": 1,
+    "cardSummary": "用自然语言生成、迭代并发布网站与全栈应用的 AI 构建平台",
+    "productIntro": "用自然语言生成、迭代并发布网站与全栈应用的 AI 构建平台。",
+    "bestFor": "非技术人员做应用原型、产品团队快速验证与前后端一体开发",
+    "coreCapabilities": [
+      "自然语言建站",
+      "全栈应用",
+      "可视化迭代",
+      "云端发布"
+    ],
+    "homepageUrl": "https://lovable.dev/",
+    "docsUrl": "https://docs.lovable.dev/",
+    "mediaUrl": "https://lovable.dev/",
+    "icon": "fa-code"
+  },
+  {
+    "id": "tool-ext-scite",
+    "name": "scite",
+    "company": "Research Solutions",
+    "region": "overseas",
+    "toolTypeId": "search",
+    "toolTypeIds": [
+      "search"
+    ],
+    "toolTypeLabels": [
+      "AI搜索与研究"
+    ],
+    "externalCategoryRanks": {
+      "search": 1
+    },
+    "externalSortOrder": 117,
+    "externalSortRank": 1,
+    "cardSummary": "围绕论文引用上下文与证据关系，帮助研究者判断文献是否被支持或反驳",
+    "productIntro": "围绕论文引用上下文与证据关系，帮助研究者判断文献是否被支持或反驳。",
+    "bestFor": "学术检索、引用核验、文献综述和证据质量判断",
+    "coreCapabilities": [
+      "Smart Citations",
+      "论文搜索",
+      "引用语境",
+      "研究助手"
+    ],
+    "homepageUrl": "https://scite.ai/",
+    "docsUrl": "https://help.scite.ai/",
+    "mediaUrl": "https://scite.ai/",
+    "icon": "fa-magnifying-glass"
+  },
+  {
+    "id": "tool-ext-mem",
+    "name": "Mem",
+    "company": "Mem Labs",
+    "region": "overseas",
+    "toolTypeId": "knowledge",
+    "toolTypeIds": [
+      "knowledge"
+    ],
+    "toolTypeLabels": [
+      "知识管理与写作"
+    ],
+    "externalCategoryRanks": {
+      "knowledge": 1
+    },
+    "externalSortOrder": 118,
+    "externalSortRank": 1,
+    "cardSummary": "用 AI 自动组织笔记、关联上下文并从个人知识中生成答案与内容",
+    "productIntro": "用 AI 自动组织笔记、关联上下文并从个人知识中生成答案与内容。",
+    "bestFor": "自动整理笔记、个人知识检索、会议信息沉淀和基于记忆写作",
+    "coreCapabilities": [
+      "自动组织",
+      "语义检索",
+      "AI 问答",
+      "智能写作"
+    ],
+    "homepageUrl": "https://get.mem.ai/",
+    "docsUrl": "https://help.mem.ai/",
+    "mediaUrl": "https://get.mem.ai/",
+    "icon": "fa-book"
+  },
+  {
+    "id": "tool-saas-jasper",
+    "name": "Jasper",
+    "company": "Jasper",
+    "region": "overseas",
+    "toolTypeId": "writing",
+    "toolTypeIds": [
+      "writing"
+    ],
+    "toolTypeLabels": [
+      "写作与翻译"
+    ],
+    "externalCategoryRanks": {
+      "writing": 1
+    },
+    "externalSortOrder": 119,
+    "externalSortRank": 1,
+    "cardSummary": "面向营销团队的内容平台，强调品牌语调、活动协作和规模化内容生产",
+    "productIntro": "面向营销团队的内容平台，强调品牌语调、活动协作和规模化内容生产。",
+    "bestFor": "品牌营销文案、Campaign、内容运营和多渠道规模化生产",
+    "coreCapabilities": [
+      "Brand Voice",
+      "营销模板",
+      "团队协作",
+      "内容工作流"
+    ],
+    "homepageUrl": "https://www.jasper.ai/",
+    "docsUrl": "https://help.jasper.ai/",
+    "mediaUrl": "https://www.jasper.ai/",
+    "icon": "fa-pen"
+  },
+  {
+    "id": "tool-saas-copyai",
+    "name": "Copy.ai",
+    "company": "Copy.ai",
+    "region": "overseas",
+    "toolTypeId": "writing",
+    "toolTypeIds": [
+      "writing"
+    ],
+    "toolTypeLabels": [
+      "写作与翻译"
+    ],
+    "externalCategoryRanks": {
+      "writing": 1
+    },
+    "externalSortOrder": 120,
+    "externalSortRank": 1,
+    "cardSummary": "把销售与营销内容生成嵌入可复用工作流，适合团队批量交付",
+    "productIntro": "把销售与营销内容生成嵌入可复用工作流，适合团队批量交付。",
+    "bestFor": "营销文案、销售材料、内容再利用和 GTM 工作流",
+    "coreCapabilities": [
+      "GTM Workflows",
+      "品牌语调",
+      "批量内容",
+      "团队模板"
+    ],
+    "homepageUrl": "https://www.copy.ai/",
+    "docsUrl": "https://support.copy.ai/",
+    "mediaUrl": "https://www.copy.ai/",
+    "icon": "fa-pen"
+  },
+  {
+    "id": "tool-ext-wordtune",
+    "name": "Wordtune",
+    "company": "AI21 Labs",
+    "region": "overseas",
+    "toolTypeId": "writing",
+    "toolTypeIds": [
+      "writing"
+    ],
+    "toolTypeLabels": [
+      "写作与翻译"
+    ],
+    "externalCategoryRanks": {
+      "writing": 1
+    },
+    "externalSortOrder": 121,
+    "externalSortRank": 1,
+    "cardSummary": "围绕改写、语气、清晰度与摘要优化英文表达的 AI 写作助手",
+    "productIntro": "围绕改写、语气、清晰度与摘要优化英文表达的 AI 写作助手。",
+    "bestFor": "英文润色、改写、语气调整、摘要和商务沟通",
+    "coreCapabilities": [
+      "Rewrite",
+      "语气调整",
+      "语法优化",
+      "摘要"
+    ],
+    "homepageUrl": "https://www.wordtune.com/",
+    "docsUrl": "https://support.wordtune.com/",
+    "mediaUrl": "https://www.wordtune.com/",
+    "icon": "fa-pen"
+  },
+  {
+    "id": "tool-ext-plus-ai",
+    "name": "Plus AI",
+    "company": "Plus",
+    "region": "overseas",
+    "toolTypeId": "ppt",
+    "toolTypeIds": [
+      "ppt"
+    ],
+    "toolTypeLabels": [
+      "演示与文档"
+    ],
+    "externalCategoryRanks": {
+      "ppt": 1
+    },
+    "externalSortOrder": 122,
+    "externalSortRank": 1,
+    "cardSummary": "直接在 Google Slides 与 PowerPoint 中生成、重写和重新排版演示文稿",
+    "productIntro": "直接在 Google Slides 与 PowerPoint 中生成、重写和重新排版演示文稿。",
+    "bestFor": "保留原生 PPT 编辑、企业模板、长文转演示和团队协作",
+    "coreCapabilities": [
+      "原生插件",
+      "生成演示",
+      "内容重写",
+      "企业模板"
+    ],
+    "homepageUrl": "https://www.plusdocs.com/",
+    "docsUrl": "https://www.plusdocs.com/plus-ai-for-google-slides",
+    "mediaUrl": "https://www.plusdocs.com/plus-ai-for-powerpoint",
+    "icon": "fa-file-powerpoint"
+  },
+  {
+    "id": "tool-ext-pitch",
+    "name": "Pitch",
+    "company": "Pitch",
+    "region": "overseas",
+    "toolTypeId": "ppt",
+    "toolTypeIds": [
+      "ppt"
+    ],
+    "toolTypeLabels": [
+      "演示与文档"
+    ],
+    "externalCategoryRanks": {
+      "ppt": 1
+    },
+    "externalSortOrder": 123,
+    "externalSortRank": 1,
+    "cardSummary": "面向销售和团队协作的演示平台，用 AI 加速起稿、改写与品牌化排版",
+    "productIntro": "面向销售和团队协作的演示平台，用 AI 加速起稿、改写与品牌化排版。",
+    "bestFor": "销售演示、团队协作、品牌模板、演示分享和效果分析",
+    "coreCapabilities": [
+      "AI 起稿",
+      "协作编辑",
+      "品牌模板",
+      "演示分析"
+    ],
+    "homepageUrl": "https://pitch.com/",
+    "docsUrl": "https://help.pitch.com/",
+    "mediaUrl": "https://pitch.com/",
+    "icon": "fa-file-powerpoint"
+  },
+  {
+    "id": "tool-ext-sora",
+    "name": "Sora",
+    "company": "OpenAI",
+    "region": "overseas",
+    "toolTypeId": "video",
+    "toolTypeIds": [
+      "video"
+    ],
+    "toolTypeLabels": [
+      "视频与数字人"
+    ],
+    "externalCategoryRanks": {
+      "video": 1
+    },
+    "externalSortOrder": 124,
+    "externalSortRank": 1,
+    "cardSummary": "从文字、图片或视频出发生成和编辑具有连贯运动与镜头感的视频",
+    "productIntro": "从文字、图片或视频出发生成和编辑具有连贯运动与镜头感的视频。",
+    "bestFor": "概念短片、分镜预演、营销视频、视觉实验和视频再创作",
+    "coreCapabilities": [
+      "文生视频",
+      "图生视频",
+      "视频编辑",
+      "故事板"
+    ],
+    "homepageUrl": "https://sora.com/",
+    "mediaUrl": "https://openai.com/sora/",
+    "icon": "fa-video"
+  },
+  {
+    "id": "tool-saas-luma",
+    "name": "Luma Dream Machine",
+    "company": "Luma AI",
+    "region": "overseas",
+    "toolTypeId": "video",
+    "toolTypeIds": [
+      "video"
+    ],
+    "toolTypeLabels": [
+      "视频与数字人"
+    ],
+    "externalCategoryRanks": {
+      "video": 1
+    },
+    "externalSortOrder": 125,
+    "externalSortRank": 1,
+    "cardSummary": "面向创作者的图像与视频生成平台，突出快速镜头迭代与视觉一致性",
+    "productIntro": "面向创作者的图像与视频生成平台，突出快速镜头迭代与视觉一致性。",
+    "bestFor": "广告概念、镜头探索、图片动效、创意短片和快速迭代",
+    "coreCapabilities": [
+      "文生视频",
+      "图生视频",
+      "关键帧",
+      "镜头控制"
+    ],
+    "homepageUrl": "https://lumalabs.ai/dream-machine",
+    "docsUrl": "https://lumalabs.ai/learning-hub",
+    "mediaUrl": "https://lumalabs.ai/dream-machine",
+    "icon": "fa-video"
+  },
+  {
+    "id": "tool-saas-pika",
+    "name": "Pika",
+    "company": "Pika Labs",
+    "region": "overseas",
+    "toolTypeId": "video",
+    "toolTypeIds": [
+      "video"
+    ],
+    "toolTypeLabels": [
+      "视频与数字人"
+    ],
+    "externalCategoryRanks": {
+      "video": 1
+    },
+    "externalSortOrder": 126,
+    "externalSortRank": 1,
+    "cardSummary": "以低门槛特效、图生视频和快速风格化著称的短视频生成工具",
+    "productIntro": "以低门槛特效、图生视频和快速风格化著称的短视频生成工具。",
+    "bestFor": "社媒短视频、趣味特效、图片动效、产品创意和快速试错",
+    "coreCapabilities": [
+      "图生视频",
+      "视频特效",
+      "对象替换",
+      "风格化"
+    ],
+    "homepageUrl": "https://pika.art/",
+    "docsUrl": "https://pika.art/",
+    "mediaUrl": "https://pika.art/",
+    "icon": "fa-video"
+  },
+  {
+    "id": "tool-ext-murf-ai",
+    "name": "Murf AI",
+    "company": "Murf",
+    "region": "overseas",
+    "toolTypeId": "audio",
+    "toolTypeIds": [
+      "audio"
+    ],
+    "toolTypeLabels": [
+      "音频与语音"
+    ],
+    "externalCategoryRanks": {
+      "audio": 1
+    },
+    "externalSortOrder": 127,
+    "externalSortRank": 1,
+    "cardSummary": "面向商业视频和培训内容的 AI 配音工作室，提供多语言语音与团队协作",
+    "productIntro": "面向商业视频和培训内容的 AI 配音工作室，提供多语言语音与团队协作。",
+    "bestFor": "培训配音、产品解说、广告旁白、多语言视频和团队制作",
+    "coreCapabilities": [
+      "AI 配音",
+      "多语言",
+      "语音编辑",
+      "团队协作"
+    ],
+    "homepageUrl": "https://murf.ai/",
+    "docsUrl": "https://help.murf.ai/",
+    "mediaUrl": "https://murf.ai/",
+    "icon": "fa-microphone"
+  },
+  {
+    "id": "tool-ext-adobe-podcast",
+    "name": "Adobe Podcast",
+    "company": "Adobe",
+    "region": "overseas",
+    "toolTypeId": "audio",
+    "toolTypeIds": [
+      "audio"
+    ],
+    "toolTypeLabels": [
+      "音频与语音"
+    ],
+    "externalCategoryRanks": {
+      "audio": 1
+    },
+    "externalSortOrder": 128,
+    "externalSortRank": 1,
+    "cardSummary": "用 AI 清理语音、增强录音质量并简化播客与访谈音频制作",
+    "productIntro": "用 AI 清理语音、增强录音质量并简化播客与访谈音频制作。",
+    "bestFor": "人声增强、远程录音、播客编辑、访谈清理和音频转写",
+    "coreCapabilities": [
+      "Enhance Speech",
+      "远程录音",
+      "转写编辑",
+      "麦克风检查"
+    ],
+    "homepageUrl": "https://podcast.adobe.com/",
+    "docsUrl": "https://helpx.adobe.com/podcast/",
+    "mediaUrl": "https://podcast.adobe.com/",
+    "icon": "fa-microphone"
+  },
+  {
+    "id": "tool-ext-tl-dv",
+    "name": "tl;dv",
+    "company": "tl;dv",
+    "region": "overseas",
+    "toolTypeId": "meeting",
+    "toolTypeIds": [
+      "meeting"
+    ],
+    "toolTypeLabels": [
+      "会议与协作"
+    ],
+    "externalCategoryRanks": {
+      "meeting": 1
+    },
+    "externalSortOrder": 129,
+    "externalSortRank": 1,
+    "cardSummary": "自动记录、转写并总结线上会议，可跨会议检索主题和同步行动项",
+    "productIntro": "自动记录、转写并总结线上会议，可跨会议检索主题和同步行动项。",
+    "bestFor": "销售访谈、用户研究、团队会议、跨会议洞察和 CRM 同步",
+    "coreCapabilities": [
+      "会议录制",
+      "AI 纪要",
+      "跨会议搜索",
+      "CRM 集成"
+    ],
+    "homepageUrl": "https://tldv.io/",
+    "docsUrl": "https://intercom.help/tldv/en/",
+    "mediaUrl": "https://tldv.io/",
+    "icon": "fa-users"
+  },
+  {
+    "id": "tool-ext-rows-ai",
+    "name": "Rows AI",
+    "company": "Rows",
+    "region": "overseas",
+    "toolTypeId": "data",
+    "toolTypeIds": [
+      "data"
+    ],
+    "toolTypeLabels": [
+      "数据分析"
+    ],
+    "externalCategoryRanks": {
+      "data": 1
+    },
+    "externalSortOrder": 130,
+    "externalSortRank": 1,
+    "cardSummary": "在在线表格中使用 AI、数据连接器与公式完成分析、清洗和可视化",
+    "productIntro": "在在线表格中使用 AI、数据连接器与公式完成分析、清洗和可视化。",
+    "bestFor": "营销数据、运营分析、联网取数、表格自动化和团队报表",
+    "coreCapabilities": [
+      "AI Analyst",
+      "数据连接器",
+      "表格公式",
+      "可视化"
+    ],
+    "homepageUrl": "https://rows.com/",
+    "docsUrl": "https://rows.com/docs",
+    "mediaUrl": "https://rows.com/ai",
+    "icon": "fa-chart-line"
+  },
+  {
+    "id": "tool-ext-thoughtspot-spotter",
+    "name": "ThoughtSpot Spotter",
+    "company": "ThoughtSpot",
+    "region": "overseas",
+    "toolTypeId": "data",
+    "toolTypeIds": [
+      "data"
+    ],
+    "toolTypeLabels": [
+      "数据分析"
+    ],
+    "externalCategoryRanks": {
+      "data": 1
+    },
+    "externalSortOrder": 131,
+    "externalSortRank": 1,
+    "cardSummary": "面向企业数据的对话式分析 Agent，可从业务语义中持续追问并生成洞察",
+    "productIntro": "面向企业数据的对话式分析 Agent，可从业务语义中持续追问并生成洞察。",
+    "bestFor": "企业自助分析、自然语言问数、指标追踪和业务决策支持",
+    "coreCapabilities": [
+      "对话式分析",
+      "语义层",
+      "自动洞察",
+      "企业治理"
+    ],
+    "homepageUrl": "https://www.thoughtspot.com/product/spotter",
+    "docsUrl": "https://docs.thoughtspot.com/",
+    "mediaUrl": "https://www.thoughtspot.com/product/spotter",
+    "icon": "fa-chart-line"
+  },
+  {
+    "id": "tool-ext-v0",
+    "name": "v0",
+    "company": "Vercel",
+    "region": "overseas",
+    "toolTypeId": "code",
+    "toolTypeIds": [
+      "code"
+    ],
+    "toolTypeLabels": [
+      "编程开发"
+    ],
+    "externalCategoryRanks": {
+      "code": 1
+    },
+    "externalSortOrder": 132,
+    "externalSortRank": 1,
+    "cardSummary": "从自然语言和参考图快速生成高完成度前端界面与可运行 Web 应用",
+    "productIntro": "从自然语言和参考图快速生成高完成度前端界面与可运行 Web 应用。",
+    "bestFor": "UI 原型、React / Next.js 页面、设计转代码和前端快速迭代",
+    "coreCapabilities": [
+      "UI 生成",
+      "全栈应用",
+      "视觉输入",
+      "Vercel 发布"
+    ],
+    "homepageUrl": "https://v0.dev/",
+    "docsUrl": "https://v0.dev/docs",
+    "mediaUrl": "https://v0.dev/",
+    "icon": "fa-code"
+  },
+  {
+    "id": "tool-ext-devin",
+    "name": "Devin",
+    "company": "Cognition",
+    "region": "overseas",
+    "toolTypeId": "code",
+    "toolTypeIds": [
+      "code"
+    ],
+    "toolTypeLabels": [
+      "编程开发"
+    ],
+    "externalCategoryRanks": {
+      "code": 1
+    },
+    "externalSortOrder": 133,
+    "externalSortRank": 1,
+    "cardSummary": "可在云端环境中独立处理工程任务、运行工具并提交代码成果的软件工程 Agent",
+    "productIntro": "可在云端环境中独立处理工程任务、运行工具并提交代码成果的软件工程 Agent。",
+    "bestFor": "需求实现、Bug 修复、代码迁移、测试和异步工程任务",
+    "coreCapabilities": [
+      "自主规划",
+      "云端开发环境",
+      "代码执行",
+      "PR 交付"
+    ],
+    "homepageUrl": "https://devin.ai/",
+    "docsUrl": "https://docs.devin.ai/",
+    "mediaUrl": "https://devin.ai/",
+    "icon": "fa-code"
+  },
+  {
+    "id": "tool-ext-amazon-q-developer",
+    "name": "Amazon Q Developer",
+    "company": "AWS",
+    "region": "overseas",
+    "toolTypeId": "code",
+    "toolTypeIds": [
+      "code"
+    ],
+    "toolTypeLabels": [
+      "编程开发"
+    ],
+    "externalCategoryRanks": {
+      "code": 1
+    },
+    "externalSortOrder": 134,
+    "externalSortRank": 1,
+    "cardSummary": "深度连接 AWS 与主流 IDE 的开发助手，覆盖编码、测试、升级和云资源操作",
+    "productIntro": "深度连接 AWS 与主流 IDE 的开发助手，覆盖编码、测试、升级和云资源操作。",
+    "bestFor": "AWS 开发、Java 升级、代码建议、云资源理解和安全扫描",
+    "coreCapabilities": [
+      "IDE 助手",
+      "AWS 集成",
+      "代码转换",
+      "安全扫描"
+    ],
+    "homepageUrl": "https://aws.amazon.com/q/developer/",
+    "docsUrl": "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/",
+    "mediaUrl": "https://aws.amazon.com/q/developer/",
+    "icon": "fa-code"
+  },
+  {
+    "id": "tool-ext-cline",
+    "name": "Cline",
+    "company": "Cline",
+    "region": "overseas",
+    "toolTypeId": "code",
+    "toolTypeIds": [
+      "code"
+    ],
+    "toolTypeLabels": [
+      "编程开发"
+    ],
+    "externalCategoryRanks": {
+      "code": 1
+    },
+    "externalSortOrder": 135,
+    "externalSortRank": 1,
+    "cardSummary": "运行在编辑器中的开源编码 Agent，可读写文件、执行命令并连接多种模型",
+    "productIntro": "运行在编辑器中的开源编码 Agent，可读写文件、执行命令并连接多种模型。",
+    "bestFor": "自选模型、透明工具调用、VS Code 开发、本地任务和可控自动化",
+    "coreCapabilities": [
+      "开源 Agent",
+      "多模型",
+      "终端执行",
+      "MCP"
+    ],
+    "homepageUrl": "https://cline.bot/",
+    "docsUrl": "https://docs.cline.bot/",
+    "mediaUrl": "https://cline.bot/",
+    "icon": "fa-code"
+  },
+  {
+    "id": "tool-saas-chatgpt-3",
+    "name": "ChatGPT Workspace Agents",
+    "company": "OpenAI",
+    "region": "overseas",
+    "toolTypeId": "agent",
+    "toolTypeIds": [
+      "agent"
+    ],
+    "toolTypeLabels": [
+      "智能体"
+    ],
+    "externalCategoryRanks": {
+      "agent": 1
+    },
+    "externalSortOrder": 136,
+    "externalSortRank": 1,
+    "cardSummary": "在 ChatGPT 工作空间中创建可共享的云端 Agent，连接文件、应用、工具和组织流程",
+    "productIntro": "在 ChatGPT 工作空间中创建可共享的云端 Agent，连接文件、应用、工具和组织流程。",
+    "bestFor": "研究报告、跨应用流程、团队共享 Agent、定时工作和组织最佳实践",
+    "coreCapabilities": [
+      "云端执行",
+      "连接应用",
+      "团队共享",
+      "技能与记忆"
+    ],
+    "homepageUrl": "https://chatgpt.com/",
+    "docsUrl": "https://developers.openai.com/",
+    "mediaUrl": "https://openai.com/index/introducing-workspace-agents-in-chatgpt/",
+    "icon": "fa-robot"
+  },
+  {
+    "id": "tool-ext-codex-cloud",
+    "name": "Codex Cloud",
+    "company": "OpenAI",
+    "region": "overseas",
+    "toolTypeId": "agent",
+    "toolTypeIds": [
+      "agent"
+    ],
+    "toolTypeLabels": [
+      "智能体"
+    ],
+    "externalCategoryRanks": {
+      "agent": 1
+    },
+    "externalSortOrder": 137,
+    "externalSortRank": 1,
+    "cardSummary": "把代码任务交给云端智能体并行推进，在隔离环境中实现、测试与交付",
+    "productIntro": "在隔离云环境中并行执行长任务，可从网页、GitHub、Linear 或 Slack 委派工作。",
+    "bestFor": "后台长任务、多方案并行、代码库任务、自动化交付和异步协作",
+    "coreCapabilities": [
+      "云端沙箱",
+      "并行任务",
+      "后台执行",
+      "集成委派"
+    ],
+    "homepageUrl": "https://chatgpt.com/codex",
+    "docsUrl": "https://developers.openai.com/codex/cloud",
+    "mediaUrl": "https://openai.com/codex/",
+    "icon": "fa-robot"
+  },
+  {
+    "id": "tool-ext-ai-2",
+    "name": "夸克AI",
+    "company": "阿里巴巴",
+    "region": "domestic",
+    "toolTypeId": "search",
+    "toolTypeIds": [
+      "search"
+    ],
+    "toolTypeLabels": [
+      "AI搜索与研究"
+    ],
+    "externalCategoryRanks": {
+      "search": 1
+    },
+    "externalSortOrder": 138,
+    "externalSortRank": 1,
+    "cardSummary": "融合搜索、网盘、扫描和内容生成的中文 AI 信息服务",
+    "productIntro": "融合搜索、网盘、扫描和内容生成的中文 AI 信息服务。",
+    "bestFor": "中文资料搜索、文件总结、学习辅助与移动端信息处理",
+    "coreCapabilities": [
+      "AI 搜索",
+      "深度研究",
+      "文件解析",
+      "扫描与网盘"
+    ],
+    "homepageUrl": "https://ai.quark.cn/",
+    "docsUrl": "https://ai.quark.cn/",
+    "mediaUrl": "https://ai.quark.cn/",
+    "icon": "fa-magnifying-glass"
+  },
+  {
+    "id": "tool-ext-tbfab108334",
+    "name": "飞书知识问答",
+    "company": "飞书",
+    "region": "domestic",
+    "toolTypeId": "knowledge",
+    "toolTypeIds": [
+      "knowledge"
+    ],
+    "toolTypeLabels": [
+      "知识管理与写作"
+    ],
+    "externalCategoryRanks": {
+      "knowledge": 1
+    },
+    "externalSortOrder": 139,
+    "externalSortRank": 1,
+    "cardSummary": "基于飞书文档、知识库与业务内容进行权限内检索和问答",
+    "productIntro": "基于飞书文档、知识库与业务内容进行权限内检索和问答。",
+    "bestFor": "组织制度查询、项目知识复用、新人学习与跨文档检索",
+    "coreCapabilities": [
+      "知识问答",
+      "权限继承",
+      "来源引用",
+      "飞书内容连接"
+    ],
+    "homepageUrl": "https://www.feishu.cn/hc/zh-CN/articles/854453754409-%E4%BD%BF%E7%94%A8%E7%9F%A5%E8%AF%86%E9%97%AE%E7%AD%94",
+    "docsUrl": "https://www.feishu.cn/hc/zh-CN/articles/854453754409-%E4%BD%BF%E7%94%A8%E7%9F%A5%E8%AF%86%E9%97%AE%E7%AD%94",
+    "mediaUrl": "https://www.feishu.cn/product/ai",
+    "icon": "fa-book"
+  },
+  {
+    "id": "tool-ext-t91df293e5e",
+    "name": "秘塔写作猫",
+    "company": "秘塔科技",
+    "region": "domestic",
+    "toolTypeId": "writing",
+    "toolTypeIds": [
+      "writing"
+    ],
+    "toolTypeLabels": [
+      "写作与翻译"
+    ],
+    "externalCategoryRanks": {
+      "writing": 1
+    },
+    "externalSortOrder": 140,
+    "externalSortRank": 1,
+    "cardSummary": "提供中文纠错、改写、续写和排版建议的 AI 写作辅助工具",
+    "productIntro": "提供中文纠错、改写、续写和排版建议的 AI 写作辅助工具。",
+    "bestFor": "中文公文、报告、长文校对与表达优化",
+    "coreCapabilities": [
+      "中文纠错",
+      "智能改写",
+      "文本续写",
+      "浏览器插件"
+    ],
+    "homepageUrl": "https://xiezuocat.com/",
+    "docsUrl": "https://xiezuocat.com/",
+    "mediaUrl": "https://xiezuocat.com/",
+    "icon": "fa-pen"
+  },
+  {
+    "id": "tool-ext-tffe5575282",
+    "name": "讯飞写作",
+    "company": "科大讯飞",
+    "region": "domestic",
+    "toolTypeId": "writing",
+    "toolTypeIds": [
+      "writing"
+    ],
+    "toolTypeLabels": [
+      "写作与翻译"
+    ],
+    "externalCategoryRanks": {
+      "writing": 1
+    },
+    "externalSortOrder": 141,
+    "externalSortRank": 1,
+    "cardSummary": "面向中文材料、公文和营销内容的 AI 写作与润色平台",
+    "productIntro": "面向中文材料、公文和营销内容的 AI 写作与润色平台。",
+    "bestFor": "公文材料、工作总结、营销文案与中文长文",
+    "coreCapabilities": [
+      "主题写作",
+      "公文模板",
+      "扩写润色",
+      "内容改写"
+    ],
+    "homepageUrl": "https://huixie.iflyrec.com/",
+    "docsUrl": "https://huixie.iflyrec.com/",
+    "mediaUrl": "https://huixie.iflyrec.com/",
+    "icon": "fa-pen"
+  },
+  {
+    "id": "tool-ext-islide-ai",
+    "name": "iSlide AI",
+    "company": "成都艾斯莱德网络科技",
+    "region": "domestic",
+    "toolTypeId": "ppt",
+    "toolTypeIds": [
+      "ppt"
+    ],
+    "toolTypeLabels": [
+      "演示与文档"
+    ],
+    "externalCategoryRanks": {
+      "ppt": 1
+    },
+    "externalSortOrder": 142,
+    "externalSortRank": 1,
+    "cardSummary": "围绕 PowerPoint 的 AI 生成、模板素材和批量排版工具",
+    "productIntro": "围绕 PowerPoint 的 AI 生成、模板素材和批量排版工具。",
+    "bestFor": "企业 PPT 美化、模板复用、批量排版和快速成稿",
+    "coreCapabilities": [
+      "AI 生成 PPT",
+      "模板库",
+      "智能排版",
+      "图示素材"
+    ],
+    "homepageUrl": "https://www.islide.cc/",
+    "docsUrl": "https://support.islide.cc/",
+    "mediaUrl": "https://www.islide.cc/",
+    "icon": "fa-file-powerpoint"
+  },
+  {
+    "id": "tool-ext-vidu",
+    "name": "Vidu",
+    "company": "生数科技",
+    "region": "domestic",
+    "toolTypeId": "video",
+    "toolTypeIds": [
+      "video"
+    ],
+    "toolTypeLabels": [
+      "视频与数字人"
+    ],
+    "externalCategoryRanks": {
+      "video": 1
+    },
+    "externalSortOrder": 143,
+    "externalSortRank": 1,
+    "cardSummary": "面向动漫、广告和创意表达的多主体一致性 AI 视频生成平台",
+    "productIntro": "面向动漫、广告和创意表达的多主体一致性 AI 视频生成平台。",
+    "bestFor": "动漫内容、参考图视频、品牌短片和社媒创意",
+    "coreCapabilities": [
+      "参考生视频",
+      "主体一致性",
+      "文生视频",
+      "动漫风格"
+    ],
+    "homepageUrl": "https://www.vidu.com/zh/",
+    "docsUrl": "https://www.vidu.com/zh/",
+    "mediaUrl": "https://www.vidu.com/zh/",
+    "icon": "fa-video"
+  },
+  {
+    "id": "tool-ext-wps-ai-",
+    "name": "WPS AI 表格",
+    "company": "金山办公",
+    "region": "domestic",
+    "toolTypeId": "data",
+    "toolTypeIds": [
+      "data"
+    ],
+    "toolTypeLabels": [
+      "数据分析"
+    ],
+    "externalCategoryRanks": {
+      "data": 1
+    },
+    "externalSortOrder": 144,
+    "externalSortRank": 1,
+    "cardSummary": "在 WPS 表格中以自然语言生成公式、分析数据与制作图表",
+    "productIntro": "在 WPS 表格中以自然语言生成公式、分析数据与制作图表。",
+    "bestFor": "中文办公表格、公式辅助、经营数据整理和快速图表",
+    "coreCapabilities": [
+      "公式生成",
+      "数据问答",
+      "智能图表",
+      "表格整理"
+    ],
+    "homepageUrl": "https://ai.wps.cn/",
+    "docsUrl": "https://ai.wps.cn/",
+    "mediaUrl": "https://ai.wps.cn/",
+    "icon": "fa-chart-line"
+  },
+  {
+    "id": "tool-ext-chatexcel",
+    "name": "ChatExcel",
+    "company": "北京元空智能科技",
+    "region": "domestic",
+    "toolTypeId": "data",
+    "toolTypeIds": [
+      "data"
+    ],
+    "toolTypeLabels": [
+      "数据分析"
+    ],
+    "externalCategoryRanks": {
+      "data": 1
+    },
+    "externalSortOrder": 145,
+    "externalSortRank": 1,
+    "cardSummary": "以对话处理 Excel、数据库和多格式资料并生成报告与看板",
+    "productIntro": "以对话处理 Excel、数据库和多格式资料并生成报告与看板。",
+    "bestFor": "复杂表格清洗、跨表分析、自然语言问数与数据报告",
+    "coreCapabilities": [
+      "AI Excel",
+      "ChatDB",
+      "多模态资料",
+      "报告与看板"
+    ],
+    "homepageUrl": "https://www.chatexcel.com/",
+    "docsUrl": "https://chatexcel.com/blog/tutorial/chatexcel-beginners-guide/",
+    "mediaUrl": "https://chatexcel.com/blog/chatexcel-ultra-%E6%A1%8C%E9%9D%A2%E7%89%88%E6%AD%A3%E5%BC%8F%E4%B8%8A%E7%BA%BF%EF%BC%81/",
+    "icon": "fa-chart-line"
+  },
+  {
+    "id": "tool-ext-t41f06b73fa",
+    "name": "腾讯元器",
+    "company": "腾讯",
+    "region": "domestic",
+    "toolTypeId": "agent",
+    "toolTypeIds": [
+      "agent"
+    ],
+    "toolTypeLabels": [
+      "智能体"
+    ],
+    "externalCategoryRanks": {
+      "agent": 1
+    },
+    "externalSortOrder": 146,
+    "externalSortRank": 1,
+    "cardSummary": "基于腾讯生态搭建知识库、工作流和可发布智能体的平台",
+    "productIntro": "基于腾讯生态搭建知识库、工作流和可发布智能体的平台。",
+    "bestFor": "公众号与企微助手、知识问答、行业机器人和内容服务",
+    "coreCapabilities": [
+      "智能体搭建",
+      "知识库",
+      "工作流",
+      "腾讯生态发布"
+    ],
+    "homepageUrl": "https://yuanqi.tencent.com/",
+    "docsUrl": "https://yuanqi.tencent.com/agent-doc/",
+    "mediaUrl": "https://yuanqi.tencent.com/",
+    "icon": "fa-robot"
+  },
+  {
+    "id": "tool-ext-tcd48919259",
+    "name": "讯飞星火",
+    "company": "科大讯飞",
+    "region": "domestic",
+    "toolTypeId": "general",
+    "toolTypeIds": [
+      "general"
+    ],
+    "toolTypeLabels": [
+      "通用AI助手"
+    ],
+    "externalCategoryRanks": {
+      "general": 1
+    },
+    "externalSortOrder": 147,
+    "externalSortRank": 1,
+    "cardSummary": "面向中文办公、学习与行业应用的多模态认知大模型助手",
+    "productIntro": "面向中文办公、学习与行业应用的多模态认知大模型助手。",
+    "bestFor": "中文写作、知识问答、语音交互、学习辅导与行业应用",
+    "coreCapabilities": [
+      "中文理解",
+      "语音交互",
+      "文档问答",
+      "多模态"
+    ],
+    "homepageUrl": "https://xinghuo.xfyun.cn/",
+    "docsUrl": "https://www.xfyun.cn/doc/spark/Web.html",
+    "mediaUrl": "https://xinghuo.xfyun.cn/",
+    "icon": "fa-comments"
+  },
+  {
+    "id": "tool-ext-ta8787dd7a6",
+    "name": "知乎直答",
+    "company": "知乎",
+    "region": "domestic",
+    "toolTypeId": "search",
+    "toolTypeIds": [
+      "search"
+    ],
+    "toolTypeLabels": [
+      "AI搜索与研究"
+    ],
+    "externalCategoryRanks": {
+      "search": 1
+    },
+    "externalSortOrder": 148,
+    "externalSortRank": 1,
+    "cardSummary": "依托知乎内容与全网信息生成带来源的答案，强调观点与经验信息",
+    "productIntro": "依托知乎内容与全网信息生成带来源的答案，强调观点与经验信息。",
+    "bestFor": "中文问题研究、经验检索、观点对照和信息来源追踪",
+    "coreCapabilities": [
+      "智能搜索",
+      "来源引用",
+      "知乎内容",
+      "追问"
+    ],
+    "homepageUrl": "https://zhida.zhihu.com/",
+    "mediaUrl": "https://zhida.zhihu.com/",
+    "icon": "fa-magnifying-glass"
+  },
+  {
+    "id": "tool-ext-ai-4",
+    "name": "博查AI搜索",
+    "company": "博查",
+    "region": "domestic",
+    "toolTypeId": "search",
+    "toolTypeIds": [
+      "search"
+    ],
+    "toolTypeLabels": [
+      "AI搜索与研究"
+    ],
+    "externalCategoryRanks": {
+      "search": 1
+    },
+    "externalSortOrder": 149,
+    "externalSortRank": 1,
+    "cardSummary": "提供面向 AI 应用与个人研究的中文搜索、答案生成和搜索 API",
+    "productIntro": "提供面向 AI 应用与个人研究的中文搜索、答案生成和搜索 API。",
+    "bestFor": "中文联网检索、资料聚合、开发者搜索接入和事实查询",
+    "coreCapabilities": [
+      "联网搜索",
+      "搜索 API",
+      "网页摘要",
+      "多源结果"
+    ],
+    "homepageUrl": "https://bochaai.com/",
+    "docsUrl": "https://open.bochaai.com/",
+    "mediaUrl": "https://bochaai.com/",
+    "icon": "fa-magnifying-glass"
+  },
+  {
+    "id": "tool-ext-flowus-ai",
+    "name": "FlowUs AI",
+    "company": "FlowUs",
+    "region": "domestic",
+    "toolTypeId": "knowledge",
+    "toolTypeIds": [
+      "knowledge"
+    ],
+    "toolTypeLabels": [
+      "知识管理与写作"
+    ],
+    "externalCategoryRanks": {
+      "knowledge": 1
+    },
+    "externalSortOrder": 150,
+    "externalSortRank": 1,
+    "cardSummary": "把文档、数据库、知识库与 AI 助手整合在一体化协作空间中",
+    "productIntro": "把文档、数据库、知识库与 AI 助手整合在一体化协作空间中。",
+    "bestFor": "团队文档、项目知识库、信息整理、协作写作和知识问答",
+    "coreCapabilities": [
+      "块编辑器",
+      "多维表",
+      "知识库",
+      "AI 写作"
+    ],
+    "homepageUrl": "https://flowus.cn/",
+    "docsUrl": "https://flowus.cn/share/",
+    "mediaUrl": "https://flowus.cn/",
+    "icon": "fa-book"
+  },
+  {
+    "id": "tool-ext-ta8a343cb47",
+    "name": "语雀",
+    "company": "蚂蚁集团",
+    "region": "domestic",
+    "toolTypeId": "knowledge",
+    "toolTypeIds": [
+      "knowledge"
+    ],
+    "toolTypeLabels": [
+      "知识管理与写作"
+    ],
+    "externalCategoryRanks": {
+      "knowledge": 1
+    },
+    "externalSortOrder": 151,
+    "externalSortRank": 1,
+    "cardSummary": "面向个人与团队的结构化文档和知识库平台，支持 AI 辅助创作与总结",
+    "productIntro": "面向个人与团队的结构化文档和知识库平台，支持 AI 辅助创作与总结。",
+    "bestFor": "团队知识库、项目文档、规范沉淀、协同写作和内容发布",
+    "coreCapabilities": [
+      "结构化知识库",
+      "协同文档",
+      "AI 辅助",
+      "权限管理"
+    ],
+    "homepageUrl": "https://www.yuque.com/",
+    "docsUrl": "https://www.yuque.com/yuque/help",
+    "mediaUrl": "https://www.yuque.com/",
+    "icon": "fa-book"
+  },
+  {
+    "id": "tool-ext--ai-2",
+    "name": "有道云笔记 AI",
+    "company": "网易有道",
+    "region": "domestic",
+    "toolTypeId": "knowledge",
+    "toolTypeIds": [
+      "knowledge"
+    ],
+    "toolTypeLabels": [
+      "知识管理与写作"
+    ],
+    "externalCategoryRanks": {
+      "knowledge": 1
+    },
+    "externalSortOrder": 152,
+    "externalSortRank": 1,
+    "cardSummary": "在多端笔记、资料收藏和文档处理中加入 AI 总结、写作与问答能力",
+    "productIntro": "在多端笔记、资料收藏和文档处理中加入 AI 总结、写作与问答能力。",
+    "bestFor": "跨端笔记、资料收藏、OCR、文档阅读和个人知识管理",
+    "coreCapabilities": [
+      "多端同步",
+      "OCR",
+      "AI 总结",
+      "资料收藏"
+    ],
+    "homepageUrl": "https://note.youdao.com/",
+    "mediaUrl": "https://note.youdao.com/",
+    "icon": "fa-book"
+  },
+  {
+    "id": "tool-ext-ai-5",
+    "name": "笔灵AI",
+    "company": "笔灵科技",
+    "region": "domestic",
+    "toolTypeId": "writing",
+    "toolTypeIds": [
+      "writing"
+    ],
+    "toolTypeLabels": [
+      "写作与翻译"
+    ],
+    "externalCategoryRanks": {
+      "writing": 1
+    },
+    "externalSortOrder": 153,
+    "externalSortRank": 1,
+    "cardSummary": "面向中文长文、公文、自媒体与商业材料的一站式 AI 写作平台",
+    "productIntro": "面向中文长文、公文、自媒体与商业材料的一站式 AI 写作平台。",
+    "bestFor": "中文长文、工作总结、公文、营销文案和自媒体内容",
+    "coreCapabilities": [
+      "长文生成",
+      "公文写作",
+      "改写润色",
+      "模板库"
+    ],
+    "homepageUrl": "https://ibiling.cn/",
+    "mediaUrl": "https://ibiling.cn/",
+    "icon": "fa-pen"
+  },
+  {
+    "id": "tool-ext-t72dd0035f1",
+    "name": "火山写作",
+    "company": "字节跳动",
+    "region": "domestic",
+    "toolTypeId": "writing",
+    "toolTypeIds": [
+      "writing"
+    ],
+    "toolTypeLabels": [
+      "写作与翻译"
+    ],
+    "externalCategoryRanks": {
+      "writing": 1
+    },
+    "externalSortOrder": 154,
+    "externalSortRank": 1,
+    "cardSummary": "提供中文与英文的智能改写、续写、润色和表达建议",
+    "productIntro": "提供中文与英文的智能改写、续写、润色和表达建议。",
+    "bestFor": "日常写作、英文辅助、句子改写、润色与表达校正",
+    "coreCapabilities": [
+      "中英写作",
+      "改写续写",
+      "语法检查",
+      "表达建议"
+    ],
+    "homepageUrl": "https://www.writingo.net/",
+    "mediaUrl": "https://www.writingo.net/",
+    "icon": "fa-pen"
+  },
+  {
+    "id": "tool-ext-t4268e8f61c",
+    "name": "橙篇",
+    "company": "百度",
+    "region": "domestic",
+    "toolTypeId": "writing",
+    "toolTypeIds": [
+      "writing"
+    ],
+    "toolTypeLabels": [
+      "写作与翻译"
+    ],
+    "externalCategoryRanks": {
+      "writing": 1
+    },
+    "externalSortOrder": 155,
+    "externalSortRank": 1,
+    "cardSummary": "面向长文理解与创作，将资料检索、阅读、整理和成稿串成完整流程",
+    "productIntro": "面向长文理解与创作，将资料检索、阅读、整理和成稿串成完整流程。",
+    "bestFor": "长篇报告、资料研究、内容整理和中文深度写作",
+    "coreCapabilities": [
+      "长文生成",
+      "资料检索",
+      "多文档理解",
+      "内容编辑"
+    ],
+    "homepageUrl": "https://cp.baidu.com/",
+    "mediaUrl": "https://cp.baidu.com/",
+    "icon": "fa-pen"
+  },
+  {
+    "id": "tool-ext-effidit",
+    "name": "Effidit",
+    "company": "腾讯 AI Lab",
+    "region": "domestic",
+    "toolTypeId": "writing",
+    "toolTypeIds": [
+      "writing"
+    ],
+    "toolTypeLabels": [
+      "写作与翻译"
+    ],
+    "externalCategoryRanks": {
+      "writing": 1
+    },
+    "externalSortOrder": 156,
+    "externalSortRank": 1,
+    "cardSummary": "腾讯 AI Lab 推出的智能创作助手，提供文本补全、改写、纠错和检索",
+    "productIntro": "腾讯 AI Lab 推出的智能创作助手，提供文本补全、改写、纠错和检索。",
+    "bestFor": "中文学术与办公写作、句子补全、改写和智能检索",
+    "coreCapabilities": [
+      "智能补全",
+      "文本改写",
+      "错误纠正",
+      "素材检索"
+    ],
+    "homepageUrl": "https://effidit.qq.com/",
+    "mediaUrl": "https://effidit.qq.com/",
+    "icon": "fa-pen"
+  },
+  {
+    "id": "tool-ext-ppt",
+    "name": "秒出PPT",
+    "company": "秒出科技",
+    "region": "domestic",
+    "toolTypeId": "ppt",
+    "toolTypeIds": [
+      "ppt"
+    ],
+    "toolTypeLabels": [
+      "演示与文档"
+    ],
+    "externalCategoryRanks": {
+      "ppt": 1
+    },
+    "externalSortOrder": 157,
+    "externalSortRank": 1,
+    "cardSummary": "围绕“快速出稿”提供主题生成、文档导入、模板匹配和 PPTX 导出",
+    "productIntro": "围绕“快速出稿”提供主题生成、文档导入、模板匹配和 PPTX 导出。",
+    "bestFor": "日常汇报、课程演示、方案初稿和快速可编辑导出",
+    "coreCapabilities": [
+      "主题生成",
+      "文档导入",
+      "模板匹配",
+      "PPTX 导出"
+    ],
+    "homepageUrl": "https://10sppt.com/",
+    "mediaUrl": "https://10sppt.com/",
+    "icon": "fa-file-powerpoint"
+  },
+  {
+    "id": "tool-ext-ai-ppt",
+    "name": "百度文库AI PPT",
+    "company": "百度",
+    "region": "domestic",
+    "toolTypeId": "ppt",
+    "toolTypeIds": [
+      "ppt"
+    ],
+    "toolTypeLabels": [
+      "演示与文档"
+    ],
+    "externalCategoryRanks": {
+      "ppt": 1
+    },
+    "externalSortOrder": 158,
+    "externalSortRank": 1,
+    "cardSummary": "结合百度文库资料与 AI 能力，从主题或文档生成结构化演示材料",
+    "productIntro": "结合百度文库资料与 AI 能力，从主题或文档生成结构化演示材料。",
+    "bestFor": "中文资料搜集、文档转 PPT、教育培训和通用汇报",
+    "coreCapabilities": [
+      "AI 生成 PPT",
+      "文档转演示",
+      "模板库",
+      "资料辅助"
+    ],
+    "homepageUrl": "https://wenku.baidu.com/",
+    "mediaUrl": "https://wenku.baidu.com/",
+    "icon": "fa-file-powerpoint"
+  },
+  {
+    "id": "tool-ext-ai-6",
+    "name": "堆友AI",
+    "company": "阿里巴巴",
+    "region": "domestic",
+    "toolTypeId": "image",
+    "toolTypeIds": [
+      "image"
+    ],
+    "toolTypeLabels": [
+      "图像与设计"
+    ],
+    "externalCategoryRanks": {
+      "image": 1
+    },
+    "externalSortOrder": 159,
+    "externalSortRank": 1,
+    "cardSummary": "面向设计师和电商创作者的一站式 AI 视觉平台，覆盖生图、抠图和素材",
+    "productIntro": "面向设计师和电商创作者的一站式 AI 视觉平台，覆盖生图、抠图和素材。",
+    "bestFor": "电商视觉、营销图片、背景生成、素材搜索和快速设计",
+    "coreCapabilities": [
+      "AI 生图",
+      "智能抠图",
+      "电商素材",
+      "设计资源"
+    ],
+    "homepageUrl": "https://d.design/",
+    "mediaUrl": "https://d.design/",
+    "icon": "fa-image"
+  },
+  {
+    "id": "tool-ext-ai-7",
+    "name": "稿定AI",
+    "company": "稿定科技",
+    "region": "domestic",
+    "toolTypeId": "image",
+    "toolTypeIds": [
+      "image"
+    ],
+    "toolTypeLabels": [
+      "图像与设计"
+    ],
+    "externalCategoryRanks": {
+      "image": 1
+    },
+    "externalSortOrder": 160,
+    "externalSortRank": 1,
+    "cardSummary": "把 AI 生图、设计模板、抠图与商品图制作融入大众化在线设计流程",
+    "productIntro": "把 AI 生图、设计模板、抠图与商品图制作融入大众化在线设计流程。",
+    "bestFor": "营销海报、社媒图片、电商商品图、抠图和模板化设计",
+    "coreCapabilities": [
+      "AI 生图",
+      "商品图",
+      "模板设计",
+      "智能抠图"
+    ],
+    "homepageUrl": "https://www.gaoding.com/ai",
+    "mediaUrl": "https://www.gaoding.com/ai",
+    "icon": "fa-image"
+  },
+  {
+    "id": "tool-ext-tc0906ba79c",
+    "name": "美图设计室",
+    "company": "美图",
+    "region": "domestic",
+    "toolTypeId": "image",
+    "toolTypeIds": [
+      "image"
+    ],
+    "toolTypeLabels": [
+      "图像与设计"
+    ],
+    "externalCategoryRanks": {
+      "image": 1
+    },
+    "externalSortOrder": 161,
+    "externalSortRank": 1,
+    "cardSummary": "面向商业设计与电商内容的 AI 视觉工作台，强调商品图和营销素材效率",
+    "productIntro": "面向商业设计与电商内容的 AI 视觉工作台，强调商品图和营销素材效率。",
+    "bestFor": "电商商品图、商业海报、图片精修、模特换装和批量素材",
+    "coreCapabilities": [
+      "AI 商品图",
+      "智能设计",
+      "图片精修",
+      "批量创作"
+    ],
+    "homepageUrl": "https://www.designkit.com/",
+    "mediaUrl": "https://www.designkit.com/",
+    "icon": "fa-image"
+  },
+  {
+    "id": "tool-ext-pixverse",
+    "name": "PixVerse",
+    "company": "爱诗科技",
+    "region": "domestic",
+    "toolTypeId": "video",
+    "toolTypeIds": [
+      "video"
+    ],
+    "toolTypeLabels": [
+      "视频与数字人"
+    ],
+    "externalCategoryRanks": {
+      "video": 1
+    },
+    "externalSortOrder": 162,
+    "externalSortRank": 1,
+    "cardSummary": "提供文生视频、图生视频和模板化特效的全球化 AI 视频平台",
+    "productIntro": "提供文生视频、图生视频和模板化特效的全球化 AI 视频平台。",
+    "bestFor": "社媒视频、图片动画、模板特效、角色短片和快速创作",
+    "coreCapabilities": [
+      "文生视频",
+      "图生视频",
+      "模板特效",
+      "角色一致性"
+    ],
+    "homepageUrl": "https://pixverse.ai/",
+    "docsUrl": "https://docs.pixverse.ai/",
+    "mediaUrl": "https://pixverse.ai/",
+    "icon": "fa-video"
+  },
+  {
+    "id": "tool-ext-tdf9d00f6c3",
+    "name": "智谱清影",
+    "company": "智谱",
+    "region": "domestic",
+    "toolTypeId": "video",
+    "toolTypeIds": [
+      "video"
+    ],
+    "toolTypeLabels": [
+      "视频与数字人"
+    ],
+    "externalCategoryRanks": {
+      "video": 1
+    },
+    "externalSortOrder": 163,
+    "externalSortRank": 1,
+    "cardSummary": "智谱推出的 AI 影像生成能力，支持文本、图片到视频的快速创作",
+    "productIntro": "智谱推出的 AI 影像生成能力，支持文本、图片到视频的快速创作。",
+    "bestFor": "中文图生视频、创意短片、镜头草图和营销内容",
+    "coreCapabilities": [
+      "文生视频",
+      "图生视频",
+      "中文提示词",
+      "快速生成"
+    ],
+    "homepageUrl": "https://chatglm.cn/",
+    "mediaUrl": "https://chatglm.cn/",
+    "icon": "fa-video"
+  },
+  {
+    "id": "tool-ext-fish-audio",
+    "name": "Fish Audio",
+    "company": "Fish Audio",
+    "region": "domestic",
+    "toolTypeId": "audio",
+    "toolTypeIds": [
+      "audio"
+    ],
+    "toolTypeLabels": [
+      "音频与语音"
+    ],
+    "externalCategoryRanks": {
+      "audio": 1
+    },
+    "externalSortOrder": 164,
+    "externalSortRank": 1,
+    "cardSummary": "支持高质量语音合成、声音克隆与多语言生成的开放语音平台",
+    "productIntro": "支持高质量语音合成、声音克隆与多语言生成的开放语音平台。",
+    "bestFor": "声音克隆、角色配音、多语言语音、开发者 API 和有声内容",
+    "coreCapabilities": [
+      "语音合成",
+      "声音克隆",
+      "多语言",
+      "API"
+    ],
+    "homepageUrl": "https://fish.audio/",
+    "docsUrl": "https://docs.fish.audio/",
+    "mediaUrl": "https://fish.audio/",
+    "icon": "fa-microphone"
+  },
+  {
+    "id": "tool-ext-t81e9793daa",
+    "name": "讯飞智作",
+    "company": "科大讯飞",
+    "region": "domestic",
+    "toolTypeId": "audio",
+    "toolTypeIds": [
+      "audio"
+    ],
+    "toolTypeLabels": [
+      "音频与语音"
+    ],
+    "externalCategoryRanks": {
+      "audio": 1
+    },
+    "externalSortOrder": 165,
+    "externalSortRank": 1,
+    "cardSummary": "面向配音、有声内容和虚拟人的在线智能音视频创作平台",
+    "productIntro": "面向配音、有声内容和虚拟人的在线智能音视频创作平台。",
+    "bestFor": "中文配音、课件解说、广告旁白、有声书和数字人视频",
+    "coreCapabilities": [
+      "智能配音",
+      "多音色",
+      "有声内容",
+      "数字人"
+    ],
+    "homepageUrl": "https://peiyin.xunfei.cn/",
+    "mediaUrl": "https://peiyin.xunfei.cn/",
+    "icon": "fa-microphone"
+  },
+  {
+    "id": "tool-ext-td60238d98c",
+    "name": "腾讯智影",
+    "company": "腾讯",
+    "region": "domestic",
+    "toolTypeId": "audio",
+    "toolTypeIds": [
+      "audio"
+    ],
+    "toolTypeLabels": [
+      "音频与语音"
+    ],
+    "externalCategoryRanks": {
+      "audio": 1
+    },
+    "externalSortOrder": 166,
+    "externalSortRank": 1,
+    "cardSummary": "集智能配音、数字人、字幕与在线视频编辑于一体的内容生产平台",
+    "productIntro": "集智能配音、数字人、字幕与在线视频编辑于一体的内容生产平台。",
+    "bestFor": "中文配音、数字人口播、字幕生成、培训视频和营销短片",
+    "coreCapabilities": [
+      "智能配音",
+      "数字人",
+      "自动字幕",
+      "在线视频编辑"
+    ],
+    "homepageUrl": "https://zenvideo.qq.com/",
+    "mediaUrl": "https://zenvideo.qq.com/",
+    "icon": "fa-microphone"
+  },
+  {
+    "id": "tool-ext-t0cfd1908aa",
+    "name": "网易见外",
+    "company": "网易",
+    "region": "domestic",
+    "toolTypeId": "meeting",
+    "toolTypeIds": [
+      "meeting"
+    ],
+    "toolTypeLabels": [
+      "会议与协作"
+    ],
+    "externalCategoryRanks": {
+      "meeting": 1
+    },
+    "externalSortOrder": 167,
+    "externalSortRank": 1,
+    "cardSummary": "提供音视频转写、字幕、翻译和文档翻译的一站式智能转写平台",
+    "productIntro": "提供音视频转写、字幕、翻译和文档翻译的一站式智能转写平台。",
+    "bestFor": "会议录音、视频字幕、多语言翻译、媒体内容和访谈整理",
+    "coreCapabilities": [
+      "语音转写",
+      "字幕生成",
+      "文档翻译",
+      "多语言"
+    ],
+    "homepageUrl": "https://jianwai.youdao.com/",
+    "mediaUrl": "https://jianwai.youdao.com/",
+    "icon": "fa-users"
+  },
+  {
+    "id": "tool-ext-quick-bi-",
+    "name": "Quick BI 智能问数",
+    "company": "阿里云",
+    "region": "domestic",
+    "toolTypeId": "data",
+    "toolTypeIds": [
+      "data"
+    ],
+    "toolTypeLabels": [
+      "数据分析"
+    ],
+    "externalCategoryRanks": {
+      "data": 1
+    },
+    "externalSortOrder": 168,
+    "externalSortRank": 1,
+    "cardSummary": "在企业 BI 平台中通过自然语言问数、自动图表和指标洞察降低分析门槛",
+    "productIntro": "在企业 BI 平台中通过自然语言问数、自动图表和指标洞察降低分析门槛。",
+    "bestFor": "经营分析、管理驾驶舱、自然语言问数和企业数据治理",
+    "coreCapabilities": [
+      "智能问数",
+      "自动图表",
+      "指标管理",
+      "企业 BI"
+    ],
+    "homepageUrl": "https://www.aliyun.com/product/bigdata/bi",
+    "docsUrl": "https://help.aliyun.com/zh/quick-bi/",
+    "mediaUrl": "https://www.aliyun.com/product/bigdata/bi",
+    "icon": "fa-chart-line"
+  },
+  {
+    "id": "tool-ext-finechatbi",
+    "name": "FineChatBI",
+    "company": "帆软",
+    "region": "domestic",
+    "toolTypeId": "data",
+    "toolTypeIds": [
+      "data"
+    ],
+    "toolTypeLabels": [
+      "数据分析"
+    ],
+    "externalCategoryRanks": {
+      "data": 1
+    },
+    "externalSortOrder": 169,
+    "externalSortRank": 1,
+    "cardSummary": "把企业语义、权限与大模型结合，让业务人员通过对话完成可信问数",
+    "productIntro": "把企业语义、权限与大模型结合，让业务人员通过对话完成可信问数。",
+    "bestFor": "企业经营问数、复杂指标解释、权限控制和管理层数据洞察",
+    "coreCapabilities": [
+      "对话问数",
+      "指标语义",
+      "权限治理",
+      "可视化"
+    ],
+    "homepageUrl": "https://www.fanruan.com/",
+    "mediaUrl": "https://www.fanruan.com/",
+    "icon": "fa-chart-line"
+  },
+  {
+    "id": "tool-ext--sugar-bi",
+    "name": "百度 Sugar BI",
+    "company": "百度智能云",
+    "region": "domestic",
+    "toolTypeId": "data",
+    "toolTypeIds": [
+      "data"
+    ],
+    "toolTypeLabels": [
+      "数据分析"
+    ],
+    "externalCategoryRanks": {
+      "data": 1
+    },
+    "externalSortOrder": 170,
+    "externalSortRank": 1,
+    "cardSummary": "面向企业数据可视化与智能分析，提供低代码大屏、报表和 AI 问数能力",
+    "productIntro": "面向企业数据可视化与智能分析，提供低代码大屏、报表和 AI 问数能力。",
+    "bestFor": "数据大屏、经营报表、低代码分析、行业可视化和智能问数",
+    "coreCapabilities": [
+      "数据可视化",
+      "低代码大屏",
+      "智能问数",
+      "多源接入"
+    ],
+    "homepageUrl": "https://cloud.baidu.com/product/sugar.html",
+    "docsUrl": "https://cloud.baidu.com/doc/SUGAR/",
+    "mediaUrl": "https://cloud.baidu.com/product/sugar.html",
+    "icon": "fa-chart-line"
+  },
+  {
+    "id": "tool-ext-datawind",
+    "name": "DataWind",
+    "company": "火山引擎",
+    "region": "domestic",
+    "toolTypeId": "data",
+    "toolTypeIds": [
+      "data"
+    ],
+    "toolTypeLabels": [
+      "数据分析"
+    ],
+    "externalCategoryRanks": {
+      "data": 1
+    },
+    "externalSortOrder": 171,
+    "externalSortRank": 1,
+    "cardSummary": "火山引擎的一站式数据洞察平台，覆盖自助分析、智能问数与企业报表",
+    "productIntro": "火山引擎的一站式数据洞察平台，覆盖自助分析、智能问数与企业报表。",
+    "bestFor": "运营分析、经营看板、自助取数、智能问数和团队数据协作",
+    "coreCapabilities": [
+      "自助 BI",
+      "智能问数",
+      "数据看板",
+      "协作分析"
+    ],
+    "homepageUrl": "https://www.volcengine.com/product/datawind",
+    "docsUrl": "https://www.volcengine.com/docs/4726",
+    "mediaUrl": "https://www.volcengine.com/product/datawind",
+    "icon": "fa-chart-line"
+  },
+  {
+    "id": "tool-ext--comate",
+    "name": "文心快码 Comate",
+    "company": "百度",
+    "region": "domestic",
+    "toolTypeId": "code",
+    "toolTypeIds": [
+      "code"
+    ],
+    "toolTypeLabels": [
+      "编程开发"
+    ],
+    "externalCategoryRanks": {
+      "code": 1
+    },
+    "externalSortOrder": 172,
+    "externalSortRank": 1,
+    "cardSummary": "面向企业和开发者的智能编码助手，覆盖补全、问答、单测与代码库理解",
+    "productIntro": "面向企业和开发者的智能编码助手，覆盖补全、问答、单测与代码库理解。",
+    "bestFor": "中文研发团队、代码补全、单元测试、代码解释和企业知识增强",
+    "coreCapabilities": [
+      "代码补全",
+      "代码问答",
+      "单测生成",
+      "企业知识"
+    ],
+    "homepageUrl": "https://comate.baidu.com/",
+    "docsUrl": "https://comate.baidu.com/zh/page/document",
+    "mediaUrl": "https://comate.baidu.com/",
+    "icon": "fa-code"
+  },
+  {
+    "id": "tool-ext-fitten-code",
+    "name": "Fitten Code",
+    "company": "非十科技",
+    "region": "domestic",
+    "toolTypeId": "code",
+    "toolTypeIds": [
+      "code"
+    ],
+    "toolTypeLabels": [
+      "编程开发"
+    ],
+    "externalCategoryRanks": {
+      "code": 1
+    },
+    "externalSortOrder": 173,
+    "externalSortRank": 1,
+    "cardSummary": "面向主流 IDE 的国产 AI 编程助手，提供补全、问答、测试和代码解释",
+    "productIntro": "面向主流 IDE 的国产 AI 编程助手，提供补全、问答、测试和代码解释。",
+    "bestFor": "个人开发、代码补全、Bug 分析、注释生成和单元测试",
+    "coreCapabilities": [
+      "代码补全",
+      "编程问答",
+      "单测生成",
+      "代码解释"
+    ],
+    "homepageUrl": "https://code.fittentech.com/",
+    "mediaUrl": "https://code.fittentech.com/",
+    "icon": "fa-code"
+  },
+  {
+    "id": "tool-ext-autoglm",
+    "name": "AutoGLM",
+    "company": "智谱",
+    "region": "domestic",
+    "toolTypeId": "agent",
+    "toolTypeIds": [
+      "agent"
+    ],
+    "toolTypeLabels": [
+      "智能体"
+    ],
+    "externalCategoryRanks": {
+      "agent": 1
+    },
+    "externalSortOrder": 174,
+    "externalSortRank": 1,
+    "cardSummary": "面向手机与电脑操作的自主智能体，理解目标后完成跨应用操作",
+    "productIntro": "面向手机与电脑操作的自主智能体，理解目标后完成跨应用操作。",
+    "bestFor": "手机任务、网页操作、应用协同、信息收集和个人自动化",
+    "coreCapabilities": [
+      "GUI 操作",
+      "任务规划",
+      "跨应用执行",
+      "中文交互"
+    ],
+    "homepageUrl": "https://autoglm.zhipuai.cn/",
+    "mediaUrl": "https://autoglm.zhipuai.cn/",
+    "icon": "fa-robot"
+  },
+  {
+    "id": "tool-ext-flowith-neo",
+    "name": "Flowith Neo",
+    "company": "Flowith",
+    "region": "domestic",
+    "toolTypeId": "agent",
+    "toolTypeIds": [
+      "agent"
+    ],
+    "toolTypeLabels": [
+      "智能体"
+    ],
+    "externalCategoryRanks": {
+      "agent": 1
+    },
+    "externalSortOrder": 175,
+    "externalSortRank": 1,
+    "cardSummary": "以画布、知识和多步骤执行为核心的 Agent 工作空间，适合开放式复杂任务",
+    "productIntro": "以画布、知识和多步骤执行为核心的 Agent 工作空间，适合开放式复杂任务。",
+    "bestFor": "研究规划、知识工作、复杂内容项目、多步骤执行和可视化思考",
+    "coreCapabilities": [
+      "Agent 工作流",
+      "画布",
+      "知识库",
+      "多步骤执行"
+    ],
+    "homepageUrl": "https://flowith.io/",
+    "docsUrl": "https://flowith.io/",
+    "mediaUrl": "https://flowith.io/",
+    "icon": "fa-robot"
   }
 ] as const;
-

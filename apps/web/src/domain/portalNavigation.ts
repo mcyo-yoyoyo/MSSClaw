@@ -14,6 +14,7 @@ import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { isSkillRunnable } from '@/domain/skillRuntime';
+import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 
 export interface PortalNavHandlers {
   onInvokeAgent: (agent: PrototypeAgentSeed, prompt?: string) => void;
@@ -77,10 +78,17 @@ export function openPortalCard(card: PortalMapCard, handlers: PortalNavHandlers)
   }
 
   if (action.type === 'tool') {
-    market.bumpToolInvokes(action.toolId);
     const tool = market.tools.find((t) => t.id === action.toolId);
-    if (tool && isAiSaasTool(tool) && tool.homepageUrl) {
+    // Portal content can outlive the tool it references; never let a stale
+    // portal link bypass the marketplace published gate.
+    if (!tool || !tool.published) {
+      toast(tool ? `「${tool.name}」已下架，当前不可访问` : '该工具已下架或不存在');
+      return;
+    }
+    market.bumpToolInvokes(action.toolId);
+    if (isAiSaasTool(tool) && tool.homepageUrl) {
       window.open(tool.homepageUrl, '_blank', 'noopener,noreferrer');
+      useContentEngagementStore.getState().bumpRedirect(tool.id, 'tool');
       toast(`已打开：${tool.name}`);
       return;
     }
@@ -94,6 +102,7 @@ export function openPortalCard(card: PortalMapCard, handlers: PortalNavHandlers)
     }
     if (tool?.homepageUrl) {
       window.open(tool.homepageUrl, '_blank', 'noopener,noreferrer');
+      useContentEngagementStore.getState().bumpRedirect(tool.id, 'tool');
       toast(`已打开：${tool.name}`);
       return;
     }

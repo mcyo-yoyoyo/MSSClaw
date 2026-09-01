@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { getLobeIconCDN } from '@lobehub/icons/es/features/getLobeIconCDN/index.js';
 import { toc, type IconToc } from '@lobehub/icons/es/toc.js';
 import { CenterModal } from '@/components/center/CenterShell';
@@ -16,10 +16,9 @@ import {
 } from '@/domain/capabilityShelf';
 import {
   ensureMarketShelfTags,
-  resolveToolMarketShelf,
+  resolveConfiguredToolMarketShelf,
   type MarketShelfSlot,
 } from '@/domain/aiToolCategories';
-import { resolveToolFeaturedInFindCases } from '@/domain/plazaToolPicks';
 import {
   listVisibleBusinessScenarioCategories,
   type BusinessScenarioId,
@@ -29,12 +28,22 @@ import {
   type ExternalToolTypeId,
   type ToolRegion,
 } from '@/domain/externalToolTaxonomy';
+import {
+  defaultExternalTaxonomyCatalog,
+  externalToolTypeEntryIsSelected,
+  externalToolTypeSelectionLabels,
+  listVisibleExternalToolTypes,
+  resolveExternalToolTypeSelection,
+  toggleExternalToolTypeSelection,
+  type ExternalTaxonomyCatalog,
+} from '@/domain/externalTaxonomyCatalog';
 import { useExternalTaxonomyCatalogStore } from '@/stores/externalTaxonomyCatalogStore';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
 import { resolvePersistedToolLogoUrl, resolveToolLogoUrl } from '@/domain/toolLogo';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
+import { cn } from '@/lib/utils';
 
 const LOGO_MAX_BYTES = 512 * 1024;
 
@@ -117,7 +126,6 @@ function emptyTool(asExternal: boolean): PrototypeToolSeed {
     marketShelf: asExternal ? 'external' : 'none',
     marketTitle: '',
     businessScenarioIds: [],
-    featuredInFindCases: false,
     region: undefined,
     toolTypeId: undefined,
     toolTypeIds: [],
@@ -138,12 +146,192 @@ interface ToolEditorModalProps {
   onClose: () => void;
 }
 
+function ToolTypeMultiSelect({
+  catalog,
+  value,
+  onChange,
+}: {
+  catalog: ExternalTaxonomyCatalog;
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const labelId = useId();
+  const panelId = useId();
+  const visibleTypes = listVisibleExternalToolTypes(catalog);
+  const selectedLabels = externalToolTypeSelectionLabels(value, catalog);
+  const knownIds = new Set(catalog.types.map((type) => type.id));
+  const hiddenSelected = catalog.types.filter(
+    (type) => type.visible === false && value.includes(type.id),
+  );
+  const unknownSelected = value.filter((id) => !knownIds.has(id as ExternalToolTypeId));
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
+
+  const buttonText =
+    selectedLabels.length === 0
+      ? '请选择用户页分类'
+      : selectedLabels.length <= 2
+        ? selectedLabels.join('、')
+        : `${selectedLabels.slice(0, 2).join('、')} 等`;
+  const accessibleSelection = selectedLabels.length
+    ? selectedLabels.join('、')
+    : '请选择用户页分类';
+
+  return (
+    <div
+      ref={rootRef}
+      className="relative"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
+      }}
+    >
+      <span id={labelId} className="text-[11px] font-semibold text-[#86868b]">
+        用户页分类标签（可多选）
+      </span>
+      <p className="mb-1 text-[10px] leading-relaxed text-[#86868b]">
+        与“外部工具精选”分类条保持一致；内部工具可预配置，仅进入外部货架后参与筛选。
+      </p>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={`用户页分类标签：${accessibleSelection}`}
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((current) => !current)}
+        className={cn(
+          'flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left text-[13px] transition',
+          open
+            ? 'border-zinc-400 bg-white ring-2 ring-zinc-900/10'
+            : 'border-black/8 bg-white hover:border-zinc-300',
+        )}
+      >
+        <span
+          className={cn(
+            'min-w-0 truncate',
+            selectedLabels.length ? 'text-zinc-800' : 'text-zinc-400',
+          )}
+        >
+          {buttonText}
+        </span>
+        <span className="flex shrink-0 items-center gap-2 text-[10px] text-zinc-400">
+          {value.length ? `${selectedLabels.length} 项` : ''}
+          <i className={cn('fa-solid fa-chevron-down transition', open && 'rotate-180')} />
+        </span>
+      </button>
+
+      {open ? (
+        <div
+          className="mt-1 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-[0_12px_32px_-20px_rgba(24,24,27,0.5)]"
+        >
+          <div id={panelId} role="group" aria-labelledby={labelId}>
+            <div className="grid gap-1 p-1.5 sm:grid-cols-2">
+              {visibleTypes.map((type) => {
+                const selected = externalToolTypeEntryIsSelected(value, type);
+                return (
+                  <button
+                    key={type.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() =>
+                      onChange(toggleExternalToolTypeSelection(value, type, catalog))
+                    }
+                    className={cn(
+                      'flex min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12px] transition',
+                      selected
+                        ? 'bg-zinc-900 font-medium text-white'
+                        : 'text-zinc-700 hover:bg-zinc-50',
+                    )}
+                  >
+                    <i
+                      className={cn(
+                        'fa-solid w-4 shrink-0 text-center text-[11px]',
+                        type.icon,
+                        selected ? 'text-white/80' : 'text-zinc-400',
+                      )}
+                      aria-hidden
+                    />
+                    <span className="min-w-0 flex-1 truncate">{type.label}</span>
+                    {selected ? (
+                      <i className="fa-solid fa-check text-[9px]" aria-hidden />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+
+            {hiddenSelected.length || unknownSelected.length ? (
+              <div className="border-t border-zinc-100 px-2.5 py-2">
+                <p className="mb-1.5 text-[10px] font-medium text-zinc-400">
+                  已隐藏 / 旧分类（点击可移除）
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    ...hiddenSelected.map((type) => ({ id: type.id, label: type.label })),
+                    ...unknownSelected.map((id) => ({ id, label: id })),
+                  ].map((type) => (
+                    <button
+                      key={type.id}
+                      type="button"
+                      aria-pressed="true"
+                      onClick={() => onChange(value.filter((id) => id !== type.id))}
+                      className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-800"
+                    >
+                      {type.label} <i className="fa-solid fa-xmark ml-1" aria-hidden />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {value.length ? (
+            <div className="flex justify-end border-t border-zinc-100 px-2.5 py-1.5">
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                className="text-[10px] font-medium text-zinc-500 hover:text-zinc-800"
+              >
+                清空选择
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
   const { tools, saveToolNow, showToast } = useMarketplaceStore();
   const [form, setForm] = useState<PrototypeToolSeed>(emptyTool(false));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const externalTaxonomy = useExternalTaxonomyCatalogStore((s) => s.catalog);
+  const toolTypeCatalog = useMemo(
+    () =>
+      externalTaxonomy.types.length ? externalTaxonomy : defaultExternalTaxonomyCatalog(),
+    [externalTaxonomy],
+  );
 
   useEffect(() => {
     if (!target) return;
@@ -164,10 +352,10 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
     }
     setForm({
       ...existing,
-      marketShelf: existing.marketShelf ?? resolveToolMarketShelf(existing),
+      marketShelf:
+        existing.marketShelf ?? resolveConfiguredToolMarketShelf(existing),
       marketTitle: existing.marketTitle ?? '',
       businessScenarioIds: resolveToolBusinessScenarios(existing),
-      featuredInFindCases: resolveToolFeaturedInFindCases(existing),
     });
   }, [target]);
 
@@ -208,16 +396,18 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
       showToast('请选择可见性');
       return;
     }
-    const selectedToolTypeIds = (form.toolTypeIds?.length
-      ? form.toolTypeIds
-      : form.toolTypeId
-        ? [form.toolTypeId]
-        : []) as ExternalToolTypeId[];
+    const selectedToolTypeIds = resolveExternalToolTypeSelection(
+      form,
+    ) as ExternalToolTypeId[];
+    const selectedToolTypeLabels = externalToolTypeSelectionLabels(
+      selectedToolTypeIds,
+      toolTypeCatalog,
+    );
     const prev = existingTool;
     const userName = getCurrentUserName() || 'Mcyo';
     const userId = getCurrentUserId();
     const id = isNew ? `tool-${Date.now()}` : (target as string);
-    // 新建与存量草稿都先保持未发布；只有显式勾选后才提交上架审批。
+    // 新建与存量草稿都先保持未上架；只有显式勾选后才提交上架审批。
     const needsApproval = Boolean(form.published) && !Boolean(prev?.published);
     const tags = ensureMarketShelfTags(form.tags ?? [], marketShelf);
     const marketTitle = form.marketTitle?.trim() || undefined;
@@ -237,6 +427,9 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
             ? 'platform'
             : 'connector',
       tags,
+      toolTypeId: selectedToolTypeIds[0],
+      toolTypeIds: selectedToolTypeIds,
+      toolTypeLabels: selectedToolTypeLabels,
       author: prev?.author ?? userName,
       publisher: form.publisher || userName,
       publisherUserId: form.publisherUserId || userId || undefined,
@@ -255,7 +448,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
         sourceType,
         marketShelf,
       }),
-      // 普通编辑不能顺带下架；草稿提交审批后也要等终审通过才变为已发布。
+      // 普通编辑不能顺带下架；草稿提交审批后也要等终审通过才变为已上架。
       published: Boolean(prev?.published),
       marketShelf,
       marketTitle: marketShelf === 'external' ? marketTitle : undefined,
@@ -264,11 +457,6 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
       ...(sourceType === 'external' || marketShelf === 'external'
         ? {
             region: form.region as ToolRegion,
-            toolTypeId: selectedToolTypeIds[0],
-            toolTypeIds: selectedToolTypeIds,
-            toolTypeLabels: selectedToolTypeIds.map(
-              (typeId) => externalTaxonomy.types.find((type) => type.id === typeId)?.label ?? typeId,
-            ),
             cardSummary: form.cardSummary?.trim() || undefined,
             company: form.company?.trim() || undefined,
             productIntro: form.productIntro?.trim() || undefined,
@@ -280,7 +468,6 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
           }
         : {
             region: undefined,
-            toolTypeId: undefined,
             cardSummary: undefined,
             company: undefined,
           }),
@@ -322,7 +509,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
         showToast(
           nextTool.published
             ? '工具已保存并同步到共享服务'
-            : '工具已保存为未发布并同步到共享服务',
+            : '工具已保存为未上架并同步到共享服务',
         );
       }
       onClose();
@@ -350,7 +537,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
     ? '保存并提交审批'
     : form.published
       ? '保存'
-      : '保存为未发布';
+      : '保存为未上架';
 
   return (
     <CenterModal
@@ -406,7 +593,6 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
                     next === 'external' ? 'fa-arrow-up-right-from-square' : form.icon || 'fa-plug',
                   connectorType: next === 'none' ? form.connectorType || 'http' : undefined,
                   visibility: next === 'external' ? form.visibility : form.visibility ?? 'public',
-                  featuredInFindCases: next === 'none' ? false : form.featuredInFindCases,
                 });
               }}
             >
@@ -610,8 +796,25 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
             </div>
           </FormField>
         )}
-        <FormField label="标签（逗号分隔）">
+        <ToolTypeMultiSelect
+          key={String(target)}
+          catalog={toolTypeCatalog}
+          value={resolveExternalToolTypeSelection(form)}
+          onChange={(next) =>
+            setForm((current) => ({
+              ...current,
+              toolTypeId: next[0],
+              toolTypeIds: next,
+              toolTypeLabels: externalToolTypeSelectionLabels(next, toolTypeCatalog),
+            }))
+          }
+        />
+        <FormField
+          label="其他检索标签（逗号分隔）"
+          hint="保留 hw-internal、ai-saas、对话等运营标签；不用于上方用户页分类筛选"
+        >
           <FormInput
+            aria-label="其他检索标签"
             value={form.tags.join(', ')}
             onChange={(e) =>
               setForm({
@@ -703,7 +906,6 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
                             ? 'internal'
                             : form.sourceType,
                       category: next === 'external' ? 'external' : form.category,
-                      featuredInFindCases: next === 'none' ? false : form.featuredInFindCases,
                     });
                   }}
                 >
@@ -760,9 +962,9 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
           <div className="flex items-start gap-2 rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-3 py-2.5">
             <i className="fa-solid fa-circle-check mt-0.5 text-[13px] text-emerald-600" />
             <span>
-              <span className="block text-[13px] font-medium text-emerald-800">当前已发布</span>
+              <span className="block text-[13px] font-medium text-emerald-800">当前已上架</span>
               <span className="mt-0.5 block text-[11px] leading-relaxed text-emerald-700/75">
-                编辑保存不会改变发布状态。
+                编辑保存不会改变上架状态。
               </span>
             </span>
           </div>
@@ -776,12 +978,12 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
             />
             <span>
               <span className="block text-[13px] font-medium text-zinc-800">
-                {form.published ? '提交上架审批' : '保存为未发布'}
+                {form.published ? '提交上架审批' : '保存为未上架'}
               </span>
               <span className="mt-0.5 block text-[11px] leading-relaxed text-zinc-500">
                 {form.published
-                  ? '保存后进入审批，审批通过前仍保持未发布。'
-                  : '保存后保持未发布，不会出现在前台工具货架。'}
+                  ? '保存后进入审批，审批通过前仍保持未上架。'
+                  : '保存后保持未上架，不会出现在前台工具货架。'}
               </span>
             </span>
           </label>

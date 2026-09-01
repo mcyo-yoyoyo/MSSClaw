@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { ChatMessageSchema, ExecutionStepSchema } from '@/domain/chat';
 
+const ExecutionUsageSchema = z.object({
+  inputTokens: z.number().int().nonnegative().nullable(),
+  outputTokens: z.number().int().nonnegative().nullable(),
+});
+
 export const StreamEventSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('execution_start'),
@@ -28,9 +33,10 @@ export const StreamEventSchema = z.discriminatedUnion('type', [
     steps: z.array(ExecutionStepSchema),
     agentName: z.string(),
     source: z.enum(['llm', 'scripted']).optional(),
+    usage: ExecutionUsageSchema.optional(),
     followUp: ChatMessageSchema.optional(),
   }),
-  z.object({ type: z.literal('error'), message: z.string() }),
+  z.object({ type: z.literal('error'), message: z.string(), usage: ExecutionUsageSchema.optional() }),
 ]);
 export type StreamEvent = z.infer<typeof StreamEventSchema>;
 

@@ -23,6 +23,9 @@ const ADMIN_WRITABLE_DOC_KINDS = new Set([
   'internal-office-scenes',
 ]);
 
+/** 已迁移为关系表的旧文档只保留读取兼容，任何客户端都不得再覆盖。 */
+const LEGACY_READ_ONLY_DOC_KINDS = new Set(['content-engagement']);
+
 @Controller('workspaces/:workspaceId/docs')
 export class PlatformDocsController {
   constructor(private readonly docs: PlatformDocsService) {}
@@ -69,6 +72,9 @@ export class PlatformDocsController {
     @Headers('authorization') authorization?: string,
     @Headers('x-session-token') xSessionToken?: string,
   ) {
+    if (LEGACY_READ_ONLY_DOC_KINDS.has(kind)) {
+      throw new ForbiddenException(`${kind.replace(/-/g, '_')}_legacy_read_only`);
+    }
     if (ADMIN_WRITABLE_DOC_KINDS.has(kind)) {
       await this.requireSuperAdmin(workspaceId, kind, authorization, xSessionToken);
     }
