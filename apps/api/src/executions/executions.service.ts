@@ -284,8 +284,9 @@ export class ExecutionsService {
         agentName: '模型连接测试',
         planSteps: ['连接模型服务'],
         signal: controller.signal,
-        // Keep the probe cheap while exercising the exact stream transport.
-        config: { ...config, maxTokens: 8 },
+        // Keep the probe short while leaving reasoning models enough budget to
+        // emit a visible completion after their reasoning deltas.
+        config: { ...config, maxTokens: 64 },
       })) {
         if (event.type === 'done') {
           completed = true;

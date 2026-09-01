@@ -187,7 +187,9 @@ test('candidate probe is ephemeral and uses the same stream transport', async ()
   assert.equal(result.ok, true);
   assert.equal(result.source, 'request');
   assert.equal(calls[0].url, 'https://candidate.example/v1/chat/completions');
-  assert.equal(JSON.parse(calls[0].init.body).model, 'candidate-model');
+  const request = JSON.parse(calls[0].init.body);
+  assert.equal(request.model, 'candidate-model');
+  assert.equal(request.max_tokens, 64);
   assert.equal(calls[0].init.headers.Authorization, 'Bearer candidate-key');
   assert.equal(prisma.writes.length, 0);
 });
