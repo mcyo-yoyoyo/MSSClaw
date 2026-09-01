@@ -13,6 +13,7 @@ const originalEnv = {
   baseUrl: process.env.LLM_BASE_URL,
   apiKey: process.env.LLM_API_KEY,
   model: process.env.LLM_MODEL,
+  testTimeout: process.env.LLM_TEST_TIMEOUT_MS,
 };
 
 function fakePrisma(payload) {
@@ -43,6 +44,8 @@ test.afterEach(() => {
   else process.env.LLM_API_KEY = originalEnv.apiKey;
   if (originalEnv.model === undefined) delete process.env.LLM_MODEL;
   else process.env.LLM_MODEL = originalEnv.model;
+  if (originalEnv.testTimeout === undefined) delete process.env.LLM_TEST_TIMEOUT_MS;
+  else process.env.LLM_TEST_TIMEOUT_MS = originalEnv.testTimeout;
 });
 
 test('workspace model credentials win over deployment env and stay paired', async () => {
@@ -186,6 +189,12 @@ test('candidate probe is ephemeral and uses the same stream transport', async ()
 
   assert.equal(result.ok, true);
   assert.equal(result.source, 'request');
+  assert.equal(result.diagnostics.phase, 'stream');
+  assert.equal(result.diagnostics.sseFrames, 1);
+  assert.equal(result.diagnostics.tokenDeltas, 1);
+  assert.equal(result.diagnostics.contentChars, 2);
+  assert.equal(result.diagnostics.reasoningDeltas, 0);
+  assert.equal(result.diagnostics.sawDoneMarker, true);
   assert.equal(calls[0].url, 'https://candidate.example/v1/chat/completions');
   const request = JSON.parse(calls[0].init.body);
   assert.equal(request.model, 'candidate-model');
@@ -197,7 +206,7 @@ test('candidate probe is ephemeral and uses the same stream transport', async ()
 test('probe rejects HTTP errors and empty streams without exposing provider bodies', async () => {
   const service = new ExecutionsService(fakePrisma({}));
   globalThis.fetch = async () => new Response(
-    JSON.stringify({ error: 'provider-secret-key' }),
+    JSON.stringify({ error: { message: 'invalid key candidate-key', code: 'invalid_api_key' } }),
     { status: 401, headers: { 'content-type': 'application/json' } },
   );
   const httpResult = await service.testLlmConnection('ws-test', undefined, {
@@ -208,6 +217,12 @@ test('probe rejects HTTP errors and empty streams without exposing provider bodi
   assert.equal(httpResult.ok, false);
   assert.match(httpResult.message, /HTTP 401/);
   assert.doesNotMatch(httpResult.message, /provider-secret-key/);
+  assert.equal(httpResult.diagnostics.phase, 'response');
+  assert.equal(httpResult.diagnostics.httpStatus, 401);
+  assert.equal(httpResult.diagnostics.sseFrames, 0);
+  assert.match(httpResult.diagnostics.upstreamSummary, /redacted/);
+  assert.match(httpResult.diagnostics.upstreamSummary, /invalid_api_key/);
+  assert.doesNotMatch(httpResult.diagnostics.upstreamSummary, /candidate-key/);
 
   globalThis.fetch = async () => new Response(
     'data: [DONE]\n\n',
@@ -220,6 +235,103 @@ test('probe rejects HTTP errors and empty streams without exposing provider bodi
   });
   assert.equal(emptyResult.ok, false);
   assert.equal(emptyResult.errorCode, 'llm_test_empty_stream');
+  assert.equal(emptyResult.diagnostics.sseFrames, 0);
+  assert.equal(emptyResult.diagnostics.sawDoneMarker, true);
+});
+
+test('probe reports safe network causes and timeout diagnostics', async () => {
+  const service = new ExecutionsService(fakePrisma({}));
+  globalThis.fetch = async () => {
+    const cause = Object.assign(new Error('connect ECONNREFUSED 10.0.0.8:443'), {
+      code: 'ECONNREFUSED',
+    });
+    throw Object.assign(new Error('fetch failed'), { cause });
+  };
+  const networkResult = await service.testLlmConnection('ws-test', undefined, {
+    model: 'candidate-model',
+    baseUrl: 'https://candidate.example/v1',
+    apiKey: 'candidate-key',
+  });
+  assert.equal(networkResult.ok, false);
+  assert.equal(networkResult.diagnostics.networkCode, 'ECONNREFUSED');
+  assert.match(networkResult.message, /ECONNREFUSED/);
+  assert.doesNotMatch(networkResult.message, /candidate-key/);
+
+  process.env.LLM_TEST_TIMEOUT_MS = '1000';
+  globalThis.fetch = async (_url, init) =>
+    new Promise((_, reject) => {
+      init.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), {
+        once: true,
+      });
+    });
+  const timeoutResult = await service.testLlmConnection('ws-test', undefined, {
+    model: 'candidate-model',
+    baseUrl: 'https://candidate.example/v1',
+    apiKey: 'candidate-key',
+  });
+  assert.equal(timeoutResult.ok, false);
+  assert.equal(timeoutResult.errorCode, 'llm_test_timeout');
+  assert.equal(timeoutResult.diagnostics.aborted, true);
+  assert.equal(timeoutResult.diagnostics.timeoutMs, 1000);
+  assert.match(timeoutResult.message, /1000ms/);
+});
+
+test('stream read failures do not get reported as HTTP 200 errors', async () => {
+  const service = new ExecutionsService(fakePrisma({}));
+  globalThis.fetch = async () => new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.error(Object.assign(new Error('socket closed'), { code: 'ECONNRESET' }));
+      },
+    }),
+    { status: 200, headers: { 'content-type': 'text/event-stream' } },
+  );
+  const result = await service.testLlmConnection('ws-test', undefined, {
+    model: 'read-error-model',
+    baseUrl: 'https://candidate.example/v1',
+    apiKey: 'candidate-key',
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.diagnostics.httpStatus, 200);
+  assert.equal(result.diagnostics.networkCode, 'ECONNRESET');
+  assert.doesNotMatch(result.message, /HTTP 200/);
+});
+
+test('reasoning-only SSE activity is a valid model response', async () => {
+  const service = new ExecutionsService(fakePrisma({}));
+  globalThis.fetch = async () => new Response(
+    'data: {"choices":[{"delta":{"reasoning_content":"思考中"}}]}\n\n' +
+      'data: {"usage":{"completion_tokens":4}}\n\n' +
+      'data: [DONE]\n\n',
+    { status: 200, headers: { 'content-type': 'text/event-stream' } },
+  );
+  const result = await service.testLlmConnection('ws-test', undefined, {
+    model: 'reasoning-model',
+    baseUrl: 'https://candidate.example/v1',
+    apiKey: 'candidate-key',
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.diagnostics.tokenDeltas, 0);
+  assert.equal(result.diagnostics.reasoningDeltas, 1);
+  assert.equal(result.diagnostics.reasoningChars, 3);
+  assert.equal(result.diagnostics.usageOutputTokens, 4);
+});
+
+test('usage-only SSE does not masquerade as a usable chat response', async () => {
+  const service = new ExecutionsService(fakePrisma({}));
+  globalThis.fetch = async () => new Response(
+    'data: {"usage":{"completion_tokens":4}}\n\n' +
+      'data: [DONE]\n\n',
+    { status: 200, headers: { 'content-type': 'text/event-stream' } },
+  );
+  const result = await service.testLlmConnection('ws-test', undefined, {
+    model: 'usage-only-model',
+    baseUrl: 'https://candidate.example/v1',
+    apiKey: 'candidate-key',
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.errorCode, 'llm_test_empty_stream');
+  assert.equal(result.diagnostics.usageOutputTokens, 4);
 });
 
 test('requested model cannot inherit another model or a disabled entry', () => {

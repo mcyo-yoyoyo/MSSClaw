@@ -15,6 +15,125 @@ export type NestLlmRuntimeConfig = {
   source: 'env' | 'workspace-doc' | 'request';
 };
 
+/**
+ * Safe, provider-agnostic information collected by the connection probe.
+ * Never include the request URL (it may contain credentials) or an upstream
+ * response body here; summaries are redacted and bounded below.
+ */
+export type LlmStreamDiagnostics = {
+  phase: 'config' | 'request' | 'response' | 'stream';
+  elapsedMs: number;
+  timeoutMs?: number;
+  httpStatus?: number;
+  contentType?: string;
+  upstreamSummary?: string;
+  networkCode?: string;
+  networkSummary?: string;
+  sseFrames: number;
+  tokenDeltas: number;
+  reasoningDeltas: number;
+  contentChars: number;
+  reasoningChars: number;
+  usageInputTokens: number | null;
+  usageOutputTokens: number | null;
+  sawDoneMarker: boolean;
+  aborted?: boolean;
+};
+
+const MAX_DIAGNOSTIC_TEXT = 240;
+const MAX_UPSTREAM_ERROR_BODY = 4096;
+
+function safeDiagnosticText(value: unknown, secret?: string): string {
+  if (typeof value !== 'string') return '';
+  const trimmedSecret = typeof secret === 'string' ? secret.trim() : '';
+  const exactSecret =
+    trimmedSecret.length >= 6
+      ? value.split(trimmedSecret).join('[redacted]')
+      : value;
+  const encodedSecret =
+    trimmedSecret.length >= 6
+      ? exactSecret.split(encodeURIComponent(trimmedSecret)).join('[redacted]')
+      : exactSecret;
+  return encodedSecret
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .replace(/Bearer\s+[^\s,;)}\]]+/gi, 'Bearer [redacted]')
+    .replace(/Basic\s+[A-Za-z0-9+/=]+/gi, 'Basic [redacted]')
+    .replace(/(https?:\/\/)[^\s/@:]+:[^\s/@]+@/gi, '$1[redacted]@')
+    .replace(/([?&](?:api[-_]?key|access[-_]?token|token|secret|password|key)=)[^&\s]+/gi, '$1[redacted]')
+    .replace(
+      /((?:api[-_]?key|access[-_]?token|token|secret|password|key)\s*[:=]\s*["']?)[^"',\s}]+/gi,
+      '$1[redacted]',
+    )
+    // Redact obvious credential-shaped values, while preserving useful error
+    // codes such as `invalid_api_key` and ordinary phrases such as `token limit`.
+    .replace(/\b[\w.-]{8,}(?:secret|password)[\w.-]*\b/gi, '[redacted]')
+    .replace(/\b(?:sk|rk|sess|access|refresh)-[A-Za-z0-9][A-Za-z0-9._~-]{7,}\b/gi, '[redacted]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_DIAGNOSTIC_TEXT);
+}
+
+/** Extract only conventional error fields; arbitrary upstream bodies stay hidden. */
+async function safeUpstreamSummary(response: Response, secret?: string): Promise<string | undefined> {
+  let body = '';
+  try {
+    body = (await response.text()).slice(0, MAX_UPSTREAM_ERROR_BODY);
+  } catch {
+    return undefined;
+  }
+  if (!body.trim()) return undefined;
+
+  try {
+    const parsed = JSON.parse(body) as Record<string, unknown>;
+    const error = parsed.error;
+    const errorObject =
+      error && typeof error === 'object' && !Array.isArray(error)
+        ? (error as Record<string, unknown>)
+        : undefined;
+    const pieces = [
+      typeof error === 'string' ? error : undefined,
+      typeof errorObject?.message === 'string' ? errorObject.message : undefined,
+      typeof errorObject?.type === 'string' ? errorObject.type : undefined,
+      typeof errorObject?.code === 'string' ? errorObject.code : undefined,
+      typeof parsed.message === 'string' ? parsed.message : undefined,
+      typeof parsed.detail === 'string' ? parsed.detail : undefined,
+      typeof parsed.code === 'string' ? parsed.code : undefined,
+    ]
+      .map((piece) => safeDiagnosticText(piece, secret))
+      .filter(Boolean);
+    return pieces.length
+      ? [...new Set(pieces)].join(' · ').slice(0, MAX_DIAGNOSTIC_TEXT)
+      : '上游返回 JSON 错误（未提供错误摘要）';
+  } catch {
+    // Do not echo arbitrary HTML/plaintext: it can contain credentials or a
+    // reverse-proxy diagnostic page with internal topology.
+    return '上游返回非 JSON 错误（响应体已隐藏）';
+  }
+}
+
+function networkErrorDetails(error: unknown, secret?: string): {
+  code?: string;
+  summary: string;
+} {
+  if (!error || typeof error !== 'object') return { summary: '网络请求失败' };
+  const root = error as { message?: unknown; code?: unknown; cause?: unknown };
+  const cause = root.cause;
+  const causeObject = cause && typeof cause === 'object' ? (cause as { message?: unknown; code?: unknown }) : undefined;
+  const codeValue = causeObject?.code ?? root.code;
+  const code =
+    typeof codeValue === 'string' && /^[A-Za-z0-9_.:-]{2,64}$/.test(codeValue)
+      ? codeValue
+      : undefined;
+  const rawSummary = causeObject?.message ?? root.message;
+  const summary = safeDiagnosticText(rawSummary, secret) || '网络请求失败';
+  return { ...(code ? { code } : {}), summary };
+}
+
+function responseContentType(response: Response, secret?: string): string | undefined {
+  const safe = safeDiagnosticText(response.headers.get('content-type'), secret);
+  return safe ? safe.slice(0, 120) : undefined;
+}
+
 function normalizeBaseUrl(baseUrl: string) {
   const value = baseUrl.trim().replace(/\/$/, '');
   if (!value || value.length > 2048) return '';
@@ -260,26 +379,69 @@ export async function* nestLlmExecutionStream(params: {
   kbContext?: string;
   signal?: AbortSignal;
   config: NestLlmRuntimeConfig;
+  /** Internal hook used by the model-config probe; normal chat leaves it unset. */
+  onDiagnostics?: (diagnostics: LlmStreamDiagnostics) => void;
 }): AsyncGenerator<StreamEvent> {
-  const { signal, config: cfg } = params;
-  if (signal?.aborted) return;
+  const { signal, config: cfg, onDiagnostics } = params;
+  const started = Date.now();
+  let sseFrames = 0;
+  let tokenDeltas = 0;
+  let reasoningDeltas = 0;
+  let contentChars = 0;
+  let reasoningChars = 0;
+  let usage: ExecutionUsage | undefined;
+  let sawDoneMarker = false;
+
+  const emitDiagnostics = (
+    phase: LlmStreamDiagnostics['phase'],
+    extra: Partial<LlmStreamDiagnostics> = {},
+  ) => {
+    if (!onDiagnostics) return;
+    try {
+      onDiagnostics({
+        phase,
+        elapsedMs: Math.max(0, Date.now() - started),
+        sseFrames,
+        tokenDeltas,
+        reasoningDeltas,
+        contentChars,
+        reasoningChars,
+        usageInputTokens: usage?.inputTokens ?? null,
+        usageOutputTokens: usage?.outputTokens ?? null,
+        sawDoneMarker,
+        ...extra,
+      });
+    } catch {
+      // Diagnostics must never change the execution result.
+    }
+  };
+
+  if (signal?.aborted) {
+    emitDiagnostics('request', { aborted: true });
+    return;
+  }
 
   const planSteps =
     params.planSteps?.filter((s) => s.trim()).length
       ? params.planSteps.filter((s) => s.trim())
       : ['理解任务', '分析与检索', '给出结论与建议'];
 
-  const started = Date.now();
   const executionId = `llm_${Date.now()}`;
   yield { type: 'execution_start', executionId, source: 'llm' };
 
   for (let i = 0; i < planSteps.length; i++) {
-    if (signal?.aborted) return;
+    if (signal?.aborted) {
+      emitDiagnostics('request', { aborted: true });
+      return;
+    }
     const label = planSteps[i];
     const skill = `PlanStep_${i + 1}`;
     yield { type: 'skill_start', skill, label };
     await sleep(80);
-    if (signal?.aborted) return;
+    if (signal?.aborted) {
+      emitDiagnostics('request', { aborted: true });
+      return;
+    }
     yield { type: 'skill_end', skill, latency: `${120 + i * 90}ms` };
   }
 
@@ -313,47 +475,106 @@ export async function* nestLlmExecutionStream(params: {
       signal,
     });
   } catch (error) {
-    if (signal?.aborted) return;
-    const detail = error instanceof Error ? error.message : 'network_error';
-    yield { type: 'error', message: `LLM stream connection failed: ${detail.slice(0, 160)}` };
+    if (signal?.aborted) {
+      emitDiagnostics('request', { aborted: true });
+      return;
+    }
+    const detail = networkErrorDetails(error, cfg.apiKey);
+    emitDiagnostics('request', {
+      ...(detail.code ? { networkCode: detail.code } : {}),
+      networkSummary: detail.summary,
+    });
+    yield {
+      type: 'error',
+      message: onDiagnostics
+        ? 'LLM stream connection failed'
+        : `LLM stream connection failed: ${detail.summary.slice(0, 160)}`,
+    };
     return;
   }
 
   if (!res.ok || !res.body) {
-    yield {
-      type: 'error',
-      // Keep upstream bodies (which may echo auth material) out of SSE and
-      // execution history. The status is enough for the UI test result.
-      message: `LLM stream HTTP ${res.status}`,
-    };
+    const upstreamSummary = !res.ok
+      ? await safeUpstreamSummary(res, cfg.apiKey)
+      : '模型接口未返回可读取的 SSE 响应体';
+    emitDiagnostics('response', {
+      httpStatus: res.status,
+      contentType: responseContentType(res, cfg.apiKey),
+      ...(upstreamSummary ? { upstreamSummary } : {}),
+    });
+    yield { type: 'error', message: !res.ok ? `LLM stream HTTP ${res.status}` : 'LLM stream response body missing' };
     return;
   }
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  let usage: ExecutionUsage | undefined;
 
   const parseLine = (line: string): string | undefined => {
     const trimmed = line.trim();
     if (!trimmed.startsWith('data:')) return undefined;
     const payload = trimmed.slice(5).trim();
-    if (!payload || payload === '[DONE]') return undefined;
+    if (!payload) return undefined;
+    if (payload === '[DONE]') {
+      sawDoneMarker = true;
+      emitDiagnostics('stream', {
+        httpStatus: res.status,
+        contentType: responseContentType(res, cfg.apiKey),
+      });
+      return undefined;
+    }
+    sseFrames += 1;
     try {
       const json = JSON.parse(payload) as {
-        choices?: { delta?: { content?: string } }[];
+        choices?: {
+          delta?: {
+            content?: string;
+            reasoning_content?: string;
+            reasoning?: string;
+            thinking?: string;
+          };
+        }[];
         usage?: unknown;
       };
       usage = mergeUsage(usage, usageFromChunk(json.usage));
-      return json.choices?.[0]?.delta?.content;
+      const delta = json.choices?.[0]?.delta;
+      const content = typeof delta?.content === 'string' ? delta.content : '';
+      const reasoning =
+        typeof delta?.reasoning_content === 'string'
+          ? delta.reasoning_content
+          : typeof delta?.reasoning === 'string'
+            ? delta.reasoning
+            : typeof delta?.thinking === 'string'
+              ? delta.thinking
+              : '';
+      if (content) {
+        tokenDeltas += 1;
+        contentChars += content.length;
+      }
+      if (reasoning) {
+        reasoningDeltas += 1;
+        reasoningChars += reasoning.length;
+      }
+      emitDiagnostics('stream', {
+        httpStatus: res.status,
+        contentType: responseContentType(res, cfg.apiKey),
+      });
+      return content || undefined;
     } catch {
+      emitDiagnostics('stream', {
+        httpStatus: res.status,
+        contentType: responseContentType(res, cfg.apiKey),
+      });
       return undefined;
     }
   };
 
   try {
     while (true) {
-      if (signal?.aborted) return;
+      if (signal?.aborted) {
+        emitDiagnostics('stream', { aborted: true });
+        return;
+      }
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
@@ -370,12 +591,31 @@ export async function* nestLlmExecutionStream(params: {
       if (delta) yield { type: 'token', content: delta };
     }
   } catch (error) {
-    if (signal?.aborted) return;
-    const message = error instanceof Error ? error.message : 'llm_stream_read_failed';
-    yield { type: 'error', message, ...(usage ? { usage } : {}) };
+    if (signal?.aborted) {
+      emitDiagnostics('stream', { aborted: true });
+      return;
+    }
+    const detail = networkErrorDetails(error, cfg.apiKey);
+    emitDiagnostics('stream', {
+      httpStatus: res.status,
+      contentType: responseContentType(res, cfg.apiKey),
+      ...(detail.code ? { networkCode: detail.code } : {}),
+      networkSummary: detail.summary,
+    });
+    yield {
+      type: 'error',
+      message: onDiagnostics
+        ? 'LLM stream read failed'
+        : `LLM stream read failed: ${detail.summary.slice(0, 160)}`,
+      ...(usage ? { usage } : {}),
+    };
     return;
   }
 
+  emitDiagnostics('stream', {
+    httpStatus: res.status,
+    contentType: responseContentType(res, cfg.apiKey),
+  });
   const elapsed = ((Date.now() - started) / 1000).toFixed(2);
   yield { type: 'artifact', agentType: params.actionType };
   yield {

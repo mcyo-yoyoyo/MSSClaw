@@ -14,7 +14,33 @@ import type { StreamEvent } from '@/domain/stream';
 export interface LlmTestResult {
   ok: boolean;
   message: string;
+  /** 服务端返回的可展示错误码；不包含 URL、响应正文或任何凭证。 */
+  errorCode?: string;
+  /** 服务端探测统计；只接受后端白名单字段，禁止回显原始响应。 */
+  diagnostics?: LlmTestDiagnostics;
 }
+
+export interface LlmTestDiagnostics {
+  phase?: 'config' | 'request' | 'response' | 'stream';
+  elapsedMs?: number;
+  timeoutMs?: number;
+  httpStatus?: number;
+  contentType?: string;
+  upstreamSummary?: string;
+  networkCode?: string;
+  networkSummary?: string;
+  sseFrames?: number;
+  tokenDeltas?: number;
+  reasoningDeltas?: number;
+  contentChars?: number;
+  reasoningChars?: number;
+  usageInputTokens?: number | null;
+  usageOutputTokens?: number | null;
+  sawDoneMarker?: boolean;
+  aborted?: boolean;
+}
+
+const LLM_TEST_REQUEST_TIMEOUT_MS = 20_000;
 
 export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
@@ -33,6 +59,90 @@ export function isLlmConfigured(config?: LlmConfig): boolean {
 
 function normalizeBaseUrl(baseUrl: string) {
   return baseUrl.trim().replace(/\/$/, '');
+}
+
+function normalizeLlmTestErrorCode(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const code = value.trim();
+  return /^[a-z0-9][a-z0-9_.:-]{0,63}$/i.test(code) ? code : undefined;
+}
+
+function normalizeLlmTestDiagnostics(value: unknown): LlmTestDiagnostics | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  const boundedNumber = (input: unknown): number | undefined => {
+    const number = typeof input === 'number' ? input : Number(input);
+    return Number.isSafeInteger(number) && number >= 0 && number <= 1_000_000_000
+      ? number
+      : undefined;
+  };
+  const boundedText = (input: unknown): string | undefined => {
+    if (typeof input !== 'string') return undefined;
+    const text = input
+      .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+      .replace(/Bearer\s+[^\s,;)}\]]+/gi, 'Bearer [redacted]')
+      .replace(/Basic\s+[A-Za-z0-9+/=]+/gi, 'Basic [redacted]')
+      .replace(/(https?:\/\/)[^\s/@:]+:[^\s/@]+@/gi, '$1[redacted]@')
+      .replace(/([?&](?:api[-_]?key|access[-_]?token|token|secret|password|key)=)[^&\s]+/gi, '$1[redacted]')
+      .replace(
+        /((?:api[-_]?key|access[-_]?token|token|secret|password|key)\s*[:=]\s*["']?)[^"',\s}]+/gi,
+        '$1[redacted]',
+      )
+      .replace(/\b(?:sk|rk|sess|access|refresh)-[A-Za-z0-9][A-Za-z0-9._~-]{7,}\b/gi, '[redacted]')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 240);
+    return text || undefined;
+  };
+  const phase = raw.phase;
+  const diagnostics: LlmTestDiagnostics = {
+    ...(phase === 'config' || phase === 'request' || phase === 'response' || phase === 'stream'
+      ? { phase }
+      : {}),
+    ...(boundedNumber(raw.elapsedMs) !== undefined
+      ? { elapsedMs: boundedNumber(raw.elapsedMs) }
+      : {}),
+    ...(boundedNumber(raw.timeoutMs) !== undefined
+      ? { timeoutMs: boundedNumber(raw.timeoutMs) }
+      : {}),
+    ...(boundedNumber(raw.httpStatus) !== undefined
+      ? { httpStatus: boundedNumber(raw.httpStatus) }
+      : {}),
+    ...(boundedText(raw.contentType) ? { contentType: boundedText(raw.contentType) } : {}),
+    ...(boundedText(raw.upstreamSummary)
+      ? { upstreamSummary: boundedText(raw.upstreamSummary) }
+      : {}),
+    ...(boundedText(raw.networkCode) ? { networkCode: boundedText(raw.networkCode) } : {}),
+    ...(boundedText(raw.networkSummary)
+      ? { networkSummary: boundedText(raw.networkSummary) }
+      : {}),
+    ...(boundedNumber(raw.sseFrames) !== undefined
+      ? { sseFrames: boundedNumber(raw.sseFrames) }
+      : {}),
+    ...(boundedNumber(raw.tokenDeltas) !== undefined
+      ? { tokenDeltas: boundedNumber(raw.tokenDeltas) }
+      : {}),
+    ...(boundedNumber(raw.reasoningDeltas) !== undefined
+      ? { reasoningDeltas: boundedNumber(raw.reasoningDeltas) }
+      : {}),
+    ...(boundedNumber(raw.contentChars) !== undefined
+      ? { contentChars: boundedNumber(raw.contentChars) }
+      : {}),
+    ...(boundedNumber(raw.reasoningChars) !== undefined
+      ? { reasoningChars: boundedNumber(raw.reasoningChars) }
+      : {}),
+    ...(raw.usageInputTokens === null || boundedNumber(raw.usageInputTokens) !== undefined
+      ? { usageInputTokens: raw.usageInputTokens === null ? null : boundedNumber(raw.usageInputTokens) }
+      : {}),
+    ...(raw.usageOutputTokens === null || boundedNumber(raw.usageOutputTokens) !== undefined
+      ? { usageOutputTokens: raw.usageOutputTokens === null ? null : boundedNumber(raw.usageOutputTokens) }
+      : {}),
+    ...(typeof raw.sawDoneMarker === 'boolean'
+      ? { sawDoneMarker: raw.sawDoneMarker }
+      : {}),
+    ...(typeof raw.aborted === 'boolean' ? { aborted: raw.aborted } : {}),
+  };
+  return Object.keys(diagnostics).length ? diagnostics : undefined;
 }
 
 async function chatCompletion(
@@ -336,11 +446,21 @@ export async function testWorkspaceLlmConnection(params?: {
   apiKey?: string;
 }): Promise<LlmTestResult> {
   if (!isApiEnabled()) {
-    return { ok: false, message: '共享 API 未启用，无法测试服务端模型' };
+    return {
+      ok: false,
+      errorCode: 'api_disabled',
+      message: '共享 API 未启用，无法测试服务端模型',
+    };
   }
 
   const workspaceId = (params?.workspaceId || currentWorkspaceId()).trim();
-  if (!workspaceId) return { ok: false, message: '未找到工作区，无法测试服务端模型' };
+  if (!workspaceId) {
+    return {
+      ok: false,
+      errorCode: 'workspace_missing',
+      message: '未找到工作区，无法测试服务端模型',
+    };
+  }
 
   try {
     const payload: Record<string, string> = {};
@@ -366,29 +486,55 @@ export async function testWorkspaceLlmConnection(params?: {
         },
         body: JSON.stringify(payload),
       },
-      20_000,
+      LLM_TEST_REQUEST_TIMEOUT_MS,
     );
     const body = (await res.json().catch(() => ({}))) as {
       ok?: boolean;
       model?: string;
       message?: string;
+      errorCode?: unknown;
+      diagnostics?: unknown;
     };
     if (!res.ok || body.ok !== true) {
       const detail = typeof body.message === 'string' ? body.message.trim() : '';
+      const errorCode =
+        normalizeLlmTestErrorCode(body.errorCode) ||
+        (res.status ? `http_${res.status}` : undefined);
+      const diagnostics = normalizeLlmTestDiagnostics(body.diagnostics);
       return {
         ok: false,
+        ...(errorCode ? { errorCode } : {}),
+        ...(diagnostics ? { diagnostics } : {}),
         message: detail
           ? `服务端测试失败：${detail.slice(0, 160)}`
           : `服务端测试失败（HTTP ${res.status || '未知'}）`,
       };
     }
+    const diagnostics = normalizeLlmTestDiagnostics(body.diagnostics);
     return {
       ok: true,
-      message: `连接成功 · ${body.model || '当前模型'} · 服务端流式可用`,
+      message: `连接成功 · ${(typeof body.model === 'string' ? body.model.trim().slice(0, 200) : '') || '当前模型'} · 服务端流式可用`,
+      ...(diagnostics ? { diagnostics } : {}),
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, message: `服务端测试失败：${msg.slice(0, 160)}` };
+    const aborted = typeof DOMException !== 'undefined' && e instanceof DOMException && e.name === 'AbortError';
+    return {
+      ok: false,
+      errorCode: aborted ? 'client_request_timeout' : 'client_request_failed',
+      message: aborted
+        ? `服务端测试请求超时（${LLM_TEST_REQUEST_TIMEOUT_MS}ms）`
+        : `服务端测试失败：${msg.slice(0, 160)}`,
+      ...(aborted
+        ? {
+            diagnostics: {
+              phase: 'request' as const,
+              timeoutMs: LLM_TEST_REQUEST_TIMEOUT_MS,
+              aborted: true,
+            },
+          }
+        : {}),
+    };
   }
 }
 

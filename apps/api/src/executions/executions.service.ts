@@ -16,6 +16,7 @@ import {
   nestLlmConfigFromDoc,
   nestLlmConfigFromEnv,
   nestLlmExecutionStream,
+  type LlmStreamDiagnostics,
   type NestLlmRuntimeConfig,
 } from './llm.client';
 import { portalAnalyticsDateKey } from '../persistence/portal-analytics-time';
@@ -39,11 +40,48 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function safeLlmTestError(message: string): string {
-  const status = message.match(/^LLM stream HTTP (\d{3})/i)?.[1];
-  if (status) return `模型接口返回 HTTP ${status}。`;
-  if (/abort|timeout|timed out/i.test(message)) return '模型流式测试超时或被中断。';
-  return '服务端模型流式请求失败，请检查 Base URL、网络和 API Key。';
+function emptyLlmDiagnostics(
+  phase: LlmStreamDiagnostics['phase'],
+  elapsedMs = 0,
+): LlmStreamDiagnostics {
+  return {
+    phase,
+    elapsedMs: Math.max(0, elapsedMs),
+    sseFrames: 0,
+    tokenDeltas: 0,
+    reasoningDeltas: 0,
+    contentChars: 0,
+    reasoningChars: 0,
+    usageInputTokens: null,
+    usageOutputTokens: null,
+    sawDoneMarker: false,
+  };
+}
+
+function diagnosticStats(diagnostics?: LlmStreamDiagnostics): string {
+  if (!diagnostics) return '';
+  return `（耗时 ${diagnostics.elapsedMs}ms，SSE ${diagnostics.sseFrames} 帧，正文 ${diagnostics.contentChars} 字符，推理 ${diagnostics.reasoningChars} 字符）`;
+}
+
+function safeLlmTestError(message: string, diagnostics?: LlmStreamDiagnostics): string {
+  const status = diagnostics?.httpStatus ?? Number(message.match(/^LLM stream HTTP (\d{3})/i)?.[1]);
+  if (typeof status === 'number' && status >= 300) {
+    const summary = diagnostics?.upstreamSummary ? `：${diagnostics.upstreamSummary}` : '。';
+    return `模型接口返回 HTTP ${status}${summary}${diagnosticStats(diagnostics)}`;
+  }
+  if (/response body missing/i.test(message)) {
+    return `模型接口返回 HTTP ${status || '未知'}，但没有可读取的 SSE 响应体。${diagnosticStats(diagnostics)}`;
+  }
+  if (diagnostics?.aborted || /abort|timeout|timed out/i.test(message)) {
+    const timeout = diagnostics?.timeoutMs ? `（${diagnostics.timeoutMs}ms）` : '';
+    return `模型流式测试超时或被中断${timeout}。${diagnosticStats(diagnostics)}`;
+  }
+  if (diagnostics?.networkCode || diagnostics?.networkSummary) {
+    const code = diagnostics.networkCode ? `（${diagnostics.networkCode}）` : '';
+    const summary = diagnostics.networkSummary ? `：${diagnostics.networkSummary}` : '';
+    return `服务端无法连接模型接口${code}${summary}${diagnosticStats(diagnostics)}`;
+  }
+  return `服务端模型流式请求失败，请检查 Base URL、网络和 API Key。${diagnosticStats(diagnostics)}`;
 }
 
 function resolveAgentType(chatId: string, message: string): AgentType {
@@ -249,10 +287,12 @@ export class ExecutionsService {
     model: string;
     source: NestLlmRuntimeConfig['source'];
     message: string;
+    diagnostics: LlmStreamDiagnostics;
   } | {
     ok: false;
     errorCode: string;
     message: string;
+    diagnostics?: LlmStreamDiagnostics;
   }> {
     const hasCandidate = candidate != null;
     const candidateConfig = hasCandidate ? nestLlmConfigFromCandidate(candidate) : null;
@@ -261,6 +301,7 @@ export class ExecutionsService {
         ok: false,
         errorCode: 'llm_test_config_invalid',
         message: '测试配置不完整，请填写模型、Base URL 和 API Key。',
+        diagnostics: emptyLlmDiagnostics('config'),
       };
     }
     const config = candidateConfig ?? await this.resolveLlmConfig(workspaceId, requestedModel);
@@ -269,12 +310,15 @@ export class ExecutionsService {
         ok: false,
         errorCode: 'llm_not_configured',
         message: '当前工作区没有可用的模型凭证，请先保存并启用模型。',
+        diagnostics: emptyLlmDiagnostics('config'),
       };
     }
 
     const controller = new AbortController();
     const timeoutMs = Math.max(1_000, Number(process.env.LLM_TEST_TIMEOUT_MS) || 15_000);
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const probeStarted = Date.now();
+    let latestDiagnostics: LlmStreamDiagnostics | undefined;
     let completed = false;
     let receivedToken = false;
     try {
@@ -287,6 +331,9 @@ export class ExecutionsService {
         // Keep the probe short while leaving reasoning models enough budget to
         // emit a visible completion after their reasoning deltas.
         config: { ...config, maxTokens: 64 },
+        onDiagnostics: (diagnostics) => {
+          latestDiagnostics = { ...diagnostics, timeoutMs };
+        },
       })) {
         if (event.type === 'done') {
           completed = true;
@@ -297,25 +344,36 @@ export class ExecutionsService {
           continue;
         }
         if (event.type === 'error') {
+          const diagnostics = latestDiagnostics ?? emptyLlmDiagnostics('stream', Date.now() - probeStarted);
           return {
             ok: false,
             errorCode: 'llm_test_failed',
-            message: safeLlmTestError(event.message),
+            message: safeLlmTestError(event.message, diagnostics),
+            diagnostics,
           };
         }
       }
       if (!completed) {
+        const diagnostics = latestDiagnostics ?? emptyLlmDiagnostics('stream', Date.now() - probeStarted);
+        diagnostics.timeoutMs = timeoutMs;
+        diagnostics.aborted = controller.signal.aborted;
         return {
           ok: false,
           errorCode: 'llm_test_timeout',
-          message: '模型流式测试超时或被中断。',
+          message: safeLlmTestError('timeout', diagnostics),
+          diagnostics,
         };
       }
-      if (!receivedToken) {
+      const diagnostics = latestDiagnostics ?? emptyLlmDiagnostics('stream', Date.now() - probeStarted);
+      const hasStreamActivity =
+        receivedToken ||
+        diagnostics.reasoningDeltas > 0;
+      if (!hasStreamActivity) {
         return {
           ok: false,
           errorCode: 'llm_test_empty_stream',
-          message: '模型接口已连接，但没有返回可展示的流式内容。',
+          message: `模型接口已连接，但没有返回可展示的流式内容。${diagnosticStats(diagnostics)}`,
+          diagnostics,
         };
       }
       return {
@@ -323,12 +381,15 @@ export class ExecutionsService {
         model: config.model,
         source: config.source,
         message: '服务端模型连接成功，流式执行可用。',
+        diagnostics,
       };
     } catch {
+      const diagnostics = latestDiagnostics ?? emptyLlmDiagnostics('stream', Date.now() - probeStarted);
       return {
         ok: false,
         errorCode: 'llm_test_failed',
-        message: '服务端无法连接模型接口，请检查 Base URL、网络和 API Key。',
+        message: safeLlmTestError('request failed', diagnostics),
+        diagnostics,
       };
     } finally {
       clearTimeout(timer);

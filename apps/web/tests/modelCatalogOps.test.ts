@@ -49,7 +49,7 @@ test('模型测试走服务端同一工作区链路，不再从浏览器直连�
 
 test('模型测试显式锁定当前工作区，避免切租户时串用配置', () => {
   assert.match(source, /testWorkspaceLlmConnection\(\{\s*workspaceId,\s*model: modelId/);
-  assert.match(source, /testWorkspaceLlmConnection\(\{\s*workspaceId,\s*model: model\.id/);
+  assert.match(source, /testWorkspaceLlmConnection\(\{\s*workspaceId:\s*testWorkspaceId,\s*model:\s*model\.id/);
   assert.match(settingsModalSource, /testWorkspaceLlmConnection\(\{\s*workspaceId,\s*model:/);
   assert.match(source, /if \(!isAuthenticated\) return;/);
 });
@@ -91,4 +91,23 @@ test('显式模型目录只使用当前条目凭证，旧无目录配置仍回�
 test('已有任意工作区 Key 时，状态与聊天都不会伪装成部署环境回退', () => {
   assert.match(configStoreSource, /nestLlmEnvConfigured && !hasWorkspaceLlmCredential\(config\)/);
   assert.match(llmConfigSource, /export function hasWorkspaceLlmCredential/);
+});
+
+test('已有模型测试结果在当前页保留诊断并标明使用的保存配置', () => {
+  assert.match(source, /const \[lastModelTest, setLastModelTest\]/);
+  assert.match(source, /data-testid="model-test-diagnostic"/);
+  assert.match(source, /role=\{lastModelTest\.result\.ok \? 'status' : 'alert'\}/);
+  assert.match(source, /result,\s*testedAt: Date\.now\(\)/);
+  assert.match(source, /本次使用数据库中已保存的 Base URL 和 API Key/);
+  assert.match(source, /hadUnsavedKey/);
+  assert.match(source, /result\.diagnostics\.httpStatus/);
+  assert.match(source, /useWorkspaceStore\.getState\(\)\.workspaceId === testWorkspaceId/);
+});
+
+test('客户端保留服务端错误码和脱敏诊断字段', () => {
+  assert.match(llmClientSource, /errorCode\?: string/);
+  assert.match(llmClientSource, /diagnostics\?: LlmTestDiagnostics/);
+  assert.match(llmClientSource, /function normalizeLlmTestDiagnostics/);
+  assert.match(llmClientSource, /normalizeLlmTestDiagnostics\(body\.diagnostics\)/);
+  assert.match(llmClientSource, /Bearer \[redacted\]/);
 });

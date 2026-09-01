@@ -26,6 +26,16 @@ function emptyPlatformModelDraft() {
   };
 }
 
+interface ModelTestDiagnostic {
+  workspaceId: string;
+  modelId: string;
+  label: string;
+  result: LlmTestResult;
+  testedAt: number;
+  usedSavedConfig: boolean;
+  hadUnsavedKey: boolean;
+}
+
 export function ModelCatalogOpsPage() {
   const config = useLlmConfigStore((s) => s.config);
   const syncing = useLlmConfigStore((s) => s.syncing);
@@ -47,8 +57,10 @@ export function ModelCatalogOpsPage() {
   const [testingId, setTestingId] = useState<string | null>(null);
   const [testingDraft, setTestingDraft] = useState(false);
   const [draftTestResult, setDraftTestResult] = useState<LlmTestResult | null>(null);
+  const [lastModelTest, setLastModelTest] = useState<ModelTestDiagnostic | null>(null);
 
   useEffect(() => {
+    setLastModelTest(null);
     if (!isAuthenticated) return;
     void hydrate({ fresh: true });
   }, [hydrate, apiConnected, workspaceId, isAuthenticated]);
@@ -77,6 +89,7 @@ export function ModelCatalogOpsPage() {
     }
     try {
       await fn();
+      setLastModelTest(null);
       showToast(`${label}（已同步数据库）`);
       return true;
     } catch {
@@ -174,14 +187,30 @@ export function ModelCatalogOpsPage() {
 
   const handleTest = async (model: PlatformLlmModel) => {
     setTestingId(model.id);
-    // Existing-row tests intentionally resolve the saved DB record. Unsaved
-    // key edits become effective only after clicking that row's 保存 button.
-    const result = await testWorkspaceLlmConnection({
-      workspaceId,
-      model: model.id,
-    });
-    showToast(result.message);
-    setTestingId(null);
+    const testWorkspaceId = workspaceId;
+    const hadUnsavedKey = (keyDrafts[model.id] ?? '') !== (model.apiKey || '');
+    try {
+      // Existing-row tests intentionally resolve the saved DB record. Unsaved
+      // key edits become effective only after clicking that row's 保存 button.
+      const result = await testWorkspaceLlmConnection({
+        workspaceId: testWorkspaceId,
+        model: model.id,
+      });
+      if (useWorkspaceStore.getState().workspaceId === testWorkspaceId) {
+        setLastModelTest({
+          workspaceId: testWorkspaceId,
+          modelId: model.id,
+          label: model.label,
+          result,
+          testedAt: Date.now(),
+          usedSavedConfig: true,
+          hadUnsavedKey,
+        });
+        showToast(result.message);
+      }
+    } finally {
+      setTestingId(null);
+    }
   };
 
   return (
@@ -204,7 +233,10 @@ export function ModelCatalogOpsPage() {
             <button
               type="button"
               disabled={!apiConnected || syncing}
-              onClick={() => void hydrate({ fresh: true }).then(() => showToast('已从数据库刷新'))}
+              onClick={() => {
+                setLastModelTest(null);
+                void hydrate({ fresh: true }).then(() => showToast('已从数据库刷新'));
+              }}
               className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
               {syncing ? '同步中…' : '从数据库刷新'}
@@ -222,6 +254,98 @@ export function ModelCatalogOpsPage() {
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-[12px] text-rose-800">
           {lastError}
         </div>
+      ) : null}
+      {lastModelTest ? (
+        <section
+          data-testid="model-test-diagnostic"
+          role={lastModelTest.result.ok ? 'status' : 'alert'}
+          aria-live="polite"
+          className={cn(
+            'rounded-xl border px-4 py-3 text-[12px] leading-relaxed',
+            lastModelTest.result.ok
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+              : 'border-rose-200 bg-rose-50 text-rose-900',
+          )}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-semibold">
+              {lastModelTest.result.ok ? '模型测试成功' : '模型测试失败'} · {lastModelTest.label}
+              <span className="ml-1 font-mono text-[10px] font-normal opacity-70">
+                ({lastModelTest.modelId})
+              </span>
+            </p>
+            <time className="text-[10px] opacity-60">
+              {new Date(lastModelTest.testedAt).toLocaleTimeString()}
+            </time>
+          </div>
+          <p className="mt-1 break-words">
+            {lastModelTest.result.message}
+            {lastModelTest.result.errorCode ? (
+              <code className="ml-1 font-mono text-[10px] opacity-75">
+                [{lastModelTest.result.errorCode}]
+              </code>
+            ) : null}
+          </p>
+          <p className="mt-1 text-[10px] opacity-70">
+            工作区：{lastModelTest.workspaceId} ·{' '}
+            {lastModelTest.usedSavedConfig ? '本次使用数据库中已保存的 Base URL 和 API Key。' : '本次使用临时测试配置。'}
+            {lastModelTest.hadUnsavedKey
+              ? '当前输入框有未保存 Key，请先点击该行“保存”后再测试。'
+              : ''}
+          </p>
+          {lastModelTest.result.diagnostics ? (
+            <details className="mt-2 text-[10px]" open={!lastModelTest.result.ok}>
+              <summary className="cursor-pointer select-none font-semibold">查看诊断详情</summary>
+              <dl className="mt-1 grid gap-x-4 gap-y-0.5 sm:grid-cols-2">
+                {lastModelTest.result.diagnostics.phase ? (
+                  <div><dt className="inline opacity-60">阶段：</dt> <dd className="inline">{lastModelTest.result.diagnostics.phase}</dd></div>
+                ) : null}
+                {lastModelTest.result.diagnostics.httpStatus !== undefined ? (
+                  <div><dt className="inline opacity-60">HTTP：</dt> <dd className="inline">{lastModelTest.result.diagnostics.httpStatus}</dd></div>
+                ) : null}
+                {lastModelTest.result.diagnostics.contentType ? (
+                  <div><dt className="inline opacity-60">响应类型：</dt> <dd className="inline break-all">{lastModelTest.result.diagnostics.contentType}</dd></div>
+                ) : null}
+                {lastModelTest.result.diagnostics.networkCode ? (
+                  <div><dt className="inline opacity-60">网络码：</dt> <dd className="inline">{lastModelTest.result.diagnostics.networkCode}</dd></div>
+                ) : null}
+                {lastModelTest.result.diagnostics.networkSummary ? (
+                  <div className="sm:col-span-2"><dt className="inline opacity-60">网络摘要：</dt> <dd className="inline break-words">{lastModelTest.result.diagnostics.networkSummary}</dd></div>
+                ) : null}
+                {lastModelTest.result.diagnostics.upstreamSummary ? (
+                  <div className="sm:col-span-2"><dt className="inline opacity-60">上游摘要：</dt> <dd className="inline break-words">{lastModelTest.result.diagnostics.upstreamSummary}</dd></div>
+                ) : null}
+                {lastModelTest.result.diagnostics.elapsedMs !== undefined ? (
+                  <div><dt className="inline opacity-60">耗时：</dt> <dd className="inline">{lastModelTest.result.diagnostics.elapsedMs}ms</dd></div>
+                ) : null}
+                {lastModelTest.result.diagnostics.timeoutMs !== undefined ? (
+                  <div><dt className="inline opacity-60">超时阈值：</dt> <dd className="inline">{lastModelTest.result.diagnostics.timeoutMs}ms</dd></div>
+                ) : null}
+                {lastModelTest.result.diagnostics.sseFrames !== undefined ? (
+                  <div><dt className="inline opacity-60">SSE 帧：</dt> <dd className="inline">{lastModelTest.result.diagnostics.sseFrames}</dd></div>
+                ) : null}
+                {lastModelTest.result.diagnostics.tokenDeltas !== undefined ? (
+                  <div><dt className="inline opacity-60">正文片段：</dt> <dd className="inline">{lastModelTest.result.diagnostics.tokenDeltas}</dd></div>
+                ) : null}
+                {lastModelTest.result.diagnostics.reasoningDeltas !== undefined ? (
+                  <div><dt className="inline opacity-60">推理片段：</dt> <dd className="inline">{lastModelTest.result.diagnostics.reasoningDeltas}</dd></div>
+                ) : null}
+                {lastModelTest.result.diagnostics.contentChars !== undefined ? (
+                  <div><dt className="inline opacity-60">正文字符：</dt> <dd className="inline">{lastModelTest.result.diagnostics.contentChars}</dd></div>
+                ) : null}
+                {lastModelTest.result.diagnostics.reasoningChars !== undefined ? (
+                  <div><dt className="inline opacity-60">推理字符：</dt> <dd className="inline">{lastModelTest.result.diagnostics.reasoningChars}</dd></div>
+                ) : null}
+                {lastModelTest.result.diagnostics.usageOutputTokens !== undefined ? (
+                  <div><dt className="inline opacity-60">输出 Token：</dt> <dd className="inline">{lastModelTest.result.diagnostics.usageOutputTokens ?? '—'}</dd></div>
+                ) : null}
+                {lastModelTest.result.diagnostics.sawDoneMarker !== undefined ? (
+                  <div><dt className="inline opacity-60">SSE 完成标记：</dt> <dd className="inline">{lastModelTest.result.diagnostics.sawDoneMarker ? '是' : '否'}</dd></div>
+                ) : null}
+              </dl>
+            </details>
+          ) : null}
+        </section>
       ) : null}
 
       <StatCardGrid
