@@ -8,7 +8,8 @@ import {
 import { useLlmConfigStore } from '@/stores/llmConfigStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
-import { testLlmConnection, type LlmTestResult } from '@/api/llmClient';
+import { useSessionStore } from '@/stores/sessionStore';
+import { testWorkspaceLlmConnection, type LlmTestResult } from '@/api/llmClient';
 
 /**
  * 平台运营 · 模型配置
@@ -37,6 +38,8 @@ export function ModelCatalogOpsPage() {
   const setDefaultModelId = useLlmConfigStore((s) => s.setDefaultModelId);
   const showToast = useMarketplaceStore((s) => s.showToast);
   const apiConnected = useWorkspaceStore((s) => s.apiConnected);
+  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
+  const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
 
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState(emptyPlatformModelDraft);
@@ -46,8 +49,9 @@ export function ModelCatalogOpsPage() {
   const [draftTestResult, setDraftTestResult] = useState<LlmTestResult | null>(null);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     void hydrate({ fresh: true });
-  }, [hydrate, apiConnected]);
+  }, [hydrate, apiConnected, workspaceId, isAuthenticated]);
 
   useEffect(() => {
     const next: Record<string, string> = {};
@@ -134,12 +138,26 @@ export function ModelCatalogOpsPage() {
   };
 
   const handleTestDraft = async () => {
+    const modelId = normalizeLlmModelId(draft.id);
+    if (!modelId || !draft.baseUrl.trim() || !draft.apiKey.trim()) {
+      const result = {
+        ok: false,
+        message: '请先填写模型 ID、Base URL 和 API Key',
+      } satisfies LlmTestResult;
+      setDraftTestResult(result);
+      showToast(result.message);
+      return;
+    }
     setTestingDraft(true);
-    const result = await testLlmConnection({
-      model: normalizeLlmModelId(draft.id),
+    const result = await testWorkspaceLlmConnection({
+      workspaceId,
+      model: modelId,
       baseUrl: draft.baseUrl,
       apiKey: draft.apiKey,
     });
+    if (result.ok) {
+      result.message += '；请点击“保存模型”后聊天才会使用此配置';
+    }
     setDraftTestResult(result);
     showToast(result.message);
     setTestingDraft(false);
@@ -156,10 +174,11 @@ export function ModelCatalogOpsPage() {
 
   const handleTest = async (model: PlatformLlmModel) => {
     setTestingId(model.id);
-    const result = await testLlmConnection({
+    // Existing-row tests intentionally resolve the saved DB record. Unsaved
+    // key edits become effective only after clicking that row's 保存 button.
+    const result = await testWorkspaceLlmConnection({
+      workspaceId,
       model: model.id,
-      baseUrl: model.baseUrl,
-      apiKey: (keyDrafts[model.id] ?? model.apiKey ?? '').trim(),
     });
     showToast(result.message);
     setTestingId(null);
@@ -319,11 +338,11 @@ export function ModelCatalogOpsPage() {
                       <div className="flex flex-wrap gap-1.5">
                         <button
                           type="button"
-                          disabled={testingId === m.id || !m.baseUrl}
+                          disabled={!apiConnected || syncing || testingId === m.id || !m.enabled || !m.baseUrl}
                           onClick={() => void handleTest(m)}
                           className="text-[11px] font-semibold text-sky-700 hover:underline disabled:opacity-40"
                         >
-                          {testingId === m.id ? '测试中…' : '测试'}
+                          {testingId === m.id ? '测试中…' : m.enabled ? '测试' : '已停用'}
                         </button>
                         <button
                           type="button"
@@ -398,7 +417,7 @@ export function ModelCatalogOpsPage() {
               {'Authorization: Bearer <your-api-key>'}
             </code>
             <p className="mt-2 text-sky-800/75">
-              测试请求会发送到 Base URL 的 <code>/chat/completions</code> 接口。
+              测试由内网 API 发送到 Base URL 的 <code>/chat/completions</code>，与聊天执行使用同一服务端链路；仅临时探测，不写入配置。
             </p>
           </div>
 

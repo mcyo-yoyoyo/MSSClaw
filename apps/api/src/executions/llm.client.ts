@@ -12,11 +12,46 @@ export type NestLlmRuntimeConfig = {
   apiKey: string;
   model: string;
   maxTokens: number;
-  source: 'env' | 'workspace-doc';
+  source: 'env' | 'workspace-doc' | 'request';
 };
 
 function normalizeBaseUrl(baseUrl: string) {
-  return baseUrl.trim().replace(/\/$/, '');
+  const value = baseUrl.trim().replace(/\/$/, '');
+  if (!value || value.length > 2048) return '';
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? value : '';
+  } catch {
+    return '';
+  }
+}
+
+function normalizeModelId(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const model = value.trim();
+  if (!model || model.length > 200 || /[\u0000-\u001f\u007f]/.test(model)) return '';
+  return model;
+}
+
+function hasModelDirectory(payload: Record<string, unknown>): boolean {
+  // `platformModels` was added with the per-model credential format. Older
+  // payloads may contain `customModels: []` while still using the shared
+  // top-level key, so that field alone is not a directory marker.
+  return Array.isArray(payload.platformModels);
+}
+
+function firstEnabledModelId(payload: Record<string, unknown>): string {
+  for (const list of [payload.platformModels, payload.customModels]) {
+    if (!Array.isArray(list)) continue;
+    for (const item of list) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      const model = item as Record<string, unknown>;
+      if (model.enabled === false) continue;
+      const id = normalizeModelId(model.id);
+      if (id) return id;
+    }
+  }
+  return '';
 }
 
 /** 服务端环境变量 LLM_*（部署级优先） */
@@ -36,10 +71,11 @@ export function nestLlmConfigFromEnv(): NestLlmRuntimeConfig | null {
 function pickModelCreds(
   payload: Record<string, unknown>,
   modelId: string,
-): { baseUrl: string; apiKey: string } {
+): { baseUrl: string; apiKey: string; enabled: boolean } {
   const legacyKey = typeof payload.apiKey === 'string' ? payload.apiKey.trim() : '';
   const legacyBase = normalizeBaseUrl(typeof payload.baseUrl === 'string' ? payload.baseUrl : '');
   const lists = [payload.platformModels, payload.customModels];
+  const hasModelDirectory = Array.isArray(payload.platformModels);
   for (const list of lists) {
     if (!Array.isArray(list)) continue;
     for (const item of list) {
@@ -47,33 +83,74 @@ function pickModelCreds(
       const m = item as Record<string, unknown>;
       const id = typeof m.id === 'string' ? m.id.trim() : '';
       if (id !== modelId) continue;
+      const entryBase = normalizeBaseUrl(typeof m.baseUrl === 'string' ? m.baseUrl : '');
+      const entryKey = typeof m.apiKey === 'string' ? m.apiKey.trim() : '';
       return {
-        baseUrl: normalizeBaseUrl(typeof m.baseUrl === 'string' ? m.baseUrl : '') || legacyBase,
-        apiKey:
-          (typeof m.apiKey === 'string' && m.apiKey.trim()) || legacyKey,
+        // A model directory is authoritative. In the old format, a custom
+        // entry could still rely on the shared top-level URL/key.
+        baseUrl: entryBase || (hasModelDirectory ? '' : legacyBase),
+        apiKey: entryKey || (hasModelDirectory ? '' : legacyKey),
+        enabled: m.enabled !== false,
       };
     }
   }
-  return { baseUrl: legacyBase, apiKey: legacyKey };
+  // A requested model must not silently inherit the top-level snapshot when a
+  // model directory exists: that snapshot may belong to a different model.
+  if (hasModelDirectory) {
+    return { baseUrl: '', apiKey: '', enabled: false };
+  }
+  return { baseUrl: legacyBase, apiKey: legacyKey, enabled: true };
 }
 
 /** 工作区平台文档 llm-config（与前端对齐：按模型 Key，兼容旧顶层 apiKey） */
-export function nestLlmConfigFromDoc(payload: unknown): NestLlmRuntimeConfig | null {
+export function nestLlmConfigFromDoc(
+  payload: unknown,
+  requestedModel?: string,
+): NestLlmRuntimeConfig | null {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
   const p = payload as Record<string, unknown>;
+  const requested = normalizeModelId(requestedModel);
+  const modelDirectory = hasModelDirectory(p);
+  const declared = normalizeModelId(p.model) || normalizeModelId(p.defaultModelId);
   const model =
-    (typeof p.model === 'string' && p.model.trim()) ||
-    (typeof p.defaultModelId === 'string' && p.defaultModelId.trim()) ||
-    (process.env.LLM_MODEL ?? 'gpt-4o-mini').trim() ||
+    requested ||
+    declared ||
+    (modelDirectory && firstEnabledModelId(p)) ||
+    normalizeModelId(process.env.LLM_MODEL) ||
     'gpt-4o-mini';
   const creds = pickModelCreds(p, model);
-  if (!creds.baseUrl || !creds.apiKey) return null;
+  if (!creds.enabled || !creds.baseUrl || !creds.apiKey) return null;
   return {
     baseUrl: creds.baseUrl,
     apiKey: creds.apiKey,
     model,
     maxTokens: Number(process.env.LLM_MAX_TOKENS || 1200) || 1200,
     source: 'workspace-doc',
+  };
+}
+
+/** 临时连接探测配置；只用于本次请求，不写入工作区文档。 */
+export function nestLlmConfigFromCandidate(payload: unknown): NestLlmRuntimeConfig | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const p = payload as Record<string, unknown>;
+  const baseUrl = normalizeBaseUrl(typeof p.baseUrl === 'string' ? p.baseUrl : '');
+  const apiKey = typeof p.apiKey === 'string' ? p.apiKey.trim() : '';
+  const model = normalizeModelId(p.model);
+  if (
+    !baseUrl ||
+    !apiKey ||
+    apiKey.length > 4096 ||
+    /[\u0000-\u001f\u007f]/.test(apiKey) ||
+    !model
+  ) {
+    return null;
+  }
+  return {
+    baseUrl,
+    apiKey,
+    model,
+    maxTokens: Number(process.env.LLM_MAX_TOKENS || 1200) || 1200,
+    source: 'request',
   };
 }
 
@@ -215,30 +292,39 @@ export async function* nestLlmExecutionStream(params: {
     kbContext: params.kbContext,
   });
 
-  const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${cfg.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: cfg.model,
-      messages,
-      max_tokens: cfg.maxTokens,
-      temperature: 0.5,
-      stream: true,
-      // OpenAI-compatible gateways that support usage append it to the final
-      // SSE chunk. Unsupported gateways simply omit the field.
-      stream_options: { include_usage: true },
-    }),
-    signal,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${cfg.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cfg.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: cfg.model,
+        messages,
+        max_tokens: cfg.maxTokens,
+        temperature: 0.5,
+        stream: true,
+        // OpenAI-compatible gateways that support usage append it to the final
+        // SSE chunk. Unsupported gateways simply omit the field.
+        stream_options: { include_usage: true },
+      }),
+      signal,
+    });
+  } catch (error) {
+    if (signal?.aborted) return;
+    const detail = error instanceof Error ? error.message : 'network_error';
+    yield { type: 'error', message: `LLM stream connection failed: ${detail.slice(0, 160)}` };
+    return;
+  }
 
   if (!res.ok || !res.body) {
-    const errText = await res.text().catch(() => '');
     yield {
       type: 'error',
-      message: `LLM stream HTTP ${res.status}: ${errText.slice(0, 160)}`,
+      // Keep upstream bodies (which may echo auth material) out of SSE and
+      // execution history. The status is enough for the UI test result.
+      message: `LLM stream HTTP ${res.status}`,
     };
     return;
   }

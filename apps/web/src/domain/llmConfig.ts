@@ -118,7 +118,7 @@ export const LLM_MODEL_ID_ALIASES: Record<string, string> = {
 };
 
 export function normalizeLlmModelId(model: string): string {
-  const trimmed = model.trim();
+  const trimmed = typeof model === 'string' ? model.trim() : '';
   return LLM_MODEL_ID_ALIASES[trimmed] ?? trimmed;
 }
 
@@ -150,10 +150,9 @@ export function normalizePlatformModels(raw: unknown): PlatformLlmModel[] {
 export function listEnabledPlatformModels(
   config: Pick<LlmConfig, 'platformModels'>,
 ): PlatformLlmModel[] {
-  const list =
-    config.platformModels?.length > 0
-      ? config.platformModels
-      : seedPlatformModels();
+  const list = Array.isArray(config.platformModels)
+    ? config.platformModels
+    : seedPlatformModels();
   return list.filter((m) => m.enabled);
 }
 
@@ -211,12 +210,39 @@ export function resolveModelMeta(
   };
 }
 
-/** 当前选用模型的执行凭证（按模型 Key，兼容旧顶层 apiKey） */
+/** 当前选用模型的执行凭证（按模型 Key，兼容无目录旧配置） */
 export function resolveActiveCredentials(config: LlmConfig): {
   model: string;
   baseUrl: string;
   apiKey: string;
 } {
+  const model = normalizeLlmModelId(config.model);
+  // `platformModels` is the persisted marker for the per-model directory.
+  // Older payloads can have `customModels: []` while using one top-level key.
+  const hasModelDirectory = Array.isArray(config.platformModels);
+
+  // A persisted model directory is authoritative. Never combine the active
+  // snapshot (top-level baseUrl/apiKey) with another model's entry: doing so
+  // can make the UI appear configured while the server rejects that model.
+  if (hasModelDirectory) {
+    const listed = [
+      ...(Array.isArray(config.platformModels) ? config.platformModels : []),
+      ...(Array.isArray(config.customModels) ? config.customModels : []),
+    ].find((entry) => normalizeLlmModelId(entry.id) === model);
+
+    if (!listed || ('enabled' in listed && listed.enabled === false)) {
+      return { model, baseUrl: '', apiKey: '' };
+    }
+
+    return {
+      model: normalizeLlmModelId(listed.id),
+      baseUrl: listed.baseUrl?.trim() || '',
+      apiKey: listed.apiKey?.trim() || '',
+    };
+  }
+
+  // Old payloads had no model lists and stored one shared credential at the
+  // top level. Preserve that format as a backwards-compatible fallback.
   const meta = resolveModelMeta(config);
   const apiKey = (meta.apiKey || config.apiKey || '').trim();
   const baseUrl = (meta.baseUrl || config.baseUrl || '').trim();
@@ -226,6 +252,16 @@ export function resolveActiveCredentials(config: LlmConfig): {
 export function isLlmConfigComplete(config: LlmConfig): boolean {
   const creds = resolveActiveCredentials(config);
   return Boolean(creds.apiKey && creds.baseUrl && creds.model);
+}
+
+/** 是否已经在工作区目录里保存过任意模型凭证。 */
+export function hasWorkspaceLlmCredential(
+  config: Pick<LlmConfig, 'apiKey' | 'platformModels' | 'customModels'>,
+): boolean {
+  if (typeof config.apiKey === 'string' && config.apiKey.trim()) return true;
+  return [...(config.platformModels ?? []), ...(config.customModels ?? [])].some(
+    (model) => typeof model.apiKey === 'string' && model.apiKey.trim().length > 0,
+  );
 }
 
 /** @deprecated 兼容旧引用；新逻辑请用 platformModels / DEFAULT_LLM_MODELS */

@@ -9,6 +9,7 @@ import { getSlashQuery, useHomeStore } from '@/stores/homeStore';
 import { useLlmConfigStore } from '@/stores/llmConfigStore';
 import { useConversationStore } from '@/stores/conversationStore';
 import { useSessionStore } from '@/stores/sessionStore';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useSpeechInput } from '@/hooks/useSpeechInput';
 import { HomeSlashMenu } from '@/components/home/HomeSlashMenu';
 import { HomePickerModal } from '@/components/home/HomePickerModal';
@@ -65,24 +66,27 @@ export function SharedComposer({
   const platformRole = useSessionStore((s) => s.user?.platformRole);
   const isGuest = useSessionStore((s) => s.isGuest);
   const executeAllowed = canExecuteChat(platformRole);
+  const config = useLlmConfigStore((s) => s.config);
   const inputDisabled = disabled || (!executeAllowed && !isGuest);
   const modelDisabled = disabled || !executeAllowed;
-  const config = useLlmConfigStore((s) => s.config);
   const selectModel = useLlmConfigStore((s) => s.selectModel);
   const modelOptions = useLlmConfigStore((s) => s.modelOptions);
   const settingsOpen = useLlmConfigStore((s) => s.settingsOpen);
   const closeSettings = useLlmConfigStore((s) => s.closeSettings);
   const hydrateLlm = useLlmConfigStore((s) => s.hydrate);
+  const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
+  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const status = useMemo(() => useLlmConfigStore.getState().statusLabel(), [config]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     void hydrateLlm({ fresh: true });
     const onVis = () => {
       if (document.visibilityState === 'visible') void hydrateLlm({ fresh: true });
     };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
-  }, [hydrateLlm]);
+  }, [hydrateLlm, isAuthenticated, workspaceId]);
 
   const notify = (msg: string) => {
     useConversationStore.setState({ pushToast: msg });

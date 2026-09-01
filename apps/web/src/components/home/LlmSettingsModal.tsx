@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { testLlmConnection } from '@/api/llmClient';
+import { testWorkspaceLlmConnection } from '@/api/llmClient';
 import {
   listEnabledPlatformModels,
   normalizeLlmModelId,
@@ -38,6 +38,7 @@ export function LlmSettingsModal({ open, onClose }: LlmSettingsModalProps) {
   const role = useSessionStore((s) => s.user?.platformRole);
   const isAdmin = isSystemAdmin(role);
   const apiConnected = useWorkspaceStore((s) => s.apiConnected);
+  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
 
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState(config.baseUrl);
@@ -72,7 +73,7 @@ export function LlmSettingsModal({ open, onClose }: LlmSettingsModalProps) {
     setShowAdd(settingsFocusAdd);
     setTestResult('');
     setCustomDraft({ id: '', label: '', baseUrl: '', apiKey: '' });
-  }, [open, settingsFocusAdd, hydrate]);
+  }, [open, settingsFocusAdd, hydrate, workspaceId]);
 
   useEffect(() => {
     if (!open) return;
@@ -163,11 +164,15 @@ export function LlmSettingsModal({ open, onClose }: LlmSettingsModalProps) {
   const handleTest = async () => {
     setTesting(true);
     setTestResult('正在测试连接…');
-    const result = await testLlmConnection({
+    const result = await testWorkspaceLlmConnection({
+      workspaceId,
       model: normalizeLlmModelId(modelId),
       baseUrl: baseUrl.trim(),
       apiKey: apiKey.trim(),
     });
+    if (result.ok && baseUrl.trim() && apiKey.trim()) {
+      result.message += '；当前为未保存草稿，保存到数据库后才会用于聊天';
+    }
     setTestResult(result.message);
     setTesting(false);
   };
@@ -379,7 +384,7 @@ export function LlmSettingsModal({ open, onClose }: LlmSettingsModalProps) {
           <button
             type="button"
             onClick={() => void handleTest()}
-            disabled={testing}
+            disabled={testing || !apiConnected}
             className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium hover:bg-black/[0.03] disabled:opacity-50"
           >
             {testing ? '测试中…' : '测试连接'}

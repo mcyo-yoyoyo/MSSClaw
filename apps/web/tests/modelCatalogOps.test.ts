@@ -6,6 +6,22 @@ const source = readFileSync(
   new URL('../src/features/ops/ModelCatalogOpsPage.tsx', import.meta.url),
   'utf8',
 );
+const llmClientSource = readFileSync(
+  new URL('../src/api/llmClient.ts', import.meta.url),
+  'utf8',
+);
+const configStoreSource = readFileSync(
+  new URL('../src/stores/llmConfigStore.ts', import.meta.url),
+  'utf8',
+);
+const llmConfigSource = readFileSync(
+  new URL('../src/domain/llmConfig.ts', import.meta.url),
+  'utf8',
+);
+const settingsModalSource = readFileSync(
+  new URL('../src/components/home/LlmSettingsModal.tsx', import.meta.url),
+  'utf8',
+);
 
 test('模型配置页用添加模型按钮打开弹窗，不再渲染页内添加表单', () => {
   assert.match(source, /data-testid="model-add-button"[\s\S]*?onClick=\{openAddModel\}/);
@@ -22,4 +38,57 @@ test('新增模型默认展示 OpenAI Bearer 约定并支持调试失败反馈',
   assert.match(source, /data-testid="model-add-test-result"[\s\S]*?role=\{draftTestResult\.ok \? 'status' : 'alert'\}/);
   assert.match(source, /调试失败：\$\{draftTestResult\.message\}/);
   assert.match(source, /upsertPlatformModel\([\s\S]*?baseUrl: draft\.baseUrl\.trim\(\)[\s\S]*?apiKey: draft\.apiKey\.trim\(\)/);
+});
+
+test('模型测试走服务端同一工作区链路，不再从浏览器直连厂商', () => {
+  assert.match(llmClientSource, /\/api\/v1\/workspaces\/\$\{encodeURIComponent\(workspaceId\)\}\/llm-config\/test/);
+  assert.match(llmClientSource, /testWorkspaceLlmConnection/);
+  assert.match(source, /import \{ testWorkspaceLlmConnection/);
+  assert.doesNotMatch(source, /testLlmConnection\(/);
+});
+
+test('模型测试显式锁定当前工作区，避免切租户时串用配置', () => {
+  assert.match(source, /testWorkspaceLlmConnection\(\{\s*workspaceId,\s*model: modelId/);
+  assert.match(source, /testWorkspaceLlmConnection\(\{\s*workspaceId,\s*model: model\.id/);
+  assert.match(settingsModalSource, /testWorkspaceLlmConnection\(\{\s*workspaceId,\s*model:/);
+  assert.match(source, /if \(!isAuthenticated\) return;/);
+});
+
+test('聊天请求带上当前选用模型，由服务端按目录精确解析', () => {
+  const runtimeSource = readFileSync(
+    new URL('../src/api/agentRuntime.ts', import.meta.url),
+    'utf8',
+  );
+  assert.match(runtimeSource, /hasWorkspaceLlmCredential\(activeLlmConfig\)/);
+  assert.match(runtimeSource, /model:\s*hasWorkspaceLlmCredential\(activeLlmConfig\)/);
+});
+
+test('切换组织默认模型同步聊天执行使用的 active model 快照', () => {
+  const setter = configStoreSource.slice(configStoreSource.indexOf('setDefaultModelId: async'));
+  assert.match(setter, /defaultModelId: id/);
+  assert.match(setter, /syncSnapshotFromSelection\(/);
+  assert.match(setter, /modelId\)/);
+});
+
+test('模型目录存在时不把当前快照 Key 复制给其他模型', () => {
+  assert.match(configStoreSource, /hasModelDirectory/);
+  assert.match(configStoreSource, /legacySharedKey && !hasModelDirectory/);
+  assert.match(configStoreSource, /hasModelDirectory \? '' : legacySharedKey/);
+  assert.match(configStoreSource, /m\.id === legacyModelId/);
+  assert.match(configStoreSource, /Preserve an old single-model payload/);
+});
+
+test('显式模型目录只使用当前条目凭证，旧无目录配置仍回退顶层凭证', () => {
+  assert.match(llmConfigSource, /const hasModelDirectory/);
+  assert.match(llmConfigSource, /if \(hasModelDirectory\)/);
+  assert.match(llmConfigSource, /!listed \|\| \('enabled' in listed && listed\.enabled === false\)/);
+  assert.match(llmConfigSource, /baseUrl: listed\.baseUrl\?\.trim\(\) \|\| ''/);
+  assert.match(llmConfigSource, /apiKey: listed\.apiKey\?\.trim\(\) \|\| ''/);
+  assert.match(llmConfigSource, /const apiKey = \(meta\.apiKey \|\| config\.apiKey \|\| ''\)/);
+  assert.match(llmConfigSource, /const list = Array\.isArray\(config\.platformModels\)/);
+});
+
+test('已有任意工作区 Key 时，状态与聊天都不会伪装成部署环境回退', () => {
+  assert.match(configStoreSource, /nestLlmEnvConfigured && !hasWorkspaceLlmCredential\(config\)/);
+  assert.match(llmConfigSource, /export function hasWorkspaceLlmCredential/);
 });

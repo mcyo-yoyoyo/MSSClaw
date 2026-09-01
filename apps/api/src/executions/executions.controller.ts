@@ -1,4 +1,17 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Query,
+  Req,
+  Res,
+  UnauthorizedException,
+  UseGuards,
+} from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ExecutionsService } from './executions.service';
 import type {
@@ -21,6 +34,41 @@ export class ExecutionsController {
     private readonly executionsService: ExecutionsService,
     private readonly docs: PlatformDocsService,
   ) {}
+
+  /**
+   * 用与聊天完全相同的服务端 SSE 链路探测模型。候选配置只驻留本次请求，
+   * 方便“添加模型”先调试再保存；不写入 llm-config，也不返回 Key/响应正文。
+   */
+  @Post('workspaces/:workspaceId/llm-config/test')
+  async testLlmConfig(
+    @Param('workspaceId') workspaceId: string,
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
+
+    if (body != null && (typeof body !== 'object' || Array.isArray(body))) {
+      throw new BadRequestException('llm_test_body_must_be_object');
+    }
+    const input = (body ?? {}) as Record<string, unknown>;
+
+    const hasCandidateField =
+      ['baseUrl', 'apiKey'].some((key) => Object.prototype.hasOwnProperty.call(input, key));
+    if (hasCandidateField) {
+      return this.executionsService.testLlmConnection(workspaceId, undefined, {
+        model: input.model,
+        baseUrl: input.baseUrl,
+        apiKey: input.apiKey,
+      });
+    }
+
+    const requestedModel = input.model;
+    if (requestedModel !== undefined && typeof requestedModel !== 'string') {
+      throw new BadRequestException('model_must_be_string');
+    }
+    return this.executionsService.testLlmConnection(workspaceId, requestedModel as string | undefined);
+  }
 
   @Get('workspaces/:workspaceId/executions')
   list(
@@ -54,6 +102,7 @@ export class ExecutionsController {
       chatId: body.chatId,
       message: body.message,
       workspaceId,
+      model: typeof body.model === 'string' ? body.model.trim() : undefined,
       planSteps: body.planSteps,
       systemPrompt: body.systemPrompt,
       agentName: body.agentName,
@@ -108,5 +157,17 @@ export class ExecutionsController {
       // identity is attached when session lookup fails.
       return undefined;
     }
+  }
+
+  private async requireWorkspaceMember(
+    workspaceId: string,
+    authorization?: string,
+    xSessionToken?: string,
+  ): Promise<Record<string, unknown>> {
+    const session = await this.docs.me(sessionToken(authorization, xSessionToken), workspaceId);
+    if (!session.ok) {
+      throw new UnauthorizedException(session.error || 'platform_docs_login_required');
+    }
+    return session.user;
   }
 }

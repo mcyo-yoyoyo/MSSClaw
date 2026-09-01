@@ -23,6 +23,9 @@ const ADMIN_WRITABLE_DOC_KINDS = new Set([
   'internal-office-scenes',
 ]);
 
+/** 工作区成员才能访问的共享凭证文档；游客不得读写真实 API Key。 */
+const MEMBER_REQUIRED_DOC_KINDS = new Set(['llm-config']);
+
 /** 已迁移为关系表的旧文档只保留读取兼容，任何客户端都不得再覆盖。 */
 const LEGACY_READ_ONLY_DOC_KINDS = new Set(['content-engagement']);
 
@@ -39,8 +42,9 @@ export class PlatformDocsController {
     const user = await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
     const result = await this.docs.listDocs(workspaceId);
     if (String(user.platformRole ?? '') !== 'super_admin') {
-      // 全量文档里含密码表，非平台运营不得整包拿走。
+      // 全量文档里含密码表与模型 API Key，非平台运营不得整包拿走。
       for (const kind of ADMIN_ONLY_DOC_KINDS) delete result.docs[kind];
+      for (const kind of MEMBER_REQUIRED_DOC_KINDS) delete result.docs[kind];
     }
     return result;
   }
@@ -60,6 +64,8 @@ export class PlatformDocsController {
   ) {
     if (ADMIN_ONLY_DOC_KINDS.has(kind)) {
       await this.requireSuperAdmin(workspaceId, kind, authorization, xSessionToken);
+    } else if (MEMBER_REQUIRED_DOC_KINDS.has(kind)) {
+      await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
     }
     return this.docs.getDoc(workspaceId, kind);
   }
@@ -77,6 +83,8 @@ export class PlatformDocsController {
     }
     if (ADMIN_WRITABLE_DOC_KINDS.has(kind)) {
       await this.requireSuperAdmin(workspaceId, kind, authorization, xSessionToken);
+    } else if (MEMBER_REQUIRED_DOC_KINDS.has(kind)) {
+      await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
     }
     const payload =
       body && typeof body === 'object' && 'payload' in body ? body.payload : body;

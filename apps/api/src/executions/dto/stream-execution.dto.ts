@@ -2,6 +2,8 @@ export interface StreamExecutionDto {
   chatId: string;
   message: string;
   workspaceId?: string;
+  /** 当前对话选择的模型；服务端只会解析该工作区目录中的同名条目。 */
+  model?: string;
   planSteps?: string[];
   systemPrompt?: string;
   agentName?: string;

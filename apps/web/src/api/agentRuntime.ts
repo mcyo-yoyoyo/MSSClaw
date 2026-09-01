@@ -3,6 +3,7 @@ import type { StreamEvent } from '@/domain/stream';
 import { parseSSEStream } from '@/domain/stream';
 import { apiAuthHeaders, apiUrl } from '@/api/client';
 import { isLlmConfigured, llmExecutionStream } from '@/api/llmClient';
+import { hasWorkspaceLlmCredential } from '@/domain/llmConfig';
 import { resolveAgentType } from '@/lib/utils';
 import { getSkillPack, getSkillPackByCommand } from '@/domain/skills/catalog';
 import { planStepsToExecSteps } from '@/domain/skills/types';
@@ -10,6 +11,7 @@ import { resolveSkillFromText } from '@/domain/skillRuntime';
 import { getAgentPack } from '@/domain/agents/catalog';
 import { getAgentMockReport } from '@/domain/agents/runtime';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { useLlmConfigStore } from '@/stores/llmConfigStore';
 
 const MARKETING_STEPS: ExecutionStep[] = [
   { skill: 'Intent_Parser', time: '120ms', label: '多模态意图识别', detail: '解析协作空间上下文，提取实体与 Action。' },
@@ -193,6 +195,7 @@ export async function* streamExecution(params: {
         : assetType === 'agent'
           ? params.agentId
           : params.agentId || params.skillId;
+      const activeLlmConfig = useLlmConfigStore.getState().config;
       const response = await fetch(apiUrl('/api/v1/executions/stream'), {
         method: 'POST',
         headers: {
@@ -204,6 +207,13 @@ export async function* streamExecution(params: {
           chatId: params.chatId,
           message: params.message,
           workspaceId: params.workspaceId,
+          // Once any workspace model key exists, pin the selected model. The
+          // server must reject an unkeyed selection instead of silently using
+          // another deployment credential; with no workspace keys, env fallback
+          // remains available.
+          model: hasWorkspaceLlmCredential(activeLlmConfig)
+            ? activeLlmConfig.model
+            : undefined,
           planSteps: params.planSteps,
           systemPrompt: params.systemPrompt,
           agentName,

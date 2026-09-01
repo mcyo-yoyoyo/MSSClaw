@@ -4,6 +4,8 @@ import {
   resolveActiveCredentials,
   type LlmConfig,
 } from '@/domain/llmConfig';
+import { currentWorkspaceId } from '@/api/platformDocsApi';
+import { apiAuthHeaders, apiUrl, fetchWithTimeout, isApiEnabled } from '@/api/client';
 import { useLlmConfigStore } from '@/stores/llmConfigStore';
 import type { ActionType } from '@/domain/plan';
 import type { ExecutionStep } from '@/domain/chat';
@@ -320,39 +322,79 @@ export async function refineTaskTitleWithLlm(
     ?.trim() ?? '';
 }
 
-export async function testLlmConnection(
-  config: Pick<LlmConfig, 'baseUrl' | 'apiKey' | 'model'>,
-): Promise<LlmTestResult> {
-  const apiKey = config.apiKey.trim();
-  const baseUrl = normalizeBaseUrl(config.baseUrl);
-  const model = normalizeLlmModelId(config.model);
+/**
+ * Test the same server-side configuration used by chat execution.
+ * The API resolves the saved workspace document and consumes a real
+ * stream=true completion before returning, so a green result is meaningful
+ * for the chat path (unlike the old browser-direct probe).
+ */
+export async function testWorkspaceLlmConnection(params?: {
+  workspaceId?: string;
+  model?: string;
+  /** Optional unsaved values; the server probes them without persisting. */
+  baseUrl?: string;
+  apiKey?: string;
+}): Promise<LlmTestResult> {
+  if (!isApiEnabled()) {
+    return { ok: false, message: '共享 API 未启用，无法测试服务端模型' };
+  }
 
-  if (!apiKey) return { ok: false, message: '请先填写 API Key' };
-  if (!baseUrl) return { ok: false, message: '请先填写 Base URL' };
-  if (!model) return { ok: false, message: '请先填写模型名称' };
+  const workspaceId = (params?.workspaceId || currentWorkspaceId()).trim();
+  if (!workspaceId) return { ok: false, message: '未找到工作区，无法测试服务端模型' };
 
   try {
-    const res = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'user', content: 'ping' }],
-        max_tokens: 8,
-      }),
-    });
-
-    if (res.ok) {
-      return { ok: true, message: '连接成功 · 模型可用' };
+    const payload: Record<string, string> = {};
+    if (params?.model?.trim()) payload.model = normalizeLlmModelId(params.model);
+    // Only send a candidate when both values are present. A partially edited
+    // form must resolve the persisted workspace model instead of becoming an
+    // invalid ephemeral config.
+    const baseUrl = params?.baseUrl?.trim() || '';
+    const apiKey = params?.apiKey?.trim() || '';
+    if (baseUrl && apiKey) {
+      payload.baseUrl = baseUrl;
+      payload.apiKey = apiKey;
     }
 
-    const errText = await res.text();
-    return { ok: false, message: `失败 HTTP ${res.status}：${errText.slice(0, 120)}` };
+    const res = await fetchWithTimeout(
+      apiUrl(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/llm-config/test`),
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...apiAuthHeaders(),
+        },
+        body: JSON.stringify(payload),
+      },
+      20_000,
+    );
+    const body = (await res.json().catch(() => ({}))) as {
+      ok?: boolean;
+      model?: string;
+      message?: string;
+    };
+    if (!res.ok || body.ok !== true) {
+      const detail = typeof body.message === 'string' ? body.message.trim() : '';
+      return {
+        ok: false,
+        message: detail
+          ? `服务端测试失败：${detail.slice(0, 160)}`
+          : `服务端测试失败（HTTP ${res.status || '未知'}）`,
+      };
+    }
+    return {
+      ok: true,
+      message: `连接成功 · ${body.model || '当前模型'} · 服务端流式可用`,
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, message: `连接失败：${msg}` };
+    return { ok: false, message: `服务端测试失败：${msg.slice(0, 160)}` };
   }
+}
+
+/** @deprecated Use testWorkspaceLlmConnection; retained for callers of the old export. */
+export function testLlmConnection(
+  config: Pick<LlmConfig, 'baseUrl' | 'apiKey' | 'model'>,
+): Promise<LlmTestResult> {
+  return testWorkspaceLlmConnection(config);
 }

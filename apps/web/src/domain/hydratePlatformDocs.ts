@@ -14,6 +14,7 @@ export async function hydrateAllPlatformDocs(workspaceId?: string): Promise<void
   // 密码表只有 super_admin 能读（服务端 403）。非管理员不必发这一次请求，
   // 读不到也不影响登录——鉴权由 Nest /auth/login 负责。
   const { useSessionStore } = await import('@/stores/sessionStore');
+  const isAuthenticated = useSessionStore.getState().isAuthenticated;
   if (useSessionStore.getState().user?.platformRole === 'super_admin') {
     await hydrateAccountCredentials(ws);
   }
@@ -69,7 +70,11 @@ export async function hydrateAllPlatformDocs(workspaceId?: string): Promise<void
   useAiNewsPreferenceStore.getState().hydrate();
   useAiNewsStore.getState().hydrate();
   useAiBriefEmailCopyStore.getState().hydrate();
-  await useLlmConfigStore.getState().hydrate({ fresh: true });
+  // llm-config contains real provider credentials and is member-only. A guest
+  // bootstrap must not turn that expected 401 into a failed all-docs hydrate.
+  if (isAuthenticated) {
+    await useLlmConfigStore.getState().hydrate({ fresh: true });
+  }
   useAssetApprovalStore.getState().hydrate();
 
   const { hydrateInboxMessages } = await import('@/domain/persistence/inboxStorage');

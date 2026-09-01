@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import {
   DEFAULT_LLM_CONFIG,
+  hasWorkspaceLlmCredential,
   isLlmConfigComplete,
   listEnabledPlatformModels,
   normalizeLlmModelId,
@@ -29,7 +30,14 @@ function defaultConfig(): LlmConfig {
   };
 }
 
-function normalizeCustomModels(raw: unknown, legacySharedKey: string): CustomLlmModel[] {
+let configRequestVersion = 0;
+
+function normalizeCustomModels(
+  raw: unknown,
+  legacySharedKey: string,
+  legacyModelId = '',
+  legacyBaseUrl = '',
+): CustomLlmModel[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .filter((m): m is Record<string, unknown> => !!m && typeof m === 'object')
@@ -39,8 +47,14 @@ function normalizeCustomModels(raw: unknown, legacySharedKey: string): CustomLlm
       return {
         id,
         label: String(m.label || id),
-        baseUrl: String(m.baseUrl || '').trim(),
-        apiKey: typeof m.apiKey === 'string' && m.apiKey ? m.apiKey : legacySharedKey,
+        baseUrl:
+          String(m.baseUrl || '').trim() || (id === legacyModelId ? legacyBaseUrl : ''),
+        apiKey:
+          typeof m.apiKey === 'string' && m.apiKey
+            ? m.apiKey
+            : id === legacyModelId
+              ? legacySharedKey
+              : '',
       } satisfies CustomLlmModel;
     })
     .filter((m): m is CustomLlmModel => Boolean(m));
@@ -48,11 +62,56 @@ function normalizeCustomModels(raw: unknown, legacySharedKey: string): CustomLlm
 
 export function normalizeLlmConfig(raw: Partial<LlmConfig> | null | undefined): LlmConfig {
   const legacySharedKey = typeof raw?.apiKey === 'string' ? raw.apiKey : '';
+  // `platformModels` marks the new per-model directory format. Older payloads
+  // may already contain `customModels: []` but still use one top-level key.
+  const hasModelDirectory = Array.isArray(raw?.platformModels);
+  const legacyModelId = normalizeLlmModelId(
+    typeof raw?.model === 'string' && raw.model.trim()
+      ? raw.model
+      : typeof raw?.defaultModelId === 'string' && raw.defaultModelId.trim()
+        ? raw.defaultModelId
+        : DEFAULT_LLM_CONFIG.model,
+  );
+  const legacyBaseUrl = typeof raw?.baseUrl === 'string' ? raw.baseUrl.trim() : '';
   let platformModels = normalizePlatformModels(raw?.platformModels);
-  if (legacySharedKey) {
-    platformModels = platformModels.map((m) => (m.apiKey ? m : { ...m, apiKey: legacySharedKey }));
+  // Once the model directory exists, top-level apiKey is only the active
+  // snapshot. Do not copy it into other entries and accidentally create
+  // cross-model credentials; use it as a legacy fallback only for old payloads
+  // that had no model lists at all.
+  if (legacySharedKey && !hasModelDirectory) {
+    platformModels = platformModels.map((m) =>
+      m.id === legacyModelId
+        ? {
+            ...m,
+            baseUrl: legacyBaseUrl || m.baseUrl,
+            apiKey: m.apiKey || legacySharedKey,
+          }
+        : m,
+    );
   }
-  const customModels = normalizeCustomModels(raw?.customModels, legacySharedKey);
+  let customModels = normalizeCustomModels(
+    raw?.customModels,
+    hasModelDirectory ? '' : legacySharedKey,
+    hasModelDirectory ? '' : legacyModelId,
+    hasModelDirectory ? '' : legacyBaseUrl,
+  );
+  // Preserve an old single-model payload even when its model was a private
+  // gateway ID that is not in today's seeded directory.
+  if (
+    !hasModelDirectory &&
+    !platformModels.some((m) => m.id === legacyModelId) &&
+    !customModels.some((m) => m.id === legacyModelId)
+  ) {
+    customModels = [
+      ...customModels,
+      {
+        id: legacyModelId,
+        label: legacyModelId,
+        baseUrl: legacyBaseUrl,
+        apiKey: legacySharedKey,
+      },
+    ];
+  }
   const defaultModelId = normalizeLlmModelId(
     raw?.defaultModelId ||
       platformModels.find((m) => m.enabled)?.id ||
@@ -87,11 +146,11 @@ export function normalizeLlmConfig(raw: Partial<LlmConfig> | null | undefined): 
   };
 }
 
-async function persistToDb(cfg: LlmConfig): Promise<void> {
+async function persistToDb(workspaceId: string, cfg: LlmConfig): Promise<void> {
   if (!canUsePlatformDocsApi()) {
     throw new Error('shared_api_required');
   }
-  await savePlatformDoc(currentWorkspaceId(), 'llm-config', cfg);
+  await savePlatformDoc(workspaceId, 'llm-config', cfg);
 }
 
 export interface ModelOption {
@@ -149,6 +208,8 @@ export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
   lastError: null,
 
   hydrate: async (opts) => {
+    const workspaceId = currentWorkspaceId();
+    const requestVersion = ++configRequestVersion;
     if (!canUsePlatformDocsApi()) {
       set({
         config: defaultConfig(),
@@ -159,16 +220,18 @@ export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
     set({ syncing: true, lastError: null });
     try {
       const remote = await fetchPlatformDoc<Partial<LlmConfig>>(
-        currentWorkspaceId(),
+        workspaceId,
         'llm-config',
         { fresh: opts?.fresh !== false },
       );
+      if (requestVersion !== configRequestVersion || workspaceId !== currentWorkspaceId()) return;
       set({
         config: normalizeLlmConfig(remote),
         syncing: false,
         lastError: null,
       });
     } catch (e) {
+      if (requestVersion !== configRequestVersion || workspaceId !== currentWorkspaceId()) return;
       set({
         syncing: false,
         lastError: e instanceof Error ? e.message : '加载模型配置失败',
@@ -177,6 +240,8 @@ export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
   },
 
   saveConfig: async (patch) => {
+    const workspaceId = currentWorkspaceId();
+    const requestVersion = ++configRequestVersion;
     if (!canUsePlatformDocsApi()) {
       const msg = '共享 API 未连接，无法写入数据库。请先连接后端再配置模型。';
       set({ lastError: msg });
@@ -185,18 +250,20 @@ export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
     const next = normalizeLlmConfig({ ...get().config, ...patch });
     set({ syncing: true, lastError: null });
     try {
-      await persistToDb(next);
+      await persistToDb(workspaceId, next);
       const remote = await fetchPlatformDoc<Partial<LlmConfig>>(
-        currentWorkspaceId(),
+        workspaceId,
         'llm-config',
         { fresh: true },
       );
+      if (requestVersion !== configRequestVersion || workspaceId !== currentWorkspaceId()) return;
       set({
         config: normalizeLlmConfig(remote ?? next),
         syncing: false,
         lastError: null,
       });
     } catch (e) {
+      if (requestVersion !== configRequestVersion || workspaceId !== currentWorkspaceId()) return;
       const msg = e instanceof Error ? e.message : '保存模型配置失败';
       set({ syncing: false, lastError: msg });
       throw e;
@@ -365,7 +432,23 @@ export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
   },
 
   setDefaultModelId: async (modelId) => {
-    await get().saveConfig({ defaultModelId: normalizeLlmModelId(modelId) });
+    const { config } = get();
+    const id = normalizeLlmModelId(modelId);
+    const selectable =
+      listEnabledPlatformModels(config).some((m) => m.id === id) ||
+      config.customModels.some((m) => m.id === id);
+    if (!selectable) return;
+    // The execution API reads the active `model` snapshot. Keep it aligned
+    // when operations changes the organization default from the model catalog.
+    await get().saveConfig({
+      defaultModelId: id,
+      ...syncSnapshotFromSelection(
+        id,
+        config.platformModels,
+        config.customModels,
+        id,
+      ),
+    });
   },
 
   openSettings: (opts) => set({ settingsOpen: true, settingsFocusAdd: Boolean(opts?.focusAdd) }),
@@ -411,7 +494,7 @@ export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
         configured: true,
       };
     }
-    if (nestLlmEnvConfigured) {
+    if (nestLlmEnvConfigured && !hasWorkspaceLlmCredential(config)) {
       return { text: `${meta.label} · 服务端 LLM_* 可用`, configured: true };
     }
     return { text: `${meta.label} · 当前模型未配置 API Key`, configured: false };

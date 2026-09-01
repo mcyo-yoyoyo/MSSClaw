@@ -11,7 +11,13 @@ import type {
   StreamEvent,
   StreamExecutionRequest,
 } from './dto/stream-execution.dto';
-import { nestLlmConfigFromDoc, nestLlmConfigFromEnv, nestLlmExecutionStream, type NestLlmRuntimeConfig } from './llm.client';
+import {
+  nestLlmConfigFromCandidate,
+  nestLlmConfigFromDoc,
+  nestLlmConfigFromEnv,
+  nestLlmExecutionStream,
+  type NestLlmRuntimeConfig,
+} from './llm.client';
 import { portalAnalyticsDateKey } from '../persistence/portal-analytics-time';
 
 const MARKETING_STEPS: ExecutionStep[] = [
@@ -31,6 +37,13 @@ const KNOWLEDGE_STEPS: ExecutionStep[] = [
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function safeLlmTestError(message: string): string {
+  const status = message.match(/^LLM stream HTTP (\d{3})/i)?.[1];
+  if (status) return `模型接口返回 HTTP ${status}。`;
+  if (/abort|timeout|timed out/i.test(message)) return '模型流式测试超时或被中断。';
+  return '服务端模型流式请求失败，请检查 Base URL、网络和 API Key。';
 }
 
 function resolveAgentType(chatId: string, message: string): AgentType {
@@ -132,7 +145,7 @@ export class ExecutionsService {
     const planSteps = (params.planSteps ?? []).map((s) => s.trim()).filter(Boolean);
     const executionId = `exec_${Date.now()}_${randomBytes(4).toString('hex')}`;
     const startedAt = new Date().toISOString();
-    const llmConfig = await this.resolveLlmConfig(workspaceId);
+    const llmConfig = await this.resolveLlmConfig(workspaceId, params.model);
     const allowScripted =
       process.env.ALLOW_SCRIPTED_EXECUTION === '1' ||
       process.env.ALLOW_SCRIPTED_EXECUTION === 'true';
@@ -190,23 +203,135 @@ export class ExecutionsService {
     yield* this.runScriptedStream(base, params, agentType, agentName, planSteps, signal);
   }
 
-  /** 优先 LLM_* 凭证；模型选用与工作区 llm-config 联动（同一 DB 文档） */
-  private async resolveLlmConfig(workspaceId: string): Promise<NestLlmRuntimeConfig | null> {
+  /** 工作区模型凭证优先；未指定模型且工作区无凭证时才回退部署环境。 */
+  private async resolveLlmConfig(
+    workspaceId: string,
+    requestedModel?: string,
+  ): Promise<NestLlmRuntimeConfig | null> {
     const row = await this.prisma.centerRecord.findUnique({
       where: { id: `doc-llm-config-${workspaceId}` },
     });
-    const fromDoc = nestLlmConfigFromDoc(row?.payload);
-    const fromEnv = nestLlmConfigFromEnv();
-    if (fromEnv) {
-      // 凭证用部署环境；model / baseUrl 优先跟工作区目录选用（前后台联动）
+    const fromDoc = nestLlmConfigFromDoc(row?.payload, requestedModel);
+    if (fromDoc) return fromDoc;
+    // A seeded/empty document should not disable deployment fallback. Once a
+    // workspace has stored any key, however, a missing selected-model key is a
+    // real configuration error rather than permission to mix credentials.
+    // An explicit model is an assertion from the model page/chat selector;
+    // never hide a missing per-model key behind the deployment fallback.
+    const hasRequestedModel =
+      typeof requestedModel === 'string' && requestedModel.trim().length > 0;
+    if (hasRequestedModel || this.hasWorkspaceLlmCredential(row?.payload)) return null;
+    return nestLlmConfigFromEnv();
+  }
+
+  /** 只判断是否存在任一工作区凭证，不读取或记录其内容。 */
+  private hasWorkspaceLlmCredential(payload: unknown): boolean {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+    const p = payload as Record<string, unknown>;
+    if (typeof p.apiKey === 'string' && p.apiKey.trim()) return true;
+    for (const list of [p.platformModels, p.customModels]) {
+      if (!Array.isArray(list)) continue;
+      if (list.some((item) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+        const key = (item as Record<string, unknown>).apiKey;
+        return typeof key === 'string' && key.trim().length > 0;
+      })) return true;
+    }
+    return false;
+  }
+
+  async testLlmConnection(
+    workspaceId: string,
+    requestedModel?: string,
+    candidate?: { model?: unknown; baseUrl?: unknown; apiKey?: unknown },
+  ): Promise<{
+    ok: true;
+    model: string;
+    source: NestLlmRuntimeConfig['source'];
+    message: string;
+  } | {
+    ok: false;
+    errorCode: string;
+    message: string;
+  }> {
+    const hasCandidate = candidate != null;
+    const candidateConfig = hasCandidate ? nestLlmConfigFromCandidate(candidate) : null;
+    if (hasCandidate && !candidateConfig) {
       return {
-        ...fromEnv,
-        model: fromDoc?.model || fromEnv.model,
-        baseUrl: fromDoc?.baseUrl || fromEnv.baseUrl,
-        source: fromDoc ? 'workspace-doc' : 'env',
+        ok: false,
+        errorCode: 'llm_test_config_invalid',
+        message: '测试配置不完整，请填写模型、Base URL 和 API Key。',
       };
     }
-    return fromDoc;
+    const config = candidateConfig ?? await this.resolveLlmConfig(workspaceId, requestedModel);
+    if (!config) {
+      return {
+        ok: false,
+        errorCode: 'llm_not_configured',
+        message: '当前工作区没有可用的模型凭证，请先保存并启用模型。',
+      };
+    }
+
+    const controller = new AbortController();
+    const timeoutMs = Math.max(1_000, Number(process.env.LLM_TEST_TIMEOUT_MS) || 15_000);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let completed = false;
+    let receivedToken = false;
+    try {
+      for await (const event of nestLlmExecutionStream({
+        message: '连接测试：只需回复 OK。',
+        actionType: 'knowledge',
+        agentName: '模型连接测试',
+        planSteps: ['连接模型服务'],
+        signal: controller.signal,
+        // Keep the probe cheap while exercising the exact stream transport.
+        config: { ...config, maxTokens: 8 },
+      })) {
+        if (event.type === 'done') {
+          completed = true;
+          continue;
+        }
+        if (event.type === 'token' && event.content.trim()) {
+          receivedToken = true;
+          continue;
+        }
+        if (event.type === 'error') {
+          return {
+            ok: false,
+            errorCode: 'llm_test_failed',
+            message: safeLlmTestError(event.message),
+          };
+        }
+      }
+      if (!completed) {
+        return {
+          ok: false,
+          errorCode: 'llm_test_timeout',
+          message: '模型流式测试超时或被中断。',
+        };
+      }
+      if (!receivedToken) {
+        return {
+          ok: false,
+          errorCode: 'llm_test_empty_stream',
+          message: '模型接口已连接，但没有返回可展示的流式内容。',
+        };
+      }
+      return {
+        ok: true,
+        model: config.model,
+        source: config.source,
+        message: '服务端模型连接成功，流式执行可用。',
+      };
+    } catch {
+      return {
+        ok: false,
+        errorCode: 'llm_test_failed',
+        message: '服务端无法连接模型接口，请检查 Base URL、网络和 API Key。',
+      };
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private async *runLlmStream(
