@@ -40,6 +40,18 @@ test('用户侧外部工具全部筛选读取工具运营的全局布局', () =>
   );
 });
 
+test('用户侧全局外部工具切换互动排序时不被人工布局顺序覆盖', () => {
+  assert.match(
+    source,
+    /if \(rankMode !== 'excel_order'\) \{[\s\S]*?featured: filteredCards\.filter\(\(card\) => featuredIds\.has\(card\.id\)\),[\s\S]*?rest: filteredCards\.filter\(\(card\) => !featuredIds\.has\(card\.id\)\)/,
+  );
+  assert.match(
+    source,
+    /\}, \[kind, externalType, externalToolLayout, filteredCards, rankMode, rankDirection\]\);/,
+  );
+  assert.match(source, /direction=\{rankDirection\}/);
+});
+
 test('用户侧非全部筛选读取对应分类的海外和国内精选', () => {
   assert.match(
     source,

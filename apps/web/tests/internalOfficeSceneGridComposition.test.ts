@@ -174,10 +174,10 @@ test('运营预览继续使用只读指标分支', () => {
   assert.match(gridSource, /if \(interactionMode === 'user'\)[\s\S]*?bumpUse/);
 });
 
-test('后台精简视图隐藏指标和详情按钮，仅保留底部手柄', () => {
+test('后台维护视图保留只读指标并隐藏详情按钮，仅保留底部手柄', () => {
   assert.match(
     gridSource,
-    /\{maintenanceView \? \([\s\S]*?aria-label=\{`拖动\$\{scene\.label\}`\}[\s\S]*?\) : \([\s\S]*?<SceneCardStats[\s\S]*?>\s*详情\s*<\/button>/,
+    /\{maintenanceView \? \([\s\S]*?<SceneCardStats scene=\{scene\} interactionMode="preview" \/>[\s\S]*?aria-label=\{`拖动\$\{scene\.label\}`\}[\s\S]*?\) : \([\s\S]*?<SceneCardStats[\s\S]*?>\s*详情\s*<\/button>/,
   );
 });
 

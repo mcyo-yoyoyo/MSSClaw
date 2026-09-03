@@ -309,6 +309,31 @@ test('外部工具全部筛选维护四个独立列表并在操作后立即保�
   );
 });
 
+test('外部精选标题右侧提供与工具条同步的排序入口', () => {
+  const externalPanelStart = portalPanelSource.indexOf(
+    'data-testid="portal-tool-ops-external"',
+  );
+  const featuredSectionStart = portalPanelSource.indexOf(
+    '<section className="mb-7">',
+    externalPanelStart,
+  );
+  const featuredGridStart = portalPanelSource.indexOf(
+    '<div className="grid gap-4 lg:grid-cols-2">',
+    featuredSectionStart,
+  );
+  assert.ok(externalPanelStart >= 0 && featuredSectionStart > externalPanelStart);
+  assert.ok(featuredGridStart > featuredSectionStart);
+  const featuredHeaderSource = portalPanelSource.slice(
+    featuredSectionStart,
+    featuredGridStart,
+  );
+  assert.match(featuredHeaderSource, /精选推荐/);
+  assert.match(
+    featuredHeaderSource,
+    /<ShelfRankSelect[\s\S]*?value=\{externalRankMode\}[\s\S]*?onChange=\{handleExternalRankModeChange\}[\s\S]*?direction=\{externalRankDirection\}[\s\S]*?onDirectionChange=\{setExternalRankDirection\}/,
+  );
+});
+
 test('分类精选从全库解析，更多按当前分类排名过滤并排除精选', () => {
   assert.match(
     portalPanelSource,

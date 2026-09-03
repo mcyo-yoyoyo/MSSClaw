@@ -16,6 +16,12 @@ export type RankMode =
   /** 更新时间：按资产自身 updatedAt 倒序 */
   | 'recently_updated';
 
+export type RankDirection = 'asc' | 'desc';
+
+export function defaultRankDirection(mode: RankMode): RankDirection {
+  return mode === 'excel_order' ? 'asc' : 'desc';
+}
+
 export const RANK_MODE_OPTIONS: { id: RankMode; label: string }[] = [
   { id: 'trending', label: '热门推荐' },
   { id: 'newest', label: '最新上线' },
@@ -166,6 +172,7 @@ export function sortByRankMode<T extends RankableContent>(
   items: T[],
   mode: RankMode,
   engagementOf: (id: string) => ContentEngagement,
+  direction: RankDirection = defaultRankDirection(mode),
 ): T[] {
   const scored = items.map((item) => {
     const e = engagementOf(item.id);
@@ -219,5 +226,17 @@ export function sortByRankMode<T extends RankableContent>(
     }
   });
 
-  return scored.map((s) => s.item);
+  let ordered = scored;
+  if (direction !== defaultRankDirection(mode)) ordered = [...ordered].reverse();
+  if (mode === 'excel_order' || mode === 'recently_updated') {
+    const hasRank = (item: T) =>
+      mode === 'excel_order'
+        ? typeof item.sourceOrder === 'number' && Number.isFinite(item.sourceOrder)
+        : Boolean(item.updatedAt);
+    ordered = [
+      ...ordered.filter(({ item }) => hasRank(item)),
+      ...ordered.filter(({ item }) => !hasRank(item)),
+    ];
+  }
+  return ordered.map((s) => s.item);
 }

@@ -19,8 +19,10 @@ import {
 } from '@/domain/internalOfficeScenes';
 import { filterInternalOfficeScenesBySearch } from '@/domain/internalOfficeSceneSearch';
 import {
+  defaultRankDirection,
   SHELF_RANK_TABS,
   sortByRankMode,
+  type RankDirection,
   type RankMode,
 } from '@/domain/contentEngagement';
 
@@ -265,7 +267,9 @@ export function InternalOfficeSceneGrid({
   search,
   catalogTools,
   rankMode = 'excel_order',
+  rankDirection = defaultRankDirection(rankMode),
   onRankModeChange,
+  onRankDirectionChange,
   onOpenDetail,
   onHowTo,
   onExperience,
@@ -284,7 +288,9 @@ export function InternalOfficeSceneGrid({
   /** 配置工具主数据：覆盖场景默认链接 / Logo */
   catalogTools: PrototypeToolSeed[];
   rankMode?: RankMode;
+  rankDirection?: RankDirection;
   onRankModeChange?: (next: RankMode) => void;
+  onRankDirectionChange?: (next: RankDirection) => void;
   onOpenDetail: (tool: InternalOfficeSceneTool) => void;
   onHowTo: (tool: InternalOfficeSceneTool) => void;
   onExperience: (tool: InternalOfficeSceneTool) => void;
@@ -294,7 +300,7 @@ export function InternalOfficeSceneGrid({
   interactionMode?: 'user' | 'preview';
   /** 后台可隐藏员工助手预览；用户侧默认保持展示。 */
   showAssistantChat?: boolean;
-  /** 后台精简维护视图：隐藏互动指标与详情按钮，仅保留拖拽手柄。 */
+  /** 后台维护视图：保留只读互动指标，仅隐藏详情按钮并保留拖拽手柄。 */
   maintenanceView?: boolean;
   /** 运营侧开启拖拽手柄；用户侧不传时保持原有 DOM 与交互。 */
   reorderEnabled?: boolean;
@@ -376,8 +382,13 @@ export function InternalOfficeSceneGrid({
 
   const scenes = useMemo(() => {
     const filtered = filterInternalOfficeScenesBySearch(allScenes, search, catalogTools);
-    return sortByRankMode(filtered, rankMode, (id) => getEngagement(sceneEngagementId(id)));
-  }, [allScenes, search, catalogTools, rankMode, getEngagement, engagementById]);
+    return sortByRankMode(
+      filtered,
+      rankMode,
+      (id) => getEngagement(sceneEngagementId(id)),
+      rankDirection,
+    );
+  }, [allScenes, search, catalogTools, rankMode, rankDirection, getEngagement, engagementById]);
 
   const runWithTool = (scene: InternalOfficeScene, mode: PickerMode) => {
     if (!scene.tools.length) {
@@ -834,6 +845,8 @@ export function InternalOfficeSceneGrid({
             count={scenes.length}
             rankMode={rankMode}
             onRankChange={onRankModeChange}
+            direction={rankDirection}
+            onDirectionChange={onRankDirectionChange}
             rankOptions={OFFICE_SCENE_RANK_TABS}
             className="mb-0"
           />
@@ -959,7 +972,8 @@ export function InternalOfficeSceneGrid({
                     ) : null}
                   </button>
                   {maintenanceView ? (
-                    <div className="mt-3 flex shrink-0 items-center border-t border-zinc-100 pt-2.5">
+                    <div className="mt-3 flex shrink-0 items-center gap-2 border-t border-zinc-100 pt-2.5">
+                      <SceneCardStats scene={scene} interactionMode="preview" />
                       {showReorderHandle ? (
                         <button
                           type="button"

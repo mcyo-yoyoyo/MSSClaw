@@ -36,9 +36,11 @@ import { emptyOrgPerspectiveSelection } from '@/domain/orgAxisTags';
 import { MarketToolDetailModal } from '@/features/market/MarketToolDetailModal';
 import { cn } from '@/lib/utils';
 import {
+  defaultRankDirection,
   SHELF_RANK_TABS,
   sortByRankMode,
   type ContentEngagement,
+  type RankDirection,
   type RankMode,
 } from '@/domain/contentEngagement';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
@@ -149,9 +151,12 @@ function sortExternalByEngagement(
   cards: readonly MarketShelfCardModel[],
   rankMode: RankMode,
   getEngagement: (id: string) => ContentEngagement,
+  direction: RankDirection,
 ): MarketShelfCardModel[] {
-  if (rankMode === 'excel_order') return [...cards];
-  return sortByRankMode([...cards], rankMode, getEngagement);
+  if (rankMode === 'excel_order') {
+    return direction === 'desc' ? [...cards].reverse() : [...cards];
+  }
+  return sortByRankMode([...cards], rankMode, getEngagement, direction);
 }
 
 function selectCardsByIds(
@@ -539,6 +544,7 @@ export function PortalToolOpsPanel() {
   const [externalType, setExternalType] = useState<ExternalToolTypeId | 'all'>('all');
   const [externalListMode, setExternalListMode] = useState<ExternalListMode>('listed');
   const [externalRankMode, setExternalRankMode] = useState<RankMode>('excel_order');
+  const [externalRankDirection, setExternalRankDirection] = useState<RankDirection>('asc');
   const [previewToolId, setPreviewToolId] = useState<string | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
@@ -566,6 +572,11 @@ export function PortalToolOpsPanel() {
     () => new Set(),
   );
   const savingToolListingIdsRef = useRef<Set<string>>(new Set());
+
+  const handleExternalRankModeChange = (next: RankMode) => {
+    setExternalRankMode(next);
+    setExternalRankDirection(defaultRankDirection(next));
+  };
 
   useEffect(() => {
     const visibleTypes = listVisibleExternalToolTypes(externalTaxonomy);
@@ -672,7 +683,10 @@ export function PortalToolOpsPanel() {
 
   const activeLayout: ExternalToolLayoutDocument | null = layoutDraft ?? layoutDocument;
   const externalDragEnabled = Boolean(activeLayout) && !layoutLoading && !layoutSaving;
-  const externalDragByOrder = externalDragEnabled && externalRankMode === 'excel_order';
+  const externalDragByOrder =
+    externalDragEnabled &&
+    externalRankMode === 'excel_order' &&
+    externalRankDirection === 'asc';
 
   const overseasCards = externalCards.filter((card) => card.region === 'overseas');
   const domesticCards = externalCards.filter((card) => card.region === 'domestic');
@@ -739,7 +753,7 @@ export function PortalToolOpsPanel() {
   );
 
   const sortByExternalRank = (cards: MarketShelfCardModel[]) =>
-    sortExternalByEngagement(cards, externalRankMode, getEngagement);
+    sortExternalByEngagement(cards, externalRankMode, getEngagement, externalRankDirection);
 
   const searchIds = useMemo(() => {
     if (!search.trim()) return null;
@@ -1402,8 +1416,10 @@ export function PortalToolOpsPanel() {
               />
               <ShelfRankSelect
                 value={externalRankMode}
-                onChange={setExternalRankMode}
+                onChange={handleExternalRankModeChange}
                 options={SHELF_RANK_TABS}
+                direction={externalRankDirection}
+                onDirectionChange={setExternalRankDirection}
                 className="shrink-0"
               />
               {layoutSaving ? (
@@ -1534,11 +1550,21 @@ export function PortalToolOpsPanel() {
         ) : externalType === 'all' ? (
           <>
             <section className="mb-7">
-              <div className="mb-3 flex items-baseline gap-2">
-                <h2 className="text-[17px] font-semibold text-[#1d1d1f]">精选推荐</h2>
-                <span className="text-[12px] text-[#86868b]">
-                  {visibleAllOverseasFeatured.length + visibleAllDomesticFeatured.length}
-                </span>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex items-baseline gap-2">
+                  <h2 className="text-[17px] font-semibold text-[#1d1d1f]">精选推荐</h2>
+                  <span className="text-[12px] text-[#86868b]">
+                    {visibleAllOverseasFeatured.length + visibleAllDomesticFeatured.length}
+                  </span>
+                </div>
+                <ShelfRankSelect
+                  value={externalRankMode}
+                  onChange={handleExternalRankModeChange}
+                  options={SHELF_RANK_TABS}
+                  direction={externalRankDirection}
+                  onDirectionChange={setExternalRankDirection}
+                  className="shrink-0"
+                />
               </div>
               <div className="grid gap-4 lg:grid-cols-2">
                 <ToolListPanel title="海外精选" subtitle="GLOBAL" count={visibleAllOverseasFeatured.length} tone="overseas">
@@ -1634,11 +1660,21 @@ export function PortalToolOpsPanel() {
         ) : (
           <>
             <section className="mb-7">
-              <div className="mb-3 flex items-baseline gap-2">
-                <h2 className="text-[17px] font-semibold text-[#1d1d1f]">精选推荐</h2>
-                <span className="text-[12px] text-[#86868b]">
-                  {visibleCategoryOverseasFeatured.length + visibleCategoryDomesticFeatured.length}
-                </span>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex items-baseline gap-2">
+                  <h2 className="text-[17px] font-semibold text-[#1d1d1f]">精选推荐</h2>
+                  <span className="text-[12px] text-[#86868b]">
+                    {visibleCategoryOverseasFeatured.length + visibleCategoryDomesticFeatured.length}
+                  </span>
+                </div>
+                <ShelfRankSelect
+                  value={externalRankMode}
+                  onChange={handleExternalRankModeChange}
+                  options={SHELF_RANK_TABS}
+                  direction={externalRankDirection}
+                  onDirectionChange={setExternalRankDirection}
+                  className="shrink-0"
+                />
               </div>
               <div className="grid gap-4 lg:grid-cols-2">
                 <ToolListPanel title="海外精选" subtitle="GLOBAL" count={visibleCategoryOverseasFeatured.length} tone="overseas">

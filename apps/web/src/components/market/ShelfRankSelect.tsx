@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { SHELF_RANK_TABS, type RankMode } from '@/domain/contentEngagement';
+import {
+  SHELF_RANK_TABS,
+  type RankDirection,
+  type RankMode,
+} from '@/domain/contentEngagement';
 
 export function ShelfRankSelect({
   value,
@@ -8,6 +12,8 @@ export function ShelfRankSelect({
   className,
   showExcelOrder = false,
   options,
+  direction,
+  onDirectionChange,
 }: {
   value: RankMode;
   onChange: (next: RankMode) => void;
@@ -15,6 +21,8 @@ export function ShelfRankSelect({
   showExcelOrder?: boolean;
   /** 覆盖默认排序项（如 Agent Hub 用 AGENT_HUB_RANK_TABS） */
   options?: { id: RankMode; label: string; icon: string }[];
+  direction?: RankDirection;
+  onDirectionChange?: (next: RankDirection) => void;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -36,27 +44,45 @@ export function ShelfRankSelect({
 
   return (
     <div ref={rootRef} className={cn('relative shrink-0', className)}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={`排序：${current.label}`}
-        className={cn(
-          'inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] font-medium transition',
-          'text-[#6e6e73] hover:bg-black/[0.04] hover:text-[#1d1d1f]',
-          open && 'bg-black/[0.04] text-[#1d1d1f]',
-        )}
-      >
-        <i className={cn(current.icon, 'text-[11px] text-[#86868b]')} />
-        <span>{current.label}</span>
-        <i
+      <div className="inline-flex items-center gap-0.5">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-label={`排序：${current.label}`}
           className={cn(
-            'fa-solid fa-chevron-down text-[8px] text-[#a1a1aa] transition',
-            open && 'rotate-180',
+            'inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] font-medium transition',
+            'text-[#6e6e73] hover:bg-black/[0.04] hover:text-[#1d1d1f]',
+            open && 'bg-black/[0.04] text-[#1d1d1f]',
           )}
-        />
-      </button>
+        >
+          <i className={cn(current.icon, 'text-[11px] text-[#86868b]')} />
+          <span>{current.label}</span>
+          <i
+            className={cn(
+              'fa-solid fa-chevron-down text-[8px] text-[#a1a1aa] transition',
+              open && 'rotate-180',
+            )}
+          />
+        </button>
+        {direction && onDirectionChange ? (
+          <button
+            type="button"
+            onClick={() => onDirectionChange(direction === 'asc' ? 'desc' : 'asc')}
+            aria-label={`排序方向：${direction === 'asc' ? '正序' : '倒序'}`}
+            title={`切换为${direction === 'asc' ? '倒序' : '正序'}`}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-[#86868b] transition hover:bg-black/[0.04] hover:text-[#1d1d1f]"
+          >
+            <i
+              className={cn(
+                'fa-solid text-[11px]',
+                direction === 'asc' ? 'fa-arrow-up' : 'fa-arrow-down',
+              )}
+            />
+          </button>
+        ) : null}
+      </div>
       {open ? (
         <ul
           role="listbox"
@@ -99,6 +125,8 @@ export function ShelfSectionHead({
   className,
   showExcelOrder = false,
   rankOptions,
+  direction,
+  onDirectionChange,
 }: {
   title: string;
   count?: number;
@@ -107,6 +135,8 @@ export function ShelfSectionHead({
   className?: string;
   showExcelOrder?: boolean;
   rankOptions?: { id: RankMode; label: string; icon: string }[];
+  direction?: RankDirection;
+  onDirectionChange?: (next: RankDirection) => void;
 }) {
   return (
     <div className={cn('mb-3 flex items-center justify-between gap-3', className)}>
@@ -121,6 +151,8 @@ export function ShelfSectionHead({
         onChange={onRankChange}
         showExcelOrder={showExcelOrder}
         options={rankOptions}
+        direction={direction}
+        onDirectionChange={onDirectionChange}
       />
     </div>
   );
