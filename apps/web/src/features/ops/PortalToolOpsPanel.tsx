@@ -1414,14 +1414,6 @@ export function PortalToolOpsPanel() {
                 type="search"
                 className="min-w-[13rem] flex-1 lg:max-w-[18rem]"
               />
-              <ShelfRankSelect
-                value={externalRankMode}
-                onChange={handleExternalRankModeChange}
-                options={SHELF_RANK_TABS}
-                direction={externalRankDirection}
-                onDirectionChange={setExternalRankDirection}
-                className="shrink-0"
-              />
               {layoutSaving ? (
                 <span className="text-[11px] font-medium text-zinc-500">正在自动保存…</span>
               ) : null}

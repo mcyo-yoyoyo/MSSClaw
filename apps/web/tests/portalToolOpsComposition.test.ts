@@ -309,7 +309,13 @@ test('外部工具全部筛选维护四个独立列表并在操作后立即保�
   );
 });
 
-test('外部精选标题右侧提供与工具条同步的排序入口', () => {
+test('外部精选标题右侧提供排序入口且工具条不重复显示', () => {
+  const externalSearchStart = portalPanelSource.indexOf('placeholder="搜索外部工具…"');
+  const externalFiltersStart = portalPanelSource.indexOf('<ExternalMarketFilters', externalSearchStart);
+  const externalToolbarSource = portalPanelSource.slice(externalSearchStart, externalFiltersStart);
+  assert.ok(externalSearchStart >= 0 && externalFiltersStart > externalSearchStart);
+  assert.doesNotMatch(externalToolbarSource, /<ShelfRankSelect/, '工具条不再重复展示排序控件');
+
   const externalPanelStart = portalPanelSource.indexOf(
     'data-testid="portal-tool-ops-external"',
   );
