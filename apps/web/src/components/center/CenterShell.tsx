@@ -191,17 +191,19 @@ export function CenterSearchInput({
   onChange,
   placeholder,
   className = 'w-full max-w-[12rem] sm:w-48',
+  type = 'text',
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   className?: string;
+  type?: 'text' | 'search';
 }) {
   return (
     <input
-      type="text"
+      type={type}
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onInput={(event) => onChange(event.currentTarget.value)}
       placeholder={placeholder}
       className={`apple-input ${className}`}
     />

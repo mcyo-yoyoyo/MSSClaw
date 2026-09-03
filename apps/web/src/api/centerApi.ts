@@ -10,6 +10,7 @@ import { getSkillsByWorkspace, SkillSchema, type Skill } from '@/domain/skill';
 import { getToolsByWorkspace, PlatformToolSchema, type PlatformTool } from '@/domain/tool';
 import { getWorkflowsByWorkspace, WorkflowSchema, type Workflow } from '@/domain/workflow';
 import { apiUrl } from '@/api/client';
+import { fetchToolsApi } from '@/api/persistenceApi';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 export class CenterApiError extends Error {
@@ -169,13 +170,75 @@ export async function runKnowledgePipelineApi(
   return KnowledgeBaseSchema.parse(updated);
 }
 
-export async function fetchTools(workspaceId: string): Promise<PlatformTool[]> {
-  const fallback = getToolsByWorkspace(workspaceId);
-  const payload = await fetchJson<{ tools: unknown[] }>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/tools`),
-    { tools: fallback },
-  );
-  return parseList(payload.tools, PlatformToolSchema);
+export async function fetchTools(_workspaceId?: string): Promise<PlatformTool[]> {
+  // Tool 目录已迁移到部署级单例；保留参数仅为兼容 legacy store 调用方。
+  const fallback = getToolsByWorkspace('ws-3c-latam');
+  if (!useWorkspaceStore.getState().apiConnected) return fallback;
+  try {
+    const payload = await fetchToolsApi();
+    // 200 但缺少工具数组通常是旧代理/SPA fallback；保留静态目录，避免把已有列表清空。
+    if (!Array.isArray(payload?.tools)) return fallback;
+    const raw = payload.tools;
+    // 新 marketplace 工具字段与旧 Tool 中心略有差异；仅为仍可访问的 legacy 页面
+    // 填充其所需展示字段，主路径仍直接消费 marketplaceStore 的原始工具对象。
+    return raw
+      .map((item) => {
+        try {
+          return PlatformToolSchema.parse(item);
+        } catch {
+          return toLegacyPlatformTool(item);
+        }
+      })
+      .filter((item): item is PlatformTool => item !== null);
+  } catch {
+    return fallback;
+  }
+}
+
+function toLegacyPlatformTool(raw: unknown): PlatformTool | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const item = raw as Record<string, unknown>;
+  const id = String(item.id ?? '').trim();
+  if (!id) return null;
+  const type =
+    item.type === 'http' || item.type === 'mcp' || item.type === 'openapi' ||
+    item.type === 'python' || item.type === 'node' || item.type === 'function'
+      ? item.type
+      : item.connectorType === 'mcp'
+        ? 'mcp'
+        : 'http';
+  const status = item.status === 'testing' || item.status === 'deprecated' || item.status === 'draft'
+    ? item.status
+    : item.published === false
+      ? 'draft'
+      : 'active';
+  const numberOr = (value: unknown, fallbackValue: number) =>
+    typeof value === 'number' && Number.isFinite(value) ? value : fallbackValue;
+  const strings = (value: unknown) => Array.isArray(value) ? value.map(String) : [];
+  return {
+    id,
+    name: String(item.name ?? id),
+    displayName: String(item.displayName ?? item.name ?? id),
+    description: String(item.description ?? item.desc ?? ''),
+    type,
+    status,
+    version: String(item.version ?? item.versionLabel ?? '1.0'),
+    endpoint: String(item.endpoint ?? item.homepageUrl ?? ''),
+    ...(typeof item.method === 'string' ? { method: item.method } : {}),
+    credentialType:
+      item.credentialType === 'api_key' || item.credentialType === 'oauth2' ||
+      item.credentialType === 'sso' || item.credentialType === 'secret_ref'
+        ? item.credentialType
+        : 'none',
+    credentialLabel: String(item.credentialLabel ?? '无需凭证'),
+    rateLimit: String(item.rateLimit ?? '未限制'),
+    timeoutMs: numberOr(item.timeoutMs, 15000),
+    usedBySkills: strings(item.usedBySkills),
+    usedByAgents: strings(item.usedByAgents),
+    tags: strings(item.tags),
+    updatedAt: String(item.updatedAt ?? item.createdAt ?? ''),
+    author: String(item.author ?? item.publisher ?? '平台'),
+  };
 }
 
 export async function fetchMemoryStores(workspaceId: string): Promise<MemoryStore[]> {

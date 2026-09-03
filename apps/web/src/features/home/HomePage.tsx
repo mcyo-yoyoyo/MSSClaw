@@ -104,6 +104,9 @@ export function HomePage({
   const consumeBusinessScenario = useNavigationIntentStore((s) => s.consumeBusinessScenario);
   const [skillDetail, setSkillDetail] = useState<PrototypeSkillSeed | null>(null);
   const [agentDetail, setAgentDetail] = useState<PrototypeAgentSeed | null>(null);
+  const currentSkillDetail = skillDetail
+    ? skills.find((item) => item.id === skillDetail.id) ?? skillDetail
+    : null;
 
   useEffect(() => {
     hydrateRecent();
@@ -437,9 +440,9 @@ export function HomePage({
       </div>
       <MarketCompareDock />
       <MarketCompareDrawer onOpenCard={openPortalCard} />
-      {skillDetail ? (
+      {currentSkillDetail ? (
         <MarketSkillDetailModal
-          skill={skillDetail}
+          skill={currentSkillDetail}
           canRun={canRunSkills}
           onClose={() => setSkillDetail(null)}
           onRun={(skill) => {

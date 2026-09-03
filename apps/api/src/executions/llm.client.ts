@@ -412,6 +412,8 @@ export async function* nestLlmExecutionStream(params: {
   kbContext?: string;
   signal?: AbortSignal;
   config: NestLlmRuntimeConfig;
+  /** Structured callers can avoid the normal markdown response contract. */
+  jsonOnly?: boolean;
   /** Internal hook used by the model-config probe; normal chat leaves it unset. */
   onDiagnostics?: (diagnostics: LlmStreamDiagnostics) => void;
 }): AsyncGenerator<StreamEvent> {
@@ -478,14 +480,22 @@ export async function* nestLlmExecutionStream(params: {
     yield { type: 'skill_end', skill, latency: `${120 + i * 90}ms` };
   }
 
-  const messages = buildExecutionMessages({
-    userTask: params.message,
-    actionType: params.actionType,
-    agentName: params.agentName,
-    systemPrompt: params.systemPrompt,
-    planSteps,
-    kbContext: params.kbContext,
-  });
+  const messages = params.jsonOnly
+    ? [
+        {
+          role: 'system' as const,
+          content: `${params.systemPrompt?.trim() || `你是 ${params.agentName}。`}\n只输出合法 JSON，不要 markdown、代码围栏或额外文字。`,
+        },
+        { role: 'user' as const, content: params.message },
+      ]
+    : buildExecutionMessages({
+        userTask: params.message,
+        actionType: params.actionType,
+        agentName: params.agentName,
+        systemPrompt: params.systemPrompt,
+        planSteps,
+        kbContext: params.kbContext,
+      });
 
   let res: Response;
   try {

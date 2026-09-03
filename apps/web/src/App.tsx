@@ -9,7 +9,7 @@ import { MssZhishuMark } from '@/components/brand/MssZhishuMark';
 import { HomeToTaskTransit } from '@/components/home/HomeToTaskTransit';
 import { useConversationStore } from '@/stores/conversationStore';
 import { useHomeStore } from '@/stores/homeStore';
-import { useMarketplaceStore } from '@/stores/marketplaceStore';
+import { invalidateGlobalToolsCache, useMarketplaceStore } from '@/stores/marketplaceStore';
 import { usePortalContentStore } from '@/stores/portalContentStore';
 import { usePlazaToolGuideStore } from '@/stores/plazaToolGuideStore';
 import { useInboxStore } from '@/stores/inboxStore';
@@ -309,6 +309,7 @@ export function App() {
 
   const handleApiRetry = useCallback(() => {
     hydratedRef.current = false;
+    invalidateGlobalToolsCache();
     useWorkspaceStore.setState({
       catalogReady: false,
       catalogLoading: false,

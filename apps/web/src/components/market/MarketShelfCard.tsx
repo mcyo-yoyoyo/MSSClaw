@@ -29,6 +29,7 @@ export function MarketShelfCard({
   showTags = true,
   footerActions,
   showDefaultFooter = true,
+  showEngagementOnly = false,
   interactionMode = 'user',
 }: {
   card: MarketShelfCardModel;
@@ -50,6 +51,8 @@ export function MarketShelfCard({
   footerActions?: ReactNode;
   /** 管理后台可隐藏指标与“详情”等默认操作，只保留自定义维护操作。 */
   showDefaultFooter?: boolean;
+  /** 仅展示互动指标，不追加收藏/点赞/点踩/对比等默认操作。 */
+  showEngagementOnly?: boolean;
   /** 运营预览只展示真实指标，不写入收藏、赞踩或对比状态。 */
   interactionMode?: 'user' | 'preview';
 }) {
@@ -60,6 +63,7 @@ export function MarketShelfCard({
   const homeDense = Boolean(className?.includes('home-channel-card'));
   const primaryLabel = primaryLabelOverride ?? '详情';
   const previewOnly = interactionMode === 'preview';
+  const showEngagementOnlyStats = previewOnly || showEngagementOnly;
   const assetType =
     card.assetType ??
     (card.kind === 'external' || card.kind === 'internal' ? ('tool' as const) : undefined);
@@ -348,7 +352,7 @@ export function MarketShelfCard({
             <i className="fa-regular fa-eye text-[9px] text-zinc-400" />
             {formatToolInvokes(engagement?.views ?? 0)}
           </span>
-          {previewOnly ? (
+          {showEngagementOnlyStats ? (
             <>
               <span
                 className={cn(
@@ -446,7 +450,7 @@ export function MarketShelfCard({
             </button>
           ) : null}
         </div>
-        {enableCompare && !previewOnly ? (
+        {enableCompare && !showEngagementOnlyStats ? (
           <button
             type="button"
             onClick={onToggleCompare}
@@ -470,17 +474,19 @@ export function MarketShelfCard({
             />
           </button>
         ) : null}
-        <button
-          type="button"
-          onClick={onPrimary ?? onOpen}
-          className={cn(
-            'ml-0.5 shrink-0 rounded-lg bg-zinc-100 px-3 py-1.5 text-[11px] font-medium text-zinc-500 transition',
-            'hover:bg-zinc-200/80 hover:text-zinc-600',
-            compact ? 'px-2.5 py-1 text-[10px]' : null,
-          )}
-        >
-          {primaryLabel}
-        </button>
+        {!showEngagementOnlyStats ? (
+          <button
+            type="button"
+            onClick={onPrimary ?? onOpen}
+            className={cn(
+              'ml-0.5 shrink-0 rounded-lg bg-zinc-100 px-3 py-1.5 text-[11px] font-medium text-zinc-500 transition',
+              'hover:bg-zinc-200/80 hover:text-zinc-600',
+              compact ? 'px-2.5 py-1 text-[10px]' : null,
+            )}
+          >
+            {primaryLabel}
+          </button>
+        ) : null}
         </div>
       ) : null}
       {footerActions ? (

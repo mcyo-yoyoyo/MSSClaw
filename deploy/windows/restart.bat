@@ -95,6 +95,14 @@ echo.
 
 :START
 REM ---------- 6. 启动 API ----------
+REM LLM 调用必须直连内网模型网关。Node 的全局 fetch 默认忽略 HTTP_PROXY，
+REM 但只要环境里有 NODE_USE_ENV_PROXY=1 就会启用 EnvHttpProxyAgent，把内网
+REM 地址也塞进公司代理；代理没有内网路由，表现为 6 秒后 502/504，前台看到的是
+REM "Proxy response (504) !== 200 when HTTP Tunneling"。
+REM 注意 NO_PROXY 救不了：它按主机名匹配，写 10.0.0.0/8 这类网段对域名无效。
+REM AI 快讯不受影响，那条路是显式 new ProxyAgent(HTTPS_PROXY)，不依赖本变量。
+set "NODE_USE_ENV_PROXY="
+
 echo [5/5] 启动 API...
 start "MSS Claw API" cmd /k "cd /d %CD%\apps\api && npm run start:prod"
 

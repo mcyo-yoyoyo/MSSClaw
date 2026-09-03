@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { CenterRecordService } from './center-record.service';
+import { PersistenceService } from '../persistence/persistence.service';
 
 @Controller('workspaces/:workspaceId/prompts')
 export class PromptsController {
@@ -124,11 +125,13 @@ export class KnowledgeController {
 
 @Controller('workspaces/:workspaceId/tools')
 export class ToolsController {
-  constructor(private readonly centers: CenterRecordService) {}
+  constructor(private readonly persistence: PersistenceService) {}
 
   @Get()
   list(@Param('workspaceId') workspaceId: string) {
-    return this.centers.list(workspaceId, 'tool').then((tools) => ({ tools }));
+    // 兼容旧 URL，但工具目录本身已经是部署级 singleton。
+    void workspaceId;
+    return this.persistence.getGlobalTools().then(({ tools }) => ({ tools }));
   }
 }
 

@@ -199,6 +199,11 @@ export function MarketShelfPage({
   const [agentRankMode, setAgentRankMode] = useState<RankMode>('recommended');
   const [skillDetail, setSkillDetail] = useState<PrototypeSkillSeed | null>(null);
   const [agentDetail, setAgentDetail] = useState<PrototypeAgentSeed | null>(null);
+  // 评测完成后 marketplaceStore 会替换 Skill 对象；详情弹窗始终读取最新版本，
+  // 避免仍然引用打开弹窗时的旧快照。
+  const currentSkillDetail = skillDetail
+    ? skills.find((item) => item.id === skillDetail.id) ?? skillDetail
+    : null;
 
   const caseSubmitDefaultBusinessId =
     kind === 'projects' && businessFilter !== 'all' ? businessFilter : undefined;
@@ -1152,11 +1157,7 @@ export function MarketShelfPage({
     }
   };
 
-  /**
-   * 卡片「调用」必须进入任务体验页；不能复用带下载兜底的在线试用入口。
-   * customer 等展示预设可能关闭 canRunSkills，但已上架可调用 Skill 仍应走
-   * onInvokeSkill → App.performInvokeSkill 的真实体验链路。
-   */
+  /** 卡片「调用」只在当前展示方案开放在线执行时出现。 */
   const invokeSkillExperience = (skill: PrototypeSkillSeed) => {
     const currentSkill = useMarketplaceStore
       .getState()
@@ -1202,7 +1203,7 @@ export function MarketShelfPage({
   };
 
   const renderSkillInvokeAction = (skill: PrototypeSkillSeed | undefined) => {
-    if (!skill || !isSkillCallable(skill)) return null;
+    if (!skill || !canRunSkills || !isSkillCallable(skill)) return null;
     return (
       <button
         type="button"
@@ -1752,9 +1753,9 @@ export function MarketShelfPage({
         onLoginReplay={() => setSubmitOpen(true)}
       />
 
-      {skillDetail ? (
+      {currentSkillDetail ? (
         <MarketSkillDetailModal
-          skill={skillDetail}
+          skill={currentSkillDetail}
           canRun={canRunSkills}
           onClose={() => setSkillDetail(null)}
           onRun={(s) => {

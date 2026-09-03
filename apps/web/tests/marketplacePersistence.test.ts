@@ -386,7 +386,7 @@ test('deleteToolNow keeps the tool when the remote save fails', async () => {
   assert.deepEqual(marketplaceStore.getState().tools, [tool]);
 });
 
-test('deleteToolNow does not commit into a different workspace', async () => {
+test('deleteToolNow remains global when the workspace changes mid-request', async () => {
   const workspaceId = 'ws-test-tool-delete-switch-origin';
   const response = deferred<Response>();
   const tool = { id: 'tool-delete-switch', name: 'Delete switch' };
@@ -405,15 +405,11 @@ test('deleteToolNow does not commit into a different workspace', async () => {
   workspaceStore.setState({ workspaceId: 'ws-test-tool-delete-switch-destination' });
   response.resolve(new Response(null, { status: 200 }));
 
-  assert.deepEqual(await deleting, {
-    synced: false,
-    reason: 'failed',
-    detail: 'workspace_changed',
-  });
-  assert.deepEqual(marketplaceStore.getState().tools, [tool]);
+  assert.deepEqual(await deleting, { synced: true });
+  assert.deepEqual(marketplaceStore.getState().tools, []);
 });
 
-test('saveToolNow does not report success or commit into a different workspace', async () => {
+test('saveToolNow remains global when the workspace changes mid-request', async () => {
   const workspaceId = 'ws-test-tool-switch-origin';
   const response = deferred<Response>();
   const originalTool = {
@@ -441,12 +437,8 @@ test('saveToolNow does not report success or commit into a different workspace',
   workspaceStore.setState({ workspaceId: 'ws-test-tool-switch-destination' });
   response.resolve(new Response(null, { status: 200 }));
 
-  assert.deepEqual(await saving, {
-    synced: false,
-    reason: 'failed',
-    detail: 'workspace_changed',
-  });
-  assert.deepEqual(marketplaceStore.getState().tools, [originalTool]);
+  assert.deepEqual(await saving, { synced: true });
+  assert.deepEqual(marketplaceStore.getState().tools, [editedTool]);
 });
 
 test('ordinary persist during saveToolNow keeps both the edited branding and the latest invoke count', async () => {

@@ -7,7 +7,7 @@ import { CaseDocumentPreviewList } from '@/components/content/CaseDocumentPrevie
 import { PackageFileTree } from '@/components/market/PackageFileTree';
 import { downloadPackageBlob } from '@/api/blobApi';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
-import type { PrototypeSkillSeed, SkillVersionRecord } from '@/domain/prototype/types';
+import type { PrototypeSkillSeed, SkillEvaluationReport, SkillVersionRecord } from '@/domain/prototype/types';
 import { getSkillBusinessLabel } from '@/domain/skillBusinessScenarios';
 import { skillDisplayDesc, skillDisplayName } from '@/domain/skillDisplay';
 import { downloadSkillFile } from '@/domain/skillExport';
@@ -29,11 +29,9 @@ import {
   isSkillCallable,
   isSkillRunnable,
 } from '@/domain/skillRuntime';
+import { evaluateAndPersistSkill } from '@/domain/skillEvaluation';
 
-type DetailTab = 'overview' | 'guide' | 'files' | 'versions' | 'reviews' | 'security';
-
-/** MVP：评价模块暂不上线，Tab 保留占位。改为 true 即可恢复完整评价 UI。 */
-const SKILL_REVIEWS_MVP_ENABLED = false;
+type DetailTab = 'overview' | 'guide' | 'files' | 'versions' | 'evaluation' | 'reviews' | 'security';
 
 function stripCategoryPrefix(text: string): string {
   return (text || '').replace(/^【[^】]+】/, '').trim();
@@ -45,6 +43,126 @@ function MetaRow({ label, value }: { label: string; value?: string | null }) {
     <div className="flex items-start justify-between gap-3 py-1.5">
       <dt className="shrink-0 text-[11px] text-zinc-400">{label}</dt>
       <dd className="text-right text-[12px] font-medium text-zinc-700">{value}</dd>
+    </div>
+  );
+}
+
+const TRACE_DIMENSIONS: Array<{
+  key: keyof SkillEvaluationReport['dimensions'];
+  label: string;
+  english: string;
+  letter: string;
+  icon: string;
+  color: string;
+  softColor: string;
+}> = [
+  { key: 'trust', label: '可信任度', english: 'Trust', letter: 'T', icon: 'fa-shield-halved', color: '#45a965', softColor: 'bg-emerald-50 text-emerald-600' },
+  { key: 'reliability', label: '可靠性', english: 'Reliability', letter: 'R', icon: 'fa-rotate', color: '#4e8cf7', softColor: 'bg-blue-50 text-blue-600' },
+  { key: 'adaptability', label: '适用性', english: 'Adaptability', letter: 'A', icon: 'fa-compass', color: '#efa52b', softColor: 'bg-amber-50 text-amber-600' },
+  { key: 'convention', label: '规范性', english: 'Convention', letter: 'C', icon: 'fa-book-open', color: '#a65be5', softColor: 'bg-violet-50 text-violet-600' },
+  { key: 'effectiveness', label: '有效性', english: 'Effectiveness', letter: 'E', icon: 'fa-bolt', color: '#ef5b55', softColor: 'bg-rose-50 text-rose-600' },
+];
+const TRACE_METRIC_LABELS: Record<string, string> = {
+  scan: '安全性扫描', domestic: '国内适配性', stability: '稳定性', func: '功能性', errorHandling: '错误处理',
+  boundary: '边界覆盖', trigger: '触发清晰度', progressive: '渐进式披露', structure: '结构完整度', docQuality: '文档质量',
+  antiPatternFaq: '反模式与 FAQ', accuracy: '准确性', completeness: '完整性', usability: '易用性', creativity: '创新性',
+};
+
+function TraceEvaluationPanel({
+  report,
+  generating,
+  onGenerate,
+}: {
+  report?: SkillEvaluationReport;
+  generating?: boolean;
+  onGenerate?: () => void;
+}) {
+  if (!report) {
+    return (
+      <div className="flex min-h-[240px] flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-200 bg-zinc-50/60 px-6 py-12 text-center">
+        <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-sky-50 text-sky-600"><i className="fa-solid fa-clipboard-check text-[18px]" /></span>
+        <p className="text-[14px] font-semibold text-zinc-800">暂无评测报告</p>
+        <p className="mt-1.5 max-w-sm text-[12px] leading-relaxed text-zinc-500">新上传的 Skill 会在提交后自动生成 TRACE 五维报告；存量 Skill 可在此手动生成。</p>
+        {onGenerate ? (
+          <button type="button" onClick={onGenerate} disabled={generating} className="mt-4 rounded-xl bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-700 disabled:cursor-wait disabled:opacity-60">
+            <i className={`fa-solid ${generating ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'} mr-1.5`} />
+            {generating ? '正在生成…' : '生成评测报告'}
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+  const dimensionScores = TRACE_DIMENSIONS.map(({ key }) => report.dimensions[key].score);
+  const radarPoint = (score: number, index: number, radius = 86) => {
+    const angle = -Math.PI / 2 + (index * Math.PI * 2) / TRACE_DIMENSIONS.length;
+    const scaledRadius = radius * Math.max(0, Math.min(5, score)) / 5;
+    return `${120 + Math.cos(angle) * scaledRadius},${112 + Math.sin(angle) * scaledRadius}`;
+  };
+  const radarPolygon = (radius: number) => TRACE_DIMENSIONS.map((_, index) => radarPoint(5, index, radius)).join(' ');
+  const scorePolygon = dimensionScores.map((score, index) => radarPoint(score, index)).join(' ');
+  return (
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-indigo-100 bg-indigo-50/30 px-4 py-4 md:px-5">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-indigo-500">
+            <i className="fa-solid fa-chart-line text-[14px]" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[14px] font-semibold text-zinc-800">SkillHub TRACE 评测体系</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">
+              从可信任度（Trust）、可靠性（Reliability）、适用性（Adaptability）、规范性（Convention）和有效性（Effectiveness）五个维度全面评估 Skill 的质量，帮助用户快速识别高质量 Skill。
+              <a className="ml-1.5 font-semibold text-indigo-600 hover:text-indigo-700" href="https://skillhub.cn/tutorials#trace-evaluation" target="_blank" rel="noreferrer">了解详情 ↗</a>
+            </p>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-indigo-100/80 pt-2.5 text-[11px] text-zinc-500">
+          <span><i className="fa-solid fa-circle mr-1.5 text-[8px] text-amber-400" />评测主要基于 AI 自动化检测，结果供参考。</span>
+          <a className="font-semibold text-indigo-600 hover:text-indigo-700" href="https://skillhub.cn/tutorials#trace-evaluation" target="_blank" rel="noreferrer"><i className="fa-regular fa-file-lines mr-1" />评测建议反馈</a>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm md:p-5">
+        <div className="grid items-center gap-4 md:grid-cols-[minmax(220px,0.95fr)_minmax(0,1.25fr)] md:gap-6">
+          <div className="mx-auto w-full max-w-[270px]">
+            <svg viewBox="0 0 240 225" className="h-auto w-full overflow-visible" role="img" aria-label="TRACE 五维评分雷达图">
+              {[1, 2, 3, 4, 5].map((level) => <polygon key={level} points={radarPolygon(17.2 * level)} fill={level === 5 ? 'none' : '#f7f7fb'} stroke="#dfe2ed" strokeWidth="1" />)}
+              {TRACE_DIMENSIONS.map((_, index) => <line key={index} x1="120" y1="112" x2={radarPoint(5, index, 86).split(',')[0]} y2={radarPoint(5, index, 86).split(',')[1]} stroke="#dfe2ed" strokeWidth="1" />)}
+              <polygon points={scorePolygon} fill="#7167e8" fillOpacity="0.2" stroke="#6861eb" strokeWidth="2.5" strokeLinejoin="round" />
+              {dimensionScores.map((score, index) => { const [x, y] = radarPoint(score, index).split(','); return <circle key={index} cx={x} cy={y} r="3" fill="#6861eb" />; })}
+              {TRACE_DIMENSIONS.map(({ label }, index) => { const [x, y] = radarPoint(5, index, 105).split(','); return <text key={label} x={x} y={y} textAnchor={Number(x) < 115 ? 'end' : Number(x) > 125 ? 'start' : 'middle'} dominantBaseline="middle" className="fill-zinc-500 text-[10px]">{label}</text>; })}
+            </svg>
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-end gap-2">
+              <span className="text-[48px] font-bold leading-none tracking-tight text-zinc-900">{report.overallScore.toFixed(1)}</span>
+              <span className="pb-1 text-[17px] font-medium text-zinc-400">/ 5</span>
+            </div>
+            <span className="mt-3 inline-flex rounded-full bg-indigo-50 px-3 py-1 text-[12px] font-semibold text-indigo-600">综合评级：{report.grade}</span>
+            <p className="mt-3 text-[13px] leading-relaxed text-zinc-600">{report.summary}</p>
+            <p className="mt-3 text-[10px] text-zinc-400">评测时间：{formatVersionTime(report.evaluatedAt)} · {report.source === 'hybrid' ? '模型 + 规则' : '规则评测'}</p>
+          </div>
+        </div>
+      </section>
+
+      <h3 className="text-[16px] font-bold text-zinc-900">评测详情</h3>
+      <section className="rounded-2xl border border-zinc-200/80 bg-white px-4 py-1 shadow-sm md:px-5">
+        {TRACE_DIMENSIONS.map(({ key, label, english, letter, icon, color, softColor }, index) => {
+          const item = report.dimensions[key];
+          return (
+            <article key={key} className={cn('py-4', index ? 'border-t border-zinc-100' : '')}>
+              <div className="flex items-center gap-2.5">
+                <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-full', softColor)}><i className={`fa-solid ${icon} text-[13px]`} /></span>
+                <div className="min-w-0 flex items-baseline gap-2"><span className="text-[14px] font-bold text-zinc-800">{letter} · {english}</span><span className="text-[12px] text-zinc-400">{label}</span></div>
+                <span className="ml-auto shrink-0 text-[14px] font-semibold text-zinc-600">{item.score.toFixed(1)}<span className="text-[11px] font-normal text-zinc-400"> /5</span></span>
+              </div>
+              <div className="mt-3 flex items-center gap-3"><div className="h-2 flex-1 overflow-hidden rounded-full bg-zinc-100"><div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, item.score * 20))}%`, backgroundColor: color }} /></div></div>
+              <p className="mt-2 text-[12px] leading-relaxed text-zinc-500">{item.reason}</p>
+              <details className="mt-2 text-[11px] text-zinc-400"><summary className="cursor-pointer select-none hover:text-zinc-600">查看 {Object.keys(item.items).length} 项指标明细</summary><div className="mt-2 grid gap-x-4 gap-y-2 sm:grid-cols-2">{Object.entries(item.items).map(([metricKey, metric]) => <div key={metricKey}><div className="flex justify-between gap-2"><span>{TRACE_METRIC_LABELS[metricKey] || metricKey}</span><span>{metric.score.toFixed(1)}</span></div><p className="mt-0.5 leading-relaxed text-zinc-400">{metric.reason}</p></div>)}</div></details>
+            </article>
+          );
+        })}
+      </section>
+      {report.warnings.length ? <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-relaxed text-amber-800">{report.warnings.map((warning) => <p key={warning}><i className="fa-solid fa-circle-info mr-1" />{warning}</p>)}</div> : null}
     </div>
   );
 }
@@ -85,6 +203,7 @@ export function MarketSkillDetailModal({
 }) {
   const [tab, setTab] = useState<DetailTab>('overview');
   const [selectedFile, setSelectedFile] = useState('SKILL.md');
+  const [generatingEvaluation, setGeneratingEvaluation] = useState(false);
   const getEngagement = useContentEngagementStore((s) => s.get);
   const engagementById = useContentEngagementStore((s) => s.byId);
   const bumpDetail = useContentEngagementStore((s) => s.bumpDetail);
@@ -177,6 +296,23 @@ export function MarketSkillDetailModal({
     if (requireLogin('download', run)) run();
   };
 
+  const generateEvaluation = () => {
+    if (generatingEvaluation) return;
+    const run = () => {
+      setGeneratingEvaluation(true);
+      void evaluateAndPersistSkill(skill, (status, report) => {
+        if (status === 'completed') {
+          setGeneratingEvaluation(false);
+          onToast(`评测完成：${report?.overallScore.toFixed(1) ?? '—'}/5`);
+        } else if (status === 'failed') {
+          setGeneratingEvaluation(false);
+          onToast('评测服务暂不可用，请稍后重试');
+        }
+      });
+    };
+    if (requireLogin('evaluate-skill', run)) run();
+  };
+
   const requestFavorite = () => {
     const item = {
       id: skill.id,
@@ -221,9 +357,10 @@ export function MarketSkillDetailModal({
     {
       id: 'reviews',
       label: '评价',
-      badge: SKILL_REVIEWS_MVP_ENABLED ? undefined : '即将开放',
+      badge: '即将开放',
     },
     { id: 'security', label: '安全扫描' },
+    { id: 'evaluation', label: '评测报告', badge: skill.traceEvaluation ? undefined : '待生成' },
   ];
 
   /**
@@ -654,18 +791,16 @@ export function MarketSkillDetailModal({
               </div>
             ) : null}
 
+            {tab === 'evaluation' ? (
+              <TraceEvaluationPanel report={skill.traceEvaluation} generating={generatingEvaluation} onGenerate={generateEvaluation} />
+            ) : null}
+
             {tab === 'reviews' ? (
               <div className="flex min-h-[240px] flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-200 bg-zinc-50/60 px-6 py-12 text-center">
-                <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-zinc-100 text-zinc-400">
-                  <i className="fa-solid fa-comment-dots text-[18px]" />
-                </span>
+                <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-zinc-100 text-zinc-400"><i className="fa-solid fa-comment-dots text-[18px]" /></span>
                 <p className="text-[14px] font-semibold text-zinc-800">评价功能即将开放</p>
-                <p className="mt-1.5 max-w-sm text-[12px] leading-relaxed text-zinc-500">
-                  当前 MVP 暂不提供评分与留言；上线后可在此查看均分与使用反馈。
-                </p>
-                <span className="mt-3 rounded-md bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
-                  MVP · 暂不上线
-                </span>
+                <p className="mt-1.5 max-w-sm text-[12px] leading-relaxed text-zinc-500">当前 MVP 暂不提供评分与留言；上线后可在此查看均分与使用反馈。</p>
+                <span className="mt-3 rounded-md bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-400">MVP · 暂不上线</span>
               </div>
             ) : null}
 

@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { PersistenceController } from './persistence.controller';
+import { GlobalToolsController, PersistenceController } from './persistence.controller';
 import { PersistenceService } from './persistence.service';
 import { BlobStoreService } from './blob-store.service';
 import { PlatformDocsService } from './platform-docs.service';
@@ -14,6 +14,7 @@ import { AiBriefSubscriptionsService } from './ai-brief-subscriptions.service';
 @Module({
   controllers: [
     PersistenceController,
+    GlobalToolsController,
     PlatformDocsController,
     AuthController,
     AiDailyNewsController,
@@ -28,6 +29,6 @@ import { AiBriefSubscriptionsService } from './ai-brief-subscriptions.service';
     PortalAnalyticsService,
     AiBriefSubscriptionsService,
   ],
-  exports: [BlobStoreService, PlatformDocsService],
+  exports: [PersistenceService, BlobStoreService, PlatformDocsService],
 })
 export class PersistenceModule {}

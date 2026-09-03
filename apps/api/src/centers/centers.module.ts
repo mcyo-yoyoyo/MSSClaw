@@ -9,8 +9,10 @@ import {
   WorkflowsController,
 } from './centers.controller';
 import { CenterRecordService } from './center-record.service';
+import { PersistenceModule } from '../persistence/persistence.module';
 
 @Module({
+  imports: [PersistenceModule],
   controllers: [
     PromptsController,
     AgentsController,

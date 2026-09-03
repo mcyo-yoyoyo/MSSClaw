@@ -13,5 +13,6 @@ export function publicAssetUrl(path: string | null | undefined): string {
   }
   const base = String(import.meta.env.BASE_URL || '/');
   const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+  if (raw.startsWith(normalizedBase)) return raw;
   return `${normalizedBase}${raw.replace(/^\//, '')}`;
 }

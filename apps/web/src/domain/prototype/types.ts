@@ -34,6 +34,29 @@ export interface UploadedPackageRef {
   uploadedAt: string;
 }
 
+export type SkillEvaluationMetric = { score: number; reason: string };
+export type SkillEvaluationDimension = {
+  score: number;
+  reason: string;
+  items: Record<string, SkillEvaluationMetric>;
+};
+export type SkillEvaluationReport = {
+  status: 'completed' | 'rules_only';
+  source: 'hybrid' | 'rules';
+  evaluatedAt: string;
+  overallScore: number;
+  grade: string;
+  summary: string;
+  dimensions: {
+    trust: SkillEvaluationDimension;
+    reliability: SkillEvaluationDimension;
+    adaptability: SkillEvaluationDimension;
+    convention: SkillEvaluationDimension;
+    effectiveness: SkillEvaluationDimension;
+  };
+  warnings: string[];
+};
+
 export interface AgentInputOutputInfo {
   /** §4.2 三段式中间环节：用业务语言说明 Agent 会做哪些处理（识别/抽取/匹配/生成…） */
   processSteps?: string[];
@@ -264,6 +287,8 @@ export interface PrototypeSkillSeed extends AssetOwnershipFields {
     reportNote?: string;
     scannedAt?: string;
   };
+  /** 上传后自动生成的 TRACE 五维评测报告。 */
+  traceEvaluation?: SkillEvaluationReport;
   /** 审计时间戳（ISO 日期或 YYYY-MM-DD） */
   createdAt?: string;
   updatedAt?: string;

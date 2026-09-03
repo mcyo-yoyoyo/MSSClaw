@@ -29,6 +29,25 @@ import { portalAnalyticsDateKey } from './portal-analytics-time';
 
 export type { MarketplacePayload };
 
+/**
+ * 工具目录是部署级资源，不再按 workspace 复制。为避免给 CenterRecord
+ * 引入新的表/迁移，使用一条保留前缀的 singleton 记录承载它。
+ */
+export const GLOBAL_TOOLS_RECORD_ID = 'global-tools';
+export const GLOBAL_TOOLS_SCOPE = '__global__';
+export const GLOBAL_TOOLS_RECORD_KIND = 'tool-catalog';
+
+export interface GlobalToolsPayload {
+  tools: unknown[];
+  externalCatalogVersion?: string;
+  internalCatalogVersion?: string;
+  /** 首次初始化完成后写入；旧 workspace 数据迁移不会设置它。 */
+  initialized?: boolean;
+  initializedAt?: string;
+  /** 仅用于说明 singleton 是从旧 workspace 快照迁来的。 */
+  migratedAt?: string;
+}
+
 export interface PortalContentPayload {
   items?: unknown[];
   /** 乐观锁版本；客户端 PUT 时带 expectedRevision */
@@ -194,6 +213,104 @@ function isExternalToolRecord(raw: unknown): raw is Record<string, unknown> {
     tags.includes('ai-saas') ||
     tags.includes('external')
   );
+}
+
+type LegacyToolRow = {
+  id?: string;
+  payload?: unknown;
+  updatedAt?: Date | string;
+};
+
+function normalizedToolField(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .replace(/\/+$/, '')
+    .toLocaleLowerCase();
+}
+
+function legacyToolKeys(raw: Record<string, unknown>, fallbackId?: string): string[] {
+  const keys: string[] = [];
+  const id = normalizedToolField(raw.id || fallbackId);
+  const name = normalizedToolField(raw.name ?? raw.displayName);
+  const homepage = normalizedToolField(raw.homepageUrl ?? raw.endpoint ?? raw.url);
+  const docs = normalizedToolField(raw.docsUrl ?? raw.documentationUrl);
+  if (id) keys.push(`id:${id}`);
+  if (name) keys.push(`name:${name}`);
+  if (homepage && homepage !== '#') keys.push(`homepage:${homepage}`);
+  if (docs && docs !== '#') keys.push(`docs:${docs}`);
+  return keys;
+}
+
+function legacyToolTime(value: Date | string | undefined): number {
+  if (value instanceof Date) return value.getTime();
+  const parsed = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+/**
+ * 将旧 workspace marketplace/center tool 投影合并成一份兼容快照。
+ * marketplace 优先于 center 投影，较新的 workspace 快照优先；同名/同 URL
+ * 的旧 ID 也只保留一份，尽量避免精选和互动数据出现重复卡片。
+ */
+function mergeLegacyGlobalTools(
+  marketplaceRows: LegacyToolRow[],
+  centerRows: LegacyToolRow[],
+): unknown[] {
+  const result: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
+  const append = (row: LegacyToolRow) => {
+    const payload =
+      row.payload && typeof row.payload === 'object' && !Array.isArray(row.payload)
+        ? ({ ...(row.payload as Record<string, unknown>) } as Record<string, unknown>)
+        : null;
+    if (!payload) return;
+    if (!payload.id && row.id) payload.id = row.id;
+    if (!payload.id && !payload.name && !payload.displayName) return;
+    const keys = legacyToolKeys(payload, row.id);
+    if (keys.some((key) => seen.has(key))) return;
+    keys.forEach((key) => seen.add(key));
+    result.push(payload);
+  };
+
+  // The query normally supplies this order; sorting here also keeps migration
+  // deterministic for adapters/tests that return rows in arbitrary order.
+  const newestFirst = (a: LegacyToolRow, b: LegacyToolRow) =>
+    legacyToolTime(b.updatedAt) - legacyToolTime(a.updatedAt);
+  [...marketplaceRows].sort(newestFirst).forEach((row) => {
+    const payload = row.payload;
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
+    const tools = (payload as Record<string, unknown>).tools;
+    if (!Array.isArray(tools)) return;
+    tools.forEach((tool) => append({ payload: tool, updatedAt: row.updatedAt }));
+  });
+  [...centerRows].sort(newestFirst).forEach(append);
+  return result;
+}
+
+function normalizeGlobalToolsPayload(raw: unknown): GlobalToolsPayload {
+  const source =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  const deduped = dedupeMarketplaceTools(Array.isArray(source.tools) ? source.tools : []).tools;
+  const initializedAt =
+    typeof source.initializedAt === 'string' && source.initializedAt.trim()
+      ? source.initializedAt
+      : undefined;
+  return {
+    tools: deduped,
+    ...(typeof source.externalCatalogVersion === 'string'
+      ? { externalCatalogVersion: source.externalCatalogVersion }
+      : {}),
+    ...(typeof source.internalCatalogVersion === 'string'
+      ? { internalCatalogVersion: source.internalCatalogVersion }
+      : {}),
+    initialized: source.initialized === true || Boolean(initializedAt),
+    ...(initializedAt ? { initializedAt } : {}),
+    ...(typeof source.migratedAt === 'string' && source.migratedAt.trim()
+      ? { migratedAt: source.migratedAt }
+      : {}),
+  };
 }
 
 export function existingMarketShelf(value: unknown): 'external' | 'internal' | 'none' | undefined {
@@ -512,7 +629,8 @@ export class PersistenceService {
         });
         await this.syncMarketplaceToCenters(workspaceId, enriched.payload, current);
       }
-      return enriched.payload;
+      // 兼容旧 marketplace URL：工具列表统一从部署级 singleton 返回。
+      return this.withGlobalTools(enriched.payload);
     }
 
     // 兼容已存在中心记录、但尚未生成 marketplace 聚合快照的工作区。
@@ -544,7 +662,98 @@ export class PersistenceService {
       update: {},
     });
     await this.syncMarketplaceToCenters(workspaceId, payload);
-    return payload;
+    return this.withGlobalTools(payload);
+  }
+
+  /**
+   * 读取部署级工具目录。第一次读取时把旧 workspace marketplace/center tool
+   * 快照合并到 singleton；迁移只设置 initialized=false，让一次性初始化脚本
+   * 仍有机会用外部清单覆盖旧的分工作区数据。
+   */
+  private async withGlobalTools(payload: MarketplacePayload): Promise<MarketplacePayload> {
+    const global = await this.getGlobalTools();
+    return { ...payload, tools: global.tools };
+  }
+
+  async getGlobalTools(): Promise<GlobalToolsPayload> {
+    const existing = await this.prisma.centerRecord.findUnique({
+      where: { id: GLOBAL_TOOLS_RECORD_ID },
+    });
+    if (existing) return normalizeGlobalToolsPayload(existing.payload);
+
+    const [marketplaceRows, centerRows] = await Promise.all([
+      this.prisma.centerRecord.findMany({
+        where: { kind: 'marketplace' },
+        orderBy: { updatedAt: 'desc' },
+        select: { id: true, payload: true, updatedAt: true },
+      }),
+      this.prisma.centerRecord.findMany({
+        where: { kind: 'tool' },
+        orderBy: { updatedAt: 'desc' },
+        select: { id: true, payload: true, updatedAt: true },
+      }),
+    ]);
+    const migratedAt = new Date().toISOString();
+    const payload: GlobalToolsPayload = {
+      tools: mergeLegacyGlobalTools(
+        marketplaceRows as LegacyToolRow[],
+        centerRows as LegacyToolRow[],
+      ),
+      initialized: false,
+      migratedAt,
+    };
+    const row = await this.prisma.centerRecord.upsert({
+      where: { id: GLOBAL_TOOLS_RECORD_ID },
+      create: {
+        id: GLOBAL_TOOLS_RECORD_ID,
+        workspaceId: GLOBAL_TOOLS_SCOPE,
+        kind: GLOBAL_TOOLS_RECORD_KIND,
+        payload: toPrismaJson(payload as unknown as Record<string, unknown>),
+      },
+      update: {},
+    });
+    return normalizeGlobalToolsPayload(row.payload);
+  }
+
+  /** 写入部署级工具目录；PUT 是一次完整快照替换，之后不再回灌 Excel。 */
+  async putGlobalTools(input: unknown): Promise<GlobalToolsPayload> {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      throw new BadRequestException('tools_payload_required');
+    }
+    const source = input as Record<string, unknown>;
+    if (!Array.isArray(source.tools)) throw new BadRequestException('tools_array_required');
+
+    const existing = await this.prisma.centerRecord.findUnique({
+      where: { id: GLOBAL_TOOLS_RECORD_ID },
+    });
+    const current = normalizeGlobalToolsPayload(existing?.payload);
+    const initializedAt = current.initializedAt || new Date().toISOString();
+    const payload: GlobalToolsPayload = {
+      ...current,
+      tools: dedupeMarketplaceTools(source.tools).tools,
+      initialized: true,
+      initializedAt,
+      ...(typeof source.externalCatalogVersion === 'string'
+        ? { externalCatalogVersion: source.externalCatalogVersion }
+        : {}),
+      ...(typeof source.internalCatalogVersion === 'string'
+        ? { internalCatalogVersion: source.internalCatalogVersion }
+        : {}),
+    };
+    const row = await this.prisma.centerRecord.upsert({
+      where: { id: GLOBAL_TOOLS_RECORD_ID },
+      create: {
+        id: GLOBAL_TOOLS_RECORD_ID,
+        workspaceId: GLOBAL_TOOLS_SCOPE,
+        kind: GLOBAL_TOOLS_RECORD_KIND,
+        payload: toPrismaJson(payload as unknown as Record<string, unknown>),
+      },
+      update: {
+        // Keep the singleton scope immutable; only its JSON snapshot changes.
+        payload: toPrismaJson(payload as unknown as Record<string, unknown>),
+      },
+    });
+    return normalizeGlobalToolsPayload(row.payload);
   }
 
   async putMarketplace(workspaceId: string, payload: MarketplacePayload) {
@@ -552,13 +761,32 @@ export class PersistenceService {
     // 前端快照不含目录版本号；沿用库中已有值，避免被抹掉后误判为「需要重新播种」
     const existing = (await this.prisma.centerRecord.findUnique({ where: { id } }))
       ?.payload as MarketplacePayload | undefined;
+    const hasTools = Array.isArray(payload?.tools);
     payload = this.enrichMarketplaceMetadata({
       ...payload,
+      // 工具已迁移到全局 singleton。旧客户端省略 tools 时不能把旧快照
+      // 覆盖成空数组；显式传 [] 仍保留旧 API 的完整替换语义。
+      tools: hasTools ? payload.tools : existing?.tools,
       externalCatalogVersion:
         payload.externalCatalogVersion ?? existing?.externalCatalogVersion,
       internalCatalogVersion:
         payload.internalCatalogVersion ?? existing?.internalCatalogVersion,
     }).payload;
+    if (hasTools) {
+      const global = await this.putGlobalTools({
+        tools: payload.tools,
+        externalCatalogVersion: payload.externalCatalogVersion,
+        internalCatalogVersion: payload.internalCatalogVersion,
+      });
+      payload = {
+        ...payload,
+        tools: global.tools,
+        externalCatalogVersion:
+          global.externalCatalogVersion ?? payload.externalCatalogVersion,
+        internalCatalogVersion:
+          global.internalCatalogVersion ?? payload.internalCatalogVersion,
+      };
+    }
     await this.prisma.centerRecord.upsert({
       where: { id },
       create: {
@@ -571,7 +799,7 @@ export class PersistenceService {
         payload: payload as Prisma.InputJsonValue,
       },
     });
-    await this.syncMarketplaceToCenters(workspaceId, payload, existing);
+    await this.syncMarketplaceToCenters(workspaceId, payload, existing, hasTools);
     return payload;
   }
 
@@ -861,13 +1089,19 @@ export class PersistenceService {
     });
     if (!workspace) throw new NotFoundException('market_engagement_workspace_not_found');
 
-    const rows = await this.prisma.centerRecord.findMany({
-      where: {
-        workspaceId,
-        kind: { in: [...MARKET_ENGAGEMENT_CENTER_KINDS] },
-      },
-      select: { id: true, kind: true, payload: true },
-    });
+    const [rows, globalToolsRow] = await Promise.all([
+      this.prisma.centerRecord.findMany({
+        where: {
+          workspaceId,
+          kind: { in: [...MARKET_ENGAGEMENT_CENTER_KINDS] },
+        },
+        select: { id: true, kind: true, payload: true },
+      }),
+      this.prisma.centerRecord.findUnique({
+        where: { id: GLOBAL_TOOLS_RECORD_ID },
+        select: { payload: true },
+      }),
+    ]);
     const knownIds = new Set(MARKET_ENGAGEMENT_STATIC_CONTENT_IDS);
     rows.forEach((row) => {
       if (['agent', 'skill', 'tool', 'workflow', 'knowledge'].includes(row.kind)) {
@@ -885,6 +1119,12 @@ export class PersistenceService {
         addTopLevelItemIds(payload.entries, knownIds, 'office-scene-');
       }
     });
+    if (globalToolsRow?.payload && typeof globalToolsRow.payload === 'object' && !Array.isArray(globalToolsRow.payload)) {
+      addTopLevelItemIds(
+        (globalToolsRow.payload as Record<string, unknown>).tools,
+        knownIds,
+      );
+    }
     return knownIds;
   }
 
@@ -1219,13 +1459,18 @@ export class PersistenceService {
     workspaceId: string,
     payload: MarketplacePayload,
     previousPayload?: MarketplacePayload,
+    syncTools = true,
   ) {
-    const kinds = ['agent', 'skill', 'tool'] as const;
+    const kinds = syncTools
+      ? (['agent', 'skill', 'tool'] as const)
+      : (['agent', 'skill'] as const);
     for (const kind of kinds) {
       const items = listMappedFromMarketplace(kind, payload);
       for (const item of items) {
         const id = String(item.id);
         if (!id) continue;
+        // 保留 global-tools 作为 singleton 主键，避免旧 workspace 投影覆盖目录记录。
+        if (kind === 'tool' && id === GLOBAL_TOOLS_RECORD_ID) continue;
         await this.prisma.centerRecord.upsert({
           where: { id },
           create: {

@@ -22,10 +22,13 @@ import { packageUploadSizeError } from '@/domain/packageUpload';
 import { packageZipErrorMessage } from '@/domain/safeZip';
 import { rebuildKbVectorIndex } from '@/api/kbClient';
 import {
-  flushSaveMarketplace,
+  flushSaveTools,
   loadMarketplace,
+  loadTools,
   scheduleSaveMarketplace,
+  scheduleSaveTools,
   type MarketplaceSaveResult,
+  type ToolCatalogSnapshot,
 } from '@/domain/persistence/storage';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import {
@@ -78,6 +81,7 @@ interface MarketplaceState {
 
   bootstrap: (workspaceId: string) => Promise<void>;
   persist: () => void;
+  persistTools: () => void;
   upsertAgent: (agent: PrototypeAgentSeed, isNew?: boolean) => void;
   upsertSkill: (skill: PrototypeSkillSeed, isNew?: boolean) => void;
   upsertTool: (tool: PrototypeToolSeed, isNew?: boolean) => void;
@@ -154,7 +158,55 @@ async function retainImportedPackage(file: File) {
 }
 
 let marketplaceBootstrapGeneration = 0;
+let globalToolsLoaded = false;
+let globalToolsLoading: Promise<ToolCatalogSnapshot> | null = null;
+let globalToolsSnapshot: ToolCatalogSnapshot = { tools: [] };
+let globalToolsEpoch = 0;
+const GLOBAL_TOOL_SAVE_KEY = 'global-tools';
 const immediateToolSaveChains = new Map<string, Promise<MarketplaceSaveResult>>();
+
+/** 全局工具目录只加载一次；切换 workspace 时复用同一份快照。 */
+function ensureGlobalToolsLoaded(): Promise<ToolCatalogSnapshot | null> {
+  if (!useWorkspaceStore.getState().apiConnected) return Promise.resolve(null);
+  if (globalToolsLoaded) return Promise.resolve(globalToolsSnapshot);
+  if (globalToolsLoading) return globalToolsLoading;
+  const requestEpoch = globalToolsEpoch;
+  const request = loadTools({ throwOnRemoteError: true })
+    .then((snapshot) => {
+      if (requestEpoch !== globalToolsEpoch) return globalToolsSnapshot;
+      globalToolsSnapshot = snapshot;
+      globalToolsLoaded = true;
+      return snapshot;
+    }, (error) => {
+      // 本地编辑或显式重试已使这次请求失效，不能再把旧错误传播给当前启动流程。
+      if (requestEpoch !== globalToolsEpoch) return globalToolsSnapshot;
+      throw error;
+    });
+  globalToolsLoading = request;
+  void request.then(
+    () => {
+      if (globalToolsLoading === request) globalToolsLoading = null;
+    },
+    () => {
+      if (globalToolsLoading === request) globalToolsLoading = null;
+    },
+  );
+  return request;
+}
+
+/** API 重连后允许重新读取一次全局目录。 */
+export function invalidateGlobalToolsCache() {
+  globalToolsEpoch += 1;
+  globalToolsLoaded = false;
+  globalToolsSnapshot = { tools: [] };
+  globalToolsLoading = null;
+}
+
+function invalidateGlobalToolsAfterSaveFailure() {
+  // 保留当前页面上的本地草稿，但允许下次 bootstrap 从服务端重新读取。
+  globalToolsLoaded = false;
+  globalToolsEpoch += 1;
+}
 
 function withUpsertedTool(
   tools: PrototypeToolSeed[],
@@ -205,57 +257,96 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
 
   bootstrap: async (workspaceId) => {
     const generation = ++marketplaceBootstrapGeneration;
+    const preservedTools = get().tools;
     set({
       ready: false,
       loadError: null,
       agents: [],
       skills: [],
-      tools: [],
+      // 工具是全局目录，workspace 切换时保留已加载内容，避免闪空或分叉。
+      tools: preservedTools,
       automations: [],
       kbDocs: [],
     });
-    try {
-      const snapshot = await loadMarketplace(workspaceId, {
-        throwOnRemoteError: true,
-      });
-      if (
-        generation !== marketplaceBootstrapGeneration ||
-        useWorkspaceStore.getState().workspaceId !== workspaceId
-      ) {
-        return;
-      }
-      set({
-        ...snapshot,
-        agents: backfillAgentSeedMetadata(snapshot.agents ?? []),
-        // API marketplace 是工具唯一运行时来源；未上架/下架状态由服务端快照保留，
-        // 不能再用前端静态目录或 retired 列表二次过滤。
-        tools: snapshot.tools ?? [],
-        ready: true,
-        loadError: null,
-      });
-    } catch (error) {
-      if (
-        generation !== marketplaceBootstrapGeneration ||
-        useWorkspaceStore.getState().workspaceId !== workspaceId
-      ) {
-        return;
-      }
-      set({
-        ready: true,
-        loadError:
-          error instanceof Error ? error.message : '市场数据加载失败',
-      });
+    const [workspaceResult, toolsResult] = await Promise.allSettled([
+      loadMarketplace(workspaceId, { throwOnRemoteError: true }),
+      ensureGlobalToolsLoaded(),
+    ]);
+
+    // 工具结果不属于某次 workspace 请求；即使切换期间返回，也可安全更新全局目录。
+    if (toolsResult.status === 'fulfilled' && toolsResult.value) {
+      globalToolsSnapshot = toolsResult.value;
+      set({ tools: toolsResult.value.tools ?? [] });
     }
+
+    if (
+      generation !== marketplaceBootstrapGeneration ||
+      useWorkspaceStore.getState().workspaceId !== workspaceId
+    ) {
+      return;
+    }
+
+    if (workspaceResult.status === 'fulfilled') {
+      const snapshot = workspaceResult.value;
+      const toolError =
+        toolsResult.status === 'rejected'
+          ? toolsResult.reason instanceof Error
+            ? toolsResult.reason.message
+            : '工具目录加载失败'
+          : null;
+      set({
+        agents: backfillAgentSeedMetadata(snapshot.agents ?? []),
+        skills: snapshot.skills ?? [],
+        // 工具只接受 /api/v1/tools 的全局快照，禁止 workspace 响应中的旧 tools 回灌。
+        automations: snapshot.automations ?? [],
+        kbDocs: snapshot.kbDocs ?? [],
+        ready: true,
+        loadError: toolError,
+      });
+      return;
+    }
+
+    set({
+      ready: true,
+      loadError:
+        workspaceResult.reason instanceof Error
+          ? workspaceResult.reason.message
+          : '市场数据加载失败',
+    });
   },
 
   persist: () => {
     const workspaceId = useWorkspaceStore.getState().workspaceId;
     const persistLatest = () => {
       if (useWorkspaceStore.getState().workspaceId !== workspaceId) return;
-      const { agents, skills, tools, automations, kbDocs } = get();
-      scheduleSaveMarketplace(workspaceId, { agents, skills, tools, automations, kbDocs });
+      const { agents, skills, automations, kbDocs } = get();
+      // workspace marketplace 只保存 workspace 资产；tools 已迁移到全局 API。
+      scheduleSaveMarketplace(workspaceId, {
+        agents,
+        skills,
+        automations,
+        kbDocs,
+      });
     };
-    const pendingImmediateSave = immediateToolSaveChains.get(workspaceId);
+    persistLatest();
+  },
+
+  persistTools: () => {
+    const persistLatest = () => {
+      const tools = get().tools;
+      // 先更新进程内全局快照，workspace 切换期间不会把待防抖写入的编辑冲回旧目录。
+      globalToolsEpoch += 1;
+      globalToolsSnapshot = { ...globalToolsSnapshot, tools };
+      globalToolsLoaded = useWorkspaceStore.getState().apiConnected;
+      const saveEpoch = globalToolsEpoch;
+      scheduleSaveTools({ tools }, 600, (result) => {
+        // 防抖写入失败时，当前内存快照只是本地草稿；下次切换/重连必须重拉服务端版本。
+        // 仅处理仍代表最新编辑的回调，避免旧请求把后续成功编辑标成失效。
+        if (result.synced || saveEpoch !== globalToolsEpoch) return;
+        invalidateGlobalToolsAfterSaveFailure();
+      });
+    };
+    const pendingImmediateSave = immediateToolSaveChains.get(GLOBAL_TOOL_SAVE_KEY);
     if (pendingImmediateSave) {
       void pendingImmediateSave.then(persistLatest, persistLatest);
       return;
@@ -281,47 +372,36 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     set((s) => ({
       tools: withUpsertedTool(s.tools, tool, isNew),
     }));
-    get().persist();
+    get().persistTools();
   },
 
   saveToolNow: async (tool, isNew = false) => {
-    const workspaceId = useWorkspaceStore.getState().workspaceId;
-    const previous = immediateToolSaveChains.get(workspaceId);
+    const previous = immediateToolSaveChains.get(GLOBAL_TOOL_SAVE_KEY);
     const run = async (): Promise<MarketplaceSaveResult> => {
-      if (useWorkspaceStore.getState().workspaceId !== workspaceId) {
-        return { synced: false, reason: 'failed', detail: 'workspace_changed' };
-      }
       const current = get();
       const tools = withUpsertedTool(current.tools, tool, isNew);
-      const result = await flushSaveMarketplace(
-        workspaceId,
-        {
-          agents: current.agents,
-          skills: current.skills,
-          tools,
-          automations: current.automations,
-          kbDocs: current.kbDocs,
-        },
-        { reportFailure: false },
-      );
-      if (!result.synced) return result;
-      if (useWorkspaceStore.getState().workspaceId !== workspaceId) {
-        return { synced: false, reason: 'failed', detail: 'workspace_changed' };
+      const result = await flushSaveTools({ tools }, { reportFailure: false });
+      if (!result.synced) {
+        invalidateGlobalToolsAfterSaveFailure();
+        return result;
       }
+      globalToolsEpoch += 1;
+      globalToolsSnapshot = { ...globalToolsSnapshot, tools };
+      globalToolsLoaded = true;
       set((state) => ({ tools: withUpsertedTool(state.tools, tool, isNew) }));
       return result;
     };
     const operation = previous ? previous.then(run, run) : run();
-    immediateToolSaveChains.set(workspaceId, operation);
+    immediateToolSaveChains.set(GLOBAL_TOOL_SAVE_KEY, operation);
     void operation.then(
       () => {
-        if (immediateToolSaveChains.get(workspaceId) === operation) {
-          immediateToolSaveChains.delete(workspaceId);
+        if (immediateToolSaveChains.get(GLOBAL_TOOL_SAVE_KEY) === operation) {
+          immediateToolSaveChains.delete(GLOBAL_TOOL_SAVE_KEY);
         }
       },
       () => {
-        if (immediateToolSaveChains.get(workspaceId) === operation) {
-          immediateToolSaveChains.delete(workspaceId);
+        if (immediateToolSaveChains.get(GLOBAL_TOOL_SAVE_KEY) === operation) {
+          immediateToolSaveChains.delete(GLOBAL_TOOL_SAVE_KEY);
         }
       },
     );
@@ -329,44 +409,33 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   },
 
   deleteToolNow: async (id) => {
-    const workspaceId = useWorkspaceStore.getState().workspaceId;
-    const previous = immediateToolSaveChains.get(workspaceId);
+    const previous = immediateToolSaveChains.get(GLOBAL_TOOL_SAVE_KEY);
     const run = async (): Promise<MarketplaceSaveResult> => {
-      if (useWorkspaceStore.getState().workspaceId !== workspaceId) {
-        return { synced: false, reason: 'failed', detail: 'workspace_changed' };
-      }
       const current = get();
       const tools = current.tools.filter((item) => item.id !== id);
       if (tools.length === current.tools.length) return { synced: true };
-      const result = await flushSaveMarketplace(
-        workspaceId,
-        {
-          agents: current.agents,
-          skills: current.skills,
-          tools,
-          automations: current.automations,
-          kbDocs: current.kbDocs,
-        },
-        { reportFailure: false },
-      );
-      if (!result.synced) return result;
-      if (useWorkspaceStore.getState().workspaceId !== workspaceId) {
-        return { synced: false, reason: 'failed', detail: 'workspace_changed' };
+      const result = await flushSaveTools({ tools }, { reportFailure: false });
+      if (!result.synced) {
+        invalidateGlobalToolsAfterSaveFailure();
+        return result;
       }
+      globalToolsEpoch += 1;
+      globalToolsSnapshot = { ...globalToolsSnapshot, tools };
+      globalToolsLoaded = true;
       set((state) => ({ tools: state.tools.filter((item) => item.id !== id) }));
       return result;
     };
     const operation = previous ? previous.then(run, run) : run();
-    immediateToolSaveChains.set(workspaceId, operation);
+    immediateToolSaveChains.set(GLOBAL_TOOL_SAVE_KEY, operation);
     void operation.then(
       () => {
-        if (immediateToolSaveChains.get(workspaceId) === operation) {
-          immediateToolSaveChains.delete(workspaceId);
+        if (immediateToolSaveChains.get(GLOBAL_TOOL_SAVE_KEY) === operation) {
+          immediateToolSaveChains.delete(GLOBAL_TOOL_SAVE_KEY);
         }
       },
       () => {
-        if (immediateToolSaveChains.get(workspaceId) === operation) {
-          immediateToolSaveChains.delete(workspaceId);
+        if (immediateToolSaveChains.get(GLOBAL_TOOL_SAVE_KEY) === operation) {
+          immediateToolSaveChains.delete(GLOBAL_TOOL_SAVE_KEY);
         }
       },
     );
@@ -777,7 +846,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     set((s) => ({
       tools: s.tools.map((t) => (t.id === id ? { ...t, invokes: t.invokes + 1 } : t)),
     }));
-    get().persist();
+    get().persistTools();
   },
 
   toggleAutomation: (id) =>

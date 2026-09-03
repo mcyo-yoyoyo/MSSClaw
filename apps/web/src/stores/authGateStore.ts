@@ -14,6 +14,7 @@ export type AuthGateAction =
   | 'submit-tool'
   | 'submit-skill'
   | 'submit-agent'
+  | 'evaluate-skill'
   | 'chat'
   | 'account';
 
@@ -25,6 +26,7 @@ const GATE_HINTS: Record<AuthGateAction, string> = {
   'submit-tool': '登录后即可提交工具上架',
   'submit-skill': '登录后即可提交 Skill',
   'submit-agent': '登录后即可提交 Agent',
+  'evaluate-skill': '登录后即可生成评测报告',
   chat: '登录后即可发起任务',
   account: '',
 };

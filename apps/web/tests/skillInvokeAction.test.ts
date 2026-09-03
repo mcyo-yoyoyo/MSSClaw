@@ -48,11 +48,11 @@ test('配置 Skill 卡片只在上架可调用时展示调用按钮', () => {
   assert.match(footer, />\s*调用\s*<\/button>/, '配置 Skill 卡片应展示调用按钮');
 });
 
-test('Skill Hub 的精选和更多卡片都按上架可调用状态展示调用按钮', () => {
+test('Skill Hub 仅在当前方案开放执行且 Skill 可调用时展示调用按钮', () => {
   assert.match(
     skillHubSource,
-    /const renderSkillInvokeAction = \(skill: PrototypeSkillSeed \| undefined\) => \{[\s\S]*?if \(!skill \|\| !isSkillCallable\(skill\)\) return null;/,
-    'Skill Hub 调用按钮必须以 isSkillCallable 为唯一展示门槛',
+    /const renderSkillInvokeAction = \(skill: PrototypeSkillSeed \| undefined\) => \{[\s\S]*?if \(!skill \|\| !canRunSkills \|\| !isSkillCallable\(skill\)\) return null;/,
+    'MVP 下 Skill Hub 调用按钮必须隐藏，并继续检查 Skill 可调用状态',
   );
   assert.match(
     skillHubSource,
@@ -62,6 +62,6 @@ test('Skill Hub 的精选和更多卡片都按上架可调用状态展示调用�
   assert.equal(
     skillHubSource.match(/footerActions=\{renderSkillInvokeAction\(skill\)\}/g)?.length,
     2,
-    '精选和更多 Skill 卡片都必须接入调用操作',
+    '精选和更多 Skill 卡片都必须复用同一套调用门禁',
   );
 });

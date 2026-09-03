@@ -41,6 +41,7 @@ import {
 } from '@/api/blobApi';
 import { currentWorkspaceId } from '@/api/platformDocsApi';
 import { requireLogin } from '@/stores/authGateStore';
+import { evaluateAndPersistSkill } from '@/domain/skillEvaluation';
 
 function slugCommand(name: string): string {
   const base = name
@@ -267,6 +268,14 @@ export function MarketSkillSubmitModal({
 
       draft = syncSkillZhPrimary(draft);
       upsertSkill(draft, true);
+      void evaluateAndPersistSkill(draft, (status, report) => {
+        if (status === 'started') showToast('技能已提交，正在自动生成 TRACE 评测报告…');
+        else if (status === 'completed') {
+          showToast(
+            `评测完成：${report?.overallScore.toFixed(1) ?? '—'}/5 · ${report?.source === 'hybrid' ? '模型 + 规则' : '规则评测'}`,
+          );
+        } else showToast('评测服务暂不可用，技能已保存，可稍后重试评测');
+      });
       // upsert 成功后 packageBlob 已被新 Skill 引用，不再属于临时资源。
       uploadedPackage = undefined;
       onClose();
@@ -332,6 +341,7 @@ export function MarketSkillSubmitModal({
                   已解析：{packName}
                 </p>
               ) : null}
+              <p className="mt-1 text-[10px] text-zinc-400">提交后自动生成 TRACE 五维评测报告</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <input

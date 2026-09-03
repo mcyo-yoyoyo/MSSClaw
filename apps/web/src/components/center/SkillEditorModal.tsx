@@ -59,6 +59,7 @@ import {
 } from '@/domain/packageUpload';
 import { packageZipErrorMessage } from '@/domain/safeZip';
 import { useTemporaryWorkspaceBlobs } from '@/hooks/useTemporaryWorkspaceBlobs';
+import { evaluateAndPersistSkill } from '@/domain/skillEvaluation';
 
 const ICON_MAX_BYTES = 512 * 1024;
 const CASE_ATTACHMENT_MAX_BYTES = 12 * 1024 * 1024;
@@ -583,6 +584,14 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     }
 
     upsertSkill(draft, isNew);
+    void evaluateAndPersistSkill(draft, (status, report) => {
+      if (status === 'started') showToast('技能已保存，正在自动生成 TRACE 评测报告…');
+      else if (status === 'completed') {
+        showToast(
+          `评测完成：${report?.overallScore.toFixed(1) ?? '—'}/5 · ${report?.source === 'hybrid' ? '模型 + 规则' : '规则评测'}`,
+        );
+      } else showToast('评测服务暂不可用，技能已保存，可稍后重试评测');
+    });
     temporaryPackageBlobs.finish(form.packageBlob);
     caseAttachmentUploadsRef.current.clear();
     onClose();
@@ -703,7 +712,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
               <p className="mx-auto mt-1 max-w-md text-[12px] leading-relaxed text-zinc-500">
                 支持业界常见 <code className="text-zinc-700">.skill.zip</code> /
                 <code className="text-zinc-700"> SKILL.md</code> / 清单 JSON（≤{PACKAGE_UPLOAD_MAX_LABEL}）。
-                自动解析名称、描述与正文。
+                自动解析名称、描述与正文，保存后生成 TRACE 五维评测报告。
               </p>
               <input
                 ref={fileRef}

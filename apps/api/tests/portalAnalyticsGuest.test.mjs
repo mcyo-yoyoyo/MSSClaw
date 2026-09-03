@@ -49,7 +49,7 @@ function controllerWith(session = { ok: false, error: '未登录' }) {
   };
 }
 
-function recordingPrisma(queryRows, centerRows = []) {
+function recordingPrisma(queryRows, centerRows = [], globalToolsRow = null) {
   const executeCalls = [];
   const queryCalls = [];
   return {
@@ -58,6 +58,8 @@ function recordingPrisma(queryRows, centerRows = []) {
     prisma: {
       centerRecord: {
         findMany: async () => centerRows,
+        findUnique: async ({ where } = {}) =>
+          where?.id === 'global-tools' ? globalToolsRow : null,
       },
       $executeRaw: async (strings, ...values) => {
         executeCalls.push({ sql: strings.join('?'), values });
@@ -527,6 +529,66 @@ test('custom ranges are inclusive, bounded and reject invalid dates', async () =
       (error) => error?.getStatus?.() === 400,
     );
   }
+});
+
+test('global tool singleton is authoritative for analytics inventory', async () => {
+  const centerRows = [
+    {
+      id: 'tool-removed',
+      kind: 'tool',
+      payload: { id: 'tool-removed', name: '已删除工具', sourceType: 'external', published: true },
+    },
+    {
+      id: 'marketplace-ws-test',
+      kind: 'marketplace',
+      payload: {
+        tools: [
+          { id: 'tool-live', name: '旧名称', sourceType: 'external', published: true },
+          { id: 'tool-removed', name: '已删除工具', sourceType: 'external', published: true },
+        ],
+        agents: [{ id: 'agent-keep', name: '保留 Agent', published: true }],
+      },
+    },
+  ];
+  const globalToolsRow = {
+    id: 'global-tools',
+    kind: 'tool-catalog',
+    payload: {
+      initialized: true,
+      tools: [{ id: 'tool-live', name: '新名称', sourceType: 'external', published: false }],
+    },
+  };
+  const db = recordingPrisma(null, centerRows, globalToolsRow);
+  const catalog = await new PortalAnalyticsService(db.prisma).readAssetCatalog('ws-test');
+
+  assert.deepEqual(
+    catalog.filter((row) => row.assetType === 'tool'),
+    [{
+      contentId: 'tool-live',
+      assetType: 'tool',
+      name: '新名称',
+      published: false,
+      external: true,
+      company: false,
+      officeScene: false,
+      bound: false,
+    }],
+  );
+  assert.equal(catalog.some((row) => row.contentId === 'tool-removed'), false);
+  assert.equal(catalog.some((row) => row.contentId === 'agent-keep'), true);
+});
+
+test('analytics keeps workspace tool fallback before singleton migration', async () => {
+  const centerRows = [
+    {
+      id: 'tool-legacy',
+      kind: 'tool',
+      payload: { id: 'tool-legacy', name: '旧工具', sourceType: 'external', published: true },
+    },
+  ];
+  const db = recordingPrisma(null, centerRows);
+  const catalog = await new PortalAnalyticsService(db.prisma).readAssetCatalog('ws-test');
+  assert.deepEqual(catalog.map((row) => row.contentId), ['tool-legacy']);
 });
 
 test('black asset report excludes portal-content and treats only explicit redirect as redirect', async () => {

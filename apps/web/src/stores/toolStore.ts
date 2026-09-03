@@ -29,9 +29,10 @@ interface ToolState {
 }
 
 export const useToolStore = create<ToolState>((set, get) => ({
-  workspaceId: 'ws-cn-marketing',
-  tools: getToolsByWorkspace('ws-cn-marketing'),
-  selectedToolId: getToolsByWorkspace('ws-cn-marketing')[0]?.id ?? null,
+  // 旧页面仍有一个 workspaceId 字段，但工具初始目录使用统一离线种子。
+  workspaceId: 'global',
+  tools: getToolsByWorkspace('ws-3c-latam'),
+  selectedToolId: getToolsByWorkspace('ws-3c-latam')[0]?.id ?? null,
   typeFilter: 'all',
   statusFilter: 'all',
   testRunning: false,
@@ -39,7 +40,8 @@ export const useToolStore = create<ToolState>((set, get) => ({
 
   loadWorkspace: (workspaceId) => {
     void (async () => {
-      const tools = await fetchTools(workspaceId);
+      // legacy Tool 中心保留 workspace 参数以兼容路由，但目录本身已是全局单例。
+      const tools = await fetchTools();
       set({
         workspaceId,
         tools,
@@ -53,7 +55,7 @@ export const useToolStore = create<ToolState>((set, get) => ({
   selectTool: (id) => set({ selectedToolId: id }),
 
   selectToolByName: (name) => {
-    const tool = findToolByName(get().workspaceId, name);
+    const tool = get().tools.find((item) => item.name === name || item.displayName === name);
     if (tool) set({ selectedToolId: tool.id });
   },
 
@@ -93,6 +95,14 @@ export const useToolStore = create<ToolState>((set, get) => ({
 
 export function resolveToolIdFromResource(resourceId: string, resourceName?: string | null, workspaceId?: string) {
   if (resourceId.startsWith('tool-')) return resourceId;
-  if (resourceName && workspaceId) return findToolByName(workspaceId, resourceName)?.id ?? null;
+  if (resourceName) {
+    const loaded = useToolStore.getState().tools.find(
+      (tool) => tool.name === resourceName || tool.displayName === resourceName,
+    );
+    if (loaded) return loaded.id;
+    // 仅保留静态目录作为离线/旧数据兜底，不参与在线 workspace 分叉。
+    void workspaceId;
+    return findToolByName('ws-3c-latam', resourceName)?.id ?? null;
+  }
   return null;
 }

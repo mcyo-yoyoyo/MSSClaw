@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
+import { publicAssetUrl } from '@/domain/publicAssetUrl';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
 import {
   resolveOfficeScenesWithCatalog,
@@ -800,7 +801,7 @@ export function InternalOfficeSceneGrid({
             <div className="internal-assistant-chat__head">
               {assistantTool.logoUrl ? (
                 <img
-                  src={assistantTool.logoUrl}
+                  src={publicAssetUrl(assistantTool.logoUrl)}
                   alt=""
                   className="internal-assistant-chat__logo"
                   loading="lazy"
@@ -880,7 +881,7 @@ export function InternalOfficeSceneGrid({
                 scene.tools.slice(0, 3).map((tool) => (
                   <img
                     key={`${scene.id}-${tool.id}`}
-                    src={tool.logoUrl}
+                    src={publicAssetUrl(tool.logoUrl)}
                     alt={`${tool.name} Logo`}
                     className="h-7 w-7 rounded-full bg-zinc-50 object-cover ring-2 ring-white"
                     loading="lazy"
@@ -1070,7 +1071,7 @@ export function InternalOfficeSceneGrid({
                           draggedScene.tools.slice(0, 3).map((tool) => (
                             <img
                               key={`preview-${draggedScene.id}-${tool.id}`}
-                              src={tool.logoUrl}
+                              src={publicAssetUrl(tool.logoUrl)}
                               alt=""
                               className="h-7 w-7 rounded-full bg-zinc-50 object-cover ring-2 ring-white"
                             />
@@ -1126,7 +1127,7 @@ export function InternalOfficeSceneGrid({
                     className="flex w-full items-center gap-3 rounded-xl border border-zinc-200/90 px-3 py-2.5 text-left transition hover:border-zinc-300 hover:bg-zinc-50"
                   >
                     <img
-                      src={t.logoUrl}
+                      src={publicAssetUrl(t.logoUrl)}
                       alt={`${t.name} Logo`}
                       className="h-8 w-8 rounded-lg object-cover"
                       loading="lazy"

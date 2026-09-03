@@ -70,6 +70,20 @@ export class ExecutionsController {
     return this.executionsService.testLlmConnection(workspaceId, requestedModel as string | undefined);
   }
 
+  @Post('workspaces/:workspaceId/skills/evaluate')
+  async evaluateSkill(
+    @Param('workspaceId') workspaceId: string,
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      throw new BadRequestException('skill_evaluation_body_must_be_object');
+    }
+    return this.executionsService.evaluateSkill(workspaceId, body as Record<string, unknown>);
+  }
+
   @Get('workspaces/:workspaceId/executions')
   list(
     @Param('workspaceId') workspaceId: string,

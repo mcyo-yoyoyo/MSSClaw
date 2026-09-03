@@ -1,6 +1,7 @@
 import type { ChatConfig } from '@/domain/chat';
 import type { MarketplaceSnapshot } from '@/domain/persistence/storage';
 import type { PortalContentItem } from '@/domain/prototype/portalContent';
+import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import { apiUrl, isApiEnabled, apiAuthHeaders } from '@/api/client';
 
 export class PortalConflictError extends Error {
@@ -91,12 +92,48 @@ export async function fetchMarketplaceApi(workspaceId: string): Promise<Partial<
 
 export async function saveMarketplaceApi(
   workspaceId: string,
-  snapshot: MarketplaceSnapshot,
+  snapshot: Partial<MarketplaceSnapshot>,
 ): Promise<void> {
   const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/marketplace`), {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify(snapshot),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+/**
+ * 工具目录是部署级共享资源，不再挂在某个 workspace 下。
+ * 其他 marketplace 资产仍使用上面的 workspace marketplace API。
+ */
+export interface ToolCatalogPayload {
+  tools: PrototypeToolSeed[];
+  externalCatalogVersion?: string;
+  internalCatalogVersion?: string;
+  initialized?: boolean;
+  initializedAt?: string;
+  migratedAt?: string;
+}
+
+export async function fetchToolsApi(): Promise<Partial<ToolCatalogPayload> | null> {
+  const res = await fetch(apiUrl('/api/v1/tools'), {
+    headers: apiAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const payload = await res.json();
+  if (payload == null) return null;
+  if (Array.isArray(payload)) return { tools: payload as PrototypeToolSeed[] };
+  return typeof payload === 'object' ? (payload as Partial<ToolCatalogPayload>) : null;
+}
+
+export async function saveToolsApi(
+  payload: ToolCatalogPayload | PrototypeToolSeed[],
+): Promise<void> {
+  const body: ToolCatalogPayload = Array.isArray(payload) ? { tools: payload } : payload;
+  const res = await fetch(apiUrl('/api/v1/tools'), {
+    method: 'PUT',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }

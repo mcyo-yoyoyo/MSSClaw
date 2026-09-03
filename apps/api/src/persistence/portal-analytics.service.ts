@@ -1,7 +1,11 @@
 import { BadRequestException, Injectable, Optional } from '@nestjs/common';
 import { createHash, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { PersistenceService } from './persistence.service';
+import {
+  GLOBAL_TOOLS_RECORD_ID,
+  GLOBAL_TOOLS_RECORD_KIND,
+  PersistenceService,
+} from './persistence.service';
 import {
   PORTAL_ANALYTICS_TIME_ZONE,
   portalAnalyticsDateKey,
@@ -1481,6 +1485,7 @@ export class PortalAnalyticsService {
     const client = (this.prisma as unknown as {
       centerRecord?: {
         findMany?: (args: unknown) => Promise<Array<{ id: string; kind: string; payload: unknown }>>;
+        findUnique?: (args: unknown) => Promise<{ id: string; kind: string; payload: unknown } | null>;
       };
     }).centerRecord;
     if (!client?.findMany) return [];
@@ -1503,11 +1508,28 @@ export class PortalAnalyticsService {
       },
       select: { id: true, kind: true, payload: true },
     });
-    return Array.isArray(rows) ? rows : [];
+    const result = Array.isArray(rows) ? rows : [];
+    const globalTools = await client.findUnique?.({
+      where: { id: GLOBAL_TOOLS_RECORD_ID },
+      select: { id: true, kind: true, payload: true },
+    });
+    if (globalTools && !result.some((row) => row.id === globalTools.id)) {
+      result.push({
+        ...globalTools,
+        // Keep the global singleton explicit; readAssetCatalog handles this
+        // kind separately from workspace marketplace snapshots.
+        kind: GLOBAL_TOOLS_RECORD_KIND,
+      });
+    }
+    return result;
   }
 
   private async readAssetCatalog(workspaceId: string): Promise<AssetCatalogRow[]> {
     const rows = await this.readCenterRows(workspaceId);
+    // After the deployment singleton is created, workspace marketplace/tool
+    // rows are compatibility projections and may contain stale delete/publish
+    // state. Keep them out of the inventory so the singleton is authoritative.
+    const hasGlobalTools = rows.some((row) => row.kind === GLOBAL_TOOLS_RECORD_KIND);
     const byId = new Map<string, AssetCatalogRow>();
     const boundToolIds = new Set<string>();
     const asRecord = (value: unknown): Record<string, unknown> | null =>
@@ -1594,13 +1616,21 @@ export class PortalAnalyticsService {
     };
     for (const row of rows) {
       const payload = asRecord(row.payload);
+      if (row.kind === GLOBAL_TOOLS_RECORD_KIND) {
+        if (payload && Array.isArray(payload.tools)) {
+          payload.tools.forEach((item) => add(item, { assetType: 'tool' }));
+        }
+        continue;
+      }
       if (['agent', 'skill', 'tool'].includes(row.kind)) {
+        if (row.kind === 'tool' && hasGlobalTools) continue;
         add(payload, { assetType: row.kind });
         continue;
       }
       if (!payload) continue;
       if (row.kind === 'marketplace') {
         for (const [key, assetType] of Object.entries(marketplaceLists)) {
+          if (key === 'tools' && hasGlobalTools) continue;
           if (!BLACK_ASSET_TYPES.has(assetType)) continue;
           const values = payload[key];
           if (Array.isArray(values)) values.forEach((item) => add(item, { assetType }));

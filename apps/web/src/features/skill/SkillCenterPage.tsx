@@ -117,6 +117,9 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
 
   const [detail, setDetail] = useState<PrototypeSkillSeed | null>(null);
   const [editorTarget, setEditorTarget] = useState<SkillEditorTarget>(null);
+  const currentDetail = detail
+    ? skills.find((item) => item.id === detail.id) ?? detail
+    : null;
   const [opsRequest, setOpsRequest] = useState<{
     skill: PrototypeSkillSeed;
     kind: SkillOpsRequestKind;
@@ -547,9 +550,9 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
         </div>
       </div>
 
-      {detail ? (
+      {currentDetail ? (
         <MarketSkillDetailModal
-          skill={detail}
+          skill={currentDetail}
           canRun
           onClose={() => setDetail(null)}
           onRun={(s) => {
@@ -559,10 +562,10 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
           onToast={showToast}
           adminActions={{
             onUpdateRequest: () => {
-              setOpsRequest({ skill: detail, kind: 'update' });
+              setOpsRequest({ skill: currentDetail, kind: 'update' });
             },
             onUnpublishRequest: () => {
-              setOpsRequest({ skill: detail, kind: 'unpublish' });
+              setOpsRequest({ skill: currentDetail, kind: 'unpublish' });
             },
           }}
         />

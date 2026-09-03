@@ -487,3 +487,19 @@ export class PersistenceController {
     stream.pipe(res);
   }
 }
+
+/** 部署级工具目录：所有 workspace 读取同一份快照。 */
+@Controller('tools')
+export class GlobalToolsController {
+  constructor(private readonly persistence: PersistenceService) {}
+
+  @Get()
+  getTools() {
+    return this.persistence.getGlobalTools();
+  }
+
+  @Put()
+  putTools(@Body() body: unknown) {
+    return this.persistence.putGlobalTools(body);
+  }
+}

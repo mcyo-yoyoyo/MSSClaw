@@ -404,7 +404,7 @@ test('分类精选从全库解析，更多按当前分类排名过滤并排除�
   );
   assert.match(
     portalPanelSource,
-    /items=\{visibleMore\(categoryOverseasMore\)\}[\s\S]*?items=\{visibleMore\(categoryDomesticMore\)\}/,
+    /items=\{visibleCategoryOverseasMore\}[\s\S]*?items=\{visibleCategoryDomesticMore\}/,
     '分类搜索不能重新引入未排名或已精选工具',
   );
   assert.match(
@@ -458,19 +458,19 @@ test('按钮负责进出精选，拖拽只在允许的本列表内排序', () =>
 
   for (const source of [...allFeatured, ...categoryFeatured]) {
     assert.match(source, /\bfeatured(?:\s|=\{true\})/);
-    assert.match(source, /sortable=\{externalDragEnabled\}/);
+    assert.match(source, /sortable=\{externalDragByOrder\}/);
     assert.match(source, /actionEnabled=\{externalDragEnabled\}/);
     assert.match(source, /onRemoveFromFeatured=/);
   }
   for (const source of allMore) {
     assert.match(source, /featured=\{false\}/);
-    assert.match(source, /sortable=\{externalDragEnabled && !search\.trim\(\)\}/);
+    assert.match(source, /sortable=\{externalDragByOrder && !search\.trim\(\)\}/);
     assert.match(source, /actionEnabled=\{externalDragEnabled\}/);
     assert.match(source, /onAddToFeatured=/);
   }
   for (const source of categoryMore) {
     assert.match(source, /featured=\{false\}/);
-    assert.match(source, /sortable=\{externalDragEnabled && !search\.trim\(\)\}/);
+    assert.match(source, /sortable=\{externalDragByOrder && !search\.trim\(\)\}/);
     assert.match(source, /actionEnabled=\{externalDragEnabled\}/);
     assert.match(source, /onAddToFeatured=/);
   }
@@ -656,9 +656,10 @@ test('外部排序不再渲染苹果式实时让位与落下吸附', () => {
   assert.doesNotMatch(portalPanelSource, /externalDragPlacement/);
 });
 
-test('运营卡片隐藏互动指标与详情按钮，整卡正文直接查看详情', () => {
+test('运营卡片显示互动指标且整卡正文直接查看详情', () => {
   assert.match(portalPanelSource, /interactionMode="preview"/);
-  assert.match(portalPanelSource, /showDefaultFooter=\{false\}/);
+  assert.match(portalPanelSource, /showEngagementOnly/);
+  assert.match(portalPanelSource, /showDefaultFooter/);
   assert.match(portalPanelSource, /onOpen=\{\(\) => onOpen\(card\)\}/);
   assert.match(
     portalPanelSource,

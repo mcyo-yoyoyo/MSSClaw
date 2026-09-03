@@ -23,7 +23,6 @@ import {
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { isAiSaasTool } from '@/domain/portalNavigation';
 
 type ToolTypeFilter = 'all' | 'overseas' | 'domestic' | 'company';
@@ -73,12 +72,10 @@ export function ToolCenterPage() {
 
   const consumeToolId = useNavigationIntentStore((s) => s.consumeToolId);
   const pendingToolId = useNavigationIntentStore((s) => s.pendingToolId);
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const [editorTarget, setEditorTarget] = useState<ToolEditorTarget>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string;
     name: string;
-    workspaceId: string;
   } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -138,21 +135,13 @@ export function ToolCenterPage() {
   const confirmDelete = async () => {
     if (!deleteTarget || deleting) return;
     const target = deleteTarget;
-    if (target.workspaceId !== workspaceId) {
-      const message = '当前工作区已切换。请返回原工作区后再确认删除。';
-      setDeleteError(message);
-      showToast(message);
-      return;
-    }
     setDeleting(true);
     setDeleteError(null);
     try {
       const result = await deleteToolNow(target.id);
       if (!result.synced) {
         const message =
-          result.detail === 'workspace_changed'
-            ? '删除期间工作区已切换，未更新当前页面。请返回原工作区确认后重试。'
-            : result.reason === 'offline'
+          result.reason === 'offline'
               ? '共享服务未连接，工具尚未删除。请恢复连接后重试。'
               : `工具删除失败${result.detail ? `（${result.detail}）` : ''}，请稍后重试。`;
         setDeleteError(message);
@@ -302,6 +291,7 @@ export function ToolCenterPage() {
               type="search"
               value={toolSearch}
               onChange={(event) => setToolSearch(event.target.value)}
+              onInput={(event) => setToolSearch(event.currentTarget.value)}
               placeholder="搜索名称、厂商、简介、标签或工具类型…"
               className="w-full rounded-xl border border-zinc-200 bg-zinc-50/80 py-2.5 pl-9 pr-9 text-[12px] text-zinc-700 outline-none transition placeholder:text-zinc-400 hover:border-zinc-300 hover:bg-white focus:border-zinc-400 focus:ring-4 focus:ring-zinc-900/[0.05]"
             />
@@ -396,7 +386,7 @@ export function ToolCenterPage() {
                       type="button"
                       onClick={() => {
                         setDeleteError(null);
-                        setDeleteTarget({ id: t.id, name: t.name, workspaceId });
+                        setDeleteTarget({ id: t.id, name: t.name });
                       }}
                       className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-zinc-600 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/20"
                     >

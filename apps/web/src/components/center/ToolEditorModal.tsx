@@ -479,9 +479,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
       const result = await saveToolNow(nextTool, isNew);
       if (!result.synced) {
         const message =
-          result.detail === 'workspace_changed'
-            ? '保存期间工作区已切换，未更新当前页面。请返回原工作区确认后重试。'
-            : result.reason === 'offline'
+          result.reason === 'offline'
             ? '共享服务未连接，工具尚未保存。请恢复后重试。'
             : `工具保存失败${result.detail ? `（${result.detail}）` : ''}，请稍后重试。`;
         setSaveError(message);

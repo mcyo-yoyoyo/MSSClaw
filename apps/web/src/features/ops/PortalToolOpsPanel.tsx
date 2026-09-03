@@ -10,6 +10,7 @@ import { createPortal } from 'react-dom';
 import { CenterSearchInput } from '@/components/center/CenterShell';
 import { ExternalMarketFilters } from '@/components/market/ExternalMarketFilters';
 import { InternalOfficeSceneGrid } from '@/components/market/InternalOfficeSceneGrid';
+import { ShelfRankSelect } from '@/components/market/ShelfRankSelect';
 import { MarketShelfCard } from '@/components/market/MarketShelfCard';
 import { searchCapabilitiesByIntent } from '@/domain/capabilityIntentSearch';
 import { listExternalCategoryRankedMore } from '@/domain/externalFeaturedOrder';
@@ -34,6 +35,12 @@ import {
 import { emptyOrgPerspectiveSelection } from '@/domain/orgAxisTags';
 import { MarketToolDetailModal } from '@/features/market/MarketToolDetailModal';
 import { cn } from '@/lib/utils';
+import {
+  SHELF_RANK_TABS,
+  sortByRankMode,
+  type ContentEngagement,
+  type RankMode,
+} from '@/domain/contentEngagement';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useExternalTaxonomyCatalogStore } from '@/stores/externalTaxonomyCatalogStore';
 import { useExternalToolLayoutStore } from '@/stores/externalToolLayoutStore';
@@ -138,6 +145,15 @@ function sortBySourceOrder(cards: readonly MarketShelfCardModel[]): MarketShelfC
     .map(({ card }) => card);
 }
 
+function sortExternalByEngagement(
+  cards: readonly MarketShelfCardModel[],
+  rankMode: RankMode,
+  getEngagement: (id: string) => ContentEngagement,
+): MarketShelfCardModel[] {
+  if (rankMode === 'excel_order') return [...cards];
+  return sortByRankMode([...cards], rankMode, getEngagement);
+}
+
 function selectCardsByIds(
   cards: readonly MarketShelfCardModel[],
   configuredIds: readonly string[],
@@ -222,7 +238,8 @@ function ToolDropGrid({
                   enableCompare={false}
                   interactionMode="preview"
                   onOpen={() => onOpen(card)}
-                  showDefaultFooter={false}
+                  showDefaultFooter
+                  showEngagementOnly
                   footerActions={
                     <div className="space-y-1.5 border-t border-zinc-100 pt-2">
                       <div className="flex items-center gap-1">
@@ -436,7 +453,8 @@ function UnlistedToolGrid({
               enableCompare={false}
               interactionMode="preview"
               onOpen={() => onOpen(card)}
-              showDefaultFooter={false}
+              showDefaultFooter
+              showEngagementOnly
               footerActions={
                 <div className="flex items-center justify-between gap-2 border-t border-zinc-100 pt-2">
                   <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700">
@@ -520,6 +538,7 @@ export function PortalToolOpsPanel() {
   const [search, setSearch] = useState('');
   const [externalType, setExternalType] = useState<ExternalToolTypeId | 'all'>('all');
   const [externalListMode, setExternalListMode] = useState<ExternalListMode>('listed');
+  const [externalRankMode, setExternalRankMode] = useState<RankMode>('excel_order');
   const [previewToolId, setPreviewToolId] = useState<string | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
@@ -653,6 +672,7 @@ export function PortalToolOpsPanel() {
 
   const activeLayout: ExternalToolLayoutDocument | null = layoutDraft ?? layoutDocument;
   const externalDragEnabled = Boolean(activeLayout) && !layoutLoading && !layoutSaving;
+  const externalDragByOrder = externalDragEnabled && externalRankMode === 'excel_order';
 
   const overseasCards = externalCards.filter((card) => card.region === 'overseas');
   const domesticCards = externalCards.filter((card) => card.region === 'domestic');
@@ -718,6 +738,9 @@ export function PortalToolOpsPanel() {
     categoryDomesticMoreOrderIds,
   );
 
+  const sortByExternalRank = (cards: MarketShelfCardModel[]) =>
+    sortExternalByEngagement(cards, externalRankMode, getEngagement);
+
   const searchIds = useMemo(() => {
     if (!search.trim()) return null;
     return new Set(
@@ -728,6 +751,23 @@ export function PortalToolOpsPanel() {
   }, [search, externalCards]);
   const visibleMore = (cards: MarketShelfCardModel[]) =>
     searchIds ? cards.filter((card) => searchIds.has(card.id)) : cards;
+
+  const visibleAllOverseasFeatured = sortByExternalRank(visibleMore(allOverseasFeatured));
+  const visibleAllDomesticFeatured = sortByExternalRank(visibleMore(allDomesticFeatured));
+  const visibleCategoryOverseasFeatured = sortByExternalRank(
+    visibleMore(categoryOverseasFeatured),
+  );
+  const visibleCategoryDomesticFeatured = sortByExternalRank(
+    visibleMore(categoryDomesticFeatured),
+  );
+  const visibleAllOverseasMore = sortByExternalRank(visibleMore(allOverseasMore));
+  const visibleAllDomesticMore = sortByExternalRank(visibleMore(allDomesticMore));
+  const visibleCategoryOverseasMore = sortByExternalRank(
+    visibleMore(categoryOverseasMore),
+  );
+  const visibleCategoryDomesticMore = sortByExternalRank(
+    visibleMore(categoryDomesticMore),
+  );
 
   const typeMatchedUnlistedCards = useMemo(
     () =>
@@ -752,9 +792,11 @@ export function PortalToolOpsPanel() {
       ).map((match) => match.card.id),
     );
   }, [search, typeMatchedUnlistedCards]);
-  const visibleUnlistedCards = unlistedSearchIds
-    ? typeMatchedUnlistedCards.filter((card) => unlistedSearchIds.has(card.id))
-    : typeMatchedUnlistedCards;
+  const visibleUnlistedCards = sortByExternalRank(
+    unlistedSearchIds
+      ? typeMatchedUnlistedCards.filter((card) => unlistedSearchIds.has(card.id))
+      : typeMatchedUnlistedCards,
+  );
   const unlistedOverseasCards = visibleUnlistedCards.filter(
     (card) => card.region === 'overseas',
   );
@@ -1355,7 +1397,14 @@ export function PortalToolOpsPanel() {
                 value={search}
                 onChange={setSearch}
                 placeholder="搜索外部工具…"
+                type="search"
                 className="min-w-[13rem] flex-1 lg:max-w-[18rem]"
+              />
+              <ShelfRankSelect
+                value={externalRankMode}
+                onChange={setExternalRankMode}
+                options={SHELF_RANK_TABS}
+                className="shrink-0"
               />
               {layoutSaving ? (
                 <span className="text-[11px] font-medium text-zinc-500">正在自动保存…</span>
@@ -1488,15 +1537,15 @@ export function PortalToolOpsPanel() {
               <div className="mb-3 flex items-baseline gap-2">
                 <h2 className="text-[17px] font-semibold text-[#1d1d1f]">精选推荐</h2>
                 <span className="text-[12px] text-[#86868b]">
-                  {allOverseasFeatured.length + allDomesticFeatured.length}
+                  {visibleAllOverseasFeatured.length + visibleAllDomesticFeatured.length}
                 </span>
               </div>
               <div className="grid gap-4 lg:grid-cols-2">
-                <ToolListPanel title="海外精选" subtitle="GLOBAL" count={allOverseasFeatured.length} tone="overseas">
+                <ToolListPanel title="海外精选" subtitle="GLOBAL" count={visibleAllOverseasFeatured.length} tone="overseas">
                   <ToolDropGrid
-                    items={allOverseasFeatured}
+                    items={visibleAllOverseasFeatured}
                     listId="overseasFeaturedIds"
-                    sortable={externalDragEnabled}
+                    sortable={externalDragByOrder}
                     featured
                     actionEnabled={externalDragEnabled}
                     dragState={dragState}
@@ -1505,16 +1554,16 @@ export function PortalToolOpsPanel() {
                     onRemoveFromFeatured={removeFromFeatured}
                     savingUnlistingIds={savingToolUnlistingIds}
                     onUnlist={unlistTool}
-                    emptyText="暂无海外精选"
+                    emptyText={search.trim() ? '没有匹配的海外精选' : '暂无海外精选'}
                     showHot
                     onOpen={(card) => setPreviewToolId(card.id)}
                   />
                 </ToolListPanel>
-                <ToolListPanel title="国内精选" subtitle="CHINA" count={allDomesticFeatured.length} tone="domestic">
+                <ToolListPanel title="国内精选" subtitle="CHINA" count={visibleAllDomesticFeatured.length} tone="domestic">
                   <ToolDropGrid
-                    items={allDomesticFeatured}
+                    items={visibleAllDomesticFeatured}
                     listId="domesticFeaturedIds"
-                    sortable={externalDragEnabled}
+                    sortable={externalDragByOrder}
                     featured
                     actionEnabled={externalDragEnabled}
                     dragState={dragState}
@@ -1523,7 +1572,7 @@ export function PortalToolOpsPanel() {
                     onRemoveFromFeatured={removeFromFeatured}
                     savingUnlistingIds={savingToolUnlistingIds}
                     onUnlist={unlistTool}
-                    emptyText="暂无国内精选"
+                    emptyText={search.trim() ? '没有匹配的国内精选' : '暂无国内精选'}
                     showHot
                     onOpen={(card) => setPreviewToolId(card.id)}
                   />
@@ -1542,9 +1591,9 @@ export function PortalToolOpsPanel() {
                 <div className="grid gap-4 lg:grid-cols-2">
                   <ToolListPanel title="海外工具" subtitle="MORE" count={allOverseasMore.length} tone="overseas">
                     <ToolDropGrid
-                      items={visibleMore(allOverseasMore)}
+                      items={visibleAllOverseasMore}
                       listId="overseasMoreOrderIds"
-                      sortable={externalDragEnabled && !search.trim()}
+                      sortable={externalDragByOrder && !search.trim()}
                       featured={false}
                       actionEnabled={externalDragEnabled}
                       dragState={dragState}
@@ -1560,9 +1609,9 @@ export function PortalToolOpsPanel() {
                   </ToolListPanel>
                   <ToolListPanel title="国内工具" subtitle="MORE" count={allDomesticMore.length} tone="domestic">
                     <ToolDropGrid
-                      items={visibleMore(allDomesticMore)}
+                      items={visibleAllDomesticMore}
                       listId="domesticMoreOrderIds"
-                      sortable={externalDragEnabled && !search.trim()}
+                      sortable={externalDragByOrder && !search.trim()}
                       featured={false}
                       actionEnabled={externalDragEnabled}
                       dragState={dragState}
@@ -1588,15 +1637,15 @@ export function PortalToolOpsPanel() {
               <div className="mb-3 flex items-baseline gap-2">
                 <h2 className="text-[17px] font-semibold text-[#1d1d1f]">精选推荐</h2>
                 <span className="text-[12px] text-[#86868b]">
-                  {categoryOverseasFeatured.length + categoryDomesticFeatured.length}
+                  {visibleCategoryOverseasFeatured.length + visibleCategoryDomesticFeatured.length}
                 </span>
               </div>
               <div className="grid gap-4 lg:grid-cols-2">
-                <ToolListPanel title="海外精选" subtitle="GLOBAL" count={categoryOverseasFeatured.length} tone="overseas">
+                <ToolListPanel title="海外精选" subtitle="GLOBAL" count={visibleCategoryOverseasFeatured.length} tone="overseas">
                   <ToolDropGrid
-                    items={categoryOverseasFeatured}
+                    items={visibleCategoryOverseasFeatured}
                     listId={`category:${externalType}:overseas:featured`}
-                    sortable={externalDragEnabled}
+                    sortable={externalDragByOrder}
                     featured
                     actionEnabled={externalDragEnabled}
                     dragState={dragState}
@@ -1605,16 +1654,16 @@ export function PortalToolOpsPanel() {
                     onRemoveFromFeatured={removeFromFeatured}
                     savingUnlistingIds={savingToolUnlistingIds}
                     onUnlist={unlistTool}
-                    emptyText="暂无海外精选"
+                    emptyText={search.trim() ? '没有匹配的海外精选' : '暂无海外精选'}
                     showHot
                     onOpen={(card) => setPreviewToolId(card.id)}
                   />
                 </ToolListPanel>
-                <ToolListPanel title="国内精选" subtitle="CHINA" count={categoryDomesticFeatured.length} tone="domestic">
+                <ToolListPanel title="国内精选" subtitle="CHINA" count={visibleCategoryDomesticFeatured.length} tone="domestic">
                   <ToolDropGrid
-                    items={categoryDomesticFeatured}
+                    items={visibleCategoryDomesticFeatured}
                     listId={`category:${externalType}:domestic:featured`}
-                    sortable={externalDragEnabled}
+                    sortable={externalDragByOrder}
                     featured
                     actionEnabled={externalDragEnabled}
                     dragState={dragState}
@@ -1623,7 +1672,7 @@ export function PortalToolOpsPanel() {
                     onRemoveFromFeatured={removeFromFeatured}
                     savingUnlistingIds={savingToolUnlistingIds}
                     onUnlist={unlistTool}
-                    emptyText="暂无国内精选"
+                    emptyText={search.trim() ? '没有匹配的国内精选' : '暂无国内精选'}
                     showHot
                     onOpen={(card) => setPreviewToolId(card.id)}
                   />
@@ -1647,9 +1696,9 @@ export function PortalToolOpsPanel() {
                     tone="overseas"
                   >
                     <ToolDropGrid
-                      items={visibleMore(categoryOverseasMore)}
+                      items={visibleCategoryOverseasMore}
                       listId={`category:${externalType}:overseas:more`}
-                      sortable={externalDragEnabled && !search.trim()}
+                      sortable={externalDragByOrder && !search.trim()}
                       featured={false}
                       actionEnabled={externalDragEnabled}
                       dragState={dragState}
@@ -1672,9 +1721,9 @@ export function PortalToolOpsPanel() {
                     tone="domestic"
                   >
                     <ToolDropGrid
-                      items={visibleMore(categoryDomesticMore)}
+                      items={visibleCategoryDomesticMore}
                       listId={`category:${externalType}:domestic:more`}
-                      sortable={externalDragEnabled && !search.trim()}
+                      sortable={externalDragByOrder && !search.trim()}
                       featured={false}
                       actionEnabled={externalDragEnabled}
                       dragState={dragState}

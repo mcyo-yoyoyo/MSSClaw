@@ -19,6 +19,13 @@ import {
   type LlmStreamDiagnostics,
   type NestLlmRuntimeConfig,
 } from './llm.client';
+import {
+  buildRulesEvaluation,
+  mergeModelEvaluation,
+  parseModelEvaluation,
+  skillEvaluationPrompt,
+  type SkillEvaluationInput,
+} from './skill-evaluation';
 import { portalAnalyticsDateKey } from '../persistence/portal-analytics-time';
 
 const MARKETING_STEPS: ExecutionStep[] = [
@@ -390,6 +397,63 @@ export class ExecutionsService {
         errorCode: 'llm_test_failed',
         message: safeLlmTestError('request failed', diagnostics),
         diagnostics,
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async evaluateSkill(workspaceId: string, input: Record<string, unknown>) {
+    const normalized: SkillEvaluationInput = {
+      name: input.name,
+      description: input.description,
+      command: input.command,
+      instructions: input.instructions,
+      planSteps: input.planSteps,
+      usageNotes: input.usageNotes,
+      cases: input.cases,
+      tags: input.tags,
+      securityScan: input.securityScan,
+    };
+    const rulesReport = buildRulesEvaluation(normalized);
+    const config = await this.resolveLlmConfig(workspaceId);
+    if (!config) {
+      return {
+        ...rulesReport,
+        warnings: [...rulesReport.warnings, '当前工作区未配置可用大模型，因此未进行模型语义复核。'],
+      };
+    }
+
+    const controller = new AbortController();
+    const timeoutMs = Math.max(5_000, Number(process.env.SKILL_EVALUATION_TIMEOUT_MS) || 45_000);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let raw = '';
+    try {
+      for await (const event of nestLlmExecutionStream({
+        message: skillEvaluationPrompt(normalized),
+        actionType: 'knowledge',
+        agentName: 'Skill TRACE 评测器',
+        planSteps: ['读取上传文档', '按 TRACE 五维评估', '校验评测 JSON'],
+        signal: controller.signal,
+        jsonOnly: true,
+        config: { ...config, maxTokens: Math.min(config.maxTokens, 1800) },
+      })) {
+        if (event.type === 'token') raw += event.content;
+        if (event.type === 'error') throw new Error('skill_evaluation_llm_failed');
+      }
+      const parsed = parseModelEvaluation(raw);
+      const report = mergeModelEvaluation(rulesReport, parsed);
+      if (report.status !== 'completed') {
+        return {
+          ...rulesReport,
+          warnings: [...rulesReport.warnings, '模型已连接但未返回符合约定的评测 JSON，已保留规则评测结果。'],
+        };
+      }
+      return report;
+    } catch {
+      return {
+        ...rulesReport,
+        warnings: [...rulesReport.warnings, controller.signal.aborted ? '模型评测超时，已保留规则评测结果。' : '模型评测未返回有效结果，已保留规则评测结果。'],
       };
     } finally {
       clearTimeout(timer);

@@ -1,7 +1,7 @@
 /**
  * 外部工具统一目录种子。
  *
- * 运行时权威是 workspace marketplace 快照；此清单只用于首次初始化和显式目录版本迁移。
+ * 运行时权威是 global tool-catalog 快照；此清单只用于首次初始化和显式目录版本迁移。
  * 同名产品合并；toolTypeIds 保留多分类；externalCategoryRanks 保留分类内排序。
  */
 export const EXTERNAL_TOOLS_EXCEL_VERSION = '1.1.0-canonical-external-tools';

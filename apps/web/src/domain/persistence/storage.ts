@@ -9,10 +9,13 @@ import type {
   PrototypeToolSeed,
 } from '@/domain/prototype/types';
 import {
+  fetchToolsApi,
   fetchMarketplaceApi,
   fetchSessionsApi,
+  saveToolsApi,
   saveMarketplaceApi,
   saveSessionsApi,
+  type ToolCatalogPayload,
 } from '@/api/persistenceApi';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useSessionStore } from '@/stores/sessionStore';
@@ -25,6 +28,12 @@ export interface MarketplaceSnapshot {
   automations: PrototypeAutomation[];
   kbDocs: PrototypeKbDocument[];
 }
+
+/** workspace marketplace 中不再写入 tools，避免旧工具快照覆盖全局目录。 */
+export type WorkspaceMarketplaceSnapshot = Omit<MarketplaceSnapshot, 'tools'>;
+
+/** 部署级共享工具目录；不携带 workspace 维度。 */
+export type ToolCatalogSnapshot = ToolCatalogPayload;
 
 export type MarketplaceSaveResult = {
   synced: boolean;
@@ -48,6 +57,39 @@ function emptyMarketplace(): MarketplaceSnapshot {
     kbDocs: [],
   };
 }
+
+function emptyToolCatalog(): ToolCatalogSnapshot {
+  return { tools: [] };
+}
+
+/** 从全局工具 API 读取目录。workspaceId 只保留在旧调用方，不参与请求。 */
+export async function loadTools(
+  options?: { throwOnRemoteError?: boolean },
+): Promise<ToolCatalogSnapshot> {
+  if (useWorkspaceStore.getState().apiConnected) {
+    try {
+      const remote = await fetchToolsApi();
+      if (remote && Array.isArray(remote.tools)) {
+        return {
+          tools: remote.tools as PrototypeToolSeed[],
+          externalCatalogVersion: remote.externalCatalogVersion,
+          internalCatalogVersion: remote.internalCatalogVersion,
+          initialized: remote.initialized,
+          initializedAt: remote.initializedAt,
+          migratedAt: remote.migratedAt,
+        };
+      }
+      if (options?.throwOnRemoteError) throw new Error('invalid_tools_payload');
+    } catch (error) {
+      if (options?.throwOnRemoteError) throw error;
+      /* fall through to empty local catalog */
+    }
+  }
+  return emptyToolCatalog();
+}
+
+/** 显式别名，调用方可读出这是全局目录而非 workspace marketplace。 */
+export const loadGlobalTools = loadTools;
 
 export async function loadMarketplace(
   workspaceId: string,
@@ -78,7 +120,7 @@ export async function loadMarketplace(
 
 export async function saveMarketplace(
   workspaceId: string,
-  snapshot: MarketplaceSnapshot,
+  snapshot: MarketplaceSnapshot | WorkspaceMarketplaceSnapshot,
   options?: MarketplaceSaveOptions,
 ): Promise<MarketplaceSaveResult> {
   if (!useWorkspaceStore.getState().apiConnected) {
@@ -101,6 +143,37 @@ export async function saveMarketplace(
     return result;
   }
 }
+
+/** 将工具目录写入部署级共享 API；不会携带或读取当前 workspace。 */
+export async function saveTools(
+  snapshot: ToolCatalogSnapshot | PrototypeToolSeed[],
+  options?: MarketplaceSaveOptions,
+): Promise<MarketplaceSaveResult> {
+  if (!useWorkspaceStore.getState().apiConnected) {
+    const result: MarketplaceSaveResult = { synced: false, reason: 'offline' };
+    if (options?.reportFailure !== false) reportMarketplaceSync(result);
+    return result;
+  }
+  try {
+    const payload: ToolCatalogSnapshot = Array.isArray(snapshot)
+      ? { tools: snapshot }
+      : snapshot;
+    await saveToolsApi(payload);
+    const result: MarketplaceSaveResult = { synced: true };
+    reportMarketplaceSync(result);
+    return result;
+  } catch (err) {
+    const result: MarketplaceSaveResult = {
+      synced: false,
+      reason: 'failed',
+      detail: err instanceof Error ? err.message : undefined,
+    };
+    if (options?.reportFailure !== false) reportMarketplaceSync(result);
+    return result;
+  }
+}
+
+export const saveGlobalTools = saveTools;
 
 function reportMarketplaceSync(result: MarketplaceSaveResult) {
   reportShareSync({
@@ -233,10 +306,12 @@ export async function saveSessions(
 
 const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const marketplaceSaveChains = new Map<string, Promise<MarketplaceSaveResult>>();
+const globalToolsSaveKey = 'global-tools';
+let globalToolsSaveChain: Promise<MarketplaceSaveResult> | undefined;
 
 function enqueueMarketplaceSave(
   workspaceId: string,
-  snapshot: MarketplaceSnapshot,
+  snapshot: MarketplaceSnapshot | WorkspaceMarketplaceSnapshot,
   options?: MarketplaceSaveOptions,
 ): Promise<MarketplaceSaveResult> {
   const previous = marketplaceSaveChains.get(workspaceId);
@@ -262,7 +337,11 @@ function enqueueMarketplaceSave(
   return next;
 }
 
-export function scheduleSaveMarketplace(workspaceId: string, snapshot: MarketplaceSnapshot, ms = 600) {
+export function scheduleSaveMarketplace(
+  workspaceId: string,
+  snapshot: MarketplaceSnapshot | WorkspaceMarketplaceSnapshot,
+  ms = 600,
+) {
   const key = `market:${workspaceId}`;
   const prev = debounceTimers.get(key);
   if (prev) clearTimeout(prev);
@@ -282,7 +361,7 @@ export function scheduleSaveMarketplace(workspaceId: string, snapshot: Marketpla
  */
 export function flushSaveMarketplace(
   workspaceId: string,
-  snapshot: MarketplaceSnapshot,
+  snapshot: MarketplaceSnapshot | WorkspaceMarketplaceSnapshot,
   options?: MarketplaceSaveOptions,
 ): Promise<MarketplaceSaveResult> {
   const key = `market:${workspaceId}`;
@@ -293,6 +372,63 @@ export function flushSaveMarketplace(
   }
   return enqueueMarketplaceSave(workspaceId, snapshot, options);
 }
+
+function enqueueGlobalToolsSave(
+  snapshot: ToolCatalogSnapshot | PrototypeToolSeed[],
+  options?: MarketplaceSaveOptions,
+): Promise<MarketplaceSaveResult> {
+  const previous = globalToolsSaveChain;
+  const next = previous
+    ? previous.then(
+        () => saveTools(snapshot, options),
+        () => saveTools(snapshot, options),
+      )
+    : saveTools(snapshot, options);
+  globalToolsSaveChain = next;
+  void next.then(
+    () => {
+      if (globalToolsSaveChain === next) globalToolsSaveChain = undefined;
+    },
+    () => {
+      if (globalToolsSaveChain === next) globalToolsSaveChain = undefined;
+    },
+  );
+  return next;
+}
+
+/** 防抖写入全局工具目录；所有 workspace 共用同一条队列。 */
+export function scheduleSaveTools(
+  snapshot: ToolCatalogSnapshot | PrototypeToolSeed[],
+  ms = 600,
+  onResult?: (result: MarketplaceSaveResult) => void,
+) {
+  const prev = debounceTimers.get(globalToolsSaveKey);
+  if (prev) clearTimeout(prev);
+  debounceTimers.set(
+    globalToolsSaveKey,
+    setTimeout(() => {
+      debounceTimers.delete(globalToolsSaveKey);
+      void enqueueGlobalToolsSave(snapshot).then((result) => onResult?.(result));
+    }, ms),
+  );
+}
+
+export const scheduleSaveGlobalTools = scheduleSaveTools;
+
+/** 取消待执行的全局工具防抖并立即写入，且等待已开始的全局写入。 */
+export function flushSaveTools(
+  snapshot: ToolCatalogSnapshot | PrototypeToolSeed[],
+  options?: MarketplaceSaveOptions,
+): Promise<MarketplaceSaveResult> {
+  const pending = debounceTimers.get(globalToolsSaveKey);
+  if (pending) {
+    clearTimeout(pending);
+    debounceTimers.delete(globalToolsSaveKey);
+  }
+  return enqueueGlobalToolsSave(snapshot, options);
+}
+
+export const flushSaveGlobalTools = flushSaveTools;
 
 export function scheduleSaveSessions(workspaceId: string, chats: Record<string, ChatConfig>, ms = 600) {
   const key = `sessions:${workspaceId}`;
