@@ -128,6 +128,11 @@ API 地址和密钥也可以在应用的运行时设置中覆盖。
 | `BLOB_ROOT` | 应用默认目录 | 上传文件存储目录 |
 | `MAX_CONCURRENT_SSE` | `200` | SSE 执行流并发上限 |
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | 空 | OpenAI 兼容模型配置 |
+| `ALLOW_AI_KNOWLEDGE_RULE_FALLBACK` | 开发开启、生产关闭 | AI 智库无模型时是否允许生成带明确标识的规则方案 |
+| `AI_CASE_LIBRARY_URL` | `http://localhost:4174/index.html` | AI 智库引用的海外案例库入口 |
+| `AI_CASE_LIBRARY_DATA_PATH` | 空 | AI 智库 Agent 只读检索的本地 `cases.json` 路径 |
+| `AI_TOOL_CATALOG_XLSX_PATH` | 空 | AI 智库 Agent 只读检索的 AI 工具清单工作簿 |
+| `AI_CAPABILITY_CATALOG_XLSX_PATH` | 空 | AI 智库 Agent 只读检索的已上线 Skill/Agent 工作簿 |
 
 未配置模型时，执行服务会尝试读取工作空间中保存的模型配置；两者都不存在时会明确报错。`ALLOW_SCRIPTED_EXECUTION=1` 仅用于本地冒烟测试。
 
@@ -194,6 +199,7 @@ Browser
 | 工作空间 | `GET /workspaces`、`GET /workspaces/:id/catalog` |
 | 共享数据 | sessions、marketplace、portal-content、docs、blobs |
 | AI 快讯 | `GET /ai-daily-news` |
+| AI 智库 | 需求草稿、澄清、摘要更新、方案生成和当前用户历史方案 |
 | 能力中心 | agents、skills、prompts、workflows、tools、knowledge-bases、memory-stores |
 | 知识检索 | 文档解析、搜索、向量状态与重建 |
 | 执行 | `GET /workspaces/:id/executions`、`POST /executions/stream` |

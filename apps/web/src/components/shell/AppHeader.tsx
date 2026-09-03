@@ -1,5 +1,5 @@
 import { MssZhishuMark } from '@/components/brand/MssZhishuMark';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { ADMIN_MENU_VIEWS, type AppView } from '@/domain/appView';
 import { writeAppRouteToLocation } from '@/domain/appRoute';
@@ -63,6 +63,10 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
       ? 'market-internal'
       : 'market-external';
   }, [appView, returnTarget, tools, pendingToolId]);
+  const activeNavRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    activeNavRef.current?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [appView, marketToolShelfHighlight]);
   const user = useSessionStore((s) => s.user);
   const isGuest = useSessionStore((s) => s.isGuest);
   const requestLogin = useAuthGateStore((s) => s.requestLogin);
@@ -114,6 +118,11 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
             {TOP_SHELF_NAV.filter((item) => isViewEnabled(item.view)).map((item) => (
               <button
                 key={item.view}
+                ref={
+                  appView === item.view || marketToolShelfHighlight === item.view
+                    ? activeNavRef
+                    : undefined
+                }
                 type="button"
                 onClick={() => goView(item.view)}
                 onMouseEnter={() => ROUTE_PREFETCH[item.view]?.()}
@@ -147,7 +156,7 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
         <button
           type="button"
           onClick={openPalette}
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900"
+          className="hidden h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 sm:flex"
           title="Command Palette (⌘K)"
         >
           <i className="fa-solid fa-magnifying-glass text-[13px]" />
@@ -184,11 +193,12 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
           <button
             type="button"
             onClick={() => requestLogin('account')}
-            className="flex h-9 items-center gap-1.5 rounded-lg bg-[#e0122f] px-3 text-[12px] font-semibold text-white transition hover:bg-[#c01028]"
+            className="flex h-9 w-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#e0122f] text-[12px] font-semibold text-white transition hover:bg-[#c01028] sm:w-auto sm:px-3"
             title="登录"
+            aria-label="登录"
           >
             <i className="fa-solid fa-arrow-right-to-bracket text-[12px]" />
-            登录
+            <span className="hidden sm:inline">登录</span>
           </button>
         ) : (
           <button

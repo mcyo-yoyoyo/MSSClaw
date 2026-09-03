@@ -26,13 +26,13 @@ export const DEFAULT_LLM_MODELS: LlmModelPreset[] = [
   {
     id: 'deepseek-v4-flash',
     label: 'DeepSeek V4 Flash',
-    baseUrl: 'https://api.deepseek.com/v1',
+    baseUrl: 'https://api.deepseek.com',
     providerName: 'DeepSeek',
   },
   {
     id: 'deepseek-v4-pro',
     label: 'DeepSeek V4 Pro',
-    baseUrl: 'https://api.deepseek.com/v1',
+    baseUrl: 'https://api.deepseek.com',
     providerName: 'DeepSeek',
   },
   {
@@ -269,7 +269,7 @@ export const LLM_PROVIDERS = {
   zhipu: { name: '智谱', baseUrl: DEFAULT_LLM_MODELS[0].baseUrl, models: ['glm-5.1'] },
   deepseek: {
     name: 'DeepSeek',
-    baseUrl: 'https://api.deepseek.com/v1',
+    baseUrl: 'https://api.deepseek.com',
     models: ['deepseek-v4-flash', 'deepseek-v4-pro'],
   },
   qwen: {

@@ -16,9 +16,11 @@
     "test:market-engagement-auth": "npm run build --silent && node --test tests/marketEngagementAuth.test.mjs tests/marketEngagementEvents.test.mjs tests/marketEngagementCatalog.test.mjs tests/marketEngagementSqlite.test.mjs",
     "test:market-engagement-sqlite": "npm run build --silent && node --test tests/marketEngagementSqlite.test.mjs",
     "test:portal-analytics": "npm run build --silent && node --test tests/portalAnalyticsGuest.test.mjs tests/trustProxy.test.mjs tests/portalAnalyticsSqlite.test.mjs",
+    "test:ai-knowledge": "npm run build --silent && node --test tests/aiKnowledge.test.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "prisma db seed"
+    "prisma:seed": "prisma db seed",
+    "import:marketplace": "ts-node --project tsconfig.json scripts/import-marketplace-catalog.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.12",
@@ -27,12 +29,15 @@
     "@nestjs/platform-express": "^11.0.12",
     "@nestjs/schedule": "^6.1.3",
     "@nestjs/throttler": "^6.5.0",
+    "@openai/agents": "^0.17.0",
     "@prisma/client": "^6.5.0",
     "compression": "^1.8.1",
     "helmet": "^8.3.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
-    "undici": "^8.10.0"
+    "undici": "^8.10.0",
+    "xlsx": "^0.18.5",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.5",

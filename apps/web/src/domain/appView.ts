@@ -1,5 +1,6 @@
 export const APP_VIEWS = [
   'home',
+  'ai-knowledge',
   'me',
   'market-external',
   'market-internal',

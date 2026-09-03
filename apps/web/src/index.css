@@ -561,6 +561,11 @@
 }
 
 .stage-intent-dock__submit {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
   flex-shrink: 0;
   border-radius: 14px;
   background: #1d1d1f;
@@ -572,6 +577,28 @@
 
 .stage-intent-dock__submit:hover {
   background: #2c2c2e;
+}
+
+.stage-intent-dock__submit:disabled {
+  cursor: not-allowed;
+  background: #d4d4d8;
+  color: #fafafa;
+}
+
+.stage-intent-dock__submit:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+@media (max-width: 520px) {
+  .stage-intent-dock__submit {
+    width: 40px;
+    padding: 0;
+  }
+
+  .stage-intent-dock__submit span {
+    display: none;
+  }
 }
 
 .stage-intent-dock__caption {

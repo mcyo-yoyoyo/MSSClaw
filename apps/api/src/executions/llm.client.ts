@@ -206,6 +206,52 @@ function firstEnabledModelId(payload: Record<string, unknown>): string {
   return '';
 }
 
+export async function nestLlmChatCompletion(params: {
+  messages: LlmChatMessage[];
+  config: NestLlmRuntimeConfig;
+  maxTokens?: number;
+  temperature?: number;
+  jsonMode?: boolean;
+  disableThinking?: boolean;
+  signal?: AbortSignal;
+}): Promise<string> {
+  const res = await fetch(`${params.config.baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${params.config.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: params.config.model,
+      messages: params.messages,
+      max_tokens: params.maxTokens ?? params.config.maxTokens,
+      temperature: params.temperature ?? 0.2,
+      ...(params.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+      ...(params.disableThinking && /deepseek/i.test(params.config.model)
+        ? { thinking: { type: 'disabled' } }
+        : {}),
+      stream: false,
+    }),
+    signal: params.signal,
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`LLM HTTP ${res.status}: ${body.slice(0, 160)}`);
+  }
+  const data = (await res.json()) as {
+    choices?: Array<{
+      finish_reason?: string;
+      message?: { content?: string; reasoning_content?: string };
+    }>;
+  };
+  const choice = data.choices?.[0];
+  const content = choice?.message?.content?.trim() ?? '';
+  if (!content && choice?.finish_reason === 'length') {
+    throw new Error('LLM output token limit reached before final content');
+  }
+  return content;
+}
+
 /** 服务端环境变量 LLM_*（部署级优先） */
 export function nestLlmConfigFromEnv(): NestLlmRuntimeConfig | null {
   const baseUrl = normalizeBaseUrl(process.env.LLM_BASE_URL ?? '');

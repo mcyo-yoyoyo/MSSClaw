@@ -17,6 +17,10 @@ export const LazyAiBriefPage = lazy(() =>
   import('@/features/ai-brief/AiBriefPage').then((m) => ({ default: m.AiBriefPage })),
 );
 
+export const LazyAiKnowledgePage = lazy(() =>
+  import('@/features/ai-knowledge/AiKnowledgePage').then((m) => ({ default: m.AiKnowledgePage })),
+);
+
 export const LazyAgentCenterPage = lazy(() =>
   import('@/features/agent/AgentCenterPage').then((m) => ({ default: m.AgentCenterPage })),
 );
@@ -124,6 +128,7 @@ export const ROUTE_PREFETCH: Partial<Record<AppView, () => void>> = {
   'ai-tasks': () => void import('@/features/me/MePage'),
   me: () => void import('@/features/me/MePage'),
   'ai-brief': () => void import('@/features/ai-brief/AiBriefPage'),
+  'ai-knowledge': () => void import('@/features/ai-knowledge/AiKnowledgePage'),
   agents: () => void import('@/features/agent/AgentCenterPage'),
   'agent-studio': () => void import('@/features/agent/AgentCenterPage'),
   skills: () => void import('@/features/skill/SkillCenterPage'),

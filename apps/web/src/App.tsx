@@ -619,7 +619,7 @@ export function App() {
           shellPerspective === 'ops' ? 'shell-ops-stage' : 'shell-business-stage',
         )}
       >
-        <AppShellSidebar />
+        {appView === 'ai-knowledge' ? null : <AppShellSidebar />}
 
         <main className="main-stage relative flex min-w-0 flex-1 flex-col overflow-hidden">
           {workspaceHydrating && (

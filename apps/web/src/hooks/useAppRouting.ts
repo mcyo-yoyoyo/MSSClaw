@@ -50,6 +50,7 @@ export function useAppRouting() {
   }, [setAppView, sessionBootstrapped, shellReady]);
 
   useEffect(() => {
+    if (!sessionBootstrapped || !shellReady || !appliedInitial.current) return;
     if (skipHashWrite.current) {
       skipHashWrite.current = false;
       return;
@@ -62,7 +63,7 @@ export function useAppRouting() {
         ? useNavigationIntentStore.getState().peekToolId() ?? current.id
         : undefined;
     writeAppRouteToLocation({ view: appView, chat, id }, appView === current.view);
-  }, [appView]);
+  }, [appView, sessionBootstrapped, shellReady]);
 
   useEffect(() => {
     if (!shellReady) return;

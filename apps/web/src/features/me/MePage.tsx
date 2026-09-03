@@ -2,6 +2,13 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { PageCanvas } from '@/components/layout/PageCanvas';
+import { canUseAiKnowledgeApi, listAiKnowledgeSolutions } from '@/api/aiKnowledgeApi';
+import {
+  formatSolutionDate,
+  loadAiKnowledgeSolutions,
+  type AiKnowledgeSolution,
+} from '@/domain/aiKnowledge';
+import { consumeMeAiKnowledgeTab, stageAiKnowledgeSolution } from '@/domain/aiKnowledgeEntry';
 import { writeAppRouteToLocation } from '@/domain/appRoute';
 import { MARKET_SHELF_META, type MarketShelfKind } from '@/domain/marketShelf';
 import { openMarketShelf, openMarketToolDetail } from '@/domain/openHomeJourney';
@@ -21,7 +28,7 @@ import { resolveToolMarketShelf } from '@/domain/aiToolCategories';
 import type { MarketAssetType } from '@/api/marketEngagementApi';
 
 type KindFilter = MarketShelfKind | 'all';
-type MeTab = 'submissions' | 'favorites' | 'recent' | 'tasks';
+type MeTab = 'submissions' | 'favorites' | 'recent' | 'knowledge' | 'tasks';
 
 type RowItem = {
   id: string;
@@ -84,17 +91,34 @@ export function MePage() {
     { kind: 'skill' | 'agent'; id: string } | null
   >(null);
   const [kindFilter, setKindFilter] = useState<KindFilter>('all');
+  const [knowledgeSolutions, setKnowledgeSolutions] = useState<AiKnowledgeSolution[]>(() =>
+    loadAiKnowledgeSolutions(),
+  );
   const [tab, setTab] = useState<MeTab>(
     appView === 'ai-tasks' && showTasks ? 'tasks' : 'favorites',
   );
 
   useEffect(() => {
     if (appView === 'ai-tasks' && showTasks) setTab('tasks');
+    if (appView === 'me' && consumeMeAiKnowledgeTab()) setTab('knowledge');
   }, [appView, showTasks]);
 
   useEffect(() => {
     hydrateApprovals();
   }, [hydrateApprovals]);
+
+  useEffect(() => {
+    if (!canUseAiKnowledgeApi()) return;
+    let cancelled = false;
+    void listAiKnowledgeSolutions().then((items) => {
+      if (!cancelled) setKnowledgeSolutions(items);
+    }).catch(() => {
+      if (!cancelled) showToast('AI智库方案暂时无法读取');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [showToast, user?.id]);
 
   const submissionRows = useMemo(() => {
     if (!user) return [];
@@ -218,6 +242,7 @@ export function MePage() {
     { id: 'submissions', label: '我的提交', count: submissionRows.length },
     { id: 'favorites', label: '我的收藏', count: favRows.length },
     { id: 'recent', label: '最近浏览', count: recentRows.length },
+    { id: 'knowledge', label: 'AI智库', count: knowledgeSolutions.length },
     { id: 'tasks', label: '任务记录', hidden: !showTasks },
   ];
 
@@ -280,7 +305,7 @@ export function MePage() {
                     ) : null}
                   </button>
                 ))}
-              {tab !== 'tasks' ? (
+              {tab === 'favorites' || tab === 'recent' ? (
                 <div className="ml-1 flex flex-wrap gap-1">
                   {(['all', 'external', 'internal', 'projects'] as const).map((k) => (
                     <button
@@ -306,6 +331,23 @@ export function MePage() {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {tab === 'tasks' && showTasks ? (
             <AiTasksPage embedded />
+          ) : tab === 'knowledge' ? (
+            <MeShelfGrid
+              empty="还没有推荐方案。从任一栏目使用“智库帮找”后，生成的方案会保存在这里。"
+              count={knowledgeSolutions.length}
+            >
+              {knowledgeSolutions.map((item) => (
+                <AiKnowledgeSolutionCard
+                  key={item.id}
+                  solution={item}
+                  onOpen={() => {
+                    stageAiKnowledgeSolution(item);
+                    writeAppRouteToLocation({ view: 'ai-knowledge' });
+                    setAppView('ai-knowledge');
+                  }}
+                />
+              ))}
+            </MeShelfGrid>
           ) : tab === 'submissions' ? (
             <MeShelfGrid empty="还没有提交过 Skill 或 Agent。" count={submissionRows.length}>
               {submissionRows.map((item) => (
@@ -409,6 +451,35 @@ export function MePage() {
           })()
         : null}
     </div>
+  );
+}
+
+function AiKnowledgeSolutionCard({
+  solution,
+  onOpen,
+}: {
+  solution: AiKnowledgeSolution;
+  onOpen: () => void;
+}) {
+  return (
+    <li className="rounded-lg border border-black/[0.06] bg-white p-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+      <button type="button" onClick={onOpen} className="flex w-full items-start gap-3 text-left">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+          <i className="fa-solid fa-wand-magic-sparkles text-[12px]" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="line-clamp-2 text-[13px] font-semibold leading-5 text-zinc-900">{solution.title}</span>
+          <span className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-400">
+            <span>{solution.domain}</span>
+            <span aria-hidden>·</span>
+            <span>{solution.maturity}</span>
+            <span aria-hidden>·</span>
+            <time>{formatSolutionDate(solution.createdAt)}</time>
+          </span>
+        </span>
+        <i className="fa-solid fa-chevron-right mt-2 text-[10px] text-zinc-300" aria-hidden />
+      </button>
+    </li>
   );
 }
 

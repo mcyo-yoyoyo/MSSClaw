@@ -3,6 +3,9 @@ import {
   intentSearchHintExamples,
   type IntentSearchScope,
 } from '@/domain/capabilityIntentSearch';
+import { writeAppRouteToLocation } from '@/domain/appRoute';
+import { stageAiKnowledgeEntry } from '@/domain/aiKnowledgeEntry';
+import { useAppViewStore } from '@/stores/appViewStore';
 import { useMarketFilterStore } from '@/stores/marketFilterStore';
 
 /**
@@ -22,11 +25,20 @@ export function StageIntentDock({
 }) {
   const search = useMarketFilterStore((s) => s.search);
   const setSearch = useMarketFilterStore((s) => s.setSearch);
+  const setAppView = useAppViewStore((s) => s.setAppView);
 
   const examples = suggestions ?? intentSearchHintExamples(scope);
 
   const run = (next: string) => {
     setSearch(next);
+  };
+
+  const enterAiKnowledge = () => {
+    const question = search.trim();
+    if (!question) return;
+    stageAiKnowledgeEntry(question, scope);
+    writeAppRouteToLocation({ view: 'ai-knowledge' });
+    setAppView('ai-knowledge');
   };
 
   return (
@@ -35,7 +47,7 @@ export function StageIntentDock({
         className="stage-intent-dock__composer"
         onSubmit={(e) => {
           e.preventDefault();
-          run(search);
+          enterAiKnowledge();
         }}
       >
         <i
@@ -59,6 +71,15 @@ export function StageIntentDock({
             <i className="fa-solid fa-xmark" />
           </button>
         ) : null}
+        <button
+          type="submit"
+          disabled={!search.trim()}
+          className="stage-intent-dock__submit"
+          aria-label="让 AI 智库帮我找"
+        >
+          <span>智库帮找</span>
+          <i className="fa-solid fa-arrow-right" aria-hidden />
+        </button>
       </form>
 
       <div className="stage-intent-dock__meta">

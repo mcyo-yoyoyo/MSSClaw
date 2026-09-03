@@ -32,6 +32,7 @@ import {
   LazyToolCenterPage,
   LazyWorkflowStudioPage,
   LazyAiBriefPage,
+  LazyAiKnowledgePage,
   LazyMePage,
 } from '@/features/lazyPages';
 
@@ -59,6 +60,7 @@ const VIEW_LABELS: Partial<Record<AppView, string>> = {
   'market-projects': 'AI工具Hub',
   'ai-tasks': 'AI任务',
   'ai-brief': 'AI快讯',
+  'ai-knowledge': 'AI智库',
   task: '任务记录',
   messages: '我的消息',
   'ai-map': '场景案例',
@@ -112,6 +114,12 @@ function AppViewRouterContent({ appView, handlers }: AppViewRouterProps) {
   const label = VIEW_LABELS[appView] ?? '页面';
 
   switch (appView) {
+    case 'ai-knowledge':
+      return (
+        <LazyView label={label}>
+          <LazyAiKnowledgePage />
+        </LazyView>
+      );
     case 'market-external':
       return (
         <LazyView label={label}>

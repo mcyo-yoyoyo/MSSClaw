@@ -11,6 +11,7 @@ import { PersistenceModule } from './persistence/persistence.module';
 import { KnowledgeRagModule } from './knowledge-rag/knowledge-rag.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { OptionalApiKeyGuard } from './common/optional-api-key.guard';
+import { AiKnowledgeModule } from './ai-knowledge/ai-knowledge.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { OptionalApiKeyGuard } from './common/optional-api-key.guard';
     ExecutionsModule,
     PersistenceModule,
     KnowledgeRagModule,
+    AiKnowledgeModule,
   ],
   controllers: [HealthController],
   providers: [
