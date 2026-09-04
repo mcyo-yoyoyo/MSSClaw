@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   applyClarification,
   buildSolution,
@@ -7,6 +8,18 @@ import {
   inferScenario,
   startDemandDraft,
 } from '../src/domain/aiKnowledge.ts';
+
+const stageIntentDockSource = readFileSync(
+  new URL('../src/components/market/StageIntentDock.tsx', import.meta.url),
+  'utf8',
+);
+
+test('智库帮找先通过统一登录门禁，再进入 AI 智库', () => {
+  assert.match(
+    stageIntentDockSource,
+    /if \(!requireLogin\('chat', openAiKnowledge\)\) return;\s*openAiKnowledge\(\);/,
+  );
+});
 
 test('识别三类首批业务问题', () => {
   assert.equal(inferScenario('根据 PSI 预测渠道 Sell Out'), 'gtm-sellout');

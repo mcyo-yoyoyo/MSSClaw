@@ -68,6 +68,37 @@ const TRACE_METRIC_LABELS: Record<string, string> = {
   antiPatternFaq: '反模式与 FAQ', accuracy: '准确性', completeness: '完整性', usability: '易用性', creativity: '创新性',
 };
 
+const TRACE_GUIDE_SECTIONS = [
+  {
+    title: '为什么需要评测体系？',
+    body: 'Skill 数量快速增长，质量和适用范围却不一。TRACE 为用户提供选择依据，也为开发者提供可执行的改进方向。',
+  },
+  {
+    title: 'T — Trust 可信任度',
+    body: '关注最小权限、输入验证、敏感数据保护、依赖安全，以及在目标网络环境中的可用性，回答“能不能放心用”。',
+  },
+  {
+    title: 'R — Reliability 可靠性',
+    body: '关注重复执行的稳定性、功能完整性和异常处理，要求常见及边界输入都能给出可理解的结果，回答“能不能稳定用”。',
+  },
+  {
+    title: 'A — Adaptability 适用性',
+    body: '关注能力范围、触发条件和输入输出是否清晰，帮助 Agent 在正确的场景调用 Skill，回答“该不该在这个场景用”。',
+  },
+  {
+    title: 'C — Convention 规范性',
+    body: '关注信息架构、文档说明、示例、限制和常见误用提示，让 Skill 更容易被理解、维护和复用。',
+  },
+  {
+    title: 'E — Effectiveness 有效性',
+    body: '回到用户最终目标，关注结果是否正确、完整、符合预期格式并可以直接使用，回答“用了以后问题是否真的解决”。',
+  },
+  {
+    title: '如何理解评测结果？',
+    body: '五个维度是一条从放心使用、稳定运行、正确匹配，到可维护复用并最终解决问题的观察链路。TRACE 不是绝对结论，结果应结合具体任务和使用目标判断。',
+  },
+] as const;
+
 function TraceEvaluationPanel({
   report,
   generating,
@@ -77,6 +108,8 @@ function TraceEvaluationPanel({
   generating?: boolean;
   onGenerate?: () => void;
 }) {
+  const [guideOpen, setGuideOpen] = useState(false);
+
   if (!report) {
     return (
       <div className="flex min-h-[240px] flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-200 bg-zinc-50/60 px-6 py-12 text-center">
@@ -111,13 +144,18 @@ function TraceEvaluationPanel({
             <p className="text-[14px] font-semibold text-zinc-800">SkillHub TRACE 评测体系</p>
             <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">
               从可信任度（Trust）、可靠性（Reliability）、适用性（Adaptability）、规范性（Convention）和有效性（Effectiveness）五个维度全面评估 Skill 的质量，帮助用户快速识别高质量 Skill。
-              <a className="ml-1.5 font-semibold text-indigo-600 hover:text-indigo-700" href="https://skillhub.cn/tutorials#trace-evaluation" target="_blank" rel="noreferrer">了解详情 ↗</a>
+              <button
+                type="button"
+                onClick={() => setGuideOpen(true)}
+                className="ml-1.5 font-semibold text-indigo-600 hover:text-indigo-700"
+              >
+                了解详情
+              </button>
             </p>
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-indigo-100/80 pt-2.5 text-[11px] text-zinc-500">
           <span><i className="fa-solid fa-circle mr-1.5 text-[8px] text-amber-400" />评测主要基于 AI 自动化检测，结果供参考。</span>
-          <a className="font-semibold text-indigo-600 hover:text-indigo-700" href="https://skillhub.cn/tutorials#trace-evaluation" target="_blank" rel="noreferrer"><i className="fa-regular fa-file-lines mr-1" />评测建议反馈</a>
         </div>
       </section>
 
@@ -163,6 +201,40 @@ function TraceEvaluationPanel({
         })}
       </section>
       {report.warnings.length ? <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-relaxed text-amber-800">{report.warnings.map((warning) => <p key={warning}><i className="fa-solid fa-circle-info mr-1" />{warning}</p>)}</div> : null}
+      <CenterModal
+        open={guideOpen}
+        title="SkillHub TRACE 评测体系"
+        onClose={() => setGuideOpen(false)}
+        size="xl"
+        elevate
+        actions={
+          <button
+            type="button"
+            onClick={() => setGuideOpen(false)}
+            className="rounded-lg bg-zinc-900 px-3.5 py-1.5 text-[12px] font-semibold text-white transition hover:bg-zinc-700"
+          >
+            关闭
+          </button>
+        }
+      >
+        <div className="space-y-5 p-5 md:p-7">
+          <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 px-4 py-3.5">
+            <p className="text-[13px] font-semibold text-indigo-900">TRACE 评测体系</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-indigo-900/70">
+              这是对 SkillHub 官方使用指南中 TRACE 评测体系的内容整理，帮助你在当前详情页快速了解五个评测维度。
+            </p>
+          </div>
+          {TRACE_GUIDE_SECTIONS.map((section) => (
+            <section key={section.title}>
+              <h4 className="text-[15px] font-semibold tracking-tight text-zinc-900">{section.title}</h4>
+              <p className="mt-1.5 text-[13px] leading-7 text-zinc-600">{section.body}</p>
+            </section>
+          ))}
+          <p className="border-t border-zinc-100 pt-3 text-[11px] text-zinc-400">
+            内容来源：SkillHub 使用指南（skillhub.cn/tutorials#trace-evaluation）
+          </p>
+        </div>
+      </CenterModal>
     </div>
   );
 }

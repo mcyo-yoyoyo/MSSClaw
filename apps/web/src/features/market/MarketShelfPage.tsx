@@ -196,11 +196,12 @@ export function MarketShelfPage({
   const [externalType, setExternalType] = useState<ExternalToolTypeId | 'all'>('all');
   /** MSS 集市二级面：Skill Hub | Agent Hub（默认 Skill Hub） */
   const [mssSurface, setMssSurface] = useState<'projects' | 'skills'>('skills');
-  const [rankMode, setRankMode] = useState<RankMode>('most_viewed');
-  const [rankDirection, setRankDirection] = useState<RankDirection>('desc');
-  /** Agent Hub 单独一套排序项（推荐优先 / 下载量 / 点赞量 / 更新时间） */
-  const [agentRankMode, setAgentRankMode] = useState<RankMode>('recommended');
-  const [agentRankDirection, setAgentRankDirection] = useState<RankDirection>('desc');
+  /** 三个用户货架默认采用后台保存的目录顺序。 */
+  const [rankMode, setRankMode] = useState<RankMode>('excel_order');
+  const [rankDirection, setRankDirection] = useState<RankDirection>('asc');
+  /** Agent Hub 单独一套排序项，默认采用 marketplace 快照数组顺序。 */
+  const [agentRankMode, setAgentRankMode] = useState<RankMode>('excel_order');
+  const [agentRankDirection, setAgentRankDirection] = useState<RankDirection>('asc');
   const [skillDetail, setSkillDetail] = useState<PrototypeSkillSeed | null>(null);
   const [agentDetail, setAgentDetail] = useState<PrototypeAgentSeed | null>(null);
   // 评测完成后 marketplaceStore 会替换 Skill 对象；详情弹窗始终读取最新版本，
@@ -263,12 +264,11 @@ export function MarketShelfPage({
   useEffect(() => {
     setExternalType('all');
     setMssSurface('skills');
-    // 外部工具按 Excel 清单序、公司工具按办公场景字典序；MSS 集市才按互动量
-    const nextMode = kind === 'projects' ? 'most_viewed' : 'excel_order';
-    setRankMode(nextMode);
-    setRankDirection(defaultRankDirection(nextMode));
-    setAgentRankMode('recommended');
-    setAgentRankDirection(defaultRankDirection('recommended'));
+    // 外部/内部读取各自后台布局；AI 工具 Hub 读取 marketplace 快照数组顺序。
+    setRankMode('excel_order');
+    setRankDirection(defaultRankDirection('excel_order'));
+    setAgentRankMode('excel_order');
+    setAgentRankDirection(defaultRankDirection('excel_order'));
   }, [kind]);
 
   const handleRankModeChange = (next: RankMode) => {
@@ -497,6 +497,7 @@ export function MarketShelfPage({
   const setSectionRankMode = isAgentHub ? handleAgentRankModeChange : handleRankModeChange;
   const setSectionRankDirection = isAgentHub ? setAgentRankDirection : setRankDirection;
   const sectionRankOptions = isAgentHub ? AGENT_HUB_RANK_TABS : undefined;
+  const sectionShowExcelOrder = kind === 'projects' && !isAgentHub;
 
   const showSceneHub = kind === 'projects' && businessFilter === 'all';
   // 场景分类改为 Chip 筛选，页内始终展示精选 + 列表（不再先进入分类枢纽）
@@ -674,7 +675,8 @@ export function MarketShelfPage({
   }, [kind, businessFilter, mssSkills, skillSceneCategories, sceneCatalog]);
 
   const skillCards = useMemo((): MarketShelfCardModel[] => {
-    const mapped = mssSkills.map((s) => {
+    // marketplace 快照数组顺序是后端返回的 Skill 目录顺序。
+    const mapped = mssSkills.map((s, sourceOrder) => {
       const biz = resolveSkillBusinessScenario(s);
       const bizLabel = biz ? getBusinessScenarioMeta(biz).label : null;
       const eng = getEngagement(s.id);
@@ -712,6 +714,7 @@ export function MarketShelfPage({
         scenarioId: biz ?? undefined,
         ownerDeptIds: s.ownerDeptIds,
         ownerRegionId: s.ownerRegionId,
+        sourceOrder,
       };
     });
     return sortByRankMode(
@@ -723,7 +726,8 @@ export function MarketShelfPage({
   }, [mssSkills, canRunSkills, getEngagement, engagementById, hiddenKeys, rankMode, rankDirection]);
 
   const agentCards = useMemo((): MarketShelfCardModel[] => {
-    const mapped = mssAgents.map((agent) => {
+    // marketplace 快照数组顺序是后端返回的 Agent 目录顺序。
+    const mapped = mssAgents.map((agent, sourceOrder) => {
       const bizLabel = agent.businessScenarioId
         ? getBusinessScenarioMeta(agent.businessScenarioId).label
         : null;
@@ -766,6 +770,7 @@ export function MarketShelfPage({
         primaryAction: 'detail' as const,
         ownerDeptIds: agent.ownerDeptIds,
         updatedAt: agent.updatedAt,
+        sourceOrder,
       };
     });
     const visible = mapped.filter((card) => !hiddenKeys.includes(`${card.kind}:${card.id}`));
@@ -1613,6 +1618,7 @@ export function MarketShelfPage({
                   direction={sectionRankDirection}
                   onDirectionChange={setSectionRankDirection}
                   rankOptions={sectionRankOptions}
+                  showExcelOrder={sectionShowExcelOrder}
                 />
                 <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                   {activeFeatured.map((c) => {
@@ -1667,7 +1673,7 @@ export function MarketShelfPage({
               onRankChange={setSectionRankMode}
               direction={sectionRankDirection}
               onDirectionChange={setSectionRankDirection}
-              showExcelOrder={kind === 'external'}
+              showExcelOrder={kind === 'external' || sectionShowExcelOrder}
               rankOptions={sectionRankOptions}
             />
           )}

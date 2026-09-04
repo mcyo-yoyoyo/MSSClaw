@@ -26,6 +26,16 @@ test('首页外部精选与市场页共用全局布局，布局未加载时不�
   assert.doesNotMatch(homeSource, /featuredPins\.external/);
 });
 
+test('三类用户货架默认按后台顺序，并在 Hub 卡片上保留目录序号', () => {
+  assert.match(source, /useState<RankMode>\('excel_order'\)/);
+  assert.match(source, /setRankMode\('excel_order'\)/);
+  assert.match(source, /setAgentRankMode\('excel_order'\)/);
+  assert.match(source, /const mapped = mssSkills\.map\(\(s, sourceOrder\)/);
+  assert.match(source, /const mapped = mssAgents\.map\(\(agent, sourceOrder\)/);
+  assert.match(source, /showExcelOrder=\{sectionShowExcelOrder\}/);
+  assert.match(source, /showExcelOrder=\{kind === 'external' \|\| sectionShowExcelOrder\}/);
+});
+
 test('用户侧外部工具全部筛选读取工具运营的全局布局', () => {
   assert.match(source, /externalAllLayoutSplit/);
   assert.match(source, /externalToolLayout\?\.all/);

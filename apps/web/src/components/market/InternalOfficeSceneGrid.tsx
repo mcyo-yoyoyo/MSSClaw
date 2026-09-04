@@ -28,7 +28,7 @@ import {
 
 /** 办公场景排序：默认按运营在「配置办公场景」里排的顺序 */
 const OFFICE_SCENE_RANK_TABS = [
-  { id: 'excel_order' as RankMode, label: '运营排序', icon: 'fa-solid fa-arrow-down-1-9' },
+  { id: 'excel_order' as RankMode, label: '排序', icon: 'fa-solid fa-arrow-down-1-9' },
   ...SHELF_RANK_TABS.filter((tab) => tab.id !== 'excel_order'),
 ];
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
@@ -348,7 +348,7 @@ export function InternalOfficeSceneGrid({
 
   const allScenes = useMemo(
     () =>
-      // sourceOrder = 场景字典中的次序，供「运营排序」使用；
+      // sourceOrder = 场景字典中的后台次序，供默认「排序」使用；
       // 不带这个字段时 sortByRankMode 会回落到互动量，后台的上移/下移看不出效果
       resolveOfficeScenesWithCatalog(catalogTools, sceneEntries).map((scene, index) => ({
         ...scene,

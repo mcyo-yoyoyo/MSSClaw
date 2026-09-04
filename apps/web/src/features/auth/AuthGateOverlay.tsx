@@ -9,7 +9,6 @@ import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
  */
 export function AuthGateOverlay() {
   const open = useAuthGateStore((s) => s.open);
-  const hint = useAuthGateStore((s) => s.hint);
   const close = useAuthGateStore((s) => s.close);
   const resolveAfterLogin = useAuthGateStore((s) => s.resolveAfterLogin);
 
@@ -32,7 +31,7 @@ export function AuthGateOverlay() {
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-zinc-900/40 px-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[140] flex items-center justify-center bg-zinc-900/40 px-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label="登录"
@@ -50,7 +49,6 @@ export function AuthGateOverlay() {
         </div>
         <LoginForm
           className="space-y-4 px-7 pb-7"
-          hint={hint}
           onSuccess={finishLogin}
           footer={
             <button

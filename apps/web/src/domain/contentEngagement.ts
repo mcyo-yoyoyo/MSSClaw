@@ -30,9 +30,9 @@ export const RANK_MODE_OPTIONS: { id: RankMode; label: string }[] = [
   { id: 'most_used', label: '最多使用' },
 ];
 
-/** 外部 / 内部 / MSS 货架：按互动指标排序 */
+/** 外部 / 内部 / MSS 货架：默认按后台顺序，也可切换互动指标 */
 export const SHELF_RANK_TABS: { id: RankMode; label: string; icon: string }[] = [
-  { id: 'excel_order', label: '清单排序', icon: 'fa-solid fa-arrow-down-1-9' },
+  { id: 'excel_order', label: '排序', icon: 'fa-solid fa-arrow-down-1-9' },
   { id: 'most_viewed', label: '查看', icon: 'fa-regular fa-eye' },
   { id: 'most_favorited', label: '收藏', icon: 'fa-regular fa-star' },
   { id: 'most_liked', label: '点赞', icon: 'fa-solid fa-thumbs-up' },
@@ -40,10 +40,10 @@ export const SHELF_RANK_TABS: { id: RankMode; label: string; icon: string }[] = 
 ];
 
 /**
- * Agent Hub 排序（《Agent Hub页面优化建议 V1.4》§1.4）：
- * 推荐优先 · 下载量 · 点赞量 · 更新时间
+ * Agent Hub 排序：默认后台顺序，其余按推荐 / 下载量 / 点赞量 / 更新时间
  */
 export const AGENT_HUB_RANK_TABS: { id: RankMode; label: string; icon: string }[] = [
+  { id: 'excel_order', label: '排序', icon: 'fa-solid fa-arrow-down-1-9' },
   { id: 'recommended', label: '推荐优先', icon: 'fa-solid fa-wand-magic-sparkles' },
   { id: 'most_downloaded', label: '下载量', icon: 'fa-solid fa-download' },
   { id: 'most_liked', label: '点赞量', icon: 'fa-solid fa-thumbs-up' },
@@ -80,7 +80,7 @@ export interface RankableContent {
   featured?: boolean;
   /** 工具/专家等已有调用量，并入 uses */
   baseUses?: number;
-  /** 外部工具清单排序。 */
+  /** 后台目录顺序（外部/内部布局或 marketplace 数组）。 */
   sourceOrder?: number;
 }
 

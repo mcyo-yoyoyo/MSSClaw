@@ -523,6 +523,9 @@ export function PortalToolOpsPanel() {
   const clearLayoutError = useExternalToolLayoutStore((state) => state.clearError);
 
   const internalLoaded = useInternalOfficeSceneCatalogStore((state) => state.loaded);
+  const internalSceneCount = useInternalOfficeSceneCatalogStore(
+    (state) => state.entries.filter((entry) => entry.visible !== false).length,
+  );
   const internalLoading = useInternalOfficeSceneCatalogStore((state) => state.loading);
   const internalSaving = useInternalOfficeSceneCatalogStore((state) => state.saving);
   const internalToast = useInternalOfficeSceneCatalogStore((state) => state.toast);
@@ -620,20 +623,6 @@ export function PortalToolOpsPanel() {
   const howtoToolIds = useMemo(
     () => new Set(guideRecords.map((record) => record.toolId)),
     [guideRecords],
-  );
-
-  const publishedInternalCards = useMemo(
-    () =>
-      listMarketToolCards(
-        tools,
-        'internal',
-        viewer,
-        emptyOrgPerspectiveSelection(),
-        'all',
-        getEngagement,
-        howtoToolIds,
-      ),
-    [tools, viewer, getEngagement, engagementById, howtoToolIds],
   );
 
   const externalCards = useMemo(() => {
@@ -1359,12 +1348,12 @@ export function PortalToolOpsPanel() {
           >
             {(
               [
+                { id: 'external' as const, label: '外部工具', count: externalCards.length },
                 {
                   id: 'internal' as const,
-                  label: '内部工具',
-                  count: publishedInternalCards.length,
+                  label: '办公场景',
+                  count: internalSceneCount,
                 },
-                { id: 'external' as const, label: '外部工具', count: externalCards.length },
               ] as const
             ).map((tab) => (
               <button

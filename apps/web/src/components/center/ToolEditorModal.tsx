@@ -12,17 +12,11 @@ import { OwnershipFormFields } from '@/components/center/OrgAssetFilters';
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import type { AssetSourceType, AssetVisibility, DeptId, RegionId } from '@/domain/orgTaxonomy';
 import {
-  MARKET_SHELF_SLOT_HINT,
-} from '@/domain/capabilityShelf';
-import {
   ensureMarketShelfTags,
   resolveConfiguredToolMarketShelf,
   type MarketShelfSlot,
 } from '@/domain/aiToolCategories';
-import {
-  listVisibleBusinessScenarioCategories,
-  type BusinessScenarioId,
-} from '@/domain/businessScenarios';
+import type { BusinessScenarioId } from '@/domain/businessScenarios';
 import { resolveToolBusinessScenarios } from '@/domain/toolBusinessScenarios';
 import {
   type ExternalToolTypeId,
@@ -206,7 +200,7 @@ function ToolTypeMultiSelect({
       }}
     >
       <span id={labelId} className="text-[11px] font-semibold text-[#86868b]">
-        用户页分类标签（可多选）
+        用户页分类标签（必填，可多选）
       </span>
       <p className="mb-1 text-[10px] leading-relaxed text-[#86868b]">
         与“外部工具精选”分类条保持一致；内部工具可预配置，仅进入外部货架后参与筛选。
@@ -215,6 +209,7 @@ function ToolTypeMultiSelect({
         ref={triggerRef}
         type="button"
         aria-label={`用户页分类标签：${accessibleSelection}`}
+        aria-required="true"
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((current) => !current)}
@@ -366,7 +361,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
   const existingTool = !isNew ? tools.find((tool) => tool.id === target) : undefined;
 
   const shelf = (form.marketShelf ?? 'none') as MarketShelfSlot;
-  const scenarioCats = listVisibleBusinessScenarioCategories();
+  const autoPublishInternal = shelf === 'internal';
   const selectedLobeIconId = resolveLobeIconId(form.logoUrl);
 
   const handleSave = async () => {
@@ -399,6 +394,10 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
     const selectedToolTypeIds = resolveExternalToolTypeSelection(
       form,
     ) as ExternalToolTypeId[];
+    if (!selectedToolTypeIds.length) {
+      showToast('请选择用户页分类');
+      return;
+    }
     const selectedToolTypeLabels = externalToolTypeSelectionLabels(
       selectedToolTypeIds,
       toolTypeCatalog,
@@ -407,8 +406,9 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
     const userName = getCurrentUserName() || 'Mcyo';
     const userId = getCurrentUserId();
     const id = isNew ? `tool-${Date.now()}` : (target as string);
-    // 新建与存量草稿都先保持未上架；只有显式勾选后才提交上架审批。
-    const needsApproval = Boolean(form.published) && !Boolean(prev?.published);
+    // 内部工具保存即上架；外部工具仍保持原有上架状态。
+    const wantsPublish = autoPublishInternal || Boolean(form.published);
+    const needsApproval = wantsPublish && !Boolean(prev?.published) && !autoPublishInternal;
     const tags = ensureMarketShelfTags(form.tags ?? [], marketShelf);
     const marketTitle = form.marketTitle?.trim() || undefined;
     const businessScenarioIds = (form.businessScenarioIds ?? []) as BusinessScenarioId[];
@@ -448,8 +448,8 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
         sourceType,
         marketShelf,
       }),
-      // 普通编辑不能顺带下架；草稿提交审批后也要等终审通过才变为已上架。
-      published: Boolean(prev?.published),
+      // 内部工具无需额外审批；外部工具普通编辑不能顺带下架。
+      published: autoPublishInternal || Boolean(prev?.published),
       marketShelf,
       marketTitle: marketShelf === 'external' ? marketTitle : undefined,
       businessScenarioIds: businessScenarioIds.length ? businessScenarioIds : undefined,
@@ -520,20 +520,13 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
     }
   };
 
-  const toggleScenario = (id: BusinessScenarioId) => {
-    const cur = new Set(form.businessScenarioIds ?? []);
-    if (cur.has(id)) cur.delete(id);
-    else cur.add(id);
-    setForm({ ...form, businessScenarioIds: [...cur] as BusinessScenarioId[] });
-  };
-
   const guardedClose = () => {
     if (!saving) onClose();
   };
   const willSubmitApproval = Boolean(form.published) && !Boolean(existingTool?.published);
   const saveButtonLabel = willSubmitApproval
     ? '保存并提交审批'
-    : form.published
+    : form.published || autoPublishInternal
       ? '保存'
       : '保存为未上架';
 
@@ -596,7 +589,6 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
             >
               <option value="external">外部工具精选</option>
               <option value="internal">内部办公推荐</option>
-              <option value="none">不上架（仅配置目录 / 连接器）</option>
             </FormSelect>
           </FormField>
         ) : null}
@@ -825,20 +817,6 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
             }
           />
         </FormField>
-        {form.sourceType !== 'external' && shelf !== 'external' && (
-          <FormField label="连接器类型">
-            <FormSelect
-              value={form.connectorType ?? 'http'}
-              onChange={(e) => setForm({ ...form, connectorType: e.target.value })}
-            >
-              <option value="http">HTTP</option>
-              <option value="mcp">MCP</option>
-              <option value="openapi">OpenAPI</option>
-              <option value="function">Function</option>
-            </FormSelect>
-          </FormField>
-        )}
-
         <OwnershipFormFields
           ownerDeptIds={form.ownerDeptIds ?? []}
           ownerRegionId={form.ownerRegionId ?? null}
@@ -868,94 +846,6 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
           }
         />
 
-        <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-3 py-2.5 space-y-2">
-          <p className="text-[11px] font-semibold text-zinc-700">货架陈列</p>
-          <p className="text-[11px] leading-relaxed text-zinc-500">
-            外部工具的上架与精选置顶请在{' '}
-            <strong className="font-semibold text-zinc-700">门户运营 · 货架运营</strong>{' '}
-            配置。公司推荐前台为办公场景网格，请在本页维护场景工具的链接 / Logo。本页只维护工具主数据。
-          </p>
-          {shelf !== 'none' ? (
-            <p className="rounded-lg border border-emerald-100 bg-emerald-50/70 px-2.5 py-1.5 text-[11px] text-emerald-800">
-              当前货架：
-              {shelf === 'external' ? '外部工具精选' : '内部办公推荐（场景引用）'}
-              {form.marketTitle?.trim() ? ` · ${form.marketTitle.trim()}` : ''}
-            </p>
-          ) : (
-            <p className="text-[11px] text-zinc-400">当前未上架到业务货架（可在门户运营上架外部工具）。</p>
-          )}
-          <details className="rounded-lg border border-zinc-200 bg-white px-2.5 py-2" hidden={isNew}>
-            <summary className="cursor-pointer text-[11px] font-medium text-zinc-600">
-              高级：本工具建议货架（可选，仍推荐以门户为准）
-            </summary>
-            <div className="mt-2 space-y-2.5">
-              <FormField label="建议货架">
-                <FormSelect
-                  value={shelf}
-                  onChange={(e) => {
-                    const next = e.target.value as MarketShelfSlot;
-                    setForm({
-                      ...form,
-                      marketShelf: next,
-                      sourceType:
-                        next === 'external'
-                          ? 'external'
-                          : next === 'internal'
-                            ? 'internal'
-                            : form.sourceType,
-                      category: next === 'external' ? 'external' : form.category,
-                    });
-                  }}
-                >
-                  <option value="none">不上架（仅配置目录）</option>
-                  <option value="external">外部工具精选</option>
-                  <option value="internal">内部办公推荐</option>
-                </FormSelect>
-                <p className="mt-1 text-[11px] leading-snug text-zinc-500">{MARKET_SHELF_SLOT_HINT}</p>
-              </FormField>
-              {shelf === 'external' ? (
-                <FormField label="应用场景标题">
-                  <FormInput
-                    value={form.marketTitle ?? ''}
-                    placeholder="例：竞品舆情监控 · 市场洞察"
-                    onChange={(e) => setForm({ ...form, marketTitle: e.target.value })}
-                  />
-                </FormField>
-              ) : null}
-              {shelf !== 'none' ? (
-                <FormField
-                  label="业务场景（组织轴）"
-                  hint={
-                    shelf === 'external'
-                      ? '仅用于左侧领域 / 区域相关组织筛选。'
-                      : '用于组织轴场景筛选与 MSS 关联；公司推荐主界面由办公场景字典驱动，不由此勾选决定。'
-                  }
-                >
-                  <div className="flex flex-wrap gap-1.5">
-                    {scenarioCats.map((c) => {
-                      const on = (form.businessScenarioIds ?? []).includes(c.id);
-                      return (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => toggleScenario(c.id)}
-                          className={
-                            on
-                              ? 'rounded-lg border border-claw-500/40 bg-claw-50 px-2 py-1 text-[11px] font-medium text-claw-800'
-                              : 'rounded-lg border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-600 hover:border-zinc-300'
-                          }
-                        >
-                          {c.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </FormField>
-              ) : null}
-            </div>
-          </details>
-        </div>
-
         {existingTool?.published ? (
           <div className="flex items-start gap-2 rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-3 py-2.5">
             <i className="fa-solid fa-circle-check mt-0.5 text-[13px] text-emerald-600" />
@@ -966,26 +856,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
               </span>
             </span>
           </div>
-        ) : (
-          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-3 py-2.5">
-            <input
-              type="checkbox"
-              className="mt-0.5 accent-claw-600"
-              checked={form.published}
-              onChange={(e) => setForm({ ...form, published: e.target.checked })}
-            />
-            <span>
-              <span className="block text-[13px] font-medium text-zinc-800">
-                {form.published ? '提交上架审批' : '保存为未上架'}
-              </span>
-              <span className="mt-0.5 block text-[11px] leading-relaxed text-zinc-500">
-                {form.published
-                  ? '保存后进入审批，审批通过前仍保持未上架。'
-                  : '保存后保持未上架，不会出现在前台工具货架。'}
-              </span>
-            </span>
-          </label>
-        )}
+        ) : null}
       </fieldset>
     </CenterModal>
   );

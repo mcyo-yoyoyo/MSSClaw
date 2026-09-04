@@ -6,6 +6,7 @@ import {
 import { writeAppRouteToLocation } from '@/domain/appRoute';
 import { stageAiKnowledgeEntry } from '@/domain/aiKnowledgeEntry';
 import { useAppViewStore } from '@/stores/appViewStore';
+import { requireLogin } from '@/stores/authGateStore';
 import { useMarketFilterStore } from '@/stores/marketFilterStore';
 
 /**
@@ -36,9 +37,13 @@ export function StageIntentDock({
   const enterAiKnowledge = () => {
     const question = search.trim();
     if (!question) return;
-    stageAiKnowledgeEntry(question, scope);
-    writeAppRouteToLocation({ view: 'ai-knowledge' });
-    setAppView('ai-knowledge');
+    const openAiKnowledge = () => {
+      stageAiKnowledgeEntry(question, scope);
+      writeAppRouteToLocation({ view: 'ai-knowledge' });
+      setAppView('ai-knowledge');
+    };
+    if (!requireLogin('chat', openAiKnowledge)) return;
+    openAiKnowledge();
   };
 
   return (
