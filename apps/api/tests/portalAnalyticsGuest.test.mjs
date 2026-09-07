@@ -744,3 +744,36 @@ test('black asset report excludes portal-content and treats only explicit redire
   assert.equal(report.overview.d7Retention, null);
   assert.equal(report.overview.d30Retention, null);
 });
+
+test('analytics counts legacy request:download facts as downloads', async () => {
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+  const db = recordingPrisma(({ sql }) => {
+    if (sql.includes('MAX("occurredAt")')) return [{}];
+    if (sql.includes('GROUP BY e."dateKey", e."contentId"')) {
+      return sql.includes("'request:download'")
+        ? [{ date: today, contentId: 'skill-legacy', assetType: 'skill', views: 0, favorites: 0, likes: 0, dislikes: 0, redirects: 0, downloads: 1 }]
+        : [];
+    }
+    if (sql.includes('AS "events"')) {
+      return sql.includes("'request:download'")
+        ? [{ contentId: 'skill-legacy', assetType: 'skill', action: 'request:download', events: 1, uv: 1 }]
+        : [];
+    }
+    if (sql.includes('FROM "MarketEngagement" AS m')) return [{}];
+    return [];
+  }, [
+    {
+      id: 'marketplace-ws-test',
+      kind: 'marketplace',
+      payload: { skills: [{ id: 'skill-legacy', name: '旧 Skill', published: true }] },
+    },
+  ]);
+  const report = await new PortalAnalyticsService(db.prisma).getReport('ws-test', 1);
+  assert.equal(report.behavior.totals.downloads, 1);
+  assert.equal(report.assets.rows.find((row) => row.contentId === 'skill-legacy')?.downloads, 1);
+});

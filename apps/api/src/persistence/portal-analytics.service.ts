@@ -896,7 +896,8 @@ export class PortalAnalyticsService {
           SUM(CASE WHEN e."action" = 'like' THEN 1 ELSE 0 END) AS "likes",
           SUM(CASE WHEN e."action" = 'dislike' THEN 1 ELSE 0 END) AS "dislikes",
           SUM(CASE WHEN e."action" = 'redirect' THEN 1 ELSE 0 END) AS "redirects",
-          SUM(CASE WHEN e."action" = 'download' THEN 1 ELSE 0 END) AS "downloads"
+          -- 旧版已落库的 request:download 是已完成下载的事实；新写入会在事务内改成 download。
+          SUM(CASE WHEN e."action" IN ('download', 'request:download') THEN 1 ELSE 0 END) AS "downloads"
         FROM "MarketEngagementEvent" AS e
         WHERE e."workspaceId" = ${workspaceId}
           AND e."dateKey" BETWEEN ${from} AND ${to}
@@ -950,7 +951,7 @@ export class PortalAnalyticsService {
         FROM "MarketEngagementEvent" AS e
         WHERE e."workspaceId" = ${workspaceId}
           AND e."dateKey" BETWEEN ${from} AND ${to}
-          AND e."action" IN ('exposure', 'view', 'detail', 'download', 'like', 'dislike', 'favorite', 'redirect')
+          AND e."action" IN ('exposure', 'view', 'detail', 'download', 'request:download', 'like', 'dislike', 'favorite', 'redirect')
         GROUP BY e."contentId", e."assetType", e."action"
       `),
       optionalRows(this.prisma.$queryRaw<BehaviorDownloadRow[]>`
@@ -962,7 +963,7 @@ export class PortalAnalyticsService {
         FROM "MarketEngagementEvent" AS e
         WHERE e."workspaceId" = ${workspaceId}
           AND e."dateKey" BETWEEN ${from} AND ${to}
-          AND e."action" = 'download'
+          AND e."action" IN ('download', 'request:download')
         GROUP BY e."contentId", e."assetType", e."visitorHash"
       `),
       optionalRows(this.prisma.$queryRaw<UserIdentityRow[]>`
@@ -1322,6 +1323,7 @@ export class PortalAnalyticsService {
           asset.detailUv += uv;
           break;
         case 'download':
+        case 'request:download':
           asset.downloads += events;
           asset.downloadUv += uv;
           break;
