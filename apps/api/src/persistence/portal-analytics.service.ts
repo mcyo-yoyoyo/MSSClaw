@@ -1829,8 +1829,15 @@ export class PortalAnalyticsService {
         const values = payload.entries;
         if (Array.isArray(values)) {
           values.forEach((item) => {
-            add(item, { assetType: 'office-scene', officeScene: true }, 'office-scene-');
             const scene = asRecord(item);
+            // 办公场景文档的上架字段是 visible；没有 published 字段时不能按工具默认值判定为未发布。
+            const published =
+              typeof scene?.published === 'boolean' ? scene.published : scene?.visible === true;
+            add(
+              item,
+              { assetType: 'office-scene', officeScene: true, published },
+              'office-scene-',
+            );
             if (scene && Array.isArray(scene.toolIds)) {
               scene.toolIds.map(String).filter(Boolean).forEach((id) => boundToolIds.add(id));
             }
