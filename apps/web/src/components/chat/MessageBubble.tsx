@@ -2,12 +2,15 @@ import type { ChatMessage } from '@/domain/chat';
 import type { PrototypeAgentSeed } from '@/domain/prototype/types';
 import { AgentPortrait } from '@/components/brand/AgentPortrait';
 import { cn } from '@/lib/utils';
+import { markdownToHtmlFragment } from '@/domain/markdownRender';
 
 interface MessageBubbleProps {
   message: ChatMessage;
   accentColor?: string;
   iconClass?: string;
   iconBg?: string;
+  agentName?: string;
+  showAgentBadge?: boolean;
   /** 绑定 Agent 时展示数字员工头像 */
   agent?: Pick<
     PrototypeAgentSeed,
@@ -20,6 +23,8 @@ export function MessageBubble({
   accentColor = 'claw',
   iconClass = 'fa-robot',
   iconBg,
+  agentName,
+  showAgentBadge = true,
   agent,
 }: MessageBubbleProps) {
   if (message.role === 'system') {
@@ -93,18 +98,18 @@ export function MessageBubble({
       />
       <div className="flex flex-col">
         <span className="mb-1 ml-0.5 text-[10px] font-semibold text-[#86868b]">
-          {message.name || agent?.name || 'Agent'}{' '}
-          <span className="rounded border border-zinc-200 bg-claw-50 px-1.5 py-0.5 text-[8px] font-bold text-zinc-700">
-            Agent
-          </span>
+          {agentName || message.name || agent?.name || 'Agent'}{' '}
+          {showAgentBadge ? (
+            <span className="rounded border border-zinc-200 bg-claw-50 px-1.5 py-0.5 text-[8px] font-bold text-zinc-700">
+              Agent
+            </span>
+          ) : null}
         </span>
         <div
-          className="bubble-agent rounded-2xl px-4 py-2.5 text-[13px] leading-relaxed text-[#424245]"
+          className="bubble-agent md-message rounded-2xl px-4 py-2.5 text-[13px] leading-relaxed text-[#424245]"
           dangerouslySetInnerHTML={{
             __html:
-              (message.text ?? '')
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*(.*?)\*/g, '<em>$1</em>') +
+              markdownToHtmlFragment(message.text ?? '') +
               (message.streaming
                 ? '<span class="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse rounded-sm bg-claw-500 align-middle"></span>'
                 : ''),

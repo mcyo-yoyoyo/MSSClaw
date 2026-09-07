@@ -49,14 +49,56 @@ npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
 npm run prisma:seed --workspace @mss-claw/api
 ```
 
-然后分别启动两个进程：
+### 按环境启动（前后端分开）
+
+以下按环境 API 启动命令都在仓库根目录执行。它们会清空 `NODE_USE_ENV_PROXY`，并移除
+`NODE_OPTIONS` 中的 `--use-env-proxy`，避免模型请求进入公司代理；AIHOT 是否创建显式
+`ProxyAgent` 由 `AIHOT_PROXY_ENABLED` 单独控制。
+
+本地开发（AIHOT 直连，即使环境里残留 `HTTPS_PROXY` 也不走显式代理）：
 
 ```bash
-# 终端 1：Nest API，默认 http://localhost:3000/api/v1
-npm run dev:api
+# 终端 1：Nest API，http://localhost:3000/api/v1
+npm run dev:api:local
 
-# 终端 2：React 前端，默认 http://localhost:5173
-npm run dev
+# 终端 2：React 前端，http://localhost:5173
+npm run dev:web:local
+```
+
+测试环境（先构建，再分别启动 API 与前端预览）：
+
+```bash
+# 测试/生产启动命令会自动设置 AIHOT_PROXY_ENABLED=1；
+# 只需在 apps/api/.env 或进程环境中提供：
+# HTTPS_PROXY=http://proxyjp.huawei.com:8080
+npm run build:api
+npm run build:web:test
+
+# 终端 1：API，http://localhost:3000
+npm run start:api:test
+
+# 终端 2：React 预览，http://localhost:4173
+npm run start:web:test
+```
+
+生产环境：
+
+```bash
+# 生产启动命令会自动设置 AIHOT_PROXY_ENABLED=1；API 环境中提供 HTTPS_PROXY
+npm run build:api
+npm run build:web:prod
+npm run start:api:prod
+```
+
+生产前端不启动 Vite 进程，将 `apps/web/dist` 交给 Nginx/IIS 等静态服务器，
+并把 `/api` 反向代理到 API；`start:web:test` 只用于测试预览。
+
+PowerShell 设置测试/生产代理时可执行：
+
+```powershell
+$env:AIHOT_PROXY_ENABLED = "1"
+$env:HTTPS_PROXY = "http://proxyjp.huawei.com:8080"
+npm run start:api:test
 ```
 
 验证 API：
@@ -91,9 +133,15 @@ VITE_INCLUDE_DEMO_CONTENT=false npm run build
 | --- | --- |
 | `npm run dev` | 启动 React 前端 |
 | `npm run dev:api` | 启动 Nest API（watch 模式） |
+| `npm run dev:api:local` | 本地 API（不创建 AIHOT 显式代理） |
+| `npm run dev:web:local` | 本地 React 前端 |
 | `npm run build` | 类型检查并构建前端 |
 | `npm run build:api` | 构建 API |
-| `npm run preview` | 预览前端构建产物 |
+| `npm run build:web:test` / `npm run build:web:prod` | 测试 / 生产 React 前端构建 |
+| `npm run start:api:test` / `npm run start:api:prod` | 测试 / 生产 API |
+| `npm run start:web:test` | 测试 React 预览（`:4173`） |
+| `npm run preview:react` | 预览 React 构建产物 |
+| `npm run preview` | 预览旧版静态原型 |
 | `npm run smoke` | 运行前端冒烟检查 |
 | `npm run dev:prototype` | 启动旧版静态原型 |
 
@@ -128,6 +176,8 @@ API 地址和密钥也可以在应用的运行时设置中覆盖。
 | `BLOB_ROOT` | 应用默认目录 | 上传文件存储目录 |
 | `MAX_CONCURRENT_SSE` | `200` | SSE 执行流并发上限 |
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | 空 | OpenAI 兼容模型配置 |
+| `AIHOT_PROXY_ENABLED` | 未设置（关闭） | 仅测试/生产设为 `1`；控制 AIHOT 是否允许显式 `ProxyAgent` |
+| `HTTPS_PROXY` | 空 | AIHOT 代理地址；只在 `AIHOT_PROXY_ENABLED=1` 时使用 |
 | `ALLOW_AI_KNOWLEDGE_RULE_FALLBACK` | 开发开启、生产关闭 | AI 智库无模型时是否允许生成带明确标识的规则方案 |
 | `AI_CASE_LIBRARY_URL` | `http://localhost:4174/index.html` | AI 智库引用的海外案例库入口 |
 | `AI_CASE_LIBRARY_DATA_PATH` | 空 | AI 智库 Agent 只读检索的本地 `cases.json` 路径 |
@@ -138,7 +188,9 @@ API 地址和密钥也可以在应用的运行时设置中覆盖。
 
 ## AI 快讯
 
-AI 快讯通过后端代理读取 AIHOT REST API v1 的精选内容，并转换为平台统一结构。页面不会把上游名称作为产品品牌展示。
+AI 快讯由 Nest API 读取 AIHOT REST API v1 的精选内容并归档；本地默认直连，测试/生产在
+`AIHOT_PROXY_ENABLED=1` 时直连失败才使用 `HTTPS_PROXY` 创建显式 `ProxyAgent`。模型请求不使用
+该代理开关，也不要设置全局 `NODE_USE_ENV_PROXY=1`。页面不会把上游名称作为产品品牌展示。
 
 - 每次进入 AI 快讯页面时主动拉取一次；停留在页面期间不自动轮询。
 - 默认读取最近 7 天、最多 100 条精选内容，并按发布日期分组。

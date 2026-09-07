@@ -1186,7 +1186,6 @@ export function MarketShelfPage({
         executionTrust: trust,
         primaryAction: 'detail',
       });
-      showToast(`已进入 AI 任务试用：${currentSkill.name}`);
     } catch {
       showToast(executionTrustFailMessage(trust));
     }
@@ -1231,7 +1230,6 @@ export function MarketShelfPage({
         executionTrust: resolveSkillExecutionTrust(true),
         primaryAction: 'detail',
       });
-      showToast(`已进入 AI 任务试用：${currentSkill.name}`);
     } catch {
       showToast('进入 Skill 体验失败，请重试');
     }
@@ -1247,7 +1245,7 @@ export function MarketShelfPage({
           invokeSkillExperience(skill);
         }}
         aria-label={`调用 ${skillDisplayName(skill)}`}
-        className="w-full rounded-lg bg-zinc-900 py-1.5 text-[10px] font-semibold text-white transition hover:bg-zinc-800"
+        className="inline-flex shrink-0 items-center justify-center rounded-lg bg-zinc-900 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-zinc-800"
       >
         <i className="fa-solid fa-play mr-1" />调用
       </button>
@@ -1631,7 +1629,7 @@ export function MarketShelfPage({
                           showHot
                           onOpen={() => skill && setSkillDetail(skill)}
                           onPrimary={() => skill && setSkillDetail(skill)}
-                          footerActions={renderSkillInvokeAction(skill)}
+                          inlineAction={renderSkillInvokeAction(skill)}
                         />
                       );
                     }
@@ -1748,7 +1746,7 @@ export function MarketShelfPage({
                       card={c}
                       onOpen={() => skill && setSkillDetail(skill)}
                       onPrimary={() => skill && setSkillDetail(skill)}
-                      footerActions={renderSkillInvokeAction(skill)}
+                      inlineAction={renderSkillInvokeAction(skill)}
                     />
                   );
                 }

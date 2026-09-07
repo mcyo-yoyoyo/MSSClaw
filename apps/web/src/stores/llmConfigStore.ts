@@ -2,8 +2,10 @@ import { create } from 'zustand';
 import {
   DEFAULT_LLM_CONFIG,
   hasWorkspaceLlmCredential,
+  hasModelCredentials,
   isLlmConfigComplete,
   listEnabledPlatformModels,
+  listUsablePlatformModels,
   normalizeLlmModelId,
   normalizePlatformModels,
   resolveActiveCredentials,
@@ -119,14 +121,15 @@ export function normalizeLlmConfig(raw: Partial<LlmConfig> | null | undefined): 
       DEFAULT_LLM_CONFIG.defaultModelId,
   );
   let model = normalizeLlmModelId(raw?.model || defaultModelId);
-  const enabledIds = new Set([
-    ...listEnabledPlatformModels({ platformModels }).map((m) => m.id),
-    ...customModels.map((m) => m.id),
+  // 只在「凭证齐全」的模型里挑，避免停在一个会被服务端回退掉的模型上。
+  const usableIds = new Set([
+    ...listUsablePlatformModels({ platformModels }).map((m) => m.id),
+    ...customModels.filter(hasModelCredentials).map((m) => m.id),
   ]);
-  if (enabledIds.size && !enabledIds.has(model)) {
-    model = enabledIds.has(defaultModelId)
+  if (usableIds.size && !usableIds.has(model)) {
+    model = usableIds.has(defaultModelId)
       ? defaultModelId
-      : [...enabledIds][0] || DEFAULT_LLM_CONFIG.model;
+      : [...usableIds][0] || DEFAULT_LLM_CONFIG.model;
   }
   const creds = resolveActiveCredentials({
     model,
@@ -458,21 +461,23 @@ export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
 
   modelOptions: () => {
     const { config } = get();
-    const platform: ModelOption[] = listEnabledPlatformModels(config).map((m) => ({
+    // 选择器只列凭证齐全、真能按选中模型执行的条目。
+    const platform: ModelOption[] = listUsablePlatformModels(config).map((m) => ({
       id: m.id,
       label: m.label,
       providerName: m.providerName,
       group: 'platform',
     }));
-    const customs: ModelOption[] = config.customModels.map((m) => ({
+    const customs: ModelOption[] = config.customModels.filter(hasModelCredentials).map((m) => ({
       id: m.id,
       label: m.label || m.id,
       providerName: '自定义',
       group: 'custom',
     }));
     const known = new Set([...platform, ...customs].map((m) => m.id));
+    // 旧配置把凭证放在顶层、没有模型目录；只有在它确实能跑通时才补这一条。
     const orphan: ModelOption[] =
-      config.model && !known.has(config.model)
+      config.model && !known.has(config.model) && isLlmConfigComplete(config)
         ? [{ id: config.model, label: config.model, group: 'custom', providerName: '自定义' }]
         : [];
     return [...platform, ...customs, ...orphan];

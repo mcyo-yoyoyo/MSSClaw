@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AiDailyNewsController } from '../dist/persistence/ai-daily-news.controller.js';
+import { aihotProxyUrlFromEnv } from '../dist/persistence/ai-news-archive.service.js';
 
 function createController(role) {
   let syncCalls = 0;
@@ -62,4 +63,30 @@ test('manual AI news sync lets a super admin trigger the archive refresh', async
   assert.equal(state().syncCalls, 1);
   assert.equal(state().receivedToken, 'admin-session-token');
   assert.equal(state().receivedWorkspace, 'ws-test');
+});
+
+test('AIHOT proxy is opt-in for test and production startup', () => {
+  const keys = ['AIHOT_PROXY_ENABLED', 'HTTPS_PROXY', 'https_proxy'];
+  const previous = new Map(keys.map((key) => [key, process.env[key]]));
+  try {
+    process.env.HTTPS_PROXY = 'http://proxy.example.test:8080';
+    delete process.env.https_proxy;
+
+    delete process.env.AIHOT_PROXY_ENABLED;
+    assert.equal(aihotProxyUrlFromEnv(), '');
+
+    process.env.AIHOT_PROXY_ENABLED = '0';
+    assert.equal(aihotProxyUrlFromEnv(), '');
+
+    process.env.AIHOT_PROXY_ENABLED = '1';
+    assert.equal(aihotProxyUrlFromEnv(), 'http://proxy.example.test:8080');
+
+    process.env.AIHOT_PROXY_ENABLED = 'true';
+    assert.equal(aihotProxyUrlFromEnv(), 'http://proxy.example.test:8080');
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });

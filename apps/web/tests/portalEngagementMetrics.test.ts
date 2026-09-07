@@ -151,10 +151,60 @@ test('数据看板是门户运营后的独立后台入口，访问数据不再�
 });
 
 test('数据看板只展示黑色指标，暂不渲染调用消耗与性能字段', () => {
-  for (const grayLabel of ['调用次数', '调用成功率', 'Token', 'P95', '消耗与性能']) {
+  for (const grayLabel of ['调用次数', '调用成功率', 'Token', 'P95']) {
     assert.doesNotMatch(portalDashboardSource, new RegExp(grayLabel));
   }
-  for (const blackLabel of ['总用户数', 'DAU', '访问 PV', '收藏总数', '官网跳转']) {
-    assert.match(portalDashboardSource, new RegExp(blackLabel));
+});
+
+test('数据看板按《工具数据指标 1.0.4》的四个模块分块，第五个模块缺口径不渲染', () => {
+  // 文档第 1 节列了 5 个模块，但只有前 4 个给出了统计口径。
+  assert.match(
+    portalDashboardSource,
+    /MODULES:[\s\S]*?'overview'[\s\S]*?'users'[\s\S]*?'assets'[\s\S]*?'behavior'[\s\S]*?\];/,
+  );
+  assert.match(portalDashboardSource, /消耗与性能模块的指标口径尚未定义，暂不纳入本看板/);
+});
+
+test('数据看板按文档口径命名，四类资产的行为指标分开统计', () => {
+  const documentedMetrics = [
+    // 2.1 平台大盘总览
+    '页面浏览数 PV',
+    '用户数 UV',
+    '游客数',
+    '工具总数',
+    '办公场景数',
+    'Skill 数',
+    'Agent 数',
+    // 2.2 用户维度
+    '登录用户页面浏览数 PV',
+    '游客页面浏览数 PV',
+    '部门活跃',
+    '用户明细',
+    '所属部门',
+    '首次使用时间',
+    '最近活跃时间',
+    // 2.3 资产维度
+    '资产总数',
+    '外部工具数',
+    '海外工具数',
+    '国内工具数',
+    '公司工具数',
+    // 2.3 用户行为
+    '资产浏览数',
+    '资产收藏数',
+    '资产点赞数',
+    '资产点踩数',
+    '工具跳转数',
+    'Skill 下载数',
+    'Agent 下载数',
+  ];
+  for (const metric of documentedMetrics) {
+    assert.match(portalDashboardSource, new RegExp(metric));
   }
+
+  // 浏览/收藏/点赞/点踩要能拆到外部工具、公司工具、Skill、Agent 四类。
+  assert.match(
+    portalDashboardSource,
+    /ASSET_CLASSES[\s\S]*?'externalTool'[\s\S]*?'companyTool'[\s\S]*?'skill'[\s\S]*?'agent'[\s\S]*?\];/,
+  );
 });

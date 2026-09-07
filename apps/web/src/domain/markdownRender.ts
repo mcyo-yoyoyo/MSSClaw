@@ -166,6 +166,23 @@ export function markdownToHtmlFragment(markdown: string): string {
       continue;
     }
 
+    // fenced code block：代码内容不做行内 Markdown 解析，避免反引号直接显示。
+    const fence = /^```\s*([\w-]*)\s*$/.exec(trimmed);
+    if (fence) {
+      flushPara();
+      closeLists();
+      const language = fence[1] ? ` class="language-${fence[1]}"` : '';
+      const codeLines: string[] = [];
+      i += 1;
+      while (i < lines.length && !/^```\s*$/.test((lines[i] ?? '').trim())) {
+        codeLines.push(lines[i] ?? '');
+        i += 1;
+      }
+      if (i < lines.length) i += 1;
+      out.push(`<pre class="md-code-block"><code${language}>${esc(codeLines.join('\n'))}</code></pre>`);
+      continue;
+    }
+
     // GFM 表格：表头 + 分隔行 + 数据行
     if (isTableRow(trimmed)) {
       const next = (lines[i + 1] ?? '').trim();

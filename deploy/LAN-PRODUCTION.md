@@ -82,11 +82,16 @@ cp ../../deploy/api.env.example .env
 #   MAX_CONCURRENT_SSE=200
 #   BLOB_ROOT=/var/lib/mssclaw/blobs    （建议放到大磁盘）
 #   DATABASE_URL="file:./prod.db"       （试点 / 小团队可用 SQLite）
+#   AIHOT_PROXY_ENABLED=1                （生产启用 AIHOT 显式代理）
+#   HTTPS_PROXY=http://proxyjp.huawei.com:8080
+#   不要设置 NODE_USE_ENV_PROXY=1；模型请求必须直连内网
 #   # 百人以上共享写：换 Postgres，例如
 #   # DATABASE_URL="postgresql://mssclaw:密码@127.0.0.1:5432/mssclaw"
 
 npm run build
-npm run start:prod
+# 该入口会设置 AIHOT_PROXY_ENABLED=1，并清除 Node 全局环境代理开关
+node scripts/start-api.mjs production
+# systemd / pm2 也应托管上面的 launcher，不要绕过它直接执行 npm run start:prod
 # 建议用 systemd / pm2 守护进程
 ```
 

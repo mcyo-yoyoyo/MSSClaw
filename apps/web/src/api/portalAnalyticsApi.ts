@@ -23,6 +23,9 @@ export interface PortalAnalyticsAssetRow {
   contentId: string;
   assetType: string;
   name?: string;
+  region?: 'overseas' | 'domestic' | 'unknown';
+  /** 货架来源；旧服务不返回时按 'none' 处理，前端不臆造归类。 */
+  source?: 'external' | 'company' | 'none';
   department?: string | null;
   exposurePv: number;
   exposureUv: number;
@@ -53,7 +56,14 @@ export interface PortalAnalyticsAssetSummary {
   total: number;
   published: number;
   unpublished: number;
+  tool?: number;
+  skill?: number;
+  agent?: number;
   external: number;
+  externalOverseas?: number;
+  externalDomestic?: number;
+  /** 外部工具中未标注地区的数量。 */
+  unknown?: number;
   company: number;
   officeScenes: number;
   bound: number;
@@ -116,6 +126,11 @@ export interface PortalAnalyticsReport {
       currentUv: number;
     };
   };
+  trafficPeriods?: {
+    today: PortalAnalyticsTrafficCounts;
+    last7Days: PortalAnalyticsTrafficCounts;
+    last30Days: PortalAnalyticsTrafficCounts;
+  };
   /** 黑色指标扩展；旧服务返回时可为空，前端显示未采集而不是造数。 */
   overview?: {
     totalUsers: number;
@@ -143,6 +158,9 @@ export interface PortalAnalyticsReport {
     departmentRows: Array<{
       department: string;
       activeUv: number;
+      todayUv?: number;
+      last7DaysUv?: number;
+      last30DaysUv?: number;
       users?: number;
       activeUsers?: number;
       calls?: number;
@@ -232,6 +250,18 @@ export async function fetchPortalAnalyticsApi(
       cache: 'no-store',
     },
   );
-  if (!res.ok) throw new Error(`portal_analytics_get_${res.status}`);
+  if (!res.ok) {
+    // 服务端会用 to_must_not_be_in_the_future 这类语义化的码说明拒绝原因，
+    // 丢掉响应体的话前端只能显示「读取失败」，用户看不出该改哪里。
+    let reason = `portal_analytics_get_${res.status}`;
+    try {
+      const body = (await res.json()) as { message?: string | string[] };
+      const message = Array.isArray(body?.message) ? body.message[0] : body?.message;
+      if (typeof message === 'string' && message.trim()) reason = message.trim();
+    } catch {
+      /* 响应体不是 JSON 时保留状态码 */
+    }
+    throw new Error(reason);
+  }
   return (await res.json()) as PortalAnalyticsReport;
 }

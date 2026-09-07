@@ -100,11 +100,12 @@ REM 但只要环境里有 NODE_USE_ENV_PROXY=1 就会启用 EnvHttpProxyAgent，
 REM 地址也塞进公司代理；代理没有内网路由，表现为 6 秒后 502/504，前台看到的是
 REM "Proxy response (504) !== 200 when HTTP Tunneling"。
 REM 注意 NO_PROXY 救不了：它按主机名匹配，写 10.0.0.0/8 这类网段对域名无效。
-REM AI 快讯不受影响，那条路是显式 new ProxyAgent(HTTPS_PROXY)，不依赖本变量。
+REM AI 快讯只在 AIHOT_PROXY_ENABLED=1 时显式 new ProxyAgent(HTTPS_PROXY)。
 set "NODE_USE_ENV_PROXY="
+set "AIHOT_PROXY_ENABLED=1"
 
 echo [5/5] 启动 API...
-start "MSS Claw API" cmd /k "cd /d %CD%\apps\api && npm run start:prod"
+start "MSS Claw API" /D "%CD%" cmd /k "node apps\api\scripts\start-api.mjs production"
 
 REM 等待健康检查通过，最多 30 秒
 set /a TRIES=0

@@ -27,6 +27,7 @@ export function MarketShelfCard({
   howToLabel: _howToLabel,
   enableCompare = true,
   showTags = true,
+  inlineAction,
   footerActions,
   showDefaultFooter = true,
   showEngagementOnly = false,
@@ -47,6 +48,8 @@ export function MarketShelfCard({
   enableCompare?: boolean;
   /** 是否展示场景、区域、类型等标签；首页三栏关闭。 */
   showTags?: boolean;
+  /** 紧邻“详情”左侧的轻量操作。 */
+  inlineAction?: ReactNode;
   /** 管理后台专用：将操作集中收纳到卡片内部。 */
   footerActions?: ReactNode;
   /** 管理后台可隐藏指标与“详情”等默认操作，只保留自定义维护操作。 */
@@ -473,6 +476,11 @@ export function MarketShelfCard({
               )}
             />
           </button>
+        ) : null}
+        {inlineAction ? (
+          <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
+            {inlineAction}
+          </div>
         ) : null}
         {!showEngagementOnlyStats ? (
           <button

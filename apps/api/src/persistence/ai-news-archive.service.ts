@@ -20,8 +20,13 @@ const STALE_AFTER_HOURS = 12;
 const DIRECT_TIMEOUT_MS = 10_000;
 const PROXY_TIMEOUT_MS = 20_000;
 
-/** 只从环境变量读，不硬编码任何公司内部地址；读不到就不尝试代理 */
-function proxyUrlFromEnv(): string {
+/**
+ * AIHOT 代理必须由测试/生产启动命令显式打开；本地即使继承了 HTTPS_PROXY 也只直连。
+ * 代理地址仍只从环境变量读取，不硬编码任何公司内部地址。
+ */
+export function aihotProxyUrlFromEnv(): string {
+  const enabled = process.env.AIHOT_PROXY_ENABLED?.trim().toLowerCase();
+  if (enabled !== '1' && enabled !== 'true') return '';
   return (process.env.HTTPS_PROXY || process.env.https_proxy || '').trim();
 }
 
@@ -178,7 +183,7 @@ export class AiNewsArchiveService implements OnModuleInit {
 
   /** 拉取上游并合并入库；上游失败时保留既有归档不动 */
   /**
-   * 先直连，失败且配了 HTTPS_PROXY 才换代理重试。
+   * 先直连，失败且测试/生产启动时打开 AIHOT_PROXY_ENABLED=1 才换代理重试。
    *
    * 顺序取「先直连」而非「先代理」：没配代理的环境行为完全不变，不会因为环境变量
    * 配错导致全部流量莫名走代理。代价是内网每次要先等一轮直连超时——这是每天一次的
@@ -210,7 +215,7 @@ export class AiNewsArchiveService implements OnModuleInit {
     try {
       return await read('direct', undefined, DIRECT_TIMEOUT_MS);
     } catch (directError) {
-      const proxyUrl = proxyUrlFromEnv();
+      const proxyUrl = aihotProxyUrlFromEnv();
       if (!proxyUrl) throw directError;
 
       this.logger.warn(

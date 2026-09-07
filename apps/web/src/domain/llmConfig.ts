@@ -156,6 +156,24 @@ export function listEnabledPlatformModels(
   return list.filter((m) => m.enabled);
 }
 
+/** 凭证齐全：Base URL 与该模型自己的 API Key 都填了。 */
+export function hasModelCredentials(entry: { baseUrl?: string; apiKey?: string }): boolean {
+  return Boolean(entry.baseUrl?.trim()) && Boolean(entry.apiKey?.trim());
+}
+
+/**
+ * 可选用的平台模型：启用 + 凭证齐全。
+ *
+ * 缺凭证的模型不能进选择器：服务端 nestLlmConfigFromDoc 在
+ * `!creds.baseUrl || !creds.apiKey` 时返回 null，转而回退到固定的 LLM_MODEL 环境变量，
+ * 于是用户选了 A、实际跑的是 B，选择器等于在撒谎。
+ */
+export function listUsablePlatformModels(
+  config: Pick<LlmConfig, 'platformModels'>,
+): PlatformLlmModel[] {
+  return listEnabledPlatformModels(config).filter(hasModelCredentials);
+}
+
 export function resolveModelMeta(
   config: Pick<LlmConfig, 'model' | 'customModels' | 'platformModels'>,
 ): {

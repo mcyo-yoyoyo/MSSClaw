@@ -60,10 +60,10 @@ function PortalDataDashboardContent() {
       <div className="mx-auto max-w-6xl pb-8">
         <CenterPageHeader
           title="数据看板"
-          subtitle="平台总览、用户分析、工具 / Skill / Agent 资产与交互行为"
           tip={
             <>
-              按黑色指标展示平台、用户、资产、交互与调用事实；灰色指标暂不纳入，未采集字段明确标记。
+              按《工具数据指标 1.0.4》分为平台总览、用户分析、资产、交互行为四块，顶部可切换时间范围并在模块间跳转。
+              未采集字段明确标记，不做估算。
             </>
           }
         />

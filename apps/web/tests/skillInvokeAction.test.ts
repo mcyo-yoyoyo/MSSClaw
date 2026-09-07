@@ -11,6 +11,7 @@ const skillHubSource = readFileSync(
   new URL('../src/features/market/MarketShelfPage.tsx', import.meta.url),
   'utf8',
 );
+const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 
 type SkillRuntimeModule = {
   isSkillCallable: (skill: { published: boolean; callable?: boolean }) => boolean;
@@ -57,11 +58,19 @@ test('Skill Hub 仅在当前方案开放执行且 Skill 可调用时展示调用
   assert.match(
     skillHubSource,
     /onClick=\{\(event\) => \{[\s\S]*?invokeSkillExperience\(skill\)/,
-    'Skill Hub 调用按钮必须复用现有任务体验链路',
+    'Skill Hub 调用按钮必须复用统一 Skill 调用入口',
   );
   assert.equal(
-    skillHubSource.match(/footerActions=\{renderSkillInvokeAction\(skill\)\}/g)?.length,
+    skillHubSource.match(/inlineAction=\{renderSkillInvokeAction\(skill\)\}/g)?.length,
     2,
-    '精选和更多 Skill 卡片都必须复用同一套调用门禁',
+    '精选和更多 Skill 卡片都必须在详情左侧复用同一套调用门禁',
   );
+});
+
+test('Skill 调用只打开当前页面对话抽屉，不创建任务或跳转', () => {
+  const start = appSource.indexOf('const performInvokeSkill');
+  const end = appSource.indexOf('// 登录浮层', start);
+  const handler = appSource.slice(start, end);
+  assert.match(handler, /setSkillChatDrawer\(\{ skill: currentSkill, open: true \}\)/);
+  assert.doesNotMatch(handler, /createAgentTaskSession|goToTaskWithTransit/);
 });

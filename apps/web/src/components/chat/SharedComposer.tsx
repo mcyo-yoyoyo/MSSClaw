@@ -22,6 +22,9 @@ export interface SharedComposerProps {
   onChange: (value: string) => void;
   onSubmit: (text: string) => void;
   disabled?: boolean;
+  /** 执行中保留操作按钮，用停止替换发送。 */
+  busy?: boolean;
+  onStop?: () => void;
   placeholder?: string;
   /** workspace：斜杠菜单向上弹出 */
   slashPlacement?: 'inside' | 'above';
@@ -42,6 +45,8 @@ export function SharedComposer({
   onChange,
   onSubmit,
   disabled = false,
+  busy = false,
+  onStop,
   placeholder,
   slashPlacement,
   hideAgent = false,
@@ -76,7 +81,9 @@ export function SharedComposer({
   const hydrateLlm = useLlmConfigStore((s) => s.hydrate);
   const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
   const workspaceId = useWorkspaceStore((s) => s.workspaceId);
-  const status = useMemo(() => useLlmConfigStore.getState().statusLabel(), [config]);
+  // 选择器只列凭证齐全的模型；一个都没有时给出可操作的提示而不是空下拉。
+  const options = useMemo(() => modelOptions(), [config, modelOptions]);
+  const noUsableModel = options.length === 0;
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -152,6 +159,14 @@ export function SharedComposer({
     onChange('');
     setSlashOpen(false);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
+  };
+
+  const handlePrimaryAction = () => {
+    if (busy && onStop) {
+      onStop();
+      return;
+    }
+    handleSubmit();
   };
 
   const applySuggestion = () => {
@@ -333,35 +348,43 @@ export function SharedComposer({
                     );
                   });
                 }}
-                disabled={modelDisabled}
+                disabled={modelDisabled || noUsableModel}
                 className={cn(
                   'border border-zinc-200 bg-white text-zinc-800 disabled:opacity-60',
                   compactLanding
                     ? 'h-5 max-w-[112px] shrink rounded-md px-1 text-[9px] leading-none'
                     : 'max-w-[180px] rounded-lg px-2.5 py-1.5 text-[11px]',
                 )}
-                title="选用对话模型"
+                title={noUsableModel ? '暂无可用模型：请在管理后台为模型配置 API Key' : '选用对话模型'}
               >
-                <optgroup label="平台模型">
-                  {modelOptions()
-                    .filter((m) => m.group === 'platform')
-                    .map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.label}
-                      </option>
-                    ))}
-                </optgroup>
-                {modelOptions().some((m) => m.group === 'custom') ? (
-                  <optgroup label="我的扩展">
-                    {modelOptions()
-                      .filter((m) => m.group === 'custom')
-                      .map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.label}
-                        </option>
-                      ))}
-                  </optgroup>
-                ) : null}
+                {noUsableModel ? (
+                  <option value="">暂无可用模型</option>
+                ) : (
+                  <>
+                    {options.some((m) => m.group === 'platform') ? (
+                      <optgroup label="平台模型">
+                        {options
+                          .filter((m) => m.group === 'platform')
+                          .map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.label}
+                            </option>
+                          ))}
+                      </optgroup>
+                    ) : null}
+                    {options.some((m) => m.group === 'custom') ? (
+                      <optgroup label="我的扩展">
+                        {options
+                          .filter((m) => m.group === 'custom')
+                          .map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.label}
+                            </option>
+                          ))}
+                      </optgroup>
+                    ) : null}
+                  </>
+                )}
               </select>
             </div>
 
@@ -406,27 +429,30 @@ export function SharedComposer({
               </button>
               <button
                 type="button"
-                onClick={handleSubmit}
-                disabled={inputDisabled}
+                onClick={handlePrimaryAction}
+                disabled={busy ? !onStop : inputDisabled}
                 className={cn(
-                  'apple-btn-primary relative flex items-center justify-center text-white disabled:opacity-50',
+                  'relative flex items-center justify-center text-white disabled:opacity-50',
+                  busy ? 'rounded-lg bg-zinc-800 transition hover:bg-zinc-700' : 'apple-btn-primary',
                   compactLanding ? 'h-5 w-5 rounded' : 'h-8 w-8 rounded-lg',
                 )}
+                title={busy ? '停止执行' : '发送'}
+                aria-label={busy ? '停止执行' : '发送'}
               >
-                <i className={cn('fa-solid fa-arrow-up', compactLanding ? 'text-[10px]' : 'text-[13px]')} />
-                <GuestGateLock />
+                <i
+                  className={cn(
+                    'fa-solid',
+                    busy ? 'fa-stop' : 'fa-arrow-up',
+                    compactLanding ? 'text-[10px]' : 'text-[13px]',
+                  )}
+                />
+                {!busy && <GuestGateLock />}
               </button>
             </div>
           </div>
 
-          {!landing ? (
-            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-zinc-100 px-4 py-1.5 text-[11px] text-zinc-500">
-              <span className={cn('truncate text-[10px]', status.configured && 'font-medium text-emerald-600/90')}>
-                {status.text}
-              </span>
-            </div>
-          ) : compactLanding ? null : (
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 px-4 py-1.5 text-[10px] text-zinc-400">
+          {landing && !compactLanding ? (
+            <div className="flex flex-wrap items-center gap-2 border-t border-zinc-100 px-4 py-1.5 text-[10px] text-zinc-400">
               <span>
                 {hideSkill
                   ? 'Enter 发送 · @ Agent'
@@ -434,9 +460,8 @@ export function SharedComposer({
                     ? 'Enter 发送 · / Skill'
                     : 'Enter 发送 · @ Agent · / Skill'}
               </span>
-              <span className={cn(status.configured && 'font-medium text-emerald-600/90')}>{status.text}</span>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 

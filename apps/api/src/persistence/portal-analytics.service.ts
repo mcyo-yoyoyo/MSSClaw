@@ -14,6 +14,7 @@ import {
 
 const DEFAULT_REPORT_DAYS = 7;
 const MAX_REPORT_DAYS = 90;
+const USER_STATS_START_DATE = '2026-08-21';
 const PAGE_VIEW_RATE_WINDOW_MS = 60_000;
 const PAGE_VIEW_VISITOR_RATE_LIMIT = 60;
 const PAGE_VIEW_IP_RATE_LIMIT = 300;
@@ -80,6 +81,16 @@ interface SeriesRow {
 
 interface PageRow {
   routeKey: string;
+  pv: CountValue;
+  uv: CountValue;
+  guestPv: CountValue;
+  guestUv: CountValue;
+  userPv: CountValue;
+  userUv: CountValue;
+}
+
+interface TrafficPeriodRow {
+  period: string;
   pv: CountValue;
   uv: CountValue;
   guestPv: CountValue;
@@ -176,6 +187,7 @@ interface AssetCatalogRow {
   company: boolean;
   officeScene: boolean;
   bound: boolean;
+  region?: 'overseas' | 'domestic' | 'unknown';
 }
 
 export interface PortalBehaviorCounts {
@@ -198,6 +210,11 @@ export interface PortalAnalyticsReport {
     userPv: number;
     userUv: number;
     todayLoginUsers: number;
+  };
+  trafficPeriods: {
+    today: PortalTrafficPeriod;
+    last7Days: PortalTrafficPeriod;
+    last30Days: PortalTrafficPeriod;
   };
   series: Array<{
     date: string;
@@ -258,6 +275,9 @@ export interface PortalAnalyticsReport {
     departmentRows: Array<{
       department: string;
       activeUv: number;
+      todayUv: number;
+      last7DaysUv: number;
+      last30DaysUv: number;
       users: number;
       activeUsers: number;
       calls?: number;
@@ -272,6 +292,17 @@ export interface PortalAnalyticsReport {
       company: number;
       officeScenes: number;
       bound: number;
+      tool?: number;
+      skill?: number;
+      agent?: number;
+      externalOverseas?: number;
+      externalDomestic?: number;
+      tools: number;
+      skills: number;
+      agents: number;
+      overseas: number;
+      domestic: number;
+      unknown: number;
     };
     rows: Array<{
       contentId: string;
@@ -295,6 +326,7 @@ export interface PortalAnalyticsReport {
       successRate: number | null;
       tokenTotal: number | null;
       p95Ms: number | null;
+      region: 'overseas' | 'domestic' | 'unknown';
       likeRate: number;
       dislikeRate: number;
       favoriteRate: number;
@@ -316,6 +348,15 @@ export interface PortalAnalyticsReport {
     updatedAt: string | null;
   };
   updatedAt: string | null;
+}
+
+export interface PortalTrafficPeriod {
+  pv: number;
+  uv: number;
+  guestPv: number;
+  guestUv: number;
+  userPv: number;
+  userUv: number;
 }
 
 function count(value: CountValue | undefined): number {
@@ -638,6 +679,7 @@ export class PortalAnalyticsService {
 
     const [
       totalsRows,
+      trafficPeriodRows,
       seriesRows,
       pageRows,
       dailyLoginRows,
@@ -681,7 +723,71 @@ export class PortalAnalyticsService {
         FROM "PortalPageView" AS p
         WHERE p."workspaceId" = ${workspaceId}
           AND p."dateKey" BETWEEN ${from} AND ${to}
+          AND p."routeKey" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
       `,
+      optionalRows(this.prisma.$queryRaw<Array<TrafficPeriodRow>>`
+        SELECT 'today' AS "period",
+          COUNT(*) AS "pv",
+          COUNT(DISTINCT CASE
+            WHEN p."visitorType" = 'user' THEN p."visitorHash"
+            WHEN p."visitorType" = 'guest' THEN COALESCE(
+              (SELECT l."userHash" FROM "PortalConversionEvent" AS l
+               WHERE l."workspaceId" = p."workspaceId" AND l."eventType" = 'login_success'
+                 AND l."journeyHash" = p."journeyHash" AND l."userHash" IS NOT NULL
+                 AND l."occurredAt" >= p."occurredAt"
+               ORDER BY l."occurredAt" ASC LIMIT 1),
+              p."journeyHash", p."visitorHash")
+            ELSE p."visitorHash" END) AS "uv",
+          SUM(CASE WHEN p."visitorType" = 'guest' THEN 1 ELSE 0 END) AS "guestPv",
+          COUNT(DISTINCT CASE WHEN p."visitorType" = 'guest' THEN p."visitorHash" END) AS "guestUv",
+          SUM(CASE WHEN p."visitorType" = 'user' THEN 1 ELSE 0 END) AS "userPv",
+          COUNT(DISTINCT CASE WHEN p."visitorType" = 'user' THEN p."visitorHash" END) AS "userUv"
+        FROM "PortalPageView" AS p
+        WHERE p."workspaceId" = ${workspaceId} AND p."dateKey" = ${today}
+          AND p."routeKey" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
+        UNION ALL
+        SELECT 'last7Days' AS "period",
+          COUNT(*) AS "pv",
+          COUNT(DISTINCT CASE
+            WHEN p."visitorType" = 'user' THEN p."visitorHash"
+            WHEN p."visitorType" = 'guest' THEN COALESCE(
+              (SELECT l."userHash" FROM "PortalConversionEvent" AS l
+               WHERE l."workspaceId" = p."workspaceId" AND l."eventType" = 'login_success'
+                 AND l."journeyHash" = p."journeyHash" AND l."userHash" IS NOT NULL
+                 AND l."occurredAt" >= p."occurredAt"
+               ORDER BY l."occurredAt" ASC LIMIT 1),
+              p."journeyHash", p."visitorHash")
+            ELSE p."visitorHash" END) AS "uv",
+          SUM(CASE WHEN p."visitorType" = 'guest' THEN 1 ELSE 0 END) AS "guestPv",
+          COUNT(DISTINCT CASE WHEN p."visitorType" = 'guest' THEN p."visitorHash" END) AS "guestUv",
+          SUM(CASE WHEN p."visitorType" = 'user' THEN 1 ELSE 0 END) AS "userPv",
+          COUNT(DISTINCT CASE WHEN p."visitorType" = 'user' THEN p."visitorHash" END) AS "userUv"
+        FROM "PortalPageView" AS p
+        WHERE p."workspaceId" = ${workspaceId}
+          AND p."dateKey" BETWEEN ${shiftPortalAnalyticsDateKey(today, -6)} AND ${today}
+          AND p."routeKey" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
+        UNION ALL
+        SELECT 'last30Days' AS "period",
+          COUNT(*) AS "pv",
+          COUNT(DISTINCT CASE
+            WHEN p."visitorType" = 'user' THEN p."visitorHash"
+            WHEN p."visitorType" = 'guest' THEN COALESCE(
+              (SELECT l."userHash" FROM "PortalConversionEvent" AS l
+               WHERE l."workspaceId" = p."workspaceId" AND l."eventType" = 'login_success'
+                 AND l."journeyHash" = p."journeyHash" AND l."userHash" IS NOT NULL
+                 AND l."occurredAt" >= p."occurredAt"
+               ORDER BY l."occurredAt" ASC LIMIT 1),
+              p."journeyHash", p."visitorHash")
+            ELSE p."visitorHash" END) AS "uv",
+          SUM(CASE WHEN p."visitorType" = 'guest' THEN 1 ELSE 0 END) AS "guestPv",
+          COUNT(DISTINCT CASE WHEN p."visitorType" = 'guest' THEN p."visitorHash" END) AS "guestUv",
+          SUM(CASE WHEN p."visitorType" = 'user' THEN 1 ELSE 0 END) AS "userPv",
+          COUNT(DISTINCT CASE WHEN p."visitorType" = 'user' THEN p."visitorHash" END) AS "userUv"
+        FROM "PortalPageView" AS p
+        WHERE p."workspaceId" = ${workspaceId}
+          AND p."dateKey" BETWEEN ${shiftPortalAnalyticsDateKey(today, -29)} AND ${today}
+          AND p."routeKey" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
+      `),
       this.prisma.$queryRaw<SeriesRow[]>`
         SELECT
           p."dateKey" AS "date",
@@ -712,6 +818,7 @@ export class PortalAnalyticsService {
         FROM "PortalPageView" AS p
         WHERE p."workspaceId" = ${workspaceId}
           AND p."dateKey" BETWEEN ${from} AND ${to}
+          AND p."routeKey" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
         GROUP BY p."dateKey"
         ORDER BY p."dateKey" ASC
       `,
@@ -745,6 +852,7 @@ export class PortalAnalyticsService {
         FROM "PortalPageView" AS p
         WHERE p."workspaceId" = ${workspaceId}
           AND p."dateKey" BETWEEN ${from} AND ${to}
+          AND p."routeKey" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
         GROUP BY p."routeKey"
         ORDER BY "pv" DESC, p."routeKey" ASC
       `,
@@ -866,6 +974,7 @@ export class PortalAnalyticsService {
           SELECT "visitorHash", "dateKey", "firstLoginAt" AS "eventAt"
           FROM "PortalDailyLogin"
           WHERE "workspaceId" = ${workspaceId}
+            AND "dateKey" >= ${USER_STATS_START_DATE}
             AND "visitorHash" IS NOT NULL
         ) AS users
         GROUP BY "visitorHash"
@@ -881,6 +990,7 @@ export class PortalAnalyticsService {
           SELECT "dateKey", "visitorHash", "firstLoginAt" AS "eventAt"
           FROM "PortalDailyLogin"
           WHERE "workspaceId" = ${workspaceId}
+            AND "dateKey" >= ${USER_STATS_START_DATE}
             AND "dateKey" BETWEEN ${activityFrom} AND ${today}
             AND "visitorHash" IS NOT NULL
           UNION ALL
@@ -888,6 +998,8 @@ export class PortalAnalyticsService {
           FROM "PortalPageView"
           WHERE "workspaceId" = ${workspaceId}
             AND "visitorType" = 'user'
+            AND "routeKey" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
+            AND "dateKey" >= ${USER_STATS_START_DATE}
             AND "dateKey" BETWEEN ${activityFrom} AND ${today}
             AND "visitorHash" IS NOT NULL
           UNION ALL
@@ -896,6 +1008,7 @@ export class PortalAnalyticsService {
           WHERE "workspaceId" = ${workspaceId}
             AND "visitorType" = 'user'
             AND "action" IN ('call', 'use')
+            AND "dateKey" >= ${USER_STATS_START_DATE}
             AND "dateKey" BETWEEN ${activityFrom} AND ${today}
             AND "visitorHash" IS NOT NULL
         ) AS activity
@@ -922,11 +1035,11 @@ export class PortalAnalyticsService {
     }
     const isBlackCatalogAsset = (contentId: string, rawAssetType?: string | null): boolean => {
       const rows = catalogById.get(contentId) ?? [];
-      if (!rows.some((row) => BLACK_ASSET_TYPES.has(row.assetType))) return false;
+      if (!rows.some((row) => BLACK_ASSET_TYPES.has(row.assetType) && row.assetType !== 'office-scene')) return false;
       const assetType = stringValue(rawAssetType).toLowerCase();
       // Older facts have no trustworthy dimension; keep them compatible while
       // rejecting an explicit type that disagrees with the catalog.
-      return !assetType || assetType === 'unknown' || rows.some((row) => row.assetType === assetType);
+      return !assetType || assetType === 'unknown' || rows.some((row) => row.assetType === assetType && row.assetType !== 'office-scene');
     };
 
     const totalsRow = totalsRows[0];
@@ -1080,6 +1193,11 @@ export class PortalAnalyticsService {
       }
       return users;
     };
+    const periodActiveUsers = {
+      today: activeUsersBetween(today, today),
+      last7Days: activeUsersBetween(shiftPortalAnalyticsDateKey(today, -6), today),
+      last30Days: activeUsersBetween(shiftPortalAnalyticsDateKey(today, -29), today),
+    };
     const dau = activeUsersBetween(to, to).size;
     const wau = activeUsersBetween(naturalWeekStart(to), to).size;
     const mau = activeUsersBetween(naturalMonthStart(to), to).size;
@@ -1152,6 +1270,10 @@ export class PortalAnalyticsService {
       successfulCalls: number;
       callTokenTotal: number;
       callDurations: number[];
+      region: 'overseas' | 'domestic' | 'unknown';
+      // 指标文档要求浏览/收藏/点赞/点踩按外部工具、公司工具、Skill、Agent 分别统计，
+      // assetType 只能区分到 tool，所以把货架来源一并带给前端。
+      source: 'external' | 'company' | 'none';
     }>();
     const emptyAsset = (contentId: string, catalogRow?: AssetCatalogRow) => ({
       contentId,
@@ -1174,6 +1296,12 @@ export class PortalAnalyticsService {
       successfulCalls: 0,
       callTokenTotal: 0,
       callDurations: [],
+      region: catalogRow?.region ?? 'unknown',
+      source: catalogRow?.external
+        ? ('external' as const)
+        : catalogRow?.company
+          ? ('company' as const)
+          : ('none' as const),
     });
     for (const row of catalog) assetMap.set(row.contentId, emptyAsset(row.contentId, row));
     for (const row of behaviorAssetRows) {
@@ -1274,12 +1402,34 @@ export class PortalAnalyticsService {
         company: 0,
         officeScenes: 0,
         bound: 0,
+        tools: 0,
+        skills: 0,
+        agents: 0,
+        tool: 0,
+        skill: 0,
+        agent: 0,
+        overseas: 0,
+        domestic: 0,
+        unknown: 0,
+        externalOverseas: 0,
+        externalDomestic: 0,
       },
     );
-    assetSummary.external = toolInventory.filter((row) => row.external).length;
-    assetSummary.company = toolInventory.filter((row) => row.company).length;
-    assetSummary.officeScenes = catalog.filter((row) => row.officeScene).length;
-    assetSummary.bound = toolInventory.filter((row) => row.bound).length;
+    assetSummary.tools = catalog.filter((row) => row.assetType === 'tool' && !row.officeScene && row.published).length;
+    assetSummary.skills = catalog.filter((row) => row.assetType === 'skill' && row.published).length;
+    assetSummary.agents = catalog.filter((row) => row.assetType === 'agent' && row.published).length;
+    assetSummary.tool = assetSummary.tools;
+    assetSummary.skill = assetSummary.skills;
+    assetSummary.agent = assetSummary.agents;
+    assetSummary.external = toolInventory.filter((row) => row.published && row.external).length;
+    assetSummary.company = toolInventory.filter((row) => row.published && row.company).length;
+    assetSummary.officeScenes = catalog.filter((row) => row.published && row.officeScene).length;
+    assetSummary.bound = toolInventory.filter((row) => row.published && row.bound).length;
+    assetSummary.overseas = toolInventory.filter((row) => row.published && row.external && row.region === 'overseas').length;
+    assetSummary.domestic = toolInventory.filter((row) => row.published && row.external && row.region === 'domestic').length;
+    assetSummary.unknown = toolInventory.filter((row) => row.published && row.external && row.region === 'unknown').length;
+    assetSummary.externalOverseas = assetSummary.overseas;
+    assetSummary.externalDomestic = assetSummary.domestic;
 
     const memberActivity = new Map<string, Set<string>>();
     for (const [date, hashes] of activityByDate) {
@@ -1324,6 +1474,7 @@ export class PortalAnalyticsService {
         const userId = stringValue(member.id);
         if (!userId) return null;
         const visitorHash = this.accountVisitorHash(workspaceId, userId);
+        if (!firstByUser.has(visitorHash)) return null;
         const firstDate = firstByUser.get(visitorHash);
         const dates = memberActivity.get(visitorHash);
         const lastDate = dates && dates.size ? [...dates].sort().at(-1) : undefined;
@@ -1348,7 +1499,10 @@ export class PortalAnalyticsService {
         };
       })
       .filter((row): row is NonNullable<typeof row> => Boolean(row));
-    const departments = new Map<string, { users: number; activeUsers: number; calls: number }>();
+    const departments = new Map<
+      string,
+      { users: number; activeUsers: number; calls: number; todayUv: number; last7DaysUv: number; last30DaysUv: number }
+    >();
     for (const member of members) {
       const userId = stringValue(member.id);
       if (!userId) continue;
@@ -1359,9 +1513,19 @@ export class PortalAnalyticsService {
         ? member.deptIds.map(String).filter(Boolean)
         : [stringValue(member.department ?? member.deptId)].filter(Boolean);
       for (const department of departmentIds) {
-        const item = departments.get(department) ?? { users: 0, activeUsers: 0, calls: 0 };
+        const item = departments.get(department) ?? {
+          users: 0,
+          activeUsers: 0,
+          calls: 0,
+          todayUv: 0,
+          last7DaysUv: 0,
+          last30DaysUv: 0,
+        };
         item.users += 1;
         if (active) item.activeUsers += 1;
+        if (periodActiveUsers.today.has(visitorHash)) item.todayUv += 1;
+        if (periodActiveUsers.last7Days.has(visitorHash)) item.last7DaysUv += 1;
+        if (periodActiveUsers.last30Days.has(visitorHash)) item.last30DaysUv += 1;
         item.calls += callCount;
         departments.set(department, item);
       }
@@ -1370,13 +1534,16 @@ export class PortalAnalyticsService {
       .map(([department, values]) => ({
         department,
         activeUv: values.activeUsers,
+        todayUv: values.todayUv,
+        last7DaysUv: values.last7DaysUv,
+        last30DaysUv: values.last30DaysUv,
         // Keep the raw member/activity counts available to non-UI consumers while
         // matching the compact frontend contract (`activeUv`).
         users: values.users,
         activeUsers: values.activeUsers,
         calls: values.calls,
       }))
-      .sort((a, b) => b.users - a.users || a.department.localeCompare(b.department));
+      .sort((a, b) => b.last7DaysUv - a.last7DaysUv || a.department.localeCompare(b.department));
 
     const callDurations = catalogCallFactRows
       .map((row) => count(row.durationMs))
@@ -1417,6 +1584,18 @@ export class PortalAnalyticsService {
         ).size
       : count(behaviorDownloadRows[0]?.uv);
 
+    const trafficPeriod = (period: string): PortalTrafficPeriod => {
+      const row = trafficPeriodRows.find((item) => item.period === period);
+      return {
+        pv: count(row?.pv),
+        uv: count(row?.uv),
+        guestPv: count(row?.guestPv),
+        guestUv: count(row?.guestUv),
+        userPv: count(row?.userPv),
+        userUv: count(row?.userUv),
+      };
+    };
+
     return {
       timezone: PORTAL_ANALYTICS_TIME_ZONE,
       range: { days, from, to },
@@ -1428,6 +1607,11 @@ export class PortalAnalyticsService {
         userPv: count(totalsRow?.userPv),
         userUv: count(totalsRow?.userUv),
         todayLoginUsers: count(dailyLoginRows[0]?.users),
+      },
+      trafficPeriods: {
+        today: trafficPeriod('today'),
+        last7Days: trafficPeriod('last7Days'),
+        last30Days: trafficPeriod('last30Days'),
       },
       series,
       pages: pageRows.map((row) => ({
@@ -1549,6 +1733,9 @@ export class PortalAnalyticsService {
       const tags = Array.isArray(item.tags) ? item.tags.map(String).map((tag) => tag.toLowerCase()) : [];
       const sourceType = stringValue(item.sourceType ?? item.scope ?? item.origin).toLowerCase();
       const category = stringValue(item.category ?? item.marketShelf).toLowerCase();
+      const rawRegion = stringValue(item.region).toLowerCase();
+      const region: AssetCatalogRow['region'] =
+        rawRegion === 'overseas' || rawRegion === 'domestic' ? rawRegion : 'unknown';
       const rawType =
         defaults.assetType || stringValue(item.assetType ?? item.kind ?? item.type) || 'unknown';
       const typeText = rawType.toLowerCase().replace(/[_\s]+/g, '-');
@@ -1602,6 +1789,9 @@ export class PortalAnalyticsService {
         company: Boolean(previous?.company || company),
         officeScene: Boolean(previous?.officeScene || officeScene),
         bound: Boolean(previous?.bound || bound),
+        ...(previous?.region || region !== 'unknown'
+          ? { region: previous?.region && previous.region !== 'unknown' ? previous.region : region }
+          : {}),
       });
     };
 

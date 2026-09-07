@@ -15,14 +15,12 @@ import { usePlazaToolGuideStore } from '@/stores/plazaToolGuideStore';
 import { useInboxStore } from '@/stores/inboxStore';
 import { getAgentById } from '@/domain/plan';
 import {
-  buildSkillDemoPrompt,
   hasSkillExecutionBody,
   isSkillCallable,
   isSkillRunnable,
 } from '@/domain/skillRuntime';
 import { buildAgentDemoPrompt } from '@/domain/agents/runtime';
 import { enterTaskChatFocusMode } from '@/domain/taskFocusMode';
-import { PROTOTYPE_AGENTS } from '@/domain/prototype/agents';
 import type { PrototypeAgentSeed, PrototypeKbDocument, PrototypeSkillSeed } from '@/domain/prototype/types';
 import type { ScenarioDemoPlan } from '@/domain/scenarioPipeline';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -55,6 +53,7 @@ import { roleNavDisabledToast } from '@/domain/permissions';
 import { useShellPerspectiveStore } from '@/stores/shellPerspectiveStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { TaskGlobalModals } from '@/components/task/TaskGlobalModals';
+import { SkillChatDrawer } from '@/components/chat/SkillChatDrawer';
 import { openAiAssistantForNewTask } from '@/domain/openNewTask';
 import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
 import { AccessDeniedPanel } from '@/components/shell/AccessDeniedPanel';
@@ -115,6 +114,18 @@ export function App() {
     open: false,
     summary: '',
   });
+  const [skillChatDrawer, setSkillChatDrawer] = useState<{
+    skill: PrototypeSkillSeed | null;
+    open: boolean;
+  }>({ skill: null, open: false });
+
+  const closeSkillChatDrawer = useCallback(() => {
+    setSkillChatDrawer((current) => ({ ...current, open: false }));
+  }, []);
+
+  const changeSkillChatDrawer = useCallback((skill: PrototypeSkillSeed) => {
+    setSkillChatDrawer({ skill, open: true });
+  }, []);
 
   const goToTaskWithTransit = useCallback((summary: string, chatId?: string) => {
     const nav = useNavPresentationStore.getState();
@@ -375,10 +386,6 @@ export function App() {
       useConversationStore.setState({ pushToast: READONLY_EXECUTE_HINT });
       return;
     }
-    if (!sessionsReady) {
-      useConversationStore.setState({ pushToast: '工作区加载中，请稍候再试' });
-      return;
-    }
     const currentSkill = useMarketplaceStore.getState().skills.find((item) => item.id === skill.id);
     if (!currentSkill || !isSkillRunnable(currentSkill)) {
       const reason = !currentSkill
@@ -391,30 +398,9 @@ export function App() {
       useConversationStore.setState({ pushToast: reason });
       return;
     }
-    const reviewAgent = getAgentById('agent-review');
-    const marketAgents = useMarketplaceStore.getState().agents;
-    const boundAgent =
-      reviewAgent?.skillIds?.includes(currentSkill.id)
-        ? reviewAgent
-        : marketAgents.find((a) => a.skillIds?.includes(currentSkill.id) && a.published) ??
-          PROTOTYPE_AGENTS.find((a) => a.skillIds?.includes(currentSkill.id) && a.published) ??
-          reviewAgent;
-    const initialMessage = buildSkillDemoPrompt(currentSkill);
-    // 进入任务对话并自动发送，使 AI任务链路挂载 Skill 正文后执行
-    const chatId = createAgentTaskSession({
-      title: currentSkill.name,
-      agentId: boundAgent?.id,
-      agentName: boundAgent?.name,
-      agentIcon: boundAgent?.icon ?? currentSkill.icon,
-      skillId: currentSkill.id,
-      taskSource: 'skill',
-      assetType: 'skill',
-      initialMessage,
-      autoSend: Boolean(initialMessage.trim()),
-      switchTo: true,
-    });
-    goToTaskWithTransit(currentSkill.name, chatId);
-  }, [createAgentTaskSession, goToTaskWithTransit, sessionsReady]);
+    // Skill 直接在当前货架页的右侧对话抽屉中打开，不创建任务会话、不切换路由。
+    setSkillChatDrawer({ skill: currentSkill, open: true });
+  }, []);
 
   // 登录浮层可能跨过若干次 React 重渲染；重放时只保留动作参数，
   // 实际执行始终走当前 render 的实现，避免捕获过期的 sessionsReady 等组件状态。
@@ -662,6 +648,12 @@ export function App() {
 
       <TaskGlobalModals onWorkspaceSwitch={reloadAllStores} />
       <HomeToTaskTransit open={transit.open} summary={transit.summary} />
+      <SkillChatDrawer
+        skill={skillChatDrawer.skill}
+        open={skillChatDrawer.open}
+        onClose={closeSkillChatDrawer}
+        onSkillChange={changeSkillChatDrawer}
+      />
       <GlobalToastHost />
       <AssetApprovalModal />
       <AuthGateOverlay />
