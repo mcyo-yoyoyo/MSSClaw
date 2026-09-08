@@ -342,7 +342,10 @@ export function SkillChatDrawer({ skill, open, onClose, onSkillChange }: SkillCh
           } else if (event.type === 'error') {
             run.terminal = true;
             setMessages((current) =>
-              finishStreaming(current, `⚠️ ${event.message || '执行失败，请重试。'}`),
+              finishStreaming(
+                current,
+                `⚠️ ${event.message || '执行失败，请重试。'}${event.detail ? `\n\n详情：${event.detail}` : ''}`,
+              ),
             );
           }
         }

@@ -455,11 +455,12 @@ async function runApprovedPipeline(get: () => ConversationState, set: StoreSet) 
     }
 
     if (event.type === 'error') {
+      const detail = event.detail ? `\n\n详情：${event.detail}` : '';
       set((state) => ({
         isAgentTyping: false,
         streamStatus: null,
         abortController: null,
-        pushToast: event.message,
+        pushToast: `${event.message}${event.detail ? ` · ${event.detail}` : ''}`,
         chats: {
           ...state.chats,
           [currentChatId]: {
@@ -469,7 +470,7 @@ async function runApprovedPipeline(get: () => ConversationState, set: StoreSet) 
               {
                 role: 'agent',
                 name: 'System',
-                text: `⚠️ 流式请求失败：${event.message}`,
+                text: `⚠️ 流式请求失败：${event.message}${detail}`,
                 streaming: false,
               },
             ],

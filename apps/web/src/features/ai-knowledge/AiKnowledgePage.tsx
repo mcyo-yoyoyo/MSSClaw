@@ -78,6 +78,24 @@ function conciseText(value: string, maxLength = 160): string {
   return `${clean.slice(0, maxLength).replace(/[，,；;：:\s]+$/, '')}…`;
 }
 
+function aiKnowledgeErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message.trim() : '';
+  if (!raw) return '方案生成失败，请检查服务或稍后重试';
+  if (raw.includes('llm_not_configured')) {
+    return '平台尚未配置方案生成模型：请先检查工作区 LLM 配置';
+  }
+  if (raw.includes('demand_incomplete')) {
+    return '需求摘要还没有完成，请继续补充待确认信息';
+  }
+  if (raw.includes('invalid_solution')) {
+    return 'AI 生成的内容不完整，请重新生成';
+  }
+  if (raw.includes('HTTP_')) {
+    return `方案生成失败：服务返回 ${raw}`;
+  }
+  return `方案生成失败：${conciseText(raw, 180)}`;
+}
+
 function normalizeResourceValue(value?: string): string {
   return (value ?? '').trim().replace(/\/+$/, '').toLocaleLowerCase();
 }
@@ -307,14 +325,7 @@ export function AiKnowledgePage() {
       setMode('solution');
     } catch (error) {
       if (requestEpoch.current !== epoch) return;
-      const message = error instanceof Error && error.message.includes('llm_not_configured')
-        ? '平台尚未配置方案生成模型'
-        : error instanceof Error && error.message.includes('demand_incomplete')
-          ? '需求摘要还没有完成，请继续补充待确认信息'
-        : error instanceof Error && error.message.includes('invalid_solution')
-          ? 'AI 生成的内容不完整，请重新生成'
-          : '方案生成失败，请检查服务或稍后重试';
-      setNotice(message);
+      setNotice(aiKnowledgeErrorMessage(error));
     } finally {
       if (requestEpoch.current === epoch) {
         activeRequest.current = null;

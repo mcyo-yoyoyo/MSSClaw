@@ -57,4 +57,4 @@ export type StreamEvent =
         text: string;
       };
     }
-  | { type: 'error'; message: string; usage?: ExecutionUsage };
+  | { type: 'error'; message: string; detail?: string; step?: string; code?: string; usage?: ExecutionUsage };

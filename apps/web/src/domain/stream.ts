@@ -36,7 +36,14 @@ export const StreamEventSchema = z.discriminatedUnion('type', [
     usage: ExecutionUsageSchema.optional(),
     followUp: ChatMessageSchema.optional(),
   }),
-  z.object({ type: z.literal('error'), message: z.string(), usage: ExecutionUsageSchema.optional() }),
+  z.object({
+    type: z.literal('error'),
+    message: z.string(),
+    detail: z.string().optional(),
+    step: z.string().optional(),
+    code: z.string().optional(),
+    usage: ExecutionUsageSchema.optional(),
+  }),
 ]);
 export type StreamEvent = z.infer<typeof StreamEventSchema>;
 

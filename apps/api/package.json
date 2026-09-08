@@ -23,6 +23,7 @@
     "import:marketplace": "ts-node --project tsconfig.json scripts/import-marketplace-catalog.ts"
   },
   "dependencies": {
+    "@mastra/core": "^1.64.0",
     "@nestjs/common": "^11.0.12",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.12",
@@ -33,6 +34,7 @@
     "@prisma/client": "^6.5.0",
     "compression": "^1.8.1",
     "helmet": "^8.3.0",
+    "mastra": "^1.27.3",
     "playwright-core": "^1.63.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",

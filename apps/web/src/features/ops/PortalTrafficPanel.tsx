@@ -981,10 +981,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
   );
 
   /* 04 交互行为 */
-  const behaviorAssetRows = useMemo(
-    () => behaviorState.report?.assets?.rows ?? [],
-    [behaviorState.report?.assets?.rows],
-  );
+  const behaviorAssetRows = allAssetRows;
   const behaviorHasFacts = Boolean(behaviorAssetRows.length);
   const behavior = useMemo(() => buildBehaviorBreakdown(behaviorAssetRows), [behaviorAssetRows]);
   const behaviorRows: Array<{ key: string; label: string; counts: BehaviorCounts; muted?: boolean }> =
@@ -1045,9 +1042,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
   const assetsRangeLabel = assetsState.report
     ? `${formatDate(assetsState.report.range.from)} 至 ${formatDate(assetsState.report.range.to)}`
     : '暂无数据';
-  const behaviorRangeLabel = behaviorState.report
-    ? `${formatDate(behaviorState.report.range.from)} 至 ${formatDate(behaviorState.report.range.to)}`
-    : '暂无数据';
+  const behaviorRangeLabel = assetsRangeLabel;
 
   return (
     <div className="space-y-5 pb-6">
@@ -1408,7 +1403,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
           </Notice>
         ) : null}
 
-        {behaviorState.loading ? (
+        {assetsState.loading ? (
           <Skeleton className="h-[116px]" />
         ) : (
           <div className="space-y-3">
@@ -1488,7 +1483,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                   </tr>
                 </>
               ) : (
-                <EmptyRow colSpan={5} label={behaviorState.loading ? '读取中' : '资产行为事实未采集'} />
+                <EmptyRow colSpan={5} label={assetsState.loading ? '读取中' : '资产行为事实未采集'} />
               )}
             </tbody>
           </table>

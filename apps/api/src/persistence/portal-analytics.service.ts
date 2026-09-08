@@ -691,6 +691,7 @@ export class PortalAnalyticsService {
       behaviorLifetimeAssetRows,
       behaviorAssetRows,
       behaviorDownloadRows,
+      marketEngagementRows,
       userIdentityRows,
       userActivityRows,
       callFactRows,
@@ -967,6 +968,26 @@ export class PortalAnalyticsService {
           AND e."dateKey" BETWEEN ${from} AND ${to}
           AND e."action" IN ('download', 'request:download')
         GROUP BY e."contentId", e."assetType", e."visitorHash"
+      `),
+      optionalRows(this.prisma.$queryRaw<Array<{
+        contentId: string;
+        views: number;
+        uses: number;
+        likes: number;
+        dislikes: number;
+        downloads: number;
+        favorites: number;
+      }>>`
+        SELECT
+          m."contentId" AS "contentId",
+          COALESCE(m."views", 0) AS "views",
+          COALESCE(m."uses", 0) AS "uses",
+          COALESCE(m."likes", 0) AS "likes",
+          COALESCE(m."dislikes", 0) AS "dislikes",
+          COALESCE(m."downloads", 0) AS "downloads",
+          COALESCE(m."favorites", 0) AS "favorites"
+        FROM "MarketEngagement" AS m
+        WHERE m."workspaceId" = ${workspaceId}
       `),
       optionalRows(this.prisma.$queryRaw<UserIdentityRow[]>`
         -- Account cohorts are defined by successful login facts. Page views and
@@ -1345,6 +1366,26 @@ export class PortalAnalyticsService {
         default:
           break;
       }
+      assetMap.set(contentId, asset);
+    }
+    for (const row of marketEngagementRows) {
+      const contentId = stringValue(row.contentId);
+      if (!contentId || !isBlackCatalogAsset(contentId)) continue;
+      const asset = assetMap.get(contentId);
+      if (!asset) continue;
+      const views = count(row.views);
+      const uses = count(row.uses);
+      const likes = count(row.likes);
+      const dislikes = count(row.dislikes);
+      const downloads = count(row.downloads);
+      const favorites = count(row.favorites);
+      asset.exposurePv = Math.max(asset.exposurePv, views);
+      asset.detailPv = Math.max(asset.detailPv, views);
+      asset.redirects = Math.max(asset.redirects, uses);
+      asset.likes = Math.max(asset.likes, likes);
+      asset.dislikes = Math.max(asset.dislikes, dislikes);
+      asset.favorites = Math.max(asset.favorites, favorites);
+      asset.downloads = Math.max(asset.downloads, downloads);
       assetMap.set(contentId, asset);
     }
     for (const row of callFactRows) {

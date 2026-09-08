@@ -144,8 +144,9 @@ export class ExecutionsController {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown stream error';
+      const detail = error instanceof Error ? error.stack ?? error.message : undefined;
       if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({ type: 'error', message })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'error', message, detail })}\n\n`);
       }
     } finally {
       req.off('close', onClose);

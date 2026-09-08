@@ -229,6 +229,7 @@ export async function* streamExecution(params: {
         yield {
           type: 'error',
           message: `执行服务异常（HTTP ${response.status || 'no-body'}），未回退本地 Mock`,
+          detail: `请求目标：${apiUrl('/api/v1/executions/stream')}`,
         };
         return;
       }
@@ -238,7 +239,7 @@ export async function* streamExecution(params: {
     } catch (error) {
       if (params.signal?.aborted) return;
       const msg = error instanceof Error ? error.message : '未知错误';
-      yield { type: 'error', message: `执行流中断：${msg}` };
+      yield { type: 'error', message: `执行流中断：${msg}`, detail: error instanceof Error ? error.stack ?? undefined : undefined };
       return;
     }
   }
