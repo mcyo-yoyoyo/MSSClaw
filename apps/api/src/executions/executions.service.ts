@@ -27,6 +27,7 @@ import {
   type SkillEvaluationInput,
 } from './skill-evaluation';
 import { portalAnalyticsDateKey } from '../persistence/portal-analytics-time';
+import { WebToolsService } from './web-tools.service';
 
 const MARKETING_STEPS: ExecutionStep[] = [
   { skill: 'Intent_Parser', time: '120ms', label: '多模态意图识别', detail: '解析群聊上下文，提取实体与 Action。' },
@@ -164,7 +165,10 @@ function normalizeAssetId(value: unknown): string {
 
 @Injectable()
 export class ExecutionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly webTools: WebToolsService,
+  ) {}
 
   async list(workspaceId: string, limit = 50) {
     const rows = await this.prisma.centerRecord.findMany({
@@ -470,14 +474,37 @@ export class ExecutionsService {
     signal?: AbortSignal,
   ): AsyncGenerator<StreamEvent> {
     let terminal = false;
+    let kbContext = params.kbContext;
+    let webStep: ExecutionStep | null = null;
+    yield { type: 'execution_start', executionId: base.id, source: 'llm' };
     try {
+      if (this.webTools.isNeeded(params.message, params.systemPrompt, planSteps)) {
+        const webStarted = Date.now();
+        yield { type: 'skill_start', skill: 'Web_Context', label: '联网抓取执行上下文' };
+        const webContext = await this.webTools.collectContext({
+          message: params.message,
+          systemPrompt: params.systemPrompt,
+          planSteps,
+          signal,
+        });
+        const elapsed = `${Date.now() - webStarted}ms`;
+        yield { type: 'skill_end', skill: 'Web_Context', latency: elapsed };
+        webStep = {
+          skill: 'Web_Context',
+          time: elapsed,
+          label: '联网抓取执行上下文',
+          detail: `已抓取 ${webContext.items.length} 个网页${webContext.warnings.length ? `，警告 ${webContext.warnings.length} 条` : ''}`,
+        };
+        kbContext = [kbContext, webContext.context].filter(Boolean).join('\n\n---\n\n');
+      }
+
       for await (const event of nestLlmExecutionStream({
         message: params.message,
         actionType: agentType,
         agentName,
         systemPrompt: params.systemPrompt,
         planSteps: planSteps.length ? planSteps : undefined,
-        kbContext: params.kbContext,
+        kbContext,
         signal,
         config: llmConfig,
       })) {
@@ -490,34 +517,34 @@ export class ExecutionsService {
           return;
         }
 
-        if (event.type === 'execution_start') {
-          yield { ...event, executionId: base.id, source: 'llm' };
-          continue;
-        }
+        if (event.type === 'execution_start') continue;
 
-        yield event;
+        const outgoing = event.type === 'done' && webStep
+          ? { ...event, steps: [webStep, ...event.steps] }
+          : event;
+        yield outgoing;
 
-        if (event.type === 'done') {
+        if (outgoing.type === 'done') {
           terminal = true;
           await this.saveRecord({
             ...base,
             status: 'done',
             source: 'llm',
             finishedAt: new Date().toISOString(),
-            totalTime: event.totalTime,
-            steps: event.steps,
-            usage: event.usage,
+            totalTime: outgoing.totalTime,
+            steps: outgoing.steps,
+            usage: outgoing.usage,
           });
         }
-        if (event.type === 'error') {
+        if (outgoing.type === 'error') {
           terminal = true;
           await this.saveRecord({
             ...base,
             status: 'error',
             source: 'llm',
             finishedAt: new Date().toISOString(),
-            error: event.message,
-            usage: event.usage,
+            error: outgoing.message,
+            usage: outgoing.usage,
           });
         }
       }

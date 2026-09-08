@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { streamExecution } from '@/api/agentRuntime';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { SharedComposer } from '@/components/chat/SharedComposer';
@@ -87,10 +87,19 @@ export function SkillChatDrawer({ skill, open, onClose, onSkillChange }: SkillCh
   const drawerRef = useRef<HTMLElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const runRef = useRef<ActiveRun | null>(null);
+  const resizeRef = useRef({ pointerId: -1, startX: 0, startWidth: 0, lastWidth: 560 });
   const nextRunId = useRef(0);
   const workspaceId = useWorkspaceStore((state) => state.workspaceId);
   const agents = useMarketplaceStore((state) => state.agents);
   const skills = useMarketplaceStore((state) => state.skills);
+  const [drawerWidth, setDrawerWidth] = useState(() => {
+    if (typeof window === 'undefined') return 560;
+    const saved = Number(window.localStorage.getItem('mss-skill-chat-width'));
+    const maxWidth = Math.max(360, window.innerWidth - 16);
+    if (Number.isFinite(saved) && saved >= 360) return Math.min(saved, maxWidth);
+    return Math.min(560, maxWidth);
+  });
+  const [resizing, setResizing] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [running, setRunning] = useState(false);
@@ -113,6 +122,16 @@ export function SkillChatDrawer({ skill, open, onClose, onSkillChange }: SkillCh
   );
 
   useFocusTrap(open, drawerRef);
+
+  useEffect(() => {
+    const clampWidth = () => {
+      const maxWidth = Math.max(360, window.innerWidth - 16);
+      setDrawerWidth((current) => Math.min(current, maxWidth));
+    };
+    clampWidth();
+    window.addEventListener('resize', clampWidth);
+    return () => window.removeEventListener('resize', clampWidth);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -223,6 +242,35 @@ export function SkillChatDrawer({ skill, open, onClose, onSkillChange }: SkillCh
       ...finishStreaming(current),
       { role: 'system', text: '任务已手动终止' },
     ]);
+  };
+
+  const handleResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: drawerWidth,
+      lastWidth: drawerWidth,
+    };
+    setResizing(true);
+  };
+
+  const handleResizeMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (resizeRef.current.pointerId !== event.pointerId) return;
+    const maxWidth = Math.max(360, window.innerWidth - 16);
+    const rawWidth = resizeRef.current.startWidth + (resizeRef.current.startX - event.clientX);
+    const nextWidth = Math.min(maxWidth, Math.max(360, rawWidth));
+    resizeRef.current.lastWidth = nextWidth;
+    setDrawerWidth(nextWidth);
+  };
+
+  const handleResizeEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (resizeRef.current.pointerId !== event.pointerId) return;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    resizeRef.current.pointerId = -1;
+    setResizing(false);
+    window.localStorage.setItem('mss-skill-chat-width', String(Math.round(resizeRef.current.lastWidth)));
   };
 
   const send = (text: string) => {
@@ -339,11 +387,26 @@ export function SkillChatDrawer({ skill, open, onClose, onSkillChange }: SkillCh
         aria-modal="true"
         aria-label="Skill 对话"
         className={cn(
-          'fixed inset-y-0 right-0 z-[120] flex w-full max-w-[460px] flex-col',
+          'fixed inset-y-0 right-0 z-[120] flex max-w-[min(100vw-16px,760px)] flex-col',
           'border-l border-zinc-200/90 bg-[#fbfbfd] shadow-2xl',
+          resizing && 'select-none',
         )}
+        style={{ width: drawerWidth, transition: resizing ? 'none' : undefined }}
         onClick={(event) => event.stopPropagation()}
       >
+        <div
+          role="separator"
+          aria-label="调整 Skill 对话宽度"
+          aria-orientation="vertical"
+          title="拖动调整宽度"
+          onPointerDown={handleResizeStart}
+          onPointerMove={handleResizeMove}
+          onPointerUp={handleResizeEnd}
+          onPointerCancel={handleResizeEnd}
+          className="group absolute left-0 top-0 z-50 h-full w-2 cursor-col-resize touch-none"
+        >
+          <span className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 bg-zinc-300/0 transition-colors group-hover:bg-zinc-300/70" />
+        </div>
         <header className="flex shrink-0 items-center justify-end gap-1 border-b border-black/[0.06] bg-white px-3 py-2">
           <button
             type="button"

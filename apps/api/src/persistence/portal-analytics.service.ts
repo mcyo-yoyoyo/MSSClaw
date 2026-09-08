@@ -262,7 +262,9 @@ export interface PortalAnalyticsReport {
   users: {
     rows: Array<{
       userId: string;
+      name: string;
       department: string;
+      regionId: string | null;
       role: string;
       firstUseAt: string | null;
       lastActiveAt: string | null;
@@ -1483,9 +1485,11 @@ export class PortalAnalyticsService {
         const callFacts = callByUser.get(visitorHash);
         return {
           userId,
+          name: stringValue(member.name ?? member.displayName ?? member.fullName) || userId,
           department: Array.isArray(member.deptIds)
             ? member.deptIds.map(String).filter(Boolean).join(',')
             : stringValue(member.department ?? member.deptId),
+          regionId: stringValue(member.regionId) || null,
           role: stringValue(member.role ?? member.platformRole),
           firstUseAt: firstAtByUser.get(visitorHash) ?? (firstDate ? `${firstDate}T00:00:00.000Z` : null),
           lastActiveAt:

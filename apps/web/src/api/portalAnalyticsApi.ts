@@ -71,7 +71,9 @@ export interface PortalAnalyticsAssetSummary {
 
 export interface PortalAnalyticsUserRow {
   userId: string;
+  name: string;
   department: string;
+  regionId: string | null;
   role: string;
   firstUseAt: string | null;
   lastActiveAt: string | null;

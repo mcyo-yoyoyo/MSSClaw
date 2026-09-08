@@ -7,6 +7,7 @@ import {
   type PortalAnalyticsReport,
   type PortalAnalyticsTrafficCounts,
 } from '@/api/portalAnalyticsApi';
+import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
 import type { PortalToolInventory } from '@/domain/portalToolInventory';
 import { downloadBlob } from '@/lib/download';
 import { cn } from '@/lib/utils';
@@ -20,9 +21,8 @@ import { useWorkspaceStore } from '@/stores/workspaceStore';
  * 时只发一次；某块单独换区间才会多发一次。
  */
 
-type AssetTab = 'tool' | 'skill' | 'agent';
+type AssetTab = 'externalTool' | 'companyTool' | 'skill' | 'agent';
 type RangeKey = 'today' | 'last7Days' | 'last30Days' | 'custom';
-type TrendKey = 'pv' | 'userPv' | 'guestPv' | 'userUv' | 'redirects' | 'downloads';
 type ModuleId = 'overview' | 'users' | 'assets' | 'behavior';
 /** 文档要求行为指标按这四类分别统计。 */
 type AssetClass = 'externalTool' | 'companyTool' | 'skill' | 'agent';
@@ -69,18 +69,10 @@ const RANGE_OPTIONS: Array<{ value: RangeKey; label: string; days?: number }> = 
 ];
 
 const ASSET_TABS: Array<{ value: AssetTab; label: string }> = [
-  { value: 'tool', label: '工具' },
+  { value: 'externalTool', label: '外部工具' },
+  { value: 'companyTool', label: '内部工具' },
   { value: 'skill', label: 'Skill' },
   { value: 'agent', label: 'Agent' },
-];
-
-const TREND_METRICS: Array<{ value: TrendKey; label: string; unit: string }> = [
-  { value: 'pv', label: '页面浏览数 PV', unit: '次' },
-  { value: 'userPv', label: '登录用户 PV', unit: '次' },
-  { value: 'guestPv', label: '游客 PV', unit: '次' },
-  { value: 'userUv', label: '用户数 UV', unit: '人次' },
-  { value: 'redirects', label: '工具跳转数', unit: '次' },
-  { value: 'downloads', label: '资产下载数', unit: '次' },
 ];
 
 const PAGE_METRICS: Array<{ routeKey: string; label: string }> = [
@@ -99,7 +91,7 @@ const ASSET_CLASSES: Array<{ value: AssetClass; label: string }> = [
 ];
 
 const PAGE_SIZES = [10, 20, 50, 100];
-const ASSET_PAGE_SIZE = 20;
+const ASSET_PAGE_SIZE = 10;
 const USER_PAGE_SIZE = 10;
 
 const DEFAULT_RANGE: RangeSpec = { key: 'last7Days' };
@@ -231,11 +223,6 @@ function formatDate(value: string): string {
   return match ? `${match[1]}/${match[2]}/${match[3]}` : value;
 }
 
-function formatShortDate(value: string): string {
-  const match = value.match(/^\d{4}-(\d{2})-(\d{2})$/);
-  return match ? `${match[1]}/${match[2]}` : value;
-}
-
 function formatShare(part: number, whole: number): string {
   if (!whole) return '—';
   return `${Math.round((part / whole) * 1000) / 10}%`;
@@ -251,7 +238,8 @@ function matchesAssetTab(row: PortalAnalyticsAssetRow, tab: AssetTab): boolean {
   const type = row.assetType.toLowerCase();
   if (tab === 'skill') return type.includes('skill');
   if (tab === 'agent') return type.includes('agent');
-  return type.includes('tool');
+  if (!type.includes('tool')) return false;
+  return tab === 'externalTool' ? row.source === 'external' : row.source === 'company';
 }
 
 /** 办公场景不计入行为统计（文档 2.3 行为指标只列了这四类）。 */
@@ -318,15 +306,6 @@ function toCsv(rows: string[][]): string {
       cells.map((cell) => (/[",\n\r]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell)).join(','),
     )
     .join('\r\n');
-}
-
-function niceScale(max: number, divisions = 3): { max: number; step: number } {
-  if (!Number.isFinite(max) || max <= 0) return { max: divisions, step: 1 };
-  const raw = max / divisions;
-  const exponent = 10 ** Math.floor(Math.log10(raw));
-  const normalized = raw / exponent;
-  const step = (normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10) * exponent;
-  return { max: step * divisions, step };
 }
 
 /* ── 基础块 ── */
@@ -482,29 +461,25 @@ function HeroRow({ children }: { children: ReactNode }) {
  * 负外边距把最后一行/列的分隔线顶出裁剪区，指标数量凑不满整行也不会留下断线。
  */
 function StatBand({ columns, children }: { columns: string; children: ReactNode }) {
-  return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200/60 bg-white">
-      <div className={cn('-mb-px -mr-px grid', columns)}>{children}</div>
-    </div>
-  );
+  return <div className={cn('grid gap-3', columns)}>{children}</div>;
 }
 
 function BandItem({ label, value, note }: { label: string; value: string; note?: string }) {
   const missing = value === NOT_COLLECTED;
   return (
-    <div className="border-b border-r border-zinc-100 px-4 py-3.5">
-      <p className="text-[11px] font-medium text-zinc-500">{label}</p>
+    <div className="rounded-2xl border border-zinc-200/60 bg-white px-5 py-4 shadow-apple">
+      <p className="text-[11.5px] font-medium text-zinc-500">{label}</p>
       <p
         className={cn(
-          'mt-1.5 tabular-nums',
+          'mt-2.5 tabular-nums',
           missing
-            ? 'text-[12px] font-medium text-zinc-400'
-            : 'text-[20px] font-semibold leading-none tracking-[-0.02em] text-zinc-900',
+            ? 'text-[13px] font-medium text-zinc-400'
+            : 'text-[30px] font-semibold leading-none tracking-[-0.025em] text-zinc-900',
         )}
       >
         {value}
       </p>
-      {note ? <p className="mt-1.5 text-[10px] leading-snug text-zinc-400">{note}</p> : null}
+      {note ? <p className="mt-2.5 text-[10.5px] leading-snug text-zinc-400">{note}</p> : null}
     </div>
   );
 }
@@ -562,170 +537,6 @@ function ChipGroup<T extends string>({
           {option.label}
         </button>
       ))}
-    </div>
-  );
-}
-
-/* ── 图表 ── */
-
-const TREND_GRADIENT_ID = 'portal-dashboard-trend-fill';
-
-function TrendChart({
-  points,
-  metricLabel,
-  unit,
-}: {
-  points: Array<{ date: string; value: number }>;
-  metricLabel: string;
-  unit: string;
-}) {
-  if (points.length < 2) return <Empty label="趋势数据未采集" />;
-
-  const width = 760;
-  const height = 210;
-  const padLeft = 52;
-  const padRight = 18;
-  const padTop = 26;
-  const padBottom = 38;
-  const innerWidth = width - padLeft - padRight;
-  const innerHeight = height - padTop - padBottom;
-
-  const values = points.map((point) => point.value);
-  const { max: scaleMax, step } = niceScale(Math.max(...values));
-  const x = (index: number) => padLeft + (index / (points.length - 1)) * innerWidth;
-  const y = (value: number) => padTop + innerHeight - (value / scaleMax) * innerHeight;
-
-  const ticks: number[] = [];
-  for (let tick = 0; tick <= scaleMax + step / 2; tick += step) ticks.push(tick);
-
-  const line = points.map((point, index) => `${x(index).toFixed(2)},${y(point.value).toFixed(2)}`).join(' ');
-  const area = `${padLeft},${y(0).toFixed(2)} ${line} ${x(points.length - 1).toFixed(2)},${y(0).toFixed(2)}`;
-
-  const peakIndex = values.indexOf(Math.max(...values));
-  const lastIndex = points.length - 1;
-  const total = values.reduce((sum, value) => sum + value, 0);
-  const labelIndexes =
-    points.length <= 8
-      ? points.map((_, index) => index)
-      : [0, 0.25, 0.5, 0.75, 1].map((ratio) => Math.round(ratio * lastIndex));
-  const showDots = points.length <= 12;
-
-  return (
-    <div>
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="block w-full"
-        role="img"
-        aria-label={`${metricLabel}趋势，合计 ${formatCount(total)}${unit}，峰值 ${formatCount(values[peakIndex])} 出现在 ${formatDate(points[peakIndex].date)}`}
-      >
-        <defs>
-          <linearGradient id={TREND_GRADIENT_ID} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#18181b" stopOpacity="0.14" />
-            <stop offset="100%" stopColor="#18181b" stopOpacity="0.01" />
-          </linearGradient>
-        </defs>
-
-        {ticks.map((tick) => (
-          <g key={tick}>
-            <line
-              x1={padLeft}
-              y1={y(tick)}
-              x2={width - padRight}
-              y2={y(tick)}
-              stroke={tick === 0 ? '#e4e4e7' : '#f1f1f3'}
-              strokeWidth="1"
-            />
-            <text x={padLeft - 10} y={y(tick) + 3.5} textAnchor="end" fontSize="10" fill="#a1a1aa">
-              {tick.toLocaleString('zh-CN')}
-            </text>
-          </g>
-        ))}
-
-        <polygon points={area} fill={`url(#${TREND_GRADIENT_ID})`} />
-        <polyline
-          points={line}
-          fill="none"
-          stroke="#18181b"
-          strokeWidth="2"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-
-        {showDots
-          ? points.map((point, index) =>
-              index === lastIndex ? null : (
-                <circle
-                  key={point.date}
-                  cx={x(index)}
-                  cy={y(point.value)}
-                  r="2.4"
-                  fill="#ffffff"
-                  stroke="#18181b"
-                  strokeWidth="1.4"
-                />
-              ),
-            )
-          : null}
-
-        {peakIndex !== lastIndex ? (
-          <text
-            x={x(peakIndex)}
-            y={y(values[peakIndex]) - 10}
-            textAnchor="middle"
-            fontSize="10.5"
-            fontWeight="600"
-            fill="#52525b"
-          >
-            {formatCount(values[peakIndex])}
-          </text>
-        ) : null}
-
-        <circle cx={x(lastIndex)} cy={y(values[lastIndex])} r="7.5" fill="#18181b" fillOpacity="0.1" />
-        <circle cx={x(lastIndex)} cy={y(values[lastIndex])} r="4" fill="#18181b" />
-        <text
-          x={x(lastIndex)}
-          y={y(values[lastIndex]) - 13}
-          textAnchor="end"
-          fontSize="11"
-          fontWeight="600"
-          fill="#18181b"
-        >
-          {formatCount(values[lastIndex])}
-        </text>
-
-        {labelIndexes.map((index) => (
-          <text
-            key={index}
-            x={x(index)}
-            y={height - 18}
-            textAnchor={index === 0 ? 'start' : index === lastIndex ? 'end' : 'middle'}
-            fontSize="10"
-            fill="#a1a1aa"
-          >
-            {formatShortDate(points[index].date)}
-          </text>
-        ))}
-      </svg>
-
-      <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t border-zinc-100 pt-2.5 text-[11px] text-zinc-400">
-        <span>
-          合计 <span className="text-[13px] font-semibold tabular-nums text-zinc-900">{formatCount(total)}</span>{' '}
-          {unit}
-        </span>
-        <span>
-          日均{' '}
-          <span className="text-[13px] font-semibold tabular-nums text-zinc-900">
-            {formatCount(Math.round(total / points.length))}
-          </span>
-        </span>
-        <span>
-          峰值{' '}
-          <span className="text-[13px] font-semibold tabular-nums text-zinc-900">
-            {formatCount(values[peakIndex])}
-          </span>{' '}
-          · {formatDate(points[peakIndex].date)}
-        </span>
-      </div>
     </div>
   );
 }
@@ -954,12 +765,11 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
     };
   }, []);
 
-  const [assetTab, setAssetTab] = useState<AssetTab>('tool');
+  const [assetTab, setAssetTab] = useState<AssetTab>('externalTool');
   const [assetPage, setAssetPage] = useState(1);
   const [assetPageSize, setAssetPageSize] = useState(ASSET_PAGE_SIZE);
   const [userPage, setUserPage] = useState(1);
   const [userPageSize, setUserPageSize] = useState(USER_PAGE_SIZE);
-  const [trendKey, setTrendKey] = useState<TrendKey>('pv');
   const [activeModule, setActiveModule] = useState<ModuleId>('overview');
   const today = useMemo(shanghaiToday, []);
 
@@ -1099,27 +909,6 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
   const overviewSummary = overviewState.report?.assets?.summary ?? EMPTY_ASSET_SUMMARY;
   const overviewHasAssets = Boolean(overviewState.report?.assets);
   const overviewToolTotal = overviewSummary.tool ?? overviewSummary.external + overviewSummary.company;
-  const overviewDaily = useMemo(() => {
-    const report = overviewState.report;
-    const behaviorByDate = new Map((report?.behavior?.series ?? []).map((row) => [row.date, row]));
-    return (report?.series ?? []).map((row) => {
-      const behaviorRow = behaviorByDate.get(row.date);
-      return {
-        date: row.date,
-        pv: row.pv,
-        userPv: row.userPv,
-        guestPv: row.guestPv,
-        userUv: row.userUv,
-        redirects: behaviorRow?.redirects ?? 0,
-        downloads: behaviorRow?.downloads ?? 0,
-      };
-    });
-  }, [overviewState.report]);
-  const trendMetric = TREND_METRICS.find((metric) => metric.value === trendKey) ?? TREND_METRICS[0];
-  const trendPoints = useMemo(
-    () => overviewDaily.map((row) => ({ date: row.date, value: row[trendKey] })),
-    [overviewDaily, trendKey],
-  );
 
   /* 02 用户分析 */
   const usersTraffic = usersState.report?.totals ?? EMPTY_TRAFFIC;
@@ -1127,7 +916,24 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
     const pages = new Map((usersState.report?.pages ?? []).map((page) => [page.routeKey, page]));
     return PAGE_METRICS.map((page) => ({ ...page, ...pages.get(page.routeKey) }));
   }, [usersState.report?.pages]);
-  const userRows = usersState.report?.users?.rows ?? [];
+  const userRows = useMemo(() => {
+    const rows = usersState.report?.users?.rows ?? [];
+    const from = usersState.report?.range?.from;
+    const to = usersState.report?.range?.to;
+    const start = from ? Date.parse(`${from}T00:00:00.000Z`) : Number.NEGATIVE_INFINITY;
+    const end = to ? Date.parse(`${to}T23:59:59.999Z`) : Number.POSITIVE_INFINITY;
+    return [...rows]
+      .filter((row) => {
+        if (!row.lastActiveAt) return false;
+        const activeAt = Date.parse(row.lastActiveAt);
+        return Number.isFinite(activeAt) && activeAt >= start && activeAt <= end;
+      })
+      .sort((a, b) => {
+        const aActive = Date.parse(a.lastActiveAt ?? '');
+        const bActive = Date.parse(b.lastActiveAt ?? '');
+        return bActive - aActive || a.userId.localeCompare(b.userId);
+      });
+  }, [usersState.report?.range?.from, usersState.report?.range?.to, usersState.report?.users?.rows]);
   // activeUv 是服务端按所选区间过滤后的活跃人数（见 portal-analytics.service 里
   // memberActivity 对 from/to 的裁剪），所以这里直接跟随本模块的时间筛选。
   // 不过滤零活跃：没人来过的部门也是结论，隐藏它会让人误以为名册里没有这个部门。
@@ -1158,6 +964,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
   const assetsSummary = assetsState.report?.assets?.summary ?? EMPTY_ASSET_SUMMARY;
   const assetsHasFacts = Boolean(assetsState.report?.assets);
   const assetsToolTotal = assetsSummary.tool ?? assetsSummary.external + assetsSummary.company;
+  const assetsDisplayTotal = assetsToolTotal + (assetsSummary.skill ?? 0) + (assetsSummary.agent ?? 0);
   const allAssetRows = useMemo(() => assetsState.report?.assets?.rows ?? [], [assetsState.report?.assets?.rows]);
   const assetRows = useMemo(
     () => allAssetRows.filter((row) => matchesAssetTab(row, assetTab)),
@@ -1178,7 +985,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
     () => behaviorState.report?.assets?.rows ?? [],
     [behaviorState.report?.assets?.rows],
   );
-  const behaviorHasFacts = Boolean(behaviorState.report?.assets);
+  const behaviorHasFacts = Boolean(behaviorAssetRows.length);
   const behavior = useMemo(() => buildBehaviorBreakdown(behaviorAssetRows), [behaviorAssetRows]);
   const behaviorRows: Array<{ key: string; label: string; counts: BehaviorCounts; muted?: boolean }> =
     ASSET_CLASSES.map((assetClass) => ({
@@ -1292,29 +1099,11 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
           </HeroRow>
         )}
 
-        <Card
-          title="访问趋势"
-          actions={<ChipGroup label="趋势指标" options={TREND_METRICS} value={trendKey} onChange={setTrendKey} />}
-        >
-          {overviewState.loading ? (
-            <Skeleton className="h-[240px]" />
-          ) : overviewState.report ? (
-            <TrendChart points={trendPoints} metricLabel={trendMetric.label} unit={trendMetric.unit} />
-          ) : (
-            <Empty label="趋势数据暂不可用" />
-          )}
-        </Card>
-
-        <StatBand columns="grid-cols-2 sm:grid-cols-4">
+        <StatBand columns="grid-cols-1 sm:grid-cols-3">
           <BandItem
             label="工具总数"
             value={formatOptionalCount(overviewHasAssets ? overviewToolTotal : inventory.totalTools)}
             note="已上架外部工具 + 公司工具"
-          />
-          <BandItem
-            label="办公场景数"
-            value={formatOptionalCount(overviewHasAssets ? overviewSummary.officeScenes : inventory.officeScenes)}
-            note="已上架办公场景"
           />
           <BandItem label="Skill 数" value={formatOptionalCount(overviewSummary.skill)} note="已上架 Skill" />
           <BandItem label="Agent 数" value={formatOptionalCount(overviewSummary.agent)} note="已上架 Agent" />
@@ -1338,7 +1127,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
             <HeroStat
               label="页面浏览数 PV"
               value={formatCount(usersTraffic.pv)}
-              note="页面浏览数据，包含访客和登录用户浏览数"
+              note="登录用户页面 PV + 游客页面 PV"
             />
             <HeroStat
               label="登录用户页面浏览数 PV"
@@ -1352,6 +1141,54 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
             />
           </HeroRow>
         )}
+
+        <StatBand columns="grid-cols-1 sm:grid-cols-3">
+          <BandItem label="总 UV 数" value={formatOptionalCount((usersTraffic.userUv ?? 0) + (usersTraffic.guestUv ?? 0))} note="登录用户 UV + 游客 UV" />
+          <BandItem label="登录用户数 UV" value={formatOptionalCount(usersTraffic.userUv)} note="按用户 ID 去重" />
+          <BandItem label="游客数 UV" value={formatOptionalCount(usersTraffic.guestUv)} note="按访客 ID 去重" />
+        </StatBand>
+
+        <TableShell
+          title="用户明细"
+          subtitle={`${formatCount(userRows.length)} 名登录用户 · 按最近活跃时间筛选与排序`}
+          footer={
+            <Pagination
+              page={userCurrentPage}
+              pageCount={userPageCount}
+              pageSize={userPageSize}
+              total={userRows.length}
+              onPage={setUserPage}
+              onPageSize={setUserPageSize}
+            />
+          }
+        >
+          <table className="w-full min-w-[780px] text-left">
+            <thead>
+              <tr>
+                <Th>用户名</Th>
+                <Th>部门</Th>
+                <Th>区域</Th>
+                <Th>首次使用时间</Th>
+                <Th>最近活跃时间</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {pagedUserRows.length ? (
+                pagedUserRows.map((row) => (
+                  <Row key={row.userId}>
+                    <Td className="font-medium text-zinc-900">{row.name || row.userId}</Td>
+                    <Td>{row.department ? row.department.split(',').map((id) => getDeptLabel(id.trim())).join('、') : NOT_COLLECTED}</Td>
+                    <Td>{row.regionId ? getRegionLabel(row.regionId) : '机关'}</Td>
+                    <Td>{formatDateTime(row.firstUseAt)}</Td>
+                    <Td>{formatDateTime(row.lastActiveAt)}</Td>
+                  </Row>
+                ))
+              ) : (
+                <EmptyRow colSpan={5} label={usersState.loading ? '读取中' : '暂无登录用户事实'} />
+              )}
+            </tbody>
+          </table>
+        </TableShell>
 
         <TableShell title="页面浏览明细" subtitle={`${usersRangeLabel} · 首页、AI快讯、外部工具精选、内部办公场景、AI工具Hub`}>
           <table className="w-full min-w-[680px] text-left">
@@ -1417,48 +1254,6 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
             </tbody>
           </table>
         </TableShell>
-
-        <TableShell
-          title="用户明细"
-          subtitle={`${formatCount(userRows.length)} 名登录用户 · 自 2026/08/21 起，不随时间范围变化`}
-          footer={
-            <Pagination
-              page={userCurrentPage}
-              pageCount={userPageCount}
-              pageSize={userPageSize}
-              total={userRows.length}
-              onPage={setUserPage}
-              onPageSize={setUserPageSize}
-            />
-          }
-        >
-          <table className="w-full min-w-[640px] text-left">
-            <thead>
-              <tr>
-                <Th>用户 ID</Th>
-                <Th>所属部门</Th>
-                <Th>岗位</Th>
-                <Th>首次使用时间</Th>
-                <Th>最近活跃时间</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {pagedUserRows.length ? (
-                pagedUserRows.map((row) => (
-                  <Row key={row.userId}>
-                    <Td className="font-medium text-zinc-900">{row.userId}</Td>
-                    <Td>{row.department || NOT_COLLECTED}</Td>
-                    <Td>{row.role || NOT_COLLECTED}</Td>
-                    <Td>{formatDateTime(row.firstUseAt)}</Td>
-                    <Td>{formatDateTime(row.lastActiveAt)}</Td>
-                  </Row>
-                ))
-              ) : (
-                <EmptyRow colSpan={5} label={usersState.loading ? '读取中' : '暂无登录用户事实'} />
-              )}
-            </tbody>
-          </table>
-        </TableShell>
       </Module>
 
       {/* ══ 03 资产 ══ */}
@@ -1475,73 +1270,54 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
         {inventoryLoading || assetsState.loading ? (
           <Skeleton className="h-[116px]" />
         ) : (
-          <HeroRow>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <HeroStat
               label="资产总数"
-              value={formatOptionalCount(assetsHasFacts ? assetsSummary.total : inventory.totalTools)}
-              note="外部工具 + 公司工具 + 办公场景 + Skill + Agent"
+              value={formatOptionalCount(assetsHasFacts ? assetsDisplayTotal : null)}
+              note="外部工具 + 公司工具 + Skill + Agent"
             />
-            <HeroStat
-              label="工具总数"
-              value={formatOptionalCount(assetsHasFacts ? assetsToolTotal : inventory.totalTools)}
-              note="外部工具 + 公司工具"
-            />
-            <HeroStat
-              label="办公场景数"
-              value={formatOptionalCount(assetsHasFacts ? assetsSummary.officeScenes : inventory.officeScenes)}
-              note="已上架办公场景"
-            />
-          </HeroRow>
+            <HeroStat label="Skill 数" value={formatOptionalCount(assetsSummary.skill)} note="已上架 Skill" />
+            <HeroStat label="Agent 数" value={formatOptionalCount(assetsSummary.agent)} note="已上架 Agent" />
+          </div>
         )}
 
-        <StatBand columns="grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
-          <BandItem
-            label="外部工具数"
-            value={formatOptionalCount(assetsHasFacts ? assetsSummary.external : inventory.externalTools)}
-          />
-          <BandItem label="海外工具数" value={formatOptionalCount(assetsSummary.externalOverseas)} note="外部工具中" />
-          <BandItem label="国内工具数" value={formatOptionalCount(assetsSummary.externalDomestic)} note="外部工具中" />
-          <BandItem
-            label="公司工具数"
-            value={formatOptionalCount(assetsHasFacts ? assetsSummary.company : inventory.companyTools)}
-          />
-          <BandItem label="Skill 数" value={formatOptionalCount(assetsSummary.skill)} />
-          <BandItem label="Agent 数" value={formatOptionalCount(assetsSummary.agent)} />
-        </StatBand>
+        {inventoryLoading || assetsState.loading ? (
+          <Skeleton className="h-[116px]" />
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <HeroStat
+              label="工具总数"
+              value={formatOptionalCount(assetsHasFacts ? assetsToolTotal : null)}
+              note="已上架外部工具 + 公司工具"
+            />
+            <HeroStat
+              label="外部工具数"
+              value={formatOptionalCount(assetsHasFacts ? assetsSummary.external : null)}
+              note="已上架外部工具"
+            />
+            <HeroStat
+              label="公司工具数"
+              value={formatOptionalCount(assetsHasFacts ? assetsSummary.company : null)}
+              note="已上架公司工具"
+            />
+          </div>
+        )}
 
-        <div className="grid gap-3.5 xl:grid-cols-2">
-          <Card title="资产构成" subtitle="已上架资产按类型拆分">
-            {inventoryLoading || assetsState.loading ? (
-              <Skeleton className="h-40" />
-            ) : (
-              <StackedBar
-                segments={[
-                  { key: 'external', label: '外部工具', value: assetsSummary.external },
-                  { key: 'company', label: '公司工具', value: assetsSummary.company },
-                  { key: 'officeScene', label: '办公场景', value: assetsSummary.officeScenes },
-                  { key: 'skill', label: 'Skill', value: assetsSummary.skill ?? 0 },
-                  { key: 'agent', label: 'Agent', value: assetsSummary.agent ?? 0 },
-                ]}
-                emptyLabel="资产库存未采集"
-              />
-            )}
-          </Card>
-
-          <Card title="外部工具地区分布" subtitle="海外 / 国内">
-            {inventoryLoading || assetsState.loading ? (
-              <Skeleton className="h-40" />
-            ) : (
-              <StackedBar
-                segments={[
-                  { key: 'overseas', label: '海外工具数', value: assetsSummary.externalOverseas ?? 0 },
-                  { key: 'domestic', label: '国内工具数', value: assetsSummary.externalDomestic ?? 0 },
-                  { key: 'unknown', label: '未标注地区', value: assetsSummary.unknown ?? 0 },
-                ]}
-                emptyLabel="外部工具地区未采集"
-              />
-            )}
-          </Card>
-        </div>
+        <Card title="资产构成" subtitle="已上架资产按类型拆分">
+          {inventoryLoading || assetsState.loading ? (
+            <Skeleton className="h-40" />
+          ) : (
+            <StackedBar
+              segments={[
+                { key: 'external', label: '外部工具', value: assetsSummary.external },
+                { key: 'company', label: '公司工具', value: assetsSummary.company },
+                { key: 'skill', label: 'Skill', value: assetsSummary.skill ?? 0 },
+                { key: 'agent', label: 'Agent', value: assetsSummary.agent ?? 0 },
+              ]}
+              emptyLabel="资产库存未采集"
+            />
+          )}
+        </Card>
 
         <TableShell
           title="资产明细"
@@ -1574,12 +1350,12 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
             <thead>
               <tr>
                 <Th>名称</Th>
-                {assetTab === 'tool' ? <Th>海外 / 国内</Th> : null}
+                {assetTab === 'externalTool' ? <Th>海外 / 国内</Th> : null}
                 <Th align="right">浏览数</Th>
                 <Th align="right">收藏数</Th>
                 <Th align="right">点赞数</Th>
                 <Th align="right">点踩数</Th>
-                <Th align="right">{assetTab === 'tool' ? '跳转数' : '下载数'}</Th>
+                <Th align="right">{assetTab === 'externalTool' ? '跳转数' : '下载数'}</Th>
               </tr>
             </thead>
             <tbody>
@@ -1587,7 +1363,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                 pagedAssetRows.map((row) => (
                   <Row key={`${row.assetType}:${row.contentId}`}>
                     <Td className="font-medium text-zinc-900">{row.name || row.contentId}</Td>
-                    {assetTab === 'tool' ? (
+                    {assetTab === 'externalTool' ? (
                       <Td>
                         <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-[10.5px] font-medium text-zinc-600">
                           {regionLabel(row.region)}
@@ -1601,13 +1377,13 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                     <Td align="right">{formatCount(row.likes)}</Td>
                     <Td align="right">{formatCount(row.dislikes)}</Td>
                     <Td align="right" className="font-semibold text-zinc-900">
-                      {assetTab === 'tool' ? formatCount(row.redirects) : formatCount(row.downloads)}
+                      {assetTab === 'externalTool' ? formatCount(row.redirects) : formatCount(row.downloads)}
                     </Td>
                   </Row>
                 ))
               ) : (
                 <EmptyRow
-                  colSpan={assetTab === 'tool' ? 7 : 6}
+                  colSpan={assetTab === 'externalTool' ? 7 : 6}
                   label={assetsState.loading ? '读取中' : assetsHasFacts ? '当前类型暂无资产事实' : '资产明细未采集'}
                 />
               )}
@@ -1635,15 +1411,39 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
         {behaviorState.loading ? (
           <Skeleton className="h-[116px]" />
         ) : (
-          <HeroRow>
-            <HeroStat
-              label="工具跳转数"
-              value={formatCount(toolRedirects)}
-              note="外部工具 + 公司工具，点击「立即体验」"
-            />
-            <HeroStat label="Skill 下载数" value={formatCount(behavior.byClass.skill.downloads)} note="用户点击下载" />
-            <HeroStat label="Agent 下载数" value={formatCount(behavior.byClass.agent.downloads)} note="用户点击下载" />
-          </HeroRow>
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <HeroStat
+                label="资产浏览总数"
+                value={formatCount(behavior.total.views)}
+                note="外部工具 + 公司工具 + Skill + Agent"
+              />
+              <HeroStat
+                label="资产收藏数"
+                value={formatCount(behavior.total.favorites)}
+                note="外部工具 + 公司工具 + Skill + Agent"
+              />
+              <HeroStat
+                label="资产点赞数"
+                value={formatCount(behavior.total.likes)}
+                note="外部工具 + 公司工具 + Skill + Agent"
+              />
+              <HeroStat
+                label="资产点踩数"
+                value={formatCount(behavior.total.dislikes)}
+                note="外部工具 + 公司工具 + Skill + Agent"
+              />
+            </div>
+            <HeroRow>
+              <HeroStat
+                label="工具跳转数"
+                value={formatCount(toolRedirects)}
+                note="外部工具 + 公司工具，点击「立即体验」"
+              />
+              <HeroStat label="Skill 下载数" value={formatCount(behavior.byClass.skill.downloads)} note="用户点击下载" />
+              <HeroStat label="Agent 下载数" value={formatCount(behavior.byClass.agent.downloads)} note="用户点击下载" />
+            </HeroRow>
+          </div>
         )}
 
         <TableShell title="资产行为分类统计" subtitle={behaviorRangeLabel}>
@@ -1694,29 +1494,6 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
           </table>
         </TableShell>
 
-        <div className="grid gap-3.5 xl:grid-cols-2">
-          <Card title="资产浏览构成" subtitle="按资产类型拆分">
-            {behaviorState.loading ? (
-              <Skeleton className="h-40" />
-            ) : (
-              <StackedBar
-                segments={behaviorRows.map((row) => ({ key: row.key, label: row.label, value: row.counts.views }))}
-                emptyLabel="资产浏览事实未采集"
-              />
-            )}
-          </Card>
-
-          <Card title="资产收藏构成" subtitle="按资产类型拆分">
-            {behaviorState.loading ? (
-              <Skeleton className="h-40" />
-            ) : (
-              <StackedBar
-                segments={behaviorRows.map((row) => ({ key: row.key, label: row.label, value: row.counts.favorites }))}
-                emptyLabel="资产收藏事实未采集"
-              />
-            )}
-          </Card>
-        </div>
       </Module>
 
       <p className="pt-1 text-right text-[10px] text-zinc-400">
