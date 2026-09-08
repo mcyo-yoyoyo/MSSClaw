@@ -7,7 +7,6 @@ import {
 import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import {
-  nestLlmChatCompletion,
   nestLlmConfigFromDoc,
   nestLlmConfigFromEnv,
   type NestLlmRuntimeConfig,
@@ -20,12 +19,10 @@ import {
 } from './ai-knowledge.agent';
 import {
   buildRuleSolution,
-  buildDemandUserStory,
   canConfirmDemand,
   clarifyDraft,
   createDraft,
   sanitizeLlmSolution,
-  strongToolCandidates,
   updateDraftDemand,
 } from './ai-knowledge.domain';
 import { AiKnowledgeResourceService } from './ai-knowledge.resources';
@@ -45,26 +42,6 @@ type StoredSolution = AiKnowledgeSolution & { ownerKey: string };
 
 function hash(value: string): string {
   return createHash('sha256').update(value).digest('hex');
-}
-
-function extractJson(raw: string): unknown {
-  const clean = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-  try {
-    const direct: unknown = JSON.parse(clean);
-    if (typeof direct === 'string' && direct !== clean) return extractJson(direct);
-    return direct;
-  } catch {
-    // Some OpenAI-compatible providers prepend prose before the JSON payload.
-  }
-  const start = clean.indexOf('{');
-  const end = clean.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  try {
-    const parsed: unknown = JSON.parse(clean.slice(start, end + 1));
-    return typeof parsed === 'string' && parsed !== clean ? extractJson(parsed) : parsed;
-  } catch {
-    return null;
-  }
 }
 
 @Injectable()
@@ -143,14 +120,15 @@ export class AiKnowledgeService {
     if (!canConfirmDemand(draft.demand)) {
       throw new BadRequestException('ai_knowledge_demand_incomplete');
     }
-    let resources = await this.resourceCatalog.searchForDraft(workspaceId, draft);
-    let base = buildRuleSolution(draft, resources);
+    const resources = await this.resourceCatalog.searchForDraft(workspaceId, draft);
+    const base = buildRuleSolution(draft, resources);
     const llmConfig = await this.resolveLlmConfig(workspaceId);
     let solution = base;
 
     if (llmConfig) {
       try {
         const generated = await this.generateWithLlm(
+          workspaceId,
           draft,
           base,
           resources,
@@ -165,6 +143,7 @@ export class AiKnowledgeService {
         );
         try {
           const fallback = await this.generateWithLlm(
+            workspaceId,
             draft,
             base,
             resources,
@@ -320,6 +299,7 @@ export class AiKnowledgeService {
   }
 
   private async generateWithLlm(
+    workspaceId: string,
     draft: DemandDraft,
     base: AiKnowledgeSolution,
     resources: SolutionResource[],
@@ -327,43 +307,13 @@ export class AiKnowledgeService {
     signal?: AbortSignal,
     repair = false,
   ) {
-    const requiredToolIds = strongToolCandidates(resources).map((resource) => resource.id);
-    const raw = await nestLlmChatCompletion({
-      config,
-      signal,
-      maxTokens: Math.max(config.maxTokens, 2_200),
-      temperature: repair ? 0 : 0.15,
-      jsonMode: true,
-      disableThinking: true,
-      messages: [
-        {
-          role: 'system',
-          content:
-            AI_KNOWLEDGE_SOLUTION_INSTRUCTIONS +
-            (repair
-              ? '这是一次结构修复生成。必须严格满足字段和资源ID约束，不要省略高相关工具。'
-              : '') +
-            '只返回JSON对象，不要输出解释、Markdown或代码围栏。对象字段为title、diagnosis、tools、cases。' +
-            'diagnosis字段：need、currentSituation、keyProblems、solutionDirection。' +
-            'tools每项字段：resourceId、problemSolved、introduction、howToUse、output、expectedEffect。' +
-            'cases每项字段：resourceId、similarProblem、approach、toolsUsed、result、lessons、applicability。' +
-            '数组没有合格内容时返回空数组，不要省略字段。' +
-            'requiredToolResourceIds非空时，tools不得为空，且tools第一项的resourceId必须从该列表逐字复制。',
-        },
-        {
-          role: 'user',
-          content: JSON.stringify({
-            mode: repair ? 'repair_invalid_solution' : 'generate_solution',
-            question: draft.originalQuestion,
-            demand: draft.demand,
-            userStory: buildDemandUserStory(draft.demand),
-            requiredToolResourceIds: requiredToolIds,
-            candidateResources: resources,
-          }),
-        },
-      ],
-    });
-    return sanitizeLlmSolution(extractJson(raw), base, resources, config.model);
+    const generated = await this.agentRunner.generate(workspaceId, draft, config, signal);
+    const parsedResources = generated.resources.length ? generated.resources : resources;
+    const solution = sanitizeLlmSolution(generated.solution, base, parsedResources, config.model);
+    if (!solution) {
+      throw new BadRequestException('ai_knowledge_llm_invalid_solution');
+    }
+    return solution;
   }
 
   private ruleFallbackAllowed(): boolean {

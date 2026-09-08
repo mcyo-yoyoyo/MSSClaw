@@ -12,7 +12,7 @@ import type { DemandDraft, DemandSummary, SolutionResource } from './ai-knowledg
 import { AiKnowledgeResourceService } from './ai-knowledge.resources';
 
 type AgentGeneration = {
-  raw: string;
+  solution: unknown;
   resources: SolutionResource[];
 };
 
@@ -80,6 +80,15 @@ const demandParameters = z.object({
   assistantReply: z.string().min(2).max(300),
 });
 
+function tryParseJson(raw: string): unknown {
+  const clean = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  try {
+    return JSON.parse(clean);
+  } catch {
+    return raw;
+  }
+}
+
 function uniqueResources(resources: SolutionResource[]): SolutionResource[] {
   const seen = new Set<string>();
   return resources.filter((resource) => {
@@ -106,7 +115,7 @@ export class AiKnowledgeAgentRunner {
       name: 'submit_demand_summary',
       description: '提交根据当前对话整理后的需求摘要，以及下一句对用户的回应。',
       parameters: demandParameters,
-      execute: async (value) => JSON.stringify(value),
+      execute: async (value) => value,
     });
     const provider = new OpenAIProvider({
       apiKey: config.apiKey,
@@ -145,10 +154,9 @@ export class AiKnowledgeAgentRunner {
         }),
         { maxTurns: 2, signal },
       );
-      const raw = typeof result.finalOutput === 'string'
-        ? result.finalOutput
-        : JSON.stringify(result.finalOutput ?? '');
-      const parsed: unknown = JSON.parse(raw);
+      const parsed = typeof result.finalOutput === 'string'
+        ? tryParseJson(result.finalOutput)
+        : result.finalOutput;
       const value = demandParameters.parse(parsed);
       const { assistantReply, needsClarification, ...demand } = value;
       return { demand, assistantReply, needsClarification };
@@ -201,7 +209,7 @@ export class AiKnowledgeAgentRunner {
       description: '完成资料检索后，提交最终的结构化行动方案。这是完成任务的唯一方式。',
       parameters: solutionParameters,
       isEnabled: () => completedSearches.size === 3,
-      execute: async (solution) => JSON.stringify(solution),
+      execute: async (solution) => solution,
     });
 
     const provider = new OpenAIProvider({
@@ -248,9 +256,9 @@ export class AiKnowledgeAgentRunner {
         { maxTurns: 6, signal },
       );
       return {
-        raw: typeof result.finalOutput === 'string'
-          ? result.finalOutput
-          : JSON.stringify(result.finalOutput ?? ''),
+        solution: typeof result.finalOutput === 'string'
+          ? tryParseJson(result.finalOutput)
+          : result.finalOutput,
         resources: uniqueResources(collected).slice(0, 12),
       };
     } finally {
