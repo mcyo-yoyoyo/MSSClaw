@@ -261,7 +261,7 @@ export function nestLlmConfigFromEnv(): NestLlmRuntimeConfig | null {
     baseUrl,
     apiKey,
     model: (process.env.LLM_MODEL ?? 'gpt-4o-mini').trim() || 'gpt-4o-mini',
-    maxTokens: Number(process.env.LLM_MAX_TOKENS || 1200) || 1200,
+    maxTokens: Number(process.env.LLM_MAX_TOKENS || 4096) || 4096,
     source: 'env',
   };
 }
@@ -322,7 +322,7 @@ export function nestLlmConfigFromDoc(
     baseUrl: creds.baseUrl,
     apiKey: creds.apiKey,
     model,
-    maxTokens: Number(process.env.LLM_MAX_TOKENS || 1200) || 1200,
+    maxTokens: Number(process.env.LLM_MAX_TOKENS || 4096) || 4096,
     source: 'workspace-doc',
   };
 }
@@ -347,7 +347,7 @@ export function nestLlmConfigFromCandidate(payload: unknown): NestLlmRuntimeConf
     baseUrl,
     apiKey,
     model,
-    maxTokens: Number(process.env.LLM_MAX_TOKENS || 1200) || 1200,
+    maxTokens: Number(process.env.LLM_MAX_TOKENS || 4096) || 4096,
     source: 'request',
   };
 }

@@ -378,7 +378,7 @@ export async function* llmExecutionStream(params: {
   });
 
   try {
-    for await (const token of streamChatCompletion(messages, { signal, maxTokens: 1200 })) {
+    for await (const token of streamChatCompletion(messages, { signal, maxTokens: 4096 })) {
       if (signal?.aborted) return;
       yield { type: 'token', content: token };
     }

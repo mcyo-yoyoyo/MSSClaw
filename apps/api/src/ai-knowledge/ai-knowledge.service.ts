@@ -255,7 +255,17 @@ export class AiKnowledgeService {
     const row = await this.prisma.centerRecord.findUnique({
       where: { id: `doc-llm-config-${workspaceId}` },
     });
-    const fromDoc = nestLlmConfigFromDoc(row?.payload);
+    const payload = row?.payload;
+    const defaultModelId =
+      payload && typeof payload === 'object' && !Array.isArray(payload)
+        ? (payload as Record<string, unknown>).defaultModelId
+        : undefined;
+    // 智库“帮找”固定使用后台配置的组织默认模型，不跟随对话窗口
+    // 当前选中的模型，避免用户切换聊天模型后智库误用另一套凭证。
+    const fromDoc = nestLlmConfigFromDoc(
+      payload,
+      typeof defaultModelId === 'string' ? defaultModelId : undefined,
+    );
     if (fromDoc) return fromDoc;
     return nestLlmConfigFromEnv();
   }
