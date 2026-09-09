@@ -307,7 +307,13 @@ export class AiKnowledgeService {
     signal?: AbortSignal,
     repair = false,
   ) {
-    const generated = await this.agentRunner.generate(workspaceId, draft, config, signal);
+    const generated = await this.agentRunner.generate(
+      workspaceId,
+      draft,
+      config,
+      signal,
+      repair,
+    );
     const parsedResources = generated.resources.length ? generated.resources : resources;
     const solution = sanitizeLlmSolution(generated.solution, base, parsedResources, config.model);
     if (!solution) {

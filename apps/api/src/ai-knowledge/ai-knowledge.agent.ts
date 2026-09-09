@@ -139,7 +139,10 @@ export class AiKnowledgeAgentRunner {
       toolUseBehavior: { stopAtToolNames: ['submit_demand_summary'] },
       modelSettings: {
         toolChoice: 'required',
-        maxTokens: 900,
+        // The tool arguments contain the complete demand summary. 900 tokens is
+        // too small for the schema (especially for Chinese text) and can make
+        // the provider truncate the JSON before the tool call is complete.
+        maxTokens: Math.max(config.maxTokens, 1_600),
         providerData: { thinking: { type: 'disabled' } },
       },
     });
@@ -170,6 +173,7 @@ export class AiKnowledgeAgentRunner {
     draft: DemandDraft,
     config: NestLlmRuntimeConfig,
     signal?: AbortSignal,
+    repair = false,
   ): Promise<AgentGeneration> {
     const collected: SolutionResource[] = [];
     const completedSearches = new Set<'cases' | 'tools' | 'capabilities'>();
@@ -235,13 +239,20 @@ export class AiKnowledgeAgentRunner {
         '没有相关案例时允许cases为空，不能用弱相关案例凑数。' +
         '案例没有披露量化结果时必须明确写“案例未披露量化结果”，不得编造数字。' +
         '完成检索后必须调用submit_solution提交结果，不要直接输出普通文本。' +
-        'tools和cases中的resourceId只能填写对应检索结果中真实存在的id。',
+        'tools和cases中的resourceId只能填写对应检索结果中真实存在的id。' +
+        (repair
+          ? '这是一次修复调用。不要重新解释任务，减少每个字段到满足要求的最短准确表述，确保完整调用submit_solution。'
+          : ''),
       tools: [searchCases, searchTools, searchCapabilities, submitSolution],
       toolUseBehavior: { stopAtToolNames: ['submit_solution'] },
       modelSettings: {
         toolChoice: 'auto',
         parallelToolCalls: false,
-        maxTokens: Math.max(config.maxTokens, 1_600),
+        // A complete submit_solution call includes all nested tool/case fields;
+        // the old 1600-token floor routinely truncated its JSON arguments.
+        // Keep a larger floor for the first pass and an even larger one for a
+        // repair pass. The provider may still apply its own hard maximum.
+        maxTokens: Math.max(config.maxTokens, repair ? 6_144 : 4_096),
         providerData: { thinking: { type: 'disabled' } },
       },
     });
