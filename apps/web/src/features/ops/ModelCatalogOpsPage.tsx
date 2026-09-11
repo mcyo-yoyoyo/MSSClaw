@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { CenterModal, CenterPageHeader, StatCardGrid } from '@/components/center/CenterShell';
 import {
+  hasModelCredentials,
   normalizeLlmModelId,
   type PlatformLlmModel,
 } from '@/domain/llmConfig';
@@ -81,6 +82,23 @@ export function ModelCatalogOpsPage() {
     () => config.platformModels.filter((m) => Boolean(m.apiKey?.trim())).length,
     [config.platformModels],
   );
+  /**
+   * 智库「帮找」等后台链路只认组织默认模型，不会借用其它模型的 Key。
+   * 默认一旦停在停用 / 缺凭证的条目上，这些功能会直接报「未配置」，
+   * 所以这里必须明说是哪个模型缺什么。
+   */
+  const defaultModelIssue = useMemo(() => {
+    const id = config.defaultModelId;
+    if (!id) return '尚未指定组织默认模型';
+    const entry =
+      config.platformModels.find((m) => m.id === id) ??
+      config.customModels.find((m) => m.id === id);
+    if (!entry) return `默认模型「${id}」不在当前目录中`;
+    if ('enabled' in entry && entry.enabled === false) return `默认模型「${id}」已停用`;
+    if (!entry.baseUrl?.trim()) return `默认模型「${id}」缺少 Base URL`;
+    if (!entry.apiKey?.trim()) return `默认模型「${id}」还没有配置 API Key`;
+    return null;
+  }, [config.defaultModelId, config.platformModels, config.customModels]);
 
   const runDb = async (label: string, fn: () => Promise<void>): Promise<boolean> => {
     if (!apiConnected) {
@@ -357,6 +375,17 @@ export function ModelCatalogOpsPage() {
         ]}
       />
 
+      {defaultModelIssue ? (
+        <p
+          data-testid="default-model-warning"
+          role="alert"
+          className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[12px] leading-relaxed text-amber-900"
+        >
+          {defaultModelIssue}：智库「帮找」和未指定模型的后台任务都使用组织默认模型，
+          需要先为它填好 Base URL 和 API Key，或把「默认」改到一个凭证齐全的模型。
+        </p>
+      ) : null}
+
       <section className="rounded-2xl border border-zinc-200/80 bg-white p-4 md:p-5">
         <div className="mb-3">
           <h3 className="text-[14px] font-semibold text-zinc-900">平台模型目录</h3>
@@ -451,11 +480,11 @@ export function ModelCatalogOpsPage() {
                         type="radio"
                         name="default-model"
                         checked={config.defaultModelId === m.id}
-                        disabled={!m.enabled || !apiConnected || syncing}
+                        disabled={!m.enabled || !hasModelCredentials(m) || !apiConnected || syncing}
                         onChange={() =>
                           void runDb(`默认模型 → ${m.label}`, () => setDefaultModelId(m.id))
                         }
-                        title="设为组织默认"
+                        title={hasModelCredentials(m) ? '设为组织默认' : '请先配置该模型的 Base URL 和 API Key'}
                       />
                     </td>
                     <td className="px-2 py-2.5">

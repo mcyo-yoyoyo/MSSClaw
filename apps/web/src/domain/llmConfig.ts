@@ -99,22 +99,14 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   customModels: [],
 };
 
-/** 历史展示名 / 旧 id → 当前官方 API model id */
+/** 仅迁移旧展示名；厂商实际 model id 原样保留。 */
 export const LLM_MODEL_ID_ALIASES: Record<string, string> = {
   'GLM-5.1': 'glm-5.1',
   'glm-5': 'glm-5.1',
   'DeepSeek-V4': 'deepseek-v4-flash',
   'DeepSeek V4': 'deepseek-v4-flash',
-  'deepseek-chat': 'deepseek-v4-flash',
-  'deepseek-reasoner': 'deepseek-v4-flash',
   'Qwen-3.7': 'qwen3.7-plus',
   'Qwen 3.7': 'qwen3.7-plus',
-  'qwen-plus': 'qwen3.7-plus',
-  'qwen-max': 'qwen3.7-plus',
-  'qwen-turbo': 'qwen3.7-plus',
-  'gpt-4o': 'glm-5.1',
-  'gpt-4o-mini': 'glm-5.1',
-  'gpt-4-turbo': 'glm-5.1',
 };
 
 export function normalizeLlmModelId(model: string): string {
@@ -165,8 +157,7 @@ export function hasModelCredentials(entry: { baseUrl?: string; apiKey?: string }
  * 可选用的平台模型：启用 + 凭证齐全。
  *
  * 缺凭证的模型不能进选择器：服务端 nestLlmConfigFromDoc 在
- * `!creds.baseUrl || !creds.apiKey` 时返回 null，转而回退到固定的 LLM_MODEL 环境变量，
- * 于是用户选了 A、实际跑的是 B，选择器等于在撒谎。
+ * `!creds.baseUrl || !creds.apiKey` 时拒绝该条目，不能让选择器显示一个实际不可用的模型。
  */
 export function listUsablePlatformModels(
   config: Pick<LlmConfig, 'platformModels'>,

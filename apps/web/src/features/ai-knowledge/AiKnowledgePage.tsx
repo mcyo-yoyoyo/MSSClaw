@@ -78,11 +78,44 @@ function conciseText(value: string, maxLength = 160): string {
   return `${clean.slice(0, maxLength).replace(/[，,；;：:\s]+$/, '')}…`;
 }
 
+/**
+ * 服务端返回 `ai_knowledge_llm_not_configured:<reason>[:<model>]`。
+ * 帮找固定使用「模型配置」里的组织默认模型，所以这里要说清是哪个模型缺什么，
+ * 而不是让运营去猜「未配置」指的是谁。
+ */
+function llmNotConfiguredMessage(raw: string): string | null {
+  const matched = raw.match(
+    /ai_knowledge_llm_not_configured(?::([a-z_]+))?(?::([^\s"']+))?/,
+  );
+  if (!matched) return raw.includes('llm_not_configured')
+    ? '平台尚未配置方案生成模型：请先在「模型配置」里设置组织默认模型'
+    : null;
+  const [, reason, model] = matched;
+  const named = model ? `「${model}」` : '组织默认模型';
+  switch (reason) {
+    case 'model_missing_api_key':
+      return `组织默认模型${named}还没有填自己的 API Key：请到「模型配置」为该模型保存 Key（帮找不会借用其它模型的 Key）`;
+    case 'model_missing_base_url':
+      return `组织默认模型${named}缺少 Base URL：请到「模型配置」补齐后再试`;
+    case 'model_disabled':
+      return `组织默认模型${named}已被停用：请重新启用，或把默认改到一个已启用且凭证齐全的模型`;
+    case 'model_not_in_catalog':
+      return `组织默认模型${named}不在当前模型目录里：请到「模型配置」重新指定默认模型`;
+    case 'no_model':
+      return '「模型配置」里还没有指定组织默认模型：请先勾选一个默认模型';
+    case 'no_document':
+      return '当前工作区还没有模型配置：请先在「模型配置」添加模型并设为组织默认';
+    default:
+      return '平台尚未配置方案生成模型：请先在「模型配置」里设置组织默认模型';
+  }
+}
+
 function aiKnowledgeErrorMessage(error: unknown): string {
   const raw = error instanceof Error ? error.message.trim() : '';
   if (!raw) return '方案生成失败，请检查服务或稍后重试';
   if (raw.includes('llm_not_configured')) {
-    return '平台尚未配置方案生成模型：请先检查工作区 LLM 配置';
+    return llmNotConfiguredMessage(raw)
+      ?? '平台尚未配置方案生成模型：请先在「模型配置」里设置组织默认模型';
   }
   if (raw.includes('demand_incomplete')) {
     return '需求摘要还没有完成，请继续补充待确认信息';

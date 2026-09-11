@@ -192,7 +192,13 @@ function hasModelDirectory(payload: Record<string, unknown>): boolean {
   return Array.isArray(payload.platformModels);
 }
 
-function firstEnabledModelId(payload: Record<string, unknown>): string {
+/**
+ * 目录里「第一个可用模型」。缺 Base URL / Key 的条目会被 pickModelCreds 拒绝，
+ * 选中它等于把工作区推进「未配置」，所以优先挑凭证齐全的；一个都没有时
+ * 才退回第一个启用项，让调用方拿到具体模型 id 去报错。
+ */
+function firstUsableModelId(payload: Record<string, unknown>): string {
+  let firstEnabled = '';
   for (const list of [payload.platformModels, payload.customModels]) {
     if (!Array.isArray(list)) continue;
     for (const item of list) {
@@ -200,10 +206,14 @@ function firstEnabledModelId(payload: Record<string, unknown>): string {
       const model = item as Record<string, unknown>;
       if (model.enabled === false) continue;
       const id = normalizeModelId(model.id);
-      if (id) return id;
+      if (!id) continue;
+      if (!firstEnabled) firstEnabled = id;
+      const baseUrl = normalizeBaseUrl(typeof model.baseUrl === 'string' ? model.baseUrl : '');
+      const apiKey = typeof model.apiKey === 'string' ? model.apiKey.trim() : '';
+      if (baseUrl && apiKey) return id;
     }
   }
-  return '';
+  return firstEnabled;
 }
 
 export async function nestLlmChatCompletion(params: {
@@ -256,11 +266,12 @@ export async function nestLlmChatCompletion(params: {
 export function nestLlmConfigFromEnv(): NestLlmRuntimeConfig | null {
   const baseUrl = normalizeBaseUrl(process.env.LLM_BASE_URL ?? '');
   const apiKey = (process.env.LLM_API_KEY ?? '').trim();
-  if (!baseUrl || !apiKey) return null;
+  const model = normalizeModelId(process.env.LLM_MODEL);
+  if (!baseUrl || !apiKey || !model) return null;
   return {
     baseUrl,
     apiKey,
-    model: (process.env.LLM_MODEL ?? 'gpt-4o-mini').trim() || 'gpt-4o-mini',
+    model,
     maxTokens: Number(process.env.LLM_MAX_TOKENS || 4096) || 4096,
     source: 'env',
   };
@@ -269,7 +280,7 @@ export function nestLlmConfigFromEnv(): NestLlmRuntimeConfig | null {
 function pickModelCreds(
   payload: Record<string, unknown>,
   modelId: string,
-): { baseUrl: string; apiKey: string; enabled: boolean } {
+): { baseUrl: string; apiKey: string; enabled: boolean; found: boolean } {
   const legacyKey = typeof payload.apiKey === 'string' ? payload.apiKey.trim() : '';
   const legacyBase = normalizeBaseUrl(typeof payload.baseUrl === 'string' ? payload.baseUrl : '');
   const lists = [payload.platformModels, payload.customModels];
@@ -289,15 +300,64 @@ function pickModelCreds(
         baseUrl: entryBase || (hasModelDirectory ? '' : legacyBase),
         apiKey: entryKey || (hasModelDirectory ? '' : legacyKey),
         enabled: m.enabled !== false,
+        found: true,
       };
     }
   }
   // A requested model must not silently inherit the top-level snapshot when a
   // model directory exists: that snapshot may belong to a different model.
   if (hasModelDirectory) {
-    return { baseUrl: '', apiKey: '', enabled: false };
+    return { baseUrl: '', apiKey: '', enabled: false, found: false };
   }
-  return { baseUrl: legacyBase, apiKey: legacyKey, enabled: true };
+  return { baseUrl: legacyBase, apiKey: legacyKey, enabled: true, found: true };
+}
+
+/**
+ * 为什么这份 llm-config 解析不出可用模型。
+ * 调用方据此给出「哪个模型、缺什么」的提示，而不是一律回一句「未配置」。
+ */
+export type LlmDocModelReason =
+  | 'ok'
+  | 'no_document'
+  | 'no_model'
+  | 'model_not_in_catalog'
+  | 'model_disabled'
+  | 'model_missing_base_url'
+  | 'model_missing_api_key';
+
+export type LlmDocModelStatus = {
+  ok: boolean;
+  /** 实际被选中的模型 id；无法确定时为空串。 */
+  model: string;
+  reason: LlmDocModelReason;
+};
+
+/** 解析 llm-config 会选用哪个模型，以及该模型当前能不能跑。不返回任何凭证。 */
+export function describeLlmDocModel(
+  payload: unknown,
+  requestedModel?: string,
+): LlmDocModelStatus {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return { ok: false, model: '', reason: 'no_document' };
+  }
+  const p = payload as Record<string, unknown>;
+  const requested = normalizeModelId(requestedModel);
+  const modelDirectory = hasModelDirectory(p);
+  // When no request-specific model is supplied, the organization default is
+  // authoritative; `model` is only the legacy active-session snapshot.
+  const declared = normalizeModelId(p.defaultModelId) || normalizeModelId(p.model);
+  const model =
+    requested ||
+    declared ||
+    (modelDirectory && firstUsableModelId(p)) ||
+    normalizeModelId(process.env.LLM_MODEL);
+  if (!model) return { ok: false, model: '', reason: 'no_model' };
+  const creds = pickModelCreds(p, model);
+  if (!creds.found) return { ok: false, model, reason: 'model_not_in_catalog' };
+  if (!creds.enabled) return { ok: false, model, reason: 'model_disabled' };
+  if (!creds.baseUrl) return { ok: false, model, reason: 'model_missing_base_url' };
+  if (!creds.apiKey) return { ok: false, model, reason: 'model_missing_api_key' };
+  return { ok: true, model, reason: 'ok' };
 }
 
 /** 工作区平台文档 llm-config（与前端对齐：按模型 Key，兼容旧顶层 apiKey） */
@@ -305,23 +365,13 @@ export function nestLlmConfigFromDoc(
   payload: unknown,
   requestedModel?: string,
 ): NestLlmRuntimeConfig | null {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
-  const p = payload as Record<string, unknown>;
-  const requested = normalizeModelId(requestedModel);
-  const modelDirectory = hasModelDirectory(p);
-  const declared = normalizeModelId(p.model) || normalizeModelId(p.defaultModelId);
-  const model =
-    requested ||
-    declared ||
-    (modelDirectory && firstEnabledModelId(p)) ||
-    normalizeModelId(process.env.LLM_MODEL) ||
-    'gpt-4o-mini';
-  const creds = pickModelCreds(p, model);
-  if (!creds.enabled || !creds.baseUrl || !creds.apiKey) return null;
+  const status = describeLlmDocModel(payload, requestedModel);
+  if (!status.ok) return null;
+  const creds = pickModelCreds(payload as Record<string, unknown>, status.model);
   return {
     baseUrl: creds.baseUrl,
     apiKey: creds.apiKey,
-    model,
+    model: status.model,
     maxTokens: Number(process.env.LLM_MAX_TOKENS || 4096) || 4096,
     source: 'workspace-doc',
   };

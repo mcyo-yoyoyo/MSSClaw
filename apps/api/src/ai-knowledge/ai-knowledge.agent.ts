@@ -37,7 +37,9 @@ export const AI_KNOWLEDGE_SOLUTION_INSTRUCTIONS =
 
 const searchParameters = z.object({
   query: z.string().min(2).max(300),
-  limit: z.number().int().min(1).max(6),
+  // OpenAI-compatible providers sometimes serialize numeric arguments as
+  // strings or choose a larger page size; the resource service clamps it to 8.
+  limit: z.coerce.number().int().min(1).max(20),
 });
 
 const solutionParameters = z.object({
@@ -100,6 +102,18 @@ function uniqueResources(resources: SolutionResource[]): SolutionResource[] {
   });
 }
 
+function providerModelSettings(config: NestLlmRuntimeConfig): {
+  providerData?: { thinking: { type: 'disabled' } };
+} {
+  // DeepSeek reasoning responses cannot be replayed by the Chat Completions
+  // adapter after a tool call. Disable that optional mode only for the
+  // DeepSeek endpoint; other OpenAI-compatible providers must not receive a
+  // provider-specific field they may reject.
+  return /deepseek/i.test(`${config.model} ${config.baseUrl}`)
+    ? { providerData: { thinking: { type: 'disabled' } } }
+    : {};
+}
+
 @Injectable()
 export class AiKnowledgeAgentRunner {
   constructor(private readonly resources: AiKnowledgeResourceService) {
@@ -138,12 +152,14 @@ export class AiKnowledgeAgentRunner {
       tools: [submitDemand],
       toolUseBehavior: { stopAtToolNames: ['submit_demand_summary'] },
       modelSettings: {
-        toolChoice: 'required',
+        // Some reasoning models reject `required` while still supporting tool
+        // calls; the instruction and stop rule keep this provider-neutral.
+        toolChoice: 'auto',
         // The tool arguments contain the complete demand summary. 900 tokens is
         // too small for the schema (especially for Chinese text) and can make
         // the provider truncate the JSON before the tool call is complete.
         maxTokens: Math.max(config.maxTokens, 1_600),
-        providerData: { thinking: { type: 'disabled' } },
+        ...providerModelSettings(config),
       },
     });
     try {
@@ -186,6 +202,9 @@ export class AiKnowledgeAgentRunner {
       description: '查询本地海外 AI 落地案例库。query必须包含用户业务问题、目标、期望做法和所需工具类型，用于匹配案例做法、使用工具、结果和借鉴意义。',
       parameters: searchParameters,
       execute: async ({ query, limit }) => {
+        if (completedSearches.has('cases')) {
+          return '案例库本轮已完成检索。请停止重复查询，直接调用 submit_solution。';
+        }
         completedSearches.add('cases');
         return remember(await this.resources.searchCases(workspaceId, query, limit));
       },
@@ -195,6 +214,9 @@ export class AiKnowledgeAgentRunner {
       description: '查询 MSS 平台数据库中的国内外 AI 工具主数据。query应包含任务、输入、预期输出和所需核心能力，不要只重复用户原话。',
       parameters: searchParameters,
       execute: async ({ query, limit }) => {
+        if (completedSearches.has('tools')) {
+          return '工具目录本轮已完成检索。请停止重复查询，直接调用 submit_solution。';
+        }
         completedSearches.add('tools');
         return remember(await this.resources.searchTools(workspaceId, query, limit));
       },
@@ -204,6 +226,9 @@ export class AiKnowledgeAgentRunner {
       description: '查询当前工作区数据库中已登记的 Skill 和 Agent。query应包含业务场景、任务和所需核心能力。',
       parameters: searchParameters,
       execute: async ({ query, limit }) => {
+        if (completedSearches.has('capabilities')) {
+          return 'Skill/Agent 目录本轮已完成检索。请停止重复查询，直接调用 submit_solution。';
+        }
         completedSearches.add('capabilities');
         return remember(await this.resources.searchCapabilities(workspaceId, query, limit));
       },
@@ -212,7 +237,6 @@ export class AiKnowledgeAgentRunner {
       name: 'submit_solution',
       description: '完成资料检索后，提交最终的结构化行动方案。这是完成任务的唯一方式。',
       parameters: solutionParameters,
-      isEnabled: () => completedSearches.size === 3,
       execute: async (solution) => solution,
     });
 
@@ -253,7 +277,7 @@ export class AiKnowledgeAgentRunner {
         // Keep a larger floor for the first pass and an even larger one for a
         // repair pass. The provider may still apply its own hard maximum.
         maxTokens: Math.max(config.maxTokens, repair ? 6_144 : 4_096),
-        providerData: { thinking: { type: 'disabled' } },
+        ...providerModelSettings(config),
       },
     });
     try {
@@ -264,7 +288,7 @@ export class AiKnowledgeAgentRunner {
           question: draft.originalQuestion,
           demand: draft.demand,
         }),
-        { maxTurns: 6, signal },
+        { maxTurns: 8, signal },
       );
       return {
         solution: typeof result.finalOutput === 'string'

@@ -7,8 +7,10 @@ import {
 import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import {
+  describeLlmDocModel,
   nestLlmConfigFromDoc,
   nestLlmConfigFromEnv,
+  type LlmDocModelStatus,
   type NestLlmRuntimeConfig,
 } from '../executions/llm.client';
 import { PlatformDocsService } from '../persistence/platform-docs.service';
@@ -122,7 +124,7 @@ export class AiKnowledgeService {
     }
     const resources = await this.resourceCatalog.searchForDraft(workspaceId, draft);
     const base = buildRuleSolution(draft, resources);
-    const llmConfig = await this.resolveLlmConfig(workspaceId);
+    const { config: llmConfig, status: llmStatus } = await this.resolveLlmRuntime(workspaceId);
     let solution = base;
 
     if (llmConfig) {
@@ -161,7 +163,11 @@ export class AiKnowledgeService {
         }
       }
     } else if (!this.ruleFallbackAllowed()) {
-      throw new BadRequestException('ai_knowledge_llm_not_configured');
+      this.logger.warn(
+        `AI knowledge has no usable organization default model: ${llmStatus.reason}` +
+          (llmStatus.model ? ` (model=${llmStatus.model})` : ''),
+      );
+      throw this.llmUnavailableError(llmStatus);
     }
 
     await this.saveSolution(workspaceId, actor, solution);
@@ -251,31 +257,65 @@ export class AiKnowledgeService {
     });
   }
 
-  private async resolveLlmConfig(workspaceId: string): Promise<NestLlmRuntimeConfig | null> {
+  /**
+   * 智库“帮找”只认后台「模型配置」里的组织默认模型，不跟随对话窗口的临时选择，
+   * 也不写死任何模型 id：defaultModelId 配了谁就用谁。解析失败时带回具体原因，
+   * 让前端能说清是「哪个模型缺什么」，而不是笼统一句「未配置」。
+   */
+  private async resolveLlmRuntime(workspaceId: string): Promise<{
+    config: NestLlmRuntimeConfig | null;
+    status: LlmDocModelStatus;
+  }> {
     const row = await this.prisma.centerRecord.findUnique({
       where: { id: `doc-llm-config-${workspaceId}` },
     });
-    const payload = row?.payload;
-    const defaultModelId =
+    if (!row) {
+      // 工作区还没建过配置文档时才允许退到部署级 LLM_* 环境变量。
+      const fromEnv = nestLlmConfigFromEnv();
+      return {
+        config: fromEnv,
+        status: fromEnv
+          ? { ok: true, model: fromEnv.model, reason: 'ok' }
+          : { ok: false, model: '', reason: 'no_document' },
+      };
+    }
+    const payload = row.payload;
+    const doc =
       payload && typeof payload === 'object' && !Array.isArray(payload)
-        ? (payload as Record<string, unknown>).defaultModelId
+        ? (payload as Record<string, unknown>)
         : undefined;
-    // 智库“帮找”固定使用后台配置的组织默认模型，不跟随对话窗口
-    // 当前选中的模型，避免用户切换聊天模型后智库误用另一套凭证。
-    const fromDoc = nestLlmConfigFromDoc(
-      payload,
-      typeof defaultModelId === 'string' ? defaultModelId : undefined,
-    );
-    if (fromDoc) return fromDoc;
-    return nestLlmConfigFromEnv();
+    const defaultModelId =
+      typeof doc?.defaultModelId === 'string' && doc.defaultModelId.trim()
+        ? doc.defaultModelId
+        : typeof doc?.model === 'string' && doc.model.trim()
+          ? doc.model
+          : undefined;
+    // 配置文档存在但默认模型不可用时保持失败，不能静默换到环境变量模型：
+    // 那会让运营以为选中的是 A，实际跑的却是 B。
+    return {
+      config: nestLlmConfigFromDoc(payload, defaultModelId),
+      status: describeLlmDocModel(payload, defaultModelId),
+    };
+  }
+
+  /** `ai_knowledge_llm_not_configured:<reason>[:<model>]`，前端据此给出可执行提示。 */
+  private llmUnavailableError(status: LlmDocModelStatus): BadRequestException {
+    const detail = status.model ? `${status.reason}:${status.model}` : status.reason;
+    return new BadRequestException(`ai_knowledge_llm_not_configured:${detail}`);
   }
 
   private async refineDemandWithAgent(
     workspaceId: string,
     draft: DemandDraft,
   ): Promise<DemandDraft> {
-    const config = await this.resolveLlmConfig(workspaceId);
-    if (!config) return draft;
+    const { config, status } = await this.resolveLlmRuntime(workspaceId);
+    if (!config) {
+      this.logger.warn(
+        `AI knowledge demand refinement skipped, no usable default model: ${status.reason}` +
+          (status.model ? ` (model=${status.model})` : ''),
+      );
+      return draft;
+    }
     try {
       const refined = await this.agentRunner.refineDemand(draft, config);
       const next = updateDraftDemand(draft, refined.demand);

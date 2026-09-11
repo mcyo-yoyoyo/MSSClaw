@@ -22,6 +22,15 @@ const DEMAND_FIELDS: DemandFieldKey[] = [
   'aiRole',
 ];
 
+const EDITABLE_DEMAND_FIELDS: DemandFieldKey[] = [
+  'problem',
+  'goal',
+  'currentMethod',
+  'inputs',
+  'aiRole',
+  'humanCheckpoint',
+];
+
 const INCOMPLETE_DEMAND_PATTERN = /待确认|待补充|尚待确认|尚未确认|尚未确定|需要确认|需要补充/;
 
 function isDemandFieldComplete(value: string): boolean {
@@ -163,9 +172,19 @@ function inferHumanCheckpoint(answer: string, scenarioId: AiKnowledgeScenarioId)
 export function clarifyDraft(draft: DemandDraft, answer: string): DemandDraft {
   const clean = answer.trim();
   if (!clean || clean.length > 2_000) throw new BadRequestException('invalid_clarification');
+  const demand: DemandSummary = {
+    ...draft.demand,
+    inputs: isDemandFieldComplete(draft.demand.inputs)
+      ? draft.demand.inputs
+      : inferInputs(clean, draft.scenarioId),
+    humanCheckpoint: isDemandFieldComplete(draft.demand.humanCheckpoint)
+      ? draft.demand.humanCheckpoint
+      : inferHumanCheckpoint(clean, draft.scenarioId),
+  };
+  demand.pendingKeys = DEMAND_FIELDS.filter((key) => !isDemandFieldComplete(demand[key]));
   return {
     ...draft,
-    demand: { ...draft.demand },
+    demand,
     messages: [
       ...draft.messages,
       message('user', clean),
@@ -178,7 +197,7 @@ export function clarifyDraft(draft: DemandDraft, answer: string): DemandDraft {
 
 export function updateDraftDemand(draft: DemandDraft, patch: Partial<DemandSummary>): DemandDraft {
   const demand = { ...draft.demand };
-  for (const key of DEMAND_FIELDS) {
+  for (const key of EDITABLE_DEMAND_FIELDS) {
     if (typeof patch[key] !== 'string') continue;
     const value = patch[key]!.trim().slice(0, 2_000);
     demand[key] = value || '待确认';

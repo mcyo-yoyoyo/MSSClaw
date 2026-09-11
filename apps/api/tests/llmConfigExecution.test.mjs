@@ -4,6 +4,7 @@ import { ExecutionsService } from '../dist/executions/executions.service.js';
 import { ExecutionsController } from '../dist/executions/executions.controller.js';
 import { PlatformDocsController } from '../dist/persistence/platform-docs.controller.js';
 import {
+  describeLlmDocModel,
   nestLlmConfigFromDoc,
   nestLlmConfigFromCandidate,
 } from '../dist/executions/llm.client.js';
@@ -463,4 +464,67 @@ test('the server test route requires a workspace session and never persists a ca
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0][0], 'ws-test');
   assert.equal(calls[0][2].apiKey, 'candidate-key');
+});
+
+
+test('an absent active snapshot skips enabled-but-keyless entries', () => {
+  // 「第一个启用的模型」如果没有 Key，选中它等于把工作区推进「未配置」。
+  const config = nestLlmConfigFromDoc({
+    platformModels: [
+      { id: 'keyless', baseUrl: 'https://keyless.example/v1', apiKey: '', enabled: true },
+      { id: 'ready', baseUrl: 'https://ready.example/v1', apiKey: 'ready-key', enabled: true },
+    ],
+  });
+  assert.equal(config?.model, 'ready');
+  assert.equal(config?.apiKey, 'ready-key');
+});
+
+test('the organization default wins over the legacy active-session snapshot', () => {
+  const payload = {
+    model: 'chat-snapshot',
+    defaultModelId: 'org-default',
+    platformModels: [
+      { id: 'chat-snapshot', baseUrl: 'https://a.example/v1', apiKey: 'a-key', enabled: true },
+      { id: 'org-default', baseUrl: 'https://b.example/v1', apiKey: 'b-key', enabled: true },
+    ],
+  };
+  // 没有请求级模型时按组织默认解析，不跟随对话窗口的临时选择。
+  assert.equal(nestLlmConfigFromDoc(payload)?.model, 'org-default');
+  // 请求显式指定模型时仍以请求为准（聊天/模型测试链路）。
+  assert.equal(nestLlmConfigFromDoc(payload, 'chat-snapshot')?.model, 'chat-snapshot');
+});
+
+test('describeLlmDocModel names the model and what it is missing', () => {
+  const payload = {
+    defaultModelId: 'needs-key',
+    platformModels: [
+      { id: 'needs-key', baseUrl: 'https://k.example/v1', apiKey: '', enabled: true },
+      { id: 'needs-base', baseUrl: '', apiKey: 'has-key', enabled: true },
+      { id: 'stopped', baseUrl: 'https://s.example/v1', apiKey: 'k', enabled: false },
+      { id: 'ready', baseUrl: 'https://r.example/v1', apiKey: 'r-key', enabled: true },
+    ],
+  };
+  assert.deepEqual(describeLlmDocModel(payload), {
+    ok: false,
+    model: 'needs-key',
+    reason: 'model_missing_api_key',
+  });
+  assert.equal(describeLlmDocModel(payload, 'needs-base').reason, 'model_missing_base_url');
+  assert.equal(describeLlmDocModel(payload, 'stopped').reason, 'model_disabled');
+  assert.equal(describeLlmDocModel(payload, 'absent').reason, 'model_not_in_catalog');
+  assert.equal(describeLlmDocModel(payload, 'absent').model, 'absent');
+  assert.deepEqual(describeLlmDocModel(payload, 'ready'), {
+    ok: true,
+    model: 'ready',
+    reason: 'ok',
+  });
+  assert.equal(describeLlmDocModel(null).reason, 'no_document');
+  // 状态判断必须和实际解析一致，否则提示会指向一个能跑的模型。
+  for (const id of ['needs-key', 'needs-base', 'stopped', 'absent', 'ready']) {
+    assert.equal(
+      describeLlmDocModel(payload, id).ok,
+      nestLlmConfigFromDoc(payload, id) !== null,
+      id,
+    );
+  }
 });

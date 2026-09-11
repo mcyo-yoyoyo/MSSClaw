@@ -62,6 +62,22 @@ function normalizeCustomModels(
     .filter((m): m is CustomLlmModel => Boolean(m));
 }
 
+/**
+ * 组织默认模型必须落在「启用 + 自己的 Base URL/Key 齐全」的条目上。
+ * 服务端 nestLlmConfigFromDoc 对缺凭证的条目一律拒绝，而智库「帮找」只认
+ * defaultModelId，所以默认一旦落到空 Key 的模型上，帮找会直接报「未配置」。
+ */
+function firstUsableModelId(
+  platformModels: PlatformLlmModel[],
+  customModels: CustomLlmModel[],
+): string {
+  return (
+    listUsablePlatformModels({ platformModels })[0]?.id ||
+    customModels.find(hasModelCredentials)?.id ||
+    ''
+  );
+}
+
 export function normalizeLlmConfig(raw: Partial<LlmConfig> | null | undefined): LlmConfig {
   const legacySharedKey = typeof raw?.apiKey === 'string' ? raw.apiKey : '';
   // `platformModels` marks the new per-model directory format. Older payloads
@@ -114,8 +130,10 @@ export function normalizeLlmConfig(raw: Partial<LlmConfig> | null | undefined): 
       },
     ];
   }
+  // 已保存的默认原样保留（运营选了谁就是谁）；只有需要现推时才挑可用的。
   const defaultModelId = normalizeLlmModelId(
     raw?.defaultModelId ||
+      firstUsableModelId(platformModels, customModels) ||
       platformModels.find((m) => m.enabled)?.id ||
       customModels[0]?.id ||
       DEFAULT_LLM_CONFIG.defaultModelId,
@@ -366,16 +384,24 @@ export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
     const nextList = config.platformModels.map((m) =>
       m.id === modelId ? { ...m, apiKey } : m,
     );
-    const snap =
-      config.model === modelId
-        ? syncSnapshotFromSelection(
-            modelId,
-            nextList,
-            config.customModels,
-            config.defaultModelId,
-          )
-        : {};
-    await get().saveConfig({ platformModels: nextList, ...snap });
+    const patch: Partial<LlmConfig> = { platformModels: nextList };
+    // 清空组织默认模型的 Key 后，默认不能继续停在这个条目上：
+    // 智库「帮找」只读 defaultModelId，会立刻变成「未配置」。
+    if (config.defaultModelId === modelId && !apiKey.trim()) {
+      patch.defaultModelId = firstUsableModelId(nextList, config.customModels);
+    }
+    if (config.model === modelId) {
+      Object.assign(
+        patch,
+        syncSnapshotFromSelection(
+          modelId,
+          nextList,
+          config.customModels,
+          patch.defaultModelId ?? config.defaultModelId,
+        ),
+      );
+    }
+    await get().saveConfig(patch);
   },
 
   removePlatformModel: async (modelId) => {
@@ -383,10 +409,7 @@ export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
     const nextList = config.platformModels.filter((m) => m.id !== modelId);
     const patch: Partial<LlmConfig> = { platformModels: nextList };
     if (config.defaultModelId === modelId) {
-      patch.defaultModelId =
-        nextList.find((m) => m.enabled)?.id ||
-        config.customModels[0]?.id ||
-        DEFAULT_LLM_CONFIG.defaultModelId;
+      patch.defaultModelId = firstUsableModelId(nextList, config.customModels);
     }
     const nextModel =
       config.model === modelId
@@ -426,10 +449,7 @@ export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
       );
     }
     if (!enabled && config.defaultModelId === modelId) {
-      patch.defaultModelId =
-        nextList.find((m) => m.enabled)?.id ||
-        config.customModels[0]?.id ||
-        DEFAULT_LLM_CONFIG.defaultModelId;
+      patch.defaultModelId = firstUsableModelId(nextList, config.customModels);
     }
     await get().saveConfig(patch);
   },
@@ -438,9 +458,13 @@ export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
     const { config } = get();
     const id = normalizeLlmModelId(modelId);
     const selectable =
-      listEnabledPlatformModels(config).some((m) => m.id === id) ||
-      config.customModels.some((m) => m.id === id);
-    if (!selectable) return;
+      listEnabledPlatformModels(config).some((m) => m.id === id && hasModelCredentials(m)) ||
+      config.customModels.some((m) => m.id === id && hasModelCredentials(m));
+    if (!selectable) {
+      const message = '默认模型必须先配置 Base URL 和 API Key';
+      set({ lastError: message });
+      throw new Error('model_credentials_required');
+    }
     // The execution API reads the active `model` snapshot. Keep it aligned
     // when operations changes the organization default from the model catalog.
     await get().saveConfig({
