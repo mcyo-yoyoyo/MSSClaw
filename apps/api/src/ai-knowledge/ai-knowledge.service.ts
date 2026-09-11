@@ -126,6 +126,14 @@ export class AiKnowledgeService {
     const base = buildRuleSolution(draft, resources);
     const { config: llmConfig, status: llmStatus } = await this.resolveLlmRuntime(workspaceId);
     let solution = base;
+    if (llmConfig) {
+      // 帮找读的是组织默认模型，和「模型配置」的测试按钮（测哪一行测哪一行）
+      // 以及对话窗口（用当前选中模型）是三个不同来源，出问题时先看这行日志。
+      this.logger.log(
+        `AI knowledge generating with organization default model "${llmConfig.model}" ` +
+          `@ ${this.endpointLabel(llmConfig.baseUrl)} (source=${llmConfig.source})`,
+      );
+    }
 
     if (llmConfig) {
       try {
@@ -140,6 +148,14 @@ export class AiKnowledgeService {
         if (generated) solution = generated;
         else throw new BadRequestException('ai_knowledge_llm_invalid_solution');
       } catch (error) {
+        const upstream = this.upstreamConfigError(error, llmConfig.model);
+        if (upstream) {
+          this.logger.warn(
+            `AI knowledge upstream rejected model "${llmConfig.model}": ` +
+              (error instanceof Error ? error.message : String(error)),
+          );
+          throw upstream;
+        }
         this.logger.warn(
           `AI knowledge generation needs repair: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -159,7 +175,7 @@ export class AiKnowledgeService {
           this.logger.warn(
             `AI knowledge repair failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
           );
-          throw fallbackError;
+          throw this.upstreamConfigError(fallbackError, llmConfig.model) ?? fallbackError;
         }
       }
     } else if (!this.ruleFallbackAllowed()) {
@@ -262,6 +278,16 @@ export class AiKnowledgeService {
    * 也不写死任何模型 id：defaultModelId 配了谁就用谁。解析失败时带回具体原因，
    * 让前端能说清是「哪个模型缺什么」，而不是笼统一句「未配置」。
    */
+  /** 端点标识，只保留 origin+path：Key 从不出现在 URL 里，这里也不带查询串。 */
+  private endpointLabel(baseUrl: string): string {
+    try {
+      const url = new URL(baseUrl);
+      return `${url.origin}${url.pathname.replace(/\/$/, '')}`;
+    } catch {
+      return '(invalid base url)';
+    }
+  }
+
   private async resolveLlmRuntime(workspaceId: string): Promise<{
     config: NestLlmRuntimeConfig | null;
     status: LlmDocModelStatus;
@@ -304,6 +330,37 @@ export class AiKnowledgeService {
     return new BadRequestException(`ai_knowledge_llm_not_configured:${detail}`);
   }
 
+  /** 上游 HTTP 状态码：OpenAI SDK 的 APIError 带 status，裸 fetch 链路只有消息文本。 */
+  private upstreamStatus(error: unknown): number | null {
+    const status = (error as { status?: unknown } | null)?.status;
+    if (typeof status === 'number') return status;
+    const message = error instanceof Error ? error.message : String(error ?? '');
+    const matched = message.match(/\b(?:LLM HTTP |^)([45]\d{2})\b/);
+    return matched ? Number(matched[1]) : null;
+  }
+
+  /**
+   * 上游网关拒绝的是「配置」而不是「这次的输出」：模型未注册、Key 无效、限流。
+   * 这类失败重试和 repair 都救不了，直接带着模型 id 报回去，别再多打两次请求。
+   */
+  private upstreamConfigError(error: unknown, model: string): BadRequestException | null {
+    const status = this.upstreamStatus(error);
+    if (status === null) return null;
+    const message = error instanceof Error ? error.message : String(error ?? '');
+    const code =
+      status === 401 || status === 403
+        ? 'auth_rejected'
+        : status === 404
+          ? 'model_not_registered'
+          : status === 429
+            ? 'rate_limited'
+            : status === 400 && /model/i.test(message)
+              ? 'model_not_registered'
+              : null;
+    if (!code) return null;
+    return new BadRequestException(`ai_knowledge_llm_upstream:${code}:${model}`);
+  }
+
   private async refineDemandWithAgent(
     workspaceId: string,
     draft: DemandDraft,
@@ -341,8 +398,12 @@ export class AiKnowledgeService {
       }
       return { ...next, messages };
     } catch (error) {
+      const upstream = this.upstreamConfigError(error, config.model);
       this.logger.warn(
-        `AI knowledge demand refinement failed: ${error instanceof Error ? error.message : String(error)}`,
+        (upstream
+          ? `AI knowledge demand refinement rejected by upstream for model "${config.model}": `
+          : 'AI knowledge demand refinement failed: ') +
+          (error instanceof Error ? error.message : String(error)),
       );
       return draft;
     }

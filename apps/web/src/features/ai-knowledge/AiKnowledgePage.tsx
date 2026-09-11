@@ -110,9 +110,32 @@ function llmNotConfiguredMessage(raw: string): string | null {
   }
 }
 
+/**
+ * 服务端返回 `ai_knowledge_llm_upstream:<code>:<model>`：配置读到了、请求也发出去了，
+ * 是上游网关拒绝的。重试没用，必须去改「模型配置」。
+ */
+function llmUpstreamMessage(raw: string): string | null {
+  const matched = raw.match(/ai_knowledge_llm_upstream:([a-z_]+):([^\s"']+)/);
+  if (!matched) return null;
+  const [, code, model] = matched;
+  switch (code) {
+    case 'model_not_registered':
+      return `上游服务不认识模型 id「${model}」：Base URL 和 API Key 都是通的，但这个端点上没有注册该模型。请到「模型配置」把模型 id 改成该网关实际提供的名称（可用该行的「测试」按钮逐个验证）`;
+    case 'auth_rejected':
+      return `模型「${model}」的 API Key 被上游拒绝：请到「模型配置」核对该模型自己的 Key 是否有效、是否有调用该模型的权限`;
+    case 'rate_limited':
+      return `模型「${model}」被上游限流：请稍后重试，或在「模型配置」换一个默认模型`;
+    default:
+      return `模型「${model}」被上游拒绝：请到「模型配置」核对该模型的 id、Base URL 和 API Key`;
+  }
+}
+
 function aiKnowledgeErrorMessage(error: unknown): string {
   const raw = error instanceof Error ? error.message.trim() : '';
   if (!raw) return '方案生成失败，请检查服务或稍后重试';
+  if (raw.includes('ai_knowledge_llm_upstream')) {
+    return llmUpstreamMessage(raw) ?? `方案生成失败：${conciseText(raw, 180)}`;
+  }
   if (raw.includes('llm_not_configured')) {
     return llmNotConfiguredMessage(raw)
       ?? '平台尚未配置方案生成模型：请先在「模型配置」里设置组织默认模型';
