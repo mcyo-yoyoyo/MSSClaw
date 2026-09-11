@@ -11,7 +11,8 @@ export type NestLlmRuntimeConfig = {
   baseUrl: string;
   apiKey: string;
   model: string;
-  maxTokens: number;
+  /** 未配置 LLM_MAX_TOKENS 时为 undefined：请求里不带 max_tokens，由模型自己决定长度。 */
+  maxTokens?: number;
   source: 'env' | 'workspace-doc' | 'request';
 };
 
@@ -234,7 +235,7 @@ export async function nestLlmChatCompletion(params: {
     body: JSON.stringify({
       model: params.config.model,
       messages: params.messages,
-      max_tokens: params.maxTokens ?? params.config.maxTokens,
+      ...maxTokensField(params.maxTokens ?? params.config.maxTokens),
       temperature: params.temperature ?? 0.2,
       ...(params.jsonMode ? { response_format: { type: 'json_object' } } : {}),
       ...(params.disableThinking && /deepseek/i.test(params.config.model)
@@ -285,7 +286,7 @@ export async function nestLlmStreamedText(params: {
     body: JSON.stringify({
       model: params.config.model,
       messages: params.messages,
-      max_tokens: params.maxTokens ?? params.config.maxTokens,
+      ...maxTokensField(params.maxTokens ?? params.config.maxTokens),
       temperature: params.temperature ?? 0.5,
       stream: true,
       stream_options: { include_usage: true },
@@ -359,14 +360,30 @@ export async function nestLlmStreamedText(params: {
     // 连接、鉴权、模型 id 都是对的，纯粹是预算不够：说清楚该调哪个参数。
     throw new Error(
       `LLM_BUDGET_EXHAUSTED_BY_REASONING: 模型「${params.config.model}」输出了 ${reasoningChars} 字符推理内容但没有正文` +
-        `（max_tokens=${maxTokens}${finishReason ? `, finish_reason=${finishReason}` : ''}）。` +
-        '推理模型的思维链与正文共用 max_tokens，请调高 LLM_MAX_TOKENS，或换一个非推理模型。',
+        `（max_tokens=${maxTokens ?? '未设置'}${finishReason ? `, finish_reason=${finishReason}` : ''}）。` +
+        '推理模型的思维链与正文共用 max_tokens。若已设置 LLM_MAX_TOKENS 请调高或删除该配置；否则是网关侧的上限，请换一个非推理模型。',
     );
   }
   if (finishReason === 'length') {
     throw new Error('LLM output token limit reached before final content');
   }
   throw new Error('LLM returned an empty response');
+}
+
+/**
+ * 输出长度上限。默认**不设限**。
+ *
+ * max_tokens 是对「思维链 + 正文」的总预算，推理模型的思考会先把它吃掉，
+ * 导致正文根本产生不出来。内网网关没有按 token 计费的压力，所以除非运维
+ * 显式设置 LLM_MAX_TOKENS，否则不发这个字段，交给模型自己决定。
+ */
+function maxTokensField(value: number | undefined): { max_tokens?: number } {
+  return typeof value === 'number' && value > 0 ? { max_tokens: value } : {};
+}
+
+function envMaxTokens(): number | undefined {
+  const raw = Number(process.env.LLM_MAX_TOKENS);
+  return Number.isFinite(raw) && raw > 0 ? raw : undefined;
 }
 
 /** 服务端环境变量 LLM_*（部署级优先） */
@@ -379,7 +396,7 @@ export function nestLlmConfigFromEnv(): NestLlmRuntimeConfig | null {
     baseUrl,
     apiKey,
     model,
-    maxTokens: Number(process.env.LLM_MAX_TOKENS || 4096) || 4096,
+    maxTokens: envMaxTokens(),
     source: 'env',
   };
 }
@@ -479,7 +496,7 @@ export function nestLlmConfigFromDoc(
     baseUrl: creds.baseUrl,
     apiKey: creds.apiKey,
     model: status.model,
-    maxTokens: Number(process.env.LLM_MAX_TOKENS || 4096) || 4096,
+    maxTokens: envMaxTokens(),
     source: 'workspace-doc',
   };
 }
@@ -504,7 +521,7 @@ export function nestLlmConfigFromCandidate(payload: unknown): NestLlmRuntimeConf
     baseUrl,
     apiKey,
     model,
-    maxTokens: Number(process.env.LLM_MAX_TOKENS || 4096) || 4096,
+    maxTokens: envMaxTokens(),
     source: 'request',
   };
 }
@@ -711,7 +728,7 @@ export async function* nestLlmExecutionStream(params: {
       body: JSON.stringify({
         model: cfg.model,
         messages,
-        max_tokens: cfg.maxTokens,
+        ...maxTokensField(cfg.maxTokens),
         temperature: 0.5,
         stream: true,
         // OpenAI-compatible gateways that support usage append it to the final

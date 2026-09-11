@@ -199,8 +199,9 @@ test('candidate probe is ephemeral and uses the same stream transport', async ()
   assert.equal(calls[0].url, 'https://candidate.example/v1/chat/completions');
   const request = JSON.parse(calls[0].init.body);
   assert.equal(request.model, 'candidate-model');
-  // 探测预算不能小到「推理模型必然只剩思维链」，否则测试结论和真实链路不一致。
-  assert.equal(request.max_tokens, 2048);
+  // 探测必须和聊天 / 智库发同形请求：默认不带 max_tokens，长度交给模型自己决定。
+  // 带上一个小上限会让推理模型必然只剩思维链，探测结论就和真实链路对不上。
+  assert.equal('max_tokens' in request, false);
   assert.equal(calls[0].init.headers.Authorization, 'Bearer candidate-key');
   assert.equal(prisma.writes.length, 0);
 });
