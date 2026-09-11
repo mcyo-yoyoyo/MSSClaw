@@ -15,6 +15,14 @@ export function allowsTaskExecutionSurfaces(preset: NavPresetId): boolean {
   return preset === 'standard' || preset === 'full' || preset === 'custom';
 }
 
+/**
+ * 标准能力 / 完整产品（及自定义）才开放 AI 智库入口（货架搜索框的「智库帮找」）。
+ * MVP 演示档以「逛货架 + 下载」为主，不进诊断对话。
+ */
+export function allowsAiKnowledgeEntry(preset: NavPresetId): boolean {
+  return !isMvpCapabilityPreset(preset);
+}
+
 /** 完整产品（及自定义）才开放 AI任务顶栏入口 */
 export function allowsAiTasksSurface(preset: NavPresetId): boolean {
   return preset === 'full' || preset === 'custom';

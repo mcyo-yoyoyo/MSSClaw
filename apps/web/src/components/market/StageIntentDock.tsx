@@ -5,9 +5,11 @@ import {
 } from '@/domain/capabilityIntentSearch';
 import { writeAppRouteToLocation } from '@/domain/appRoute';
 import { stageAiKnowledgeEntry } from '@/domain/aiKnowledgeEntry';
+import { allowsAiKnowledgeEntry } from '@/domain/marketRunCapability';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { requireLogin } from '@/stores/authGateStore';
 import { useMarketFilterStore } from '@/stores/marketFilterStore';
+import { useNavPresentationStore } from '@/stores/navPresentationStore';
 
 /**
  * 四页统一：标题下方的 AI 对话框搜索
@@ -27,6 +29,9 @@ export function StageIntentDock({
   const search = useMarketFilterStore((s) => s.search);
   const setSearch = useMarketFilterStore((s) => s.setSearch);
   const setAppView = useAppViewStore((s) => s.setAppView);
+  const navPreset = useNavPresentationStore((s) => s.preset);
+  // 后台展示方式配成「MVP演示」时不放出智库入口，搜索框本身仍照常过滤当页列表。
+  const canAskAiKnowledge = allowsAiKnowledgeEntry(navPreset);
 
   const examples = suggestions ?? intentSearchHintExamples(scope);
 
@@ -35,6 +40,7 @@ export function StageIntentDock({
   };
 
   const enterAiKnowledge = () => {
+    if (!canAskAiKnowledge) return;
     const question = search.trim();
     if (!question) return;
     const openAiKnowledge = () => {
@@ -76,15 +82,17 @@ export function StageIntentDock({
             <i className="fa-solid fa-xmark" />
           </button>
         ) : null}
-        <button
-          type="submit"
-          disabled={!search.trim()}
-          className="stage-intent-dock__submit"
-          aria-label="让 AI 智库帮我找"
-        >
-          <span>智库帮找</span>
-          <i className="fa-solid fa-arrow-right" aria-hidden />
-        </button>
+        {canAskAiKnowledge ? (
+          <button
+            type="submit"
+            disabled={!search.trim()}
+            className="stage-intent-dock__submit"
+            aria-label="让 AI 智库帮我找"
+          >
+            <span>智库帮找</span>
+            <i className="fa-solid fa-arrow-right" aria-hidden />
+          </button>
+        ) : null}
       </form>
 
       <div className="stage-intent-dock__meta">
