@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from 'react';
 import {
   fetchPortalAnalyticsApi,
   type PortalAnalyticsAssetRow,
@@ -606,6 +615,461 @@ function StackedBar({
   );
 }
 
+/* ── 趋势折线 ── */
+
+/*
+ * PV / 登录用户 UV / 游客 UV 三条线共用一条 Y 轴。
+ *
+ * 三者量级差得远（PV 常是 UV 的几十倍），默认全开时后两条会压在底部。这里不做
+ * 双 Y 轴——两条轴的对齐比例是任意的，等于凭空造出一段相关性。改为图例可点：
+ * 关掉 PV 后 Y 轴按剩下的序列重新取顶，小量级序列自己撑满画布。
+ *
+ * 颜色取自分类色板前三槽（蓝 / 橙 / 青），青用深一档换取白底 3:1 对比度；这组值
+ * 跑过校验：亮度带、彩度下限、protan/deutan 分离度、对比度全部通过。别换成
+ * STACK_SHADES 那套灰阶——堆叠条只有相邻两块接触，折线是三条交叠，灰阶分不出身份。
+ */
+const TREND_SERIES = [
+  { key: 'pv', label: '页面浏览数 PV', color: '#2a78d6' },
+  { key: 'userUv', label: '用户数 UV', color: '#eb6834' },
+  { key: 'guestUv', label: '游客数', color: '#199e70' },
+] as const satisfies ReadonlyArray<{
+  key: keyof PortalAnalyticsTrafficCounts;
+  label: string;
+  color: string;
+}>;
+
+type TrendKey = (typeof TREND_SERIES)[number]['key'];
+type TrendPoint = PortalAnalyticsTrafficCounts & { date: string };
+
+const TREND_HEIGHT = 240;
+const TREND_PAD = { top: 12, right: 16, bottom: 26, left: 44 };
+/** SSR 与 ResizeObserver 缺席时的兜底宽度。 */
+const TREND_FALLBACK_WIDTH = 720;
+/** X 轴最多排这么多个日期标签，30 天区间不会糊成一片。 */
+const TREND_MAX_TICKS = 7;
+
+/** Y 轴固定 4 格，步长取 1/1.5/2/…×10ⁿ 里第一个够用的；计数指标不出现小数刻度。 */
+function buildTrendTicks(maxValue: number): number[] {
+  const target = Math.max(1, maxValue) / 4;
+  const base = 10 ** Math.floor(Math.log10(target));
+  const step =
+    [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]
+      .map((multiple) => multiple * base)
+      .find((candidate) => candidate >= target) ?? 10 * base;
+  const rounded = Math.max(1, Math.round(step));
+  return [0, 1, 2, 3, 4].map((index) => index * rounded);
+}
+
+/** 描线动画时长；末端点与面积等线走完再淡入。 */
+const TREND_DRAW_MS = 900;
+const TREND_STAGGER_MS = 110;
+
+/**
+ * 单调三次插值（Fritsch–Carlson）——把折点连成曲线。
+ *
+ * 不用普通 Catmull-Rom / 基数样条：那类曲线会在两点之间过冲，把计数指标画到 0
+ * 以下，或在两个相邻日之间凭空拱出一个比两端都高的峰。这条曲线逐段保持单调，
+ * 任意一段都不会越出相邻两点的值域，看起来是圆的，读出来仍是真的。
+ */
+function monotoneCurve(coords: Array<{ x: number; y: number }>): string {
+  const count = coords.length;
+  if (count < 2) return '';
+  const round = (value: number) => Math.round(value * 100) / 100;
+
+  const secant: number[] = [];
+  for (let i = 0; i < count - 1; i += 1) {
+    secant.push((coords[i + 1].y - coords[i].y) / (coords[i + 1].x - coords[i].x));
+  }
+
+  // 极值点处切线取 0，曲线不会翻过该点继续爬。
+  const tangent: number[] = [secant[0]];
+  for (let i = 1; i < count - 1; i += 1) {
+    tangent.push(secant[i - 1] * secant[i] <= 0 ? 0 : (secant[i - 1] + secant[i]) / 2);
+  }
+  tangent.push(secant[count - 2]);
+
+  // Fritsch–Carlson 限幅：把切线收进以割线为半径的圆内，杜绝过冲。
+  for (let i = 0; i < count - 1; i += 1) {
+    if (secant[i] === 0) {
+      tangent[i] = 0;
+      tangent[i + 1] = 0;
+      continue;
+    }
+    const a = tangent[i] / secant[i];
+    const b = tangent[i + 1] / secant[i];
+    const norm = a * a + b * b;
+    if (norm > 9) {
+      const scale = 3 / Math.sqrt(norm);
+      tangent[i] = scale * a * secant[i];
+      tangent[i + 1] = scale * b * secant[i];
+    }
+  }
+
+  let path = `M ${round(coords[0].x)},${round(coords[0].y)}`;
+  for (let i = 0; i < count - 1; i += 1) {
+    const third = (coords[i + 1].x - coords[i].x) / 3;
+    path +=
+      ` C ${round(coords[i].x + third)},${round(coords[i].y + tangent[i] * third)}` +
+      ` ${round(coords[i + 1].x - third)},${round(coords[i + 1].y - tangent[i + 1] * third)}` +
+      ` ${round(coords[i + 1].x)},${round(coords[i + 1].y)}`;
+  }
+  return path;
+}
+
+/** 轴标签用 M/D，formatDate 的 YYYY/MM/DD 在 30 天区间里排不下。 */
+function formatTrendTick(dateKey: string): string {
+  const match = dateKey.match(/^\d{4}-(\d{2})-(\d{2})$/);
+  return match ? `${Number(match[1])}/${Number(match[2])}` : dateKey;
+}
+
+function TrafficTrendChart({ points }: { points: TrendPoint[] }) {
+  const [hidden, setHidden] = useState<TrendKey[]>([]);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  // 系统开了「减少动效」就直接画好：描线动画是锦上添花，不该无视这个设置。
+  const prefersStatic = useMemo(
+    () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches,
+    [],
+  );
+  const [drawn, setDrawn] = useState(prefersStatic);
+  // 同一页可能有多张图，渐变 id 必须各自唯一，否则后挂载的会抢掉前面的引用。
+  const gradientId = useId();
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(TREND_FALLBACK_WIDTH);
+
+  // 按容器实际像素作图，而不是给 SVG 套 viewBox 缩放：缩放会把字号和线宽一起放大，
+  // 轴文字就对不上版面其余部分的字号了。
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') return undefined;
+    setWidth(node.clientWidth || TREND_FALLBACK_WIDTH);
+    const observer = new ResizeObserver((entries) => {
+      const next = entries[0]?.contentRect.width;
+      if (next && Number.isFinite(next)) setWidth(next);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (prefersStatic) return undefined;
+    // 必须等首帧提交后再改，否则起止值在同一帧里，浏览器没有可插值的起点。
+    const frame = requestAnimationFrame(() => setDrawn(true));
+    return () => cancelAnimationFrame(frame);
+  }, [prefersStatic]);
+
+  const visible = TREND_SERIES.filter((series) => !hidden.includes(series.key));
+  const plotWidth = Math.max(120, width - TREND_PAD.left - TREND_PAD.right);
+  const plotHeight = TREND_HEIGHT - TREND_PAD.top - TREND_PAD.bottom;
+
+  // 依赖 hidden 而不是 visible：后者每次渲染都是新数组，memo 会失效。
+  const ticks = useMemo(() => {
+    let max = 0;
+    for (const point of points) {
+      for (const series of TREND_SERIES) {
+        if (!hidden.includes(series.key)) max = Math.max(max, point[series.key]);
+      }
+    }
+    return buildTrendTicks(max);
+  }, [points, hidden]);
+  const axisTop = ticks[ticks.length - 1];
+
+  const xOf = (index: number) =>
+    points.length <= 1
+      ? TREND_PAD.left + plotWidth / 2
+      : TREND_PAD.left + (plotWidth * index) / (points.length - 1);
+  const yOf = (value: number) =>
+    TREND_PAD.top + plotHeight * (1 - Math.min(Math.max(0, value), axisTop) / axisTop);
+  const coordsOf = (key: TrendKey) =>
+    points.map((point, index) => ({ x: xOf(index), y: yOf(point[key]) }));
+  const linePath = (key: TrendKey) => monotoneCurve(coordsOf(key));
+  // 面积沿用同一条曲线，再收回基线闭合，边缘才跟折线严丝合缝。
+  const areaPath = (key: TrendKey) =>
+    `${linePath(key)} L ${xOf(points.length - 1)},${TREND_PAD.top + plotHeight}` +
+    ` L ${xOf(0)},${TREND_PAD.top + plotHeight} Z`;
+
+  // 从最后一天倒着挑，末端日期一定有标签，间距也均匀。
+  const labelIndices = useMemo(() => {
+    const step = Math.max(1, Math.ceil(points.length / TREND_MAX_TICKS));
+    const picked = new Set<number>();
+    for (let index = points.length - 1; index >= 0; index -= step) picked.add(index);
+    return picked;
+  }, [points.length]);
+
+  const nearestIndex = (clientX: number, element: SVGSVGElement): number => {
+    if (points.length <= 1) return 0;
+    const box = element.getBoundingClientRect();
+    const ratio = (clientX - box.left - TREND_PAD.left) / plotWidth;
+    return Math.min(points.length - 1, Math.max(0, Math.round(ratio * (points.length - 1))));
+  };
+
+  const handleKeyDown = (event: ReactKeyboardEvent<SVGSVGElement>) => {
+    if (!points.length || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return;
+    event.preventDefault();
+    setActiveIndex((previous) => {
+      const base = previous ?? points.length - 1;
+      return Math.min(points.length - 1, Math.max(0, base + (event.key === 'ArrowLeft' ? -1 : 1)));
+    });
+  };
+
+  const toggle = (key: TrendKey) => {
+    setHidden((previous) =>
+      previous.includes(key) ? previous.filter((item) => item !== key) : [...previous, key],
+    );
+  };
+
+  if (!points.length) return <Empty label="所选区间没有访问数据。" />;
+
+  const active = activeIndex === null ? null : points[activeIndex] ?? null;
+  const tooltipOnLeft = activeIndex !== null && xOf(activeIndex) > TREND_PAD.left + plotWidth * 0.55;
+  const totals = TREND_SERIES.map((series) => ({
+    ...series,
+    total: points.reduce((sum, point) => sum + point[series.key], 0),
+  }));
+  // 峰值不到纵轴顶端 5% 的序列，在当前刻度下读不出形状，值得提一句。
+  const compressed =
+    visible.length > 1
+      ? visible.filter((series) => {
+          const peak = points.reduce((max, point) => Math.max(max, point[series.key]), 0);
+          return peak > 0 && peak / axisTop < 0.05;
+        })
+      : [];
+
+  return (
+    <div>
+      <div ref={containerRef} className="relative">
+        <svg
+          width={width}
+          height={TREND_HEIGHT}
+          role="img"
+          tabIndex={0}
+          aria-label={`访问趋势折线图，${formatDate(points[0].date)} 至 ${formatDate(
+            points[points.length - 1].date,
+          )}，包含${TREND_SERIES.map((series) => series.label).join('、')}；方向键可逐日读数。`}
+          className="block touch-none outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+          onPointerMove={(event) => setActiveIndex(nearestIndex(event.clientX, event.currentTarget))}
+          onPointerLeave={() => setActiveIndex(null)}
+          onKeyDown={handleKeyDown}
+          onBlur={() => setActiveIndex(null)}
+        >
+          {ticks.map((tick) => (
+            <g key={tick}>
+              {/* 0 线当基线用，比其余网格重一档；网格本身要退到数据后面去。 */}
+              <line
+                x1={TREND_PAD.left}
+                x2={TREND_PAD.left + plotWidth}
+                y1={yOf(tick)}
+                y2={yOf(tick)}
+                stroke={tick === 0 ? '#e4e4e7' : '#f4f4f5'}
+                strokeWidth={1}
+              />
+              <text
+                x={TREND_PAD.left - 8}
+                y={yOf(tick) + 3.5}
+                textAnchor="end"
+                className="fill-zinc-400 text-[10px] tabular-nums"
+              >
+                {tick.toLocaleString('zh-CN')}
+              </text>
+            </g>
+          ))}
+
+          {points.map((point, index) =>
+            labelIndices.has(index) ? (
+              <text
+                key={point.date}
+                x={xOf(index)}
+                y={TREND_HEIGHT - 8}
+                textAnchor={index === 0 ? 'start' : index === points.length - 1 ? 'end' : 'middle'}
+                className="fill-zinc-400 text-[10px] tabular-nums"
+              >
+                {formatTrendTick(point.date)}
+              </text>
+            ) : null,
+          )}
+
+          {active && activeIndex !== null ? (
+            <line
+              x1={xOf(activeIndex)}
+              x2={xOf(activeIndex)}
+              y1={TREND_PAD.top}
+              y2={TREND_PAD.top + plotHeight}
+              stroke="#e4e4e7"
+              strokeWidth={1}
+            />
+          ) : null}
+
+          <defs>
+            {TREND_SERIES.map((series) => (
+              <linearGradient
+                key={series.key}
+                id={`${gradientId}-${series.key}`}
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="1"
+              >
+                {/* 向下收到全透明：实心色块压在网格上会盖住下面的线。 */}
+                <stop offset="0%" stopColor={series.color} stopOpacity={0.22} />
+                <stop offset="100%" stopColor={series.color} stopOpacity={0} />
+              </linearGradient>
+            ))}
+          </defs>
+
+          {/* 线下阴影。按 TREND_SERIES 的顺序铺，量级大的在后面，不会盖住小的那条。 */}
+          {points.length > 1
+            ? visible.map((series) => (
+                <path
+                  key={series.key}
+                  d={areaPath(series.key)}
+                  fill={`url(#${gradientId}-${series.key})`}
+                  opacity={drawn ? 1 : 0}
+                  style={{ transition: `opacity ${TREND_DRAW_MS}ms ease-out` }}
+                />
+              ))
+            : null}
+
+          {visible.map((series, index) =>
+            points.length === 1 ? null : (
+              <path
+                key={series.key}
+                d={linePath(series.key)}
+                fill="none"
+                stroke={series.color}
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                // pathLength 归一成 1，虚线长度就不必先量路径实长。
+                pathLength={1}
+                strokeDasharray={1}
+                strokeDashoffset={drawn ? 0 : 1}
+                style={{
+                  transition: `stroke-dashoffset ${TREND_DRAW_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`,
+                  transitionDelay: `${index * TREND_STAGGER_MS}ms`,
+                }}
+              />
+            ),
+          )}
+
+          {/* 只在末端留一个落点，把「现在是多少」锚住；白色描边保证交叠处仍可读。 */}
+          {visible.map((series, index) => (
+            <circle
+              key={series.key}
+              cx={xOf(points.length - 1)}
+              cy={yOf(points[points.length - 1][series.key])}
+              r={4}
+              fill={series.color}
+              stroke="#ffffff"
+              strokeWidth={2}
+              opacity={drawn ? 1 : 0}
+              style={{
+                transition: 'opacity 260ms ease-out',
+                transitionDelay: `${TREND_DRAW_MS * 0.7 + index * TREND_STAGGER_MS}ms`,
+              }}
+            />
+          ))}
+
+          {/* 末端直接标值只在单条线时给：三条同屏时它们会在底部撞成一团，
+              那种情况按规范交给图例和悬停读数，不硬塞标签。 */}
+          {visible.length === 1 ? (
+            <text
+              x={xOf(points.length - 1) - 8}
+              y={yOf(points[points.length - 1][visible[0].key]) - 10}
+              textAnchor="end"
+              className="fill-zinc-900 text-[11px] font-semibold tabular-nums"
+              opacity={drawn ? 1 : 0}
+              style={{ transition: 'opacity 260ms ease-out', transitionDelay: `${TREND_DRAW_MS * 0.7}ms` }}
+            >
+              {formatCount(points[points.length - 1][visible[0].key])}
+            </text>
+          ) : null}
+
+          {active && activeIndex !== null && points.length > 1
+            ? visible.map((series) => (
+                <circle
+                  key={series.key}
+                  cx={xOf(activeIndex)}
+                  cy={yOf(active[series.key])}
+                  r={4}
+                  fill={series.color}
+                  stroke="#ffffff"
+                  strokeWidth={2}
+                />
+              ))
+            : null}
+        </svg>
+
+        {active ? (
+          <div
+            role="status"
+            className={cn(
+              'pointer-events-none absolute top-1 z-10 rounded-xl border border-zinc-200/70',
+              'bg-white/95 px-3 py-2 shadow-apple backdrop-blur',
+              // 贴着准线放在空的那一侧：居中会正好盖住刚要读的那几个点。
+              tooltipOnLeft && '-translate-x-full',
+            )}
+            style={{ left: xOf(activeIndex ?? 0) + (tooltipOnLeft ? -10 : 10) }}
+          >
+            <p className="text-[10.5px] text-zinc-400 tabular-nums">{formatDate(active.date)}</p>
+            <dl className="mt-1.5 space-y-1">
+              {visible.map((series) => (
+                <div key={series.key} className="flex items-center gap-2">
+                  <span className="h-0.5 w-3 shrink-0 rounded-full" style={{ background: series.color }} />
+                  <dd className="text-[12.5px] font-semibold tabular-nums text-zinc-900">
+                    {formatCount(active[series.key])}
+                  </dd>
+                  <dt className="ml-auto whitespace-nowrap text-[10.5px] text-zinc-500">{series.label}</dt>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ) : null}
+      </div>
+
+      {/* 两条以上序列必须有图例：身份不能只靠颜色。做成药丸按钮，让「可点」自己看得出来。 */}
+      <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-zinc-100 pt-3">
+        {totals.map((series) => {
+          const off = hidden.includes(series.key);
+          return (
+            <button
+              key={series.key}
+              type="button"
+              onClick={() => toggle(series.key)}
+              aria-pressed={!off}
+              disabled={!off && visible.length === 1}
+              title={off ? `显示${series.label}` : `隐藏${series.label}`}
+              className={cn(
+                'flex items-center gap-2 rounded-full py-1 pl-2 pr-2.5 text-[11.5px] transition',
+                off
+                  ? 'bg-transparent text-zinc-400 hover:bg-zinc-100'
+                  : 'bg-white text-zinc-600 shadow-sm ring-1 ring-zinc-200/80',
+                'disabled:cursor-default',
+              )}
+            >
+              <span
+                className="h-0.5 w-3.5 shrink-0 rounded-full"
+                style={{ background: off ? '#d4d4d8' : series.color }}
+              />
+              <span>{series.label}</span>
+              <span className={cn('font-semibold tabular-nums', off ? 'text-zinc-400' : 'text-zinc-900')}>
+                {formatCount(series.total)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 提示只在真的被压扁时出现：量级接近时它是多余的装饰。 */}
+      {compressed.length ? (
+        <p className="mt-2 text-[10.5px] leading-snug text-zinc-400">
+          {'同一纵轴下，'}
+          {compressed.map((series) => series.label).join('、')}
+          {' 几乎贴底；点图例可单独查看其趋势。'}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 /* ── 表格 ── */
 
 function TableShell({
@@ -909,6 +1373,10 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
   const overviewSummary = overviewState.report?.assets?.summary ?? EMPTY_ASSET_SUMMARY;
   const overviewHasAssets = Boolean(overviewState.report?.assets);
   const overviewToolTotal = overviewSummary.tool ?? overviewSummary.external + overviewSummary.company;
+  const overviewSeries = overviewState.report?.series ?? [];
+  const overviewRangeLabel = overviewState.report
+    ? `${formatDate(overviewState.report.range.from)} – ${formatDate(overviewState.report.range.to)}`
+    : undefined;
 
   /* 02 用户分析 */
   const usersTraffic = usersState.report?.totals ?? EMPTY_TRAFFIC;
@@ -1103,6 +1571,14 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
           <BandItem label="Skill 数" value={formatOptionalCount(overviewSummary.skill)} note="已上架 Skill" />
           <BandItem label="Agent 数" value={formatOptionalCount(overviewSummary.agent)} note="已上架 Agent" />
         </StatBand>
+
+        {overviewState.loading ? (
+          <Skeleton className="h-[300px]" />
+        ) : (
+          <Card title="访问趋势" subtitle={overviewRangeLabel}>
+            <TrafficTrendChart points={overviewSeries} />
+          </Card>
+        )}
       </Module>
 
       {/* ══ 02 用户分析 ══ */}
