@@ -262,6 +262,82 @@ export async function nestLlmChatCompletion(params: {
   return content;
 }
 
+/**
+ * 与「模型配置」测试按钮完全同形的一次补全：stream=true、不带 tools/tool_choice。
+ *
+ * 智库「帮找」走这条路，而不是 function calling：内网网关常常只注册了流式路由、
+ * 或者不支持 tools，于是出现「测试能通、帮找 404」。同形请求把这个差异消掉——
+ * 后台测试能通，帮找就能通。
+ */
+export async function nestLlmStreamedText(params: {
+  messages: LlmChatMessage[];
+  config: NestLlmRuntimeConfig;
+  maxTokens?: number;
+  temperature?: number;
+  signal?: AbortSignal;
+}): Promise<string> {
+  const res = await fetch(`${params.config.baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${params.config.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: params.config.model,
+      messages: params.messages,
+      max_tokens: params.maxTokens ?? params.config.maxTokens,
+      temperature: params.temperature ?? 0.5,
+      stream: true,
+      stream_options: { include_usage: true },
+    }),
+    signal: params.signal,
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`LLM HTTP ${res.status}: ${body.slice(0, MAX_UPSTREAM_ERROR_BODY)}`);
+  }
+  if (!res.body) throw new Error('LLM HTTP 200: empty response body');
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let text = '';
+  let finishReason = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let cut = buffer.indexOf('\n');
+      while (cut !== -1) {
+        const line = buffer.slice(0, cut).trim();
+        buffer = buffer.slice(cut + 1);
+        cut = buffer.indexOf('\n');
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (!data || data === '[DONE]') continue;
+        try {
+          const parsed = JSON.parse(data) as {
+            choices?: Array<{ delta?: { content?: string }; finish_reason?: string }>;
+          };
+          const choice = parsed.choices?.[0];
+          if (typeof choice?.delta?.content === 'string') text += choice.delta.content;
+          if (choice?.finish_reason) finishReason = choice.finish_reason;
+        } catch {
+          // 网关的心跳 / 非 JSON 帧，忽略即可。
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const content = text.trim();
+  if (!content && finishReason === 'length') {
+    throw new Error('LLM output token limit reached before final content');
+  }
+  return content;
+}
+
 /** 服务端环境变量 LLM_*（部署级优先） */
 export function nestLlmConfigFromEnv(): NestLlmRuntimeConfig | null {
   const baseUrl = normalizeBaseUrl(process.env.LLM_BASE_URL ?? '');

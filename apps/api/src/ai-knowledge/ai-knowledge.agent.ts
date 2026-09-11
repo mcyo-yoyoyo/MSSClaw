@@ -1,13 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import {
-  Agent,
-  OpenAIProvider,
-  Runner,
-  setTracingDisabled,
-  tool,
-} from '@openai/agents';
 import { z } from 'zod';
-import type { NestLlmRuntimeConfig } from '../executions/llm.client';
+import { nestLlmStreamedText, type NestLlmRuntimeConfig } from '../executions/llm.client';
 import type { DemandDraft, DemandSummary, SolutionResource } from './ai-knowledge.types';
 import { AiKnowledgeResourceService } from './ai-knowledge.resources';
 
@@ -34,13 +27,6 @@ export const AI_KNOWLEDGE_SOLUTION_INSTRUCTIONS =
   '每个案例的approach只提取与当前需求最相似的真实动作，写清谁用什么工具、处理什么输入、得到什么产物；toolsUsed必须逐字复制案例候选的toolsUsed，候选未提供时填写“案例原文未明确说明”。' +
   'lessons必须结合本次用户已有输入和期望输出，给出最多两条能直接采用的动作，不能写“建立治理机制”“从具体痛点切入”等脱离当前任务的通用建议；弱相关案例宁可不选。' +
   'tools最多3项，cases最多2项，每个文字字段限制1至2句，howToUse最多3步，lessons最多2点。案例未披露量化结果时明确说明，不得编造。';
-
-const searchParameters = z.object({
-  query: z.string().min(2).max(300),
-  // OpenAI-compatible providers sometimes serialize numeric arguments as
-  // strings or choose a larger page size; the resource service clamps it to 8.
-  limit: z.coerce.number().int().min(1).max(20),
-});
 
 const solutionParameters = z.object({
   title: z.string().min(2).max(120),
@@ -82,11 +68,34 @@ const demandParameters = z.object({
   assistantReply: z.string().min(2).max(300),
 });
 
+/** 输出契约写进提示词：不再依赖 function calling，网关只要能做普通补全就行。 */
+const DEMAND_OUTPUT_CONTRACT =
+  '只输出一个 JSON 对象，不要 Markdown 代码块、解释或多余文字。字段：' +
+  'title(字符串)、domain(字符串)、problem(字符串)、goal(字符串)、currentMethod(字符串)、' +
+  'inputs(字符串)、aiRole(字符串)、humanCheckpoint(字符串)、needsClarification(布尔)、assistantReply(字符串)。';
+
+const SOLUTION_OUTPUT_CONTRACT =
+  '只输出一个 JSON 对象，不要 Markdown 代码块、解释或多余文字。结构：' +
+  '{"title":字符串,"diagnosis":{"need":字符串,"currentSituation":字符串,"keyProblems":[字符串],"solutionDirection":字符串},' +
+  '"tools":[{"resourceId":字符串,"problemSolved":字符串,"introduction":字符串,"howToUse":[2至3条字符串],"output":字符串,"expectedEffect":字符串}],' +
+  '"cases":[{"resourceId":字符串,"similarProblem":字符串,"approach":字符串,"toolsUsed":[字符串],"result":字符串,"lessons":[1至2条字符串],"applicability":字符串}]}。' +
+  'resourceId 必须逐字复制候选资源的 id。';
+
 function tryParseJson(raw: string): unknown {
   const clean = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   try {
     return JSON.parse(clean);
   } catch {
+    // 有些模型会在 JSON 前后带一句话，取最外层的花括号再试一次。
+    const start = clean.indexOf('{');
+    const end = clean.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      try {
+        return JSON.parse(clean.slice(start, end + 1));
+      } catch {
+        return raw;
+      }
+    }
     return raw;
   }
 }
@@ -102,86 +111,48 @@ function uniqueResources(resources: SolutionResource[]): SolutionResource[] {
   });
 }
 
-function providerModelSettings(config: NestLlmRuntimeConfig): {
-  providerData?: { thinking: { type: 'disabled' } };
-} {
-  // DeepSeek reasoning responses cannot be replayed by the Chat Completions
-  // adapter after a tool call. Disable that optional mode only for the
-  // DeepSeek endpoint; other OpenAI-compatible providers must not receive a
-  // provider-specific field they may reject.
-  return /deepseek/i.test(`${config.model} ${config.baseUrl}`)
-    ? { providerData: { thinking: { type: 'disabled' } } }
-    : {};
-}
-
 @Injectable()
 export class AiKnowledgeAgentRunner {
-  constructor(private readonly resources: AiKnowledgeResourceService) {
-    setTracingDisabled(true);
-  }
+  constructor(private readonly resources: AiKnowledgeResourceService) {}
 
   async refineDemand(
     draft: DemandDraft,
     config: NestLlmRuntimeConfig,
     signal?: AbortSignal,
   ): Promise<DemandRefinement> {
-    const submitDemand = tool({
-      name: 'submit_demand_summary',
-      description: '提交根据当前对话整理后的需求摘要，以及下一句对用户的回应。',
-      parameters: demandParameters,
-      execute: async (value) => value,
+    const text = await nestLlmStreamedText({
+      config,
+      signal,
+      // 中文 + 完整需求卡在 900 token 下会被截断，给一个下限。
+      maxTokens: Math.max(config.maxTokens, 1_600),
+      temperature: 0.3,
+      messages: [
+        {
+          role: 'system',
+          content:
+            '根据用户原始问题和对话历史，把需求整理成一条完整但不过度细化的用户故事。' +
+            '只判断四项信息是否明确：1）使用AI的人的业务角色；2）希望达成的业务目标；3）可以交给AI的现有输入；4）希望AI产出的结果。' +
+            '字段映射必须固定：humanCheckpoint填写使用者角色，goal填写业务目标，inputs填写现有输入，aiRole填写期望输出。problem概括任务，currentMethod统一填写“计划使用AI完成该任务”。' +
+            '信息达到类别级别即可，例如“产品录屏和卖点材料”“社交媒体宣传视频”已经足够。不要追问素材数量、时长、格式、预算、历史工作方式、审核人、国家明细或工具偏好。' +
+            '优先从用户已经说过的话中提取，不得重复追问。缺少角色或目标时先合并追问这两项；缺少输入或输出时再合并追问这两项；每轮最多问一组。' +
+            '未知项填写“待确认”，任何四项仍待确认时needsClarification必须为true。四项全部明确后立即停止追问，needsClarification为false，assistantReply只说明用户故事已形成、可以确认生成方案。' +
+            '目标用户故事示例：作为欧洲区域营销经理，我希望将产品图片、功能演示素材、核心卖点和品牌规范提交给AI，由AI自动生成适合社交媒体投放的产品宣传视频，从而缩短视频制作周期、降低沟通与制作成本，并提升新品推广效率。' +
+            DEMAND_OUTPUT_CONTRACT,
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            originalQuestion: draft.originalQuestion,
+            currentDemand: draft.demand,
+            clarificationCount: draft.clarificationCount,
+            conversation: draft.messages.map(({ role, text: line }) => ({ role, text: line })),
+          }),
+        },
+      ],
     });
-    const provider = new OpenAIProvider({
-      apiKey: config.apiKey,
-      baseURL: config.baseUrl,
-      useResponses: false,
-    });
-    const runner = new Runner({ modelProvider: provider, tracingDisabled: true });
-    const agent = new Agent({
-      name: 'MSS AI 智库需求分析 Agent',
-      model: config.model,
-      instructions:
-        '根据用户原始问题和对话历史，把需求整理成一条完整但不过度细化的用户故事。' +
-        '只判断四项信息是否明确：1）使用AI的人的业务角色；2）希望达成的业务目标；3）可以交给AI的现有输入；4）希望AI产出的结果。' +
-        '字段映射必须固定：humanCheckpoint填写使用者角色，goal填写业务目标，inputs填写现有输入，aiRole填写期望输出。problem概括任务，currentMethod统一填写“计划使用AI完成该任务”。' +
-        '信息达到类别级别即可，例如“产品录屏和卖点材料”“社交媒体宣传视频”已经足够。不要追问素材数量、时长、格式、预算、历史工作方式、审核人、国家明细或工具偏好。' +
-        '优先从用户已经说过的话中提取，不得重复追问。缺少角色或目标时先合并追问这两项；缺少输入或输出时再合并追问这两项；每轮最多问一组。' +
-        '未知项填写“待确认”，任何四项仍待确认时needsClarification必须为true。四项全部明确后立即停止追问，needsClarification为false，assistantReply只说明用户故事已形成、可以确认生成方案。' +
-        '目标用户故事示例：作为欧洲区域营销经理，我希望将产品图片、功能演示素材、核心卖点和品牌规范提交给AI，由AI自动生成适合社交媒体投放的产品宣传视频，从而缩短视频制作周期、降低沟通与制作成本，并提升新品推广效率。' +
-        '必须调用submit_demand_summary完成本轮，不要直接输出普通文本。',
-      tools: [submitDemand],
-      toolUseBehavior: { stopAtToolNames: ['submit_demand_summary'] },
-      modelSettings: {
-        // Some reasoning models reject `required` while still supporting tool
-        // calls; the instruction and stop rule keep this provider-neutral.
-        toolChoice: 'auto',
-        // The tool arguments contain the complete demand summary. 900 tokens is
-        // too small for the schema (especially for Chinese text) and can make
-        // the provider truncate the JSON before the tool call is complete.
-        maxTokens: Math.max(config.maxTokens, 1_600),
-        ...providerModelSettings(config),
-      },
-    });
-    try {
-      const result = await runner.run(
-        agent,
-        JSON.stringify({
-          originalQuestion: draft.originalQuestion,
-          currentDemand: draft.demand,
-          clarificationCount: draft.clarificationCount,
-          conversation: draft.messages.map(({ role, text }) => ({ role, text })),
-        }),
-        { maxTurns: 2, signal },
-      );
-      const parsed = typeof result.finalOutput === 'string'
-        ? tryParseJson(result.finalOutput)
-        : result.finalOutput;
-      const value = demandParameters.parse(parsed);
-      const { assistantReply, needsClarification, ...demand } = value;
-      return { demand, assistantReply, needsClarification };
-    } finally {
-      await provider.close();
-    }
+    const value = demandParameters.parse(tryParseJson(text));
+    const { assistantReply, needsClarification, ...demand } = value;
+    return { demand, assistantReply, needsClarification };
   }
 
   async generate(
@@ -191,113 +162,57 @@ export class AiKnowledgeAgentRunner {
     signal?: AbortSignal,
     repair = false,
   ): Promise<AgentGeneration> {
-    const collected: SolutionResource[] = [];
-    const completedSearches = new Set<'cases' | 'tools' | 'capabilities'>();
-    const remember = (items: SolutionResource[]) => {
-      collected.push(...items);
-      return JSON.stringify(items);
-    };
-    const searchCases = tool({
-      name: 'search_cases',
-      description: '查询本地海外 AI 落地案例库。query必须包含用户业务问题、目标、期望做法和所需工具类型，用于匹配案例做法、使用工具、结果和借鉴意义。',
-      parameters: searchParameters,
-      execute: async ({ query, limit }) => {
-        if (completedSearches.has('cases')) {
-          return '案例库本轮已完成检索。请停止重复查询，直接调用 submit_solution。';
-        }
-        completedSearches.add('cases');
-        return remember(await this.resources.searchCases(workspaceId, query, limit));
-      },
-    });
-    const searchTools = tool({
-      name: 'search_tools',
-      description: '查询 MSS 平台数据库中的国内外 AI 工具主数据。query应包含任务、输入、预期输出和所需核心能力，不要只重复用户原话。',
-      parameters: searchParameters,
-      execute: async ({ query, limit }) => {
-        if (completedSearches.has('tools')) {
-          return '工具目录本轮已完成检索。请停止重复查询，直接调用 submit_solution。';
-        }
-        completedSearches.add('tools');
-        return remember(await this.resources.searchTools(workspaceId, query, limit));
-      },
-    });
-    const searchCapabilities = tool({
-      name: 'search_capabilities',
-      description: '查询当前工作区数据库中已登记的 Skill 和 Agent。query应包含业务场景、任务和所需核心能力。',
-      parameters: searchParameters,
-      execute: async ({ query, limit }) => {
-        if (completedSearches.has('capabilities')) {
-          return 'Skill/Agent 目录本轮已完成检索。请停止重复查询，直接调用 submit_solution。';
-        }
-        completedSearches.add('capabilities');
-        return remember(await this.resources.searchCapabilities(workspaceId, query, limit));
-      },
-    });
-    const submitSolution = tool({
-      name: 'submit_solution',
-      description: '完成资料检索后，提交最终的结构化行动方案。这是完成任务的唯一方式。',
-      parameters: solutionParameters,
-      execute: async (solution) => solution,
+    // 检索在服务端确定性完成，不再让模型用 function calling 自己发查询：
+    // 候选资源一次性放进提示词，请求就退化成一次普通补全。
+    const query = [
+      draft.originalQuestion,
+      draft.demand.problem,
+      draft.demand.goal,
+      draft.demand.currentMethod,
+      draft.demand.inputs,
+      draft.demand.aiRole,
+      draft.demand.domain,
+    ].filter(Boolean).join(' ');
+    const [cases, tools, capabilities] = await Promise.all([
+      this.resources.searchCases(workspaceId, query, 4),
+      this.resources.searchTools(workspaceId, query, 4),
+      this.resources.searchCapabilities(workspaceId, query, 4),
+    ]);
+    const collected = uniqueResources([...tools, ...capabilities, ...cases]).slice(0, 12);
+
+    const text = await nestLlmStreamedText({
+      config,
+      signal,
+      maxTokens: Math.max(config.maxTokens, repair ? 6_144 : 4_096),
+      temperature: repair ? 0.1 : 0.3,
+      messages: [
+        {
+          role: 'system',
+          content:
+            AI_KNOWLEDGE_SOLUTION_INSTRUCTIONS +
+            SOLUTION_OUTPUT_CONTRACT +
+            (repair
+              ? '上一次输出不是合法 JSON 或缺少必填字段。这次务必只输出完整、可解析的 JSON。'
+              : ''),
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            task: '检索结果已给出，请据此生成简洁、可执行的业务行动方案',
+            question: draft.originalQuestion,
+            demand: draft.demand,
+            candidates: collected,
+          }),
+        },
+      ],
     });
 
-    const provider = new OpenAIProvider({
-      apiKey: config.apiKey,
-      baseURL: config.baseUrl,
-      useResponses: false,
-    });
-    const runner = new Runner({
-      modelProvider: provider,
-      tracingDisabled: true,
-    });
-    const agent = new Agent({
-      name: 'MSS AI 智库检索 Agent',
-      model: config.model,
-      instructions:
-        AI_KNOWLEDGE_SOLUTION_INSTRUCTIONS +
-        '你负责基于本地可信资料为业务问题生成一份三层诊断方案。' +
-        '先把需求归纳为任务、输入、预期输出、所需核心能力和限制条件，然后分别查询案例库、工具目录和内部 Skill/Agent 三类资料。' +
-        '如果结果不足，可以调整关键词再次查询，但最多保持必要的调用次数。' +
-        '只能引用工具返回的资源，不得虚构案例、工具、Skill 或 Agent。' +
-        '检索结果包含核心能力、适用场景、相关度和命中字段。你必须逐项比较候选是否直接支持所需能力，不能只因名称或简介出现相同词就推荐。' +
-        'toolsUsed优先使用案例资料的toolsUsed字段；原文未明确工具时填写“案例原文未明确说明”，不得猜测。' +
-        '没有相关案例时允许cases为空，不能用弱相关案例凑数。' +
-        '案例没有披露量化结果时必须明确写“案例未披露量化结果”，不得编造数字。' +
-        '完成检索后必须调用submit_solution提交结果，不要直接输出普通文本。' +
-        'tools和cases中的resourceId只能填写对应检索结果中真实存在的id。' +
-        (repair
-          ? '这是一次修复调用。不要重新解释任务，减少每个字段到满足要求的最短准确表述，确保完整调用submit_solution。'
-          : ''),
-      tools: [searchCases, searchTools, searchCapabilities, submitSolution],
-      toolUseBehavior: { stopAtToolNames: ['submit_solution'] },
-      modelSettings: {
-        toolChoice: 'auto',
-        parallelToolCalls: false,
-        // A complete submit_solution call includes all nested tool/case fields;
-        // the old 1600-token floor routinely truncated its JSON arguments.
-        // Keep a larger floor for the first pass and an even larger one for a
-        // repair pass. The provider may still apply its own hard maximum.
-        maxTokens: Math.max(config.maxTokens, repair ? 6_144 : 4_096),
-        ...providerModelSettings(config),
-      },
-    });
-    try {
-      const result = await runner.run(
-        agent,
-        JSON.stringify({
-          task: '检索可信资料并生成简洁、可执行的业务行动方案',
-          question: draft.originalQuestion,
-          demand: draft.demand,
-        }),
-        { maxTurns: 8, signal },
-      );
-      return {
-        solution: typeof result.finalOutput === 'string'
-          ? tryParseJson(result.finalOutput)
-          : result.finalOutput,
-        resources: uniqueResources(collected).slice(0, 12),
-      };
-    } finally {
-      await provider.close();
-    }
+    const parsed = tryParseJson(text);
+    const checked = solutionParameters.safeParse(parsed);
+    return {
+      // 解析失败时把原始值交给 sanitizeLlmSolution，由它决定是否退回规则方案。
+      solution: checked.success ? checked.data : parsed,
+      resources: collected,
+    };
   }
 }

@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import test from 'node:test';
+import { AiKnowledgeAgentRunner } from '../dist/ai-knowledge/ai-knowledge.agent.js';
 import {
   buildRuleSolution,
   canConfirmDemand,
@@ -157,4 +159,82 @@ test('LLM output cannot drop a strongly matched tool and pass with only a case',
     }],
   }, base, resources, 'test-model');
   assert.equal(generated, null);
+});
+
+
+/**
+ * 契约：后台「模型配置」的测试按钮能通，智库「帮找」就必须能通。
+ * 两者必须发同形请求 —— 同一路径、stream=true、不带 tools/tool_choice。
+ * 内网网关常常只注册流式路由或不支持 function calling，一旦帮找偷偷多带字段，
+ * 就会出现「测试能过、帮找 404」。
+ */
+async function captureAiKnowledgeRequest(run, content) {
+  let captured = null;
+  let calls = 0;
+  const server = http.createServer((req, res) => {
+    calls += 1;
+    let body = '';
+    req.on('data', (chunk) => (body += chunk));
+    req.on('end', () => {
+      if (!captured) captured = { url: req.url, body: JSON.parse(body) };
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content } }] })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}/codemate/v1`;
+  try {
+    await run({ baseUrl, apiKey: 'test-key', model: 'MiniMax-M3', maxTokens: 4096, source: 'workspace-doc' });
+  } finally {
+    server.close();
+  }
+  return { ...captured, calls };
+}
+
+const DEMAND_REPLY = JSON.stringify({
+  title: '渠道预测', domain: '渠道', problem: '预测慢', goal: '提效', currentMethod: '人工',
+  inputs: '历史销量', aiRole: '生成预测', humanCheckpoint: '业务负责人',
+  needsClarification: false, assistantReply: '需求已整理完整。',
+});
+
+const SOLUTION_REPLY = JSON.stringify({
+  title: '渠道预测方案',
+  diagnosis: { need: '统一预测', currentSituation: '人工汇总', keyProblems: ['口径不一'], solutionDirection: '先标准化' },
+  tools: [], cases: [],
+});
+
+test('帮找与后台测试发同形请求：流式、无 tools、同一 /chat/completions 路径', async () => {
+  const runner = new AiKnowledgeAgentRunner({
+    searchCases: async () => [],
+    searchTools: async () => [],
+    searchCapabilities: async () => [],
+  });
+
+  const refine = await captureAiKnowledgeRequest(
+    (config) => runner.refineDemand(createDraft('如何提高渠道预测效率？'), config),
+    DEMAND_REPLY,
+  );
+  const generate = await captureAiKnowledgeRequest(
+    (config) => runner.generate('ws-test', createDraft('如何提高渠道预测效率？'), config),
+    SOLUTION_REPLY,
+  );
+
+  for (const [label, captured] of [['refineDemand', refine], ['generate', generate]]) {
+    assert.equal(captured.url, '/codemate/v1/chat/completions', label);
+    assert.equal(captured.body.model, 'MiniMax-M3', label);
+    assert.equal(captured.body.stream, true, label);
+    assert.deepEqual(captured.body.stream_options, { include_usage: true }, label);
+    // function calling 是「测试能过、帮找 404」的根源，绝不能再带上。
+    assert.equal(captured.body.tools, undefined, label);
+    assert.equal(captured.body.tool_choice, undefined, label);
+    assert.deepEqual(
+      Object.keys(captured.body).sort(),
+      ['max_tokens', 'messages', 'model', 'stream', 'stream_options', 'temperature'],
+      label,
+    );
+  }
+  // 检索在服务端确定性完成，生成只打一次上游，不再跑 agent 多轮循环。
+  assert.equal(generate.calls, 1);
 });
