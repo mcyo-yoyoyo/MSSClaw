@@ -28,7 +28,6 @@ import {
   type SkillEvaluationInput,
 } from './skill-evaluation';
 import { portalAnalyticsDateKey } from '../persistence/portal-analytics-time';
-import { WebToolsService } from './web-tools.service';
 
 const MARKETING_STEPS: ExecutionStep[] = [
   { skill: 'Intent_Parser', time: '120ms', label: '多模态意图识别', detail: '解析群聊上下文，提取实体与 Action。' },
@@ -183,7 +182,6 @@ function normalizeAssetId(value: unknown): string {
 export class ExecutionsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly webTools: WebToolsService,
   ) {}
 
   async list(workspaceId: string, limit = 50) {
@@ -496,7 +494,6 @@ export class ExecutionsService {
         kbContext: params.kbContext,
         config: llmConfig,
         signal,
-        webTools: this.webTools,
       })) {
         yield event;
         if (event.type === 'done') {
