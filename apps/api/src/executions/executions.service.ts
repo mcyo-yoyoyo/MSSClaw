@@ -19,7 +19,7 @@ import {
   type LlmStreamDiagnostics,
   type NestLlmRuntimeConfig,
 } from './llm.client';
-import { runMastraExecutionStream, runMastraTextCompletion } from './mastra-execution';
+import { runLlmExecutionStream, runLlmTextCompletion } from './llm-execution';
 import {
   buildRulesEvaluation,
   mergeModelEvaluation,
@@ -355,7 +355,9 @@ export class ExecutionsService {
         signal: controller.signal,
         // Keep the probe short while leaving reasoning models enough budget to
         // emit a visible completion after their reasoning deltas.
-        config: { ...config, maxTokens: 64 },
+        // 64 tokens 对推理模型等于「必然只剩思维链」，探测会永远看不到正文。
+        // 给一个能跑完一轮短思考的预算，让测试结论和真实链路一致。
+        config: { ...config, maxTokens: Math.min(Math.max(config.maxTokens, 1_024), 2_048) },
         onDiagnostics: (diagnostics) => {
           latestDiagnostics = { ...diagnostics, timeoutMs };
         },
@@ -390,10 +392,21 @@ export class ExecutionsService {
         };
       }
       const diagnostics = latestDiagnostics ?? emptyLlmDiagnostics('stream', Date.now() - probeStarted);
-      const hasStreamActivity =
-        receivedToken ||
-        diagnostics.reasoningDeltas > 0;
-      if (!hasStreamActivity) {
+      // 测试必须验证业务链路真正需要的东西：正文。
+      // 只输出推理内容（思维链）算不通过 —— 否则会出现「后台测试通过、智库却拿不到
+      // 任何内容」，因为推理模型的思维链和正文共用 max_tokens。
+      if (!receivedToken && diagnostics.reasoningDeltas > 0) {
+        return {
+          ok: false,
+          errorCode: 'llm_test_reasoning_only',
+          message:
+            `模型已连通，但在本次探测预算内只输出了推理内容、没有正文。` +
+            `推理模型的思维链与正文共用 max_tokens，请调高 LLM_MAX_TOKENS，或改用非推理模型。` +
+            diagnosticStats(diagnostics),
+          diagnostics,
+        };
+      }
+      if (!receivedToken) {
         return {
           ok: false,
           errorCode: 'llm_test_empty_stream',
@@ -446,7 +459,7 @@ export class ExecutionsService {
     const timeoutMs = Math.max(5_000, Number(process.env.SKILL_EVALUATION_TIMEOUT_MS) || 45_000);
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const result = await runMastraTextCompletion({
+      const result = await runLlmTextCompletion({
         agentId: 'skill-trace-evaluator',
         agentName: 'Skill TRACE 评测器',
         instructions:
@@ -484,7 +497,7 @@ export class ExecutionsService {
     signal?: AbortSignal,
   ): AsyncGenerator<StreamEvent> {
     try {
-      for await (const event of runMastraExecutionStream({
+      for await (const event of runLlmExecutionStream({
         executionId: base.id,
         message: params.message,
         actionType: agentType,

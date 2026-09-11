@@ -300,8 +300,12 @@ export async function nestLlmStreamedText(params: {
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
+  const maxTokens = params.maxTokens ?? params.config.maxTokens;
   let buffer = '';
   let text = '';
+  // 推理模型（MiniMax-M3、DeepSeek-R 系等）先吐思维链再吐正文，而 max_tokens
+  // 两者共用。只读 content 会得到空串，必须把推理量也记下来才能把失败说清楚。
+  let reasoningChars = 0;
   let finishReason = '';
   try {
     for (;;) {
@@ -318,10 +322,28 @@ export async function nestLlmStreamedText(params: {
         if (!data || data === '[DONE]') continue;
         try {
           const parsed = JSON.parse(data) as {
-            choices?: Array<{ delta?: { content?: string }; finish_reason?: string }>;
+            choices?: Array<{
+              delta?: {
+                content?: string;
+                reasoning_content?: string;
+                reasoning?: string;
+                thinking?: string;
+              };
+              finish_reason?: string;
+            }>;
           };
           const choice = parsed.choices?.[0];
-          if (typeof choice?.delta?.content === 'string') text += choice.delta.content;
+          const delta = choice?.delta;
+          if (typeof delta?.content === 'string') text += delta.content;
+          const reasoning =
+            typeof delta?.reasoning_content === 'string'
+              ? delta.reasoning_content
+              : typeof delta?.reasoning === 'string'
+                ? delta.reasoning
+                : typeof delta?.thinking === 'string'
+                  ? delta.thinking
+                  : '';
+          reasoningChars += reasoning.length;
           if (choice?.finish_reason) finishReason = choice.finish_reason;
         } catch {
           // 网关的心跳 / 非 JSON 帧，忽略即可。
@@ -332,10 +354,19 @@ export async function nestLlmStreamedText(params: {
     reader.releaseLock();
   }
   const content = text.trim();
-  if (!content && finishReason === 'length') {
+  if (content) return content;
+  if (reasoningChars > 0) {
+    // 连接、鉴权、模型 id 都是对的，纯粹是预算不够：说清楚该调哪个参数。
+    throw new Error(
+      `LLM_BUDGET_EXHAUSTED_BY_REASONING: 模型「${params.config.model}」输出了 ${reasoningChars} 字符推理内容但没有正文` +
+        `（max_tokens=${maxTokens}${finishReason ? `, finish_reason=${finishReason}` : ''}）。` +
+        '推理模型的思维链与正文共用 max_tokens，请调高 LLM_MAX_TOKENS，或换一个非推理模型。',
+    );
+  }
+  if (finishReason === 'length') {
     throw new Error('LLM output token limit reached before final content');
   }
-  return content;
+  throw new Error('LLM returned an empty response');
 }
 
 /** 服务端环境变量 LLM_*（部署级优先） */

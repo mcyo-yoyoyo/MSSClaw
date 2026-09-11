@@ -199,7 +199,8 @@ test('candidate probe is ephemeral and uses the same stream transport', async ()
   assert.equal(calls[0].url, 'https://candidate.example/v1/chat/completions');
   const request = JSON.parse(calls[0].init.body);
   assert.equal(request.model, 'candidate-model');
-  assert.equal(request.max_tokens, 64);
+  // 探测预算不能小到「推理模型必然只剩思维链」，否则测试结论和真实链路不一致。
+  assert.equal(request.max_tokens, 2048);
   assert.equal(calls[0].init.headers.Authorization, 'Bearer candidate-key');
   assert.equal(prisma.writes.length, 0);
 });
@@ -338,7 +339,14 @@ test('stream read failures do not get reported as HTTP 200 errors', async () => 
   assert.doesNotMatch(result.message, /HTTP 200/);
 });
 
-test('reasoning-only SSE activity is a valid model response', async () => {
+/**
+ * 契约变更：只有思维链、没有正文 = 测试不通过。
+ *
+ * 旧行为把 reasoning-only 判为 ok，于是出现「后台测试通过，但智库拿不到任何内容」——
+ * 推理模型的思维链与正文共用 max_tokens，预算被思考吃光后正文根本不会产生。
+ * 测试必须验证业务链路真正消费的东西：正文。
+ */
+test('reasoning-only SSE is reported as unusable, not as a passing test', async () => {
   const service = new ExecutionsService(fakePrisma({}));
   globalThis.fetch = async () => new Response(
     'data: {"choices":[{"delta":{"reasoning_content":"思考中"}}]}\n\n' +
@@ -351,7 +359,11 @@ test('reasoning-only SSE activity is a valid model response', async () => {
     baseUrl: 'https://candidate.example/v1',
     apiKey: 'candidate-key',
   });
-  assert.equal(result.ok, true);
+  assert.equal(result.ok, false);
+  assert.equal(result.errorCode, 'llm_test_reasoning_only');
+  assert.match(result.message, /只输出了推理内容/);
+  assert.match(result.message, /LLM_MAX_TOKENS/);
+  // 诊断字段仍要保留，运维据此判断该调多大预算。
   assert.equal(result.diagnostics.tokenDeltas, 0);
   assert.equal(result.diagnostics.reasoningDeltas, 1);
   assert.equal(result.diagnostics.reasoningChars, 3);

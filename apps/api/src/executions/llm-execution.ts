@@ -1,8 +1,5 @@
-import { Agent } from '@mastra/core/agent';
-import { RequestContext } from '@mastra/core/request-context';
-import { z } from 'zod';
 import type { AgentType, ExecutionStep, ExecutionUsage, StreamEvent } from './dto/stream-execution.dto';
-import type { NestLlmRuntimeConfig } from './llm.client';
+import { nestLlmStreamedText, type NestLlmRuntimeConfig } from './llm.client';
 
 function planStepsToExecutionSteps(steps: string[]): ExecutionStep[] {
   return steps.map((label, i) => ({
@@ -75,31 +72,33 @@ function buildExecutionError(
   };
 }
 
-function resolveModel(config: NestLlmRuntimeConfig) {
-  return {
-    providerId: 'openai',
-    modelId: config.model,
-    url: config.baseUrl,
-    apiKey: config.apiKey,
-  } as const;
+
+/**
+ * 一次普通补全，和「模型配置」测试按钮发的请求同形。
+ *
+ * 这里刻意不使用任何 Agent 框架、不注册工具、不做多轮循环：内网网关常常只
+ * 注册了流式无工具的路由，多带一个字段就会「测试能通、实际 404」。
+ * 传输层用 stream=true（与测试按钮一致），但结果一次性交付，不做增量输出。
+ */
+async function completeOnce(params: {
+  instructions: string;
+  message: string;
+  config: NestLlmRuntimeConfig;
+  maxTokens?: number;
+  signal?: AbortSignal;
+}): Promise<string> {
+  return nestLlmStreamedText({
+    config: params.config,
+    signal: params.signal,
+    maxTokens: params.maxTokens,
+    messages: [
+      { role: 'system', content: params.instructions },
+      { role: 'user', content: params.message },
+    ],
+  });
 }
 
-async function readTextStream(stream: { getReader: () => { read: () => Promise<{ done: boolean; value?: string }>; releaseLock: () => void } }): Promise<string[]> {
-  const reader = stream.getReader();
-  const chunks: string[] = [];
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (typeof value === 'string' && value.length > 0) chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  return chunks;
-}
-
-export async function runMastraTextCompletion(params: {
+export async function runLlmTextCompletion(params: {
   agentId: string;
   agentName: string;
   instructions: string;
@@ -107,29 +106,16 @@ export async function runMastraTextCompletion(params: {
   config: NestLlmRuntimeConfig;
   signal?: AbortSignal;
 }): Promise<{ text: string; usage?: ExecutionUsage }> {
-  const agent = new Agent({
-    id: params.agentId,
-    name: params.agentName,
+  const text = await completeOnce({
     instructions: params.instructions,
-    model: resolveModel(params.config),
-    maxRetries: 1,
+    message: params.message,
+    config: params.config,
+    signal: params.signal,
   });
-  const stream = await agent.stream(params.message, {
-    instructions: params.instructions,
-    maxSteps: 2,
-    toolChoice: 'none',
-    abortSignal: params.signal,
-    requestContext: new RequestContext(),
-  });
-  const full = await stream.getFullOutput();
-  const usage = normalizeUsage(full.usage);
-  return {
-    text: full.text,
-    ...(usage ? { usage } : {}),
-  };
+  return { text };
 }
 
-export async function* runMastraExecutionStream(params: {
+export async function* runLlmExecutionStream(params: {
   executionId: string;
   message: string;
   actionType: AgentType;
@@ -141,7 +127,6 @@ export async function* runMastraExecutionStream(params: {
   signal?: AbortSignal;
 }): AsyncGenerator<StreamEvent> {
   const startedAt = Date.now();
-  let kbContext = params.kbContext?.trim() ?? '';
   const planSteps = params.planSteps.length ? params.planSteps : ['理解任务', '分析与检索', '给出结论与建议'];
 
   yield { type: 'execution_start', executionId: params.executionId, source: 'llm' };
@@ -153,58 +138,30 @@ export async function* runMastraExecutionStream(params: {
       yield { type: 'skill_end', skill: step.skill, latency: step.time };
     }
 
-    const agent = new Agent({
-      id: `skill-execution-${params.actionType}`,
-      name: params.agentName,
+    const text = await completeOnce({
       instructions: buildExecutionInstructions({
         agentName: params.agentName,
         actionType: params.actionType,
         planSteps,
-        kbContext,
+        kbContext: params.kbContext?.trim() ?? '',
         systemPrompt: params.systemPrompt,
       }),
-      model: resolveModel(params.config),
-      tools: {},
-      maxRetries: 1,
+      message: params.message,
+      config: params.config,
+      signal: params.signal,
     });
 
-    const stream = await agent.stream(params.message, {
-      instructions: buildExecutionInstructions({
-        agentName: params.agentName,
-        actionType: params.actionType,
-        planSteps,
-        kbContext,
-        systemPrompt: params.systemPrompt,
-      }),
-      maxSteps: Math.max(4, planSteps.length + 3),
-      toolChoice: 'auto',
-      abortSignal: params.signal,
-      onError: (event) => {
-        // Keep the stream surface lean; the outer catch/reader handles emission.
-        void event;
-      },
-    });
-
-    const tokenChunks = await readTextStream(stream.textStream);
-    for (const token of tokenChunks) {
-      if (params.signal?.aborted) {
-        return;
-      }
-      yield { type: 'token', content: token };
-    }
-
-    const full = await stream.getFullOutput();
-    const totalTime = `${((Date.now() - startedAt) / 1000).toFixed(2)}s`;
-    const usage = normalizeUsage(full.usage);
+    if (params.signal?.aborted) return;
+    // 不做增量输出：整段答案作为一个 token 事件交付，前端的 SSE 协议不变。
+    if (text) yield { type: 'token', content: text };
 
     yield { type: 'artifact', agentType: params.actionType };
     yield {
       type: 'done',
-      totalTime,
+      totalTime: `${((Date.now() - startedAt) / 1000).toFixed(2)}s`,
       steps,
       agentName: params.agentName,
       source: 'llm',
-      ...(usage ? { usage } : {}),
     };
   } catch (error) {
     if (params.signal?.aborted || (error instanceof Error && /aborted|abort/i.test(error.message))) {
@@ -212,6 +169,6 @@ export async function* runMastraExecutionStream(params: {
     }
     const message = error instanceof Error ? error.message : 'execution_failed';
     const detail = error instanceof Error ? error.stack ?? error.message : undefined;
-    yield buildExecutionError(message, detail, 'mastra_stream_error');
+    yield buildExecutionError(message, detail, 'llm_stream_error');
   }
 }

@@ -124,7 +124,8 @@ export class AiKnowledgeAgentRunner {
       config,
       signal,
       // 中文 + 完整需求卡在 900 token 下会被截断，给一个下限。
-      maxTokens: Math.max(config.maxTokens, 1_600),
+      // 推理模型的思维链与正文共用预算，给足下限，否则正文根本轮不到输出。
+      maxTokens: Math.max(config.maxTokens, 4_096),
       temperature: 0.3,
       messages: [
         {
@@ -183,7 +184,7 @@ export class AiKnowledgeAgentRunner {
     const text = await nestLlmStreamedText({
       config,
       signal,
-      maxTokens: Math.max(config.maxTokens, repair ? 6_144 : 4_096),
+      maxTokens: Math.max(config.maxTokens, repair ? 12_288 : 8_192),
       temperature: repair ? 0.1 : 0.3,
       messages: [
         {
