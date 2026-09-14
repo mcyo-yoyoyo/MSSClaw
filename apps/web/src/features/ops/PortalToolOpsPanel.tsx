@@ -526,6 +526,11 @@ export function PortalToolOpsPanel() {
   const internalSceneCount = useInternalOfficeSceneCatalogStore(
     (state) => state.entries.filter((entry) => entry.visible !== false).length,
   );
+  const internalUnlistedCount = useInternalOfficeSceneCatalogStore(
+    (state) => state.entries.filter((entry) => !entry.visible).length,
+  );
+  const updateInternalScene = useInternalOfficeSceneCatalogStore((state) => state.updateEntry);
+  const [internalShowUnlisted, setInternalShowUnlisted] = useState(false);
   const internalLoading = useInternalOfficeSceneCatalogStore((state) => state.loading);
   const internalSaving = useInternalOfficeSceneCatalogStore((state) => state.saving);
   const internalToast = useInternalOfficeSceneCatalogStore((state) => state.toast);
@@ -542,7 +547,7 @@ export function PortalToolOpsPanel() {
     (state) => state.dismissToast,
   );
 
-  const [kind, setKind] = useState<ToolOpsKind>('internal');
+  const [kind, setKind] = useState<ToolOpsKind>('external');
   const [search, setSearch] = useState('');
   const [externalType, setExternalType] = useState<ExternalToolTypeId | 'all'>('all');
   const [externalListMode, setExternalListMode] = useState<ExternalListMode>('listed');
@@ -1451,6 +1456,21 @@ export function PortalToolOpsPanel() {
         aria-hidden={kind !== 'internal'}
         data-testid="portal-tool-ops-internal"
       >
+        <div className="mb-4 flex gap-2" aria-label="办公场景上下架状态">
+          {[false, true].map((unlisted) => (
+            <button
+              key={String(unlisted)}
+              type="button"
+              aria-pressed={internalShowUnlisted === unlisted}
+              disabled={Boolean(internalDrag)}
+              onClick={() => setInternalShowUnlisted(unlisted)}
+              className={cn('rounded-full px-3 py-1.5 text-[12px] font-semibold',
+                internalShowUnlisted === unlisted ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-600')}
+            >
+              {unlisted ? '未上架' : '已上架'} {unlisted ? internalUnlistedCount : internalSceneCount}
+            </button>
+          ))}
+        </div>
         {internalLoading && !internalLoaded ? (
           <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-4 py-14 text-center text-[13px] text-zinc-400">
             正在加载内部办公场景…
@@ -1463,9 +1483,14 @@ export function PortalToolOpsPanel() {
             interactionMode="preview"
             showAssistantChat={false}
             maintenanceView
+            showUnlisted={internalShowUnlisted}
+            listingDisabled={!canManageInternalOrder || !internalLoaded || internalLoading || internalSaving || Boolean(internalDrag)}
+            onListingChange={canManageInternalOrder ? (id, visible) => {
+              void updateInternalScene(id, { visible });
+            } : undefined}
             pointerReorder
             reorderEnabled={
-              canManageInternalOrder && internalLoaded && !internalLoading && !internalSaving
+              !internalShowUnlisted && canManageInternalOrder && internalLoaded && !internalLoading && !internalSaving
             }
             draggingSceneId={internalDrag?.sceneId ?? null}
             onSceneDragStart={(sceneId) => {

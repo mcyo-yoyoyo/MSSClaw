@@ -1688,7 +1688,9 @@ export class PortalAnalyticsService {
       },
       assets: {
         summary: assetSummary,
-        rows: assetRows,
+        rows: assetRows.filter((asset) =>
+          catalogById.get(asset.contentId)?.some((row) => row.assetType === asset.assetType && row.published),
+        ),
       },
       calls,
       behavior: {

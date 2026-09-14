@@ -591,6 +591,23 @@ test('analytics keeps workspace tool fallback before singleton migration', async
   assert.deepEqual(catalog.map((row) => row.contentId), ['tool-legacy']);
 });
 
+test('asset details include only published tools, skills and agents', async () => {
+  const centerRows = ['tool', 'skill', 'agent'].flatMap((kind) =>
+    [true, false].map((published) => ({
+      id: `${kind}-${published}`,
+      kind,
+      payload: { id: `${kind}-${published}`, name: kind, published, sourceType: 'external' },
+    })),
+  );
+  const report = await new PortalAnalyticsService(recordingPrisma(null, centerRows).prisma)
+    .getReport('ws-test', 1);
+  assert.deepEqual(report.assets.rows.map((row) => row.contentId).sort(), [
+    'agent-true', 'skill-true', 'tool-true',
+  ]);
+  assert.equal(report.assets.summary.published, 3);
+  assert.equal(report.assets.summary.unpublished, 3);
+});
+
 test('black asset report excludes portal-content and treats only explicit redirect as redirect', async () => {
   const today = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Shanghai',

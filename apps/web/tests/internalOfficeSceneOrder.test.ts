@@ -99,6 +99,8 @@ type OfficeSceneStoreState = {
   saving: boolean;
   toast: string | null;
   hydrate: (workspaceId?: string) => Promise<boolean>;
+  addEntry: () => Promise<string | null>;
+  updateEntry: (id: string, patch: { visible: boolean }) => Promise<boolean>;
   reorderVisibleEntry: (
     activeId: string,
     beforeId: string | null,
@@ -174,6 +176,28 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
+
+test('new scenes start unlisted and listing changes persist with readback', async () => {
+  const workspaceId = 'ws-office-listing';
+  let document = versionedDocument([]);
+  globalThis.fetch = (async (_input, init) => {
+    if (init?.method === 'PUT') {
+      const { payload } = JSON.parse(String(init.body));
+      document = versionedDocument(payload.entries, document.revision + 1);
+    }
+    return jsonResponse({ kind: 'internal-office-scenes', payload: document });
+  }) as typeof fetch;
+  enableRemoteApi(workspaceId);
+  await officeSceneStore.getState().hydrate(workspaceId);
+  const id = await officeSceneStore.getState().addEntry();
+  assert.ok(id);
+  assert.equal(document.entries[0].visible, false);
+  for (const visible of [true, false]) {
+    assert.equal(await officeSceneStore.getState().updateEntry(id, { visible }), true);
+    assert.equal(document.entries[0].visible, visible);
+    assert.equal(officeSceneStore.getState().entries[0].visible, visible);
+  }
+});
 
 test('drop performs one CAS PUT, then publishes only the fresh canonical snapshot', async () => {
   const workspaceId = 'ws-office-order-success';

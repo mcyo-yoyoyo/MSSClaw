@@ -13,6 +13,7 @@ import { publicAssetUrl } from '@/domain/publicAssetUrl';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
 import {
   resolveOfficeScenesWithCatalog,
+  materializeOfficeScenes,
   resolveOfficeToolWithCatalog,
   type InternalOfficeScene,
   type InternalOfficeSceneTool,
@@ -277,6 +278,9 @@ export function InternalOfficeSceneGrid({
   interactionMode = 'user',
   showAssistantChat = true,
   maintenanceView = false,
+  showUnlisted = false,
+  onListingChange,
+  listingDisabled = false,
   reorderEnabled = false,
   pointerReorder = false,
   draggingSceneId = null,
@@ -302,6 +306,9 @@ export function InternalOfficeSceneGrid({
   showAssistantChat?: boolean;
   /** 后台维护视图：保留只读互动指标，仅隐藏详情按钮并保留拖拽手柄。 */
   maintenanceView?: boolean;
+  showUnlisted?: boolean;
+  onListingChange?: (sceneId: string, visible: boolean) => void;
+  listingDisabled?: boolean;
   /** 运营侧开启拖拽手柄；用户侧不传时保持原有 DOM 与交互。 */
   reorderEnabled?: boolean;
   /** 后台显式启用苹果桌面式 Pointer 拖拽；默认保留兼容的原生 DnD。 */
@@ -350,11 +357,13 @@ export function InternalOfficeSceneGrid({
     () =>
       // sourceOrder = 场景字典中的后台次序，供默认「排序」使用；
       // 不带这个字段时 sortByRankMode 会回落到互动量，后台的上移/下移看不出效果
-      resolveOfficeScenesWithCatalog(catalogTools, sceneEntries).map((scene, index) => ({
+      (showUnlisted
+        ? materializeOfficeScenes(sceneEntries.filter((entry) => !entry.visible), catalogTools, { includeHidden: true })
+        : resolveOfficeScenesWithCatalog(catalogTools, sceneEntries)).map((scene, index) => ({
         ...scene,
         sourceOrder: index,
       })),
-    [catalogTools, sceneEntries],
+    [catalogTools, sceneEntries, showUnlisted],
   );
 
   const assistantToolAvailable = useMemo(
@@ -974,6 +983,16 @@ export function InternalOfficeSceneGrid({
                   {maintenanceView ? (
                     <div className="mt-3 flex shrink-0 items-center gap-2 border-t border-zinc-100 pt-2.5">
                       <SceneCardStats scene={scene} interactionMode="preview" />
+                      {onListingChange ? (
+                        <button
+                          type="button"
+                          disabled={listingDisabled}
+                          onClick={() => onListingChange(scene.id, showUnlisted)}
+                          className="rounded-lg border border-zinc-200 px-2 py-1 text-[11px] font-semibold text-zinc-600 hover:bg-zinc-50 disabled:opacity-40"
+                        >
+                          {showUnlisted ? '上架' : '下架'}
+                        </button>
+                      ) : null}
                       {showReorderHandle ? (
                         <button
                           type="button"
