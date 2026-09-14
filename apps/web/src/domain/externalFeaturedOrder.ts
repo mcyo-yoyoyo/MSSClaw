@@ -55,7 +55,7 @@ export function orderExternalFeaturedItems<T extends ExternalFeaturedOrderItem>(
 }
 
 /**
- * 分类“更多”只消费 Excel 中明确存在的分类排名，并排除当前分类精选。
+ * 分类“更多”包含历史分类排名和新匹配分类的工具，并排除当前分类精选。
  * 排名相同时回落到 Excel 全表顺序，最后保持输入稳定，避免全局精选 pin
  * 或其他互动排序污染分类排名。
  */
@@ -63,6 +63,7 @@ export function listExternalCategoryRankedMore<T extends ExternalCategoryRankedI
   items: readonly T[],
   categoryId: string,
   featuredIds: readonly string[],
+  matchesCategory: (item: T) => boolean = () => false,
 ): T[] {
   const featured = new Set(featuredIds);
 
@@ -71,9 +72,8 @@ export function listExternalCategoryRankedMore<T extends ExternalCategoryRankedI
       const rank = item.externalCategoryRanks?.[categoryId];
       return (
         !featured.has(item.id) &&
-        typeof rank === 'number' &&
-        Number.isFinite(rank) &&
-        rank > 0
+        (matchesCategory(item) ||
+          (typeof rank === 'number' && Number.isFinite(rank) && rank > 0))
       );
     })
     .map((item, inputIndex) => ({ item, inputIndex }))

@@ -139,6 +139,17 @@ test('category more keeps only explicitly ranked non-featured tools in requested
   );
 });
 
+test('new category matches without Excel ranks appear after ranked tools and exclude featured', () => {
+  const cards = [
+    { id: 'new', toolTypeIds: ['general'] },
+    { id: 'ranked', externalCategoryRanks: { general: 1 } },
+    { id: 'featured', toolTypeIds: ['general'] },
+    { id: 'other', toolTypeIds: ['search'] },
+  ];
+  assert.deepEqual(ids(listExternalCategoryRankedMore(cards, 'general', ['featured'],
+    (item) => item.toolTypeIds?.includes('general') ?? false)), ['ranked', 'new']);
+});
+
 test('category rank ties fall back to Excel source order without mutating input', () => {
   const cards = Object.freeze([
     {

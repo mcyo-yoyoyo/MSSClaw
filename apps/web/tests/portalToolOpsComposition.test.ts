@@ -405,8 +405,8 @@ test('分类精选从全库解析，更多按当前分类排名过滤并排除�
   );
   assert.match(
     portalPanelSource,
-    /listExternalCategoryRankedMore\(externalCards, externalType, \[[\s\S]*?\.\.\.categoryOverseasFeaturedIds,[\s\S]*?\.\.\.categoryDomesticFeaturedIds,[\s\S]*?\]\)/,
-    '分类更多必须按当前 Excel 分类排名过滤，并排除海外和国内精选',
+    /listExternalCategoryRankedMore\(externalCards, externalType, \[[\s\S]*?\.\.\.categoryOverseasFeaturedIds,[\s\S]*?\.\.\.categoryDomesticFeaturedIds,[\s\S]*?\], \(card\) => toolMatchesExternalTypeCatalog\(/,
+    '分类更多必须包含分类匹配工具，并排除海外和国内精选',
   );
   assert.match(
     portalPanelSource,

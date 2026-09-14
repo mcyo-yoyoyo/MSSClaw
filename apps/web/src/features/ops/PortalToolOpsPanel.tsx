@@ -736,7 +736,11 @@ export function PortalToolOpsPanel() {
       : listExternalCategoryRankedMore(externalCards, externalType, [
           ...categoryOverseasFeaturedIds,
           ...categoryDomesticFeaturedIds,
-        ]);
+        ], (card) => toolMatchesExternalTypeCatalog(
+          card.toolTypeIds?.length ? card.toolTypeIds : card.toolTypeId,
+          externalType,
+          externalTaxonomy,
+        ));
   const categoryOverseasMore = orderExternalToolsByLayoutIds(
     categoryRankedMore.filter((card) => card.region === 'overseas'),
     categoryOverseasMoreOrderIds,

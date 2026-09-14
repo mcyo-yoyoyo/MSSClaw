@@ -894,7 +894,11 @@ export function MarketShelfPage({
       const rankedMore = listExternalCategoryRankedMore(filteredCards, externalType, [
         ...(categoryLayout?.overseasFeaturedIds ?? []),
         ...(categoryLayout?.domesticFeaturedIds ?? []),
-      ]);
+      ], (card) => toolMatchesExternalTypeCatalog(
+        card.toolTypeIds?.length ? card.toolTypeIds : card.toolTypeId,
+        externalType,
+        externalTaxonomy,
+      ));
       return [
         ...orderExternalToolsByLayoutIds(
           rankedMore.filter((card) => card.region === 'overseas'),
@@ -906,7 +910,7 @@ export function MarketShelfPage({
         ),
       ];
     },
-    [showExternalCategoryMore, externalToolLayout, externalType, filteredCards],
+    [showExternalCategoryMore, externalToolLayout, externalType, filteredCards, externalTaxonomy],
   );
 
   const externalFeaturedOverseas = useMemo(
