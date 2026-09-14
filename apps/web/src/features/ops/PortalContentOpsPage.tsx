@@ -28,7 +28,6 @@ import { usePortalContentStore } from '@/stores/portalContentStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { usePlazaToolGuideStore } from '@/stores/plazaToolGuideStore';
 import { PortalHowToOpsPanel } from '@/features/ops/PortalHowToOpsPanel';
-import { PortalMarketFeaturedPanel } from '@/features/ops/PortalMarketFeaturedPanel';
 import { PortalToolOpsPanel } from '@/features/ops/PortalToolOpsPanel';
 import { PortalStationAnnouncePanel } from '@/features/ops/PortalStationAnnouncePanel';
 import { PortalAiNewsPanel } from '@/features/ops/PortalAiNewsPanel';
@@ -39,7 +38,6 @@ import { PortalExternalTaxonomyPanel } from '@/features/ops/PortalExternalTaxono
 import { useBusinessScenarioCatalogStore } from '@/stores/businessScenarioCatalogStore';
 import { useExternalTaxonomyCatalogStore } from '@/stores/externalTaxonomyCatalogStore';
 import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
-import { useMarketFeaturedStore } from '@/stores/marketFeaturedStore';
 import { useStationAnnouncementStore } from '@/stores/stationAnnouncementStore';
 import { useAiNewsStore } from '@/stores/aiNewsStore';
 import { useAiBriefEmailCopyStore } from '@/stores/aiBriefEmailCopyStore';
@@ -49,7 +47,6 @@ type EditorTarget = string | 'new' | null;
 type OpsSurface =
   | 'packs'
   | 'howto'
-  | 'featured'
   | 'tools'
   | 'extaxonomy'
   | 'announce'
@@ -108,7 +105,6 @@ export function PortalContentOpsPage() {
     useBusinessScenarioCatalogStore.getState().hydrate();
     useExternalTaxonomyCatalogStore.getState().hydrate();
     useInternalOfficeSceneCatalogStore.getState().hydrate();
-    useMarketFeaturedStore.getState().hydrate();
     useStationAnnouncementStore.getState().hydrate();
     useAiNewsStore.getState().hydrate();
     useAiBriefEmailCopyStore.getState().hydrate();
@@ -248,12 +244,10 @@ export function PortalContentOpsPage() {
           subtitle={
             opsSurface === 'packs'
               ? '场景内容 · 方案包三槽分责维护'
-              : opsSurface === 'featured'
-                ? '货架运营 · 外精选上架 / 公司办公场景字典'
                 : opsSurface === 'tools'
                   ? '工具运营 · 点击卡片查看详情，拖拽后自动保存'
                 : opsSurface === 'extaxonomy'
-                  ? '货架运营 · 外精选工具类型与工作场景字典'
+                  ? '外精选分类 · 工具类型与工作场景字典'
                   : opsSurface === 'announce'
                       ? '站点触达 · 首页站内公告跑马灯'
                       : opsSurface === 'ainews'
@@ -264,7 +258,7 @@ export function PortalContentOpsPage() {
                             ? '场景分类字典 · 文案 / 图标 / 顺序'
                             : opsSurface === 'buildstats'
                               ? '站点触达 · MSS 建设概况口径'
-                              : '货架运营 · 外部 / 公司工具 How to'
+                              : '工具 How to · 外部 / 公司工具使用教程'
           }
           tip={
             opsSurface === 'packs' ? (
@@ -272,10 +266,6 @@ export function PortalContentOpsPage() {
                 业务用户在 <strong className="font-semibold">AI工具Hub</strong> 看到的是
                 <strong className="font-semibold">场景分类 → 项目卡 → 文档预览 / How to</strong>
                 。运营侧按三槽分责填写材料；「用户侧预览」打开对应场景学习内容。
-              </>
-            ) : opsSurface === 'featured' ? (
-              <>
-                外部工具：此处维护上架选品与场景标题；精选与顺序请到「工具运营 → 外部工具」。公司推荐：在此配置办公场景文案与工具绑定；链接/Logo 请到「配置工具」，分类芯片请到「外精选分类」。
               </>
             ) : opsSurface === 'tools' ? (
               <>
@@ -358,7 +348,6 @@ export function PortalContentOpsPage() {
             [
               { id: 'packs' as const, label: '场景内容', group: '场景' },
               { id: 'scenes' as const, label: '场景分类', group: '场景' },
-              { id: 'featured' as const, label: '货架运营', group: '货架' },
               { id: 'tools' as const, label: '工具运营', group: '货架' },
               { id: 'extaxonomy' as const, label: '外精选分类', group: '货架' },
               { id: 'howto' as const, label: '工具 How to', group: '货架' },
@@ -395,7 +384,6 @@ export function PortalContentOpsPage() {
         ) : null}
 
         {opsSurface === 'howto' ? <PortalHowToOpsPanel /> : null}
-        {opsSurface === 'featured' ? <PortalMarketFeaturedPanel /> : null}
         {opsSurface === 'tools' ? (
           <PortalToolOpsPanel />
         ) : null}
