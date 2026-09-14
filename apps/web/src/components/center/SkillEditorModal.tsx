@@ -543,8 +543,8 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       caseAttachments: (form.caseAttachments ?? []).length ? form.caseAttachments : undefined,
       packageBlob: form.packageBlob,
       envInfo: hasEnv ? envInfo : undefined,
-      author: prev?.author ?? userName,
-      publisher: form.publisher || userName,
+      author: form.author?.trim() || userName,
+      publisher: form.publisher?.trim() || userName,
       publisherUserId: form.publisherUserId || userId || undefined,
       invokes: prev?.invokes ?? 0,
       icon: prev?.icon ?? form.icon ?? 'fa-cube',
@@ -687,7 +687,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
               type="button"
               onClick={() => {
                 if (!isNew && s.id === 0) return;
-                if (s.id > 0 && s.id > step + 1) return;
+                if (isNew && s.id > 0 && s.id > step + 1) return;
                 setStep(s.id);
               }}
               className={cn(
@@ -843,16 +843,21 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                 />
               </FormField>
             </div>
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 px-3 py-2 text-[12px] text-zinc-600">
-              创建人：
-              <span className="font-semibold text-zinc-900">
-                {form.author || getCurrentUserName() || '当前用户'}
-              </span>
-              <span className="mx-1.5 text-zinc-300">·</span>
-              发布方：
-              <span className="font-semibold text-zinc-900">
-                {form.publisher || getCurrentUserName() || '当前用户'}
-              </span>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <FormField label="创建人">
+                <FormInput
+                  value={form.author ?? ''}
+                  onChange={(e) => setForm({ ...form, author: e.target.value })}
+                  placeholder={getCurrentUserName() || '当前用户'}
+                />
+              </FormField>
+              <FormField label="发布方">
+                <FormInput
+                  value={form.publisher ?? ''}
+                  onChange={(e) => setForm({ ...form, publisher: e.target.value })}
+                  placeholder={getCurrentUserName() || '当前用户'}
+                />
+              </FormField>
             </div>
             <FormField
               label="Skill 正文（对话执行时注入）"
