@@ -45,6 +45,7 @@ type MarketplaceStoreState = {
     tool: Record<string, unknown>,
     isNew?: boolean,
   ) => Promise<MarketplaceSaveResult>;
+  deleteSkillNow: (id: string) => Promise<MarketplaceSaveResult>;
   deleteToolNow: (id: string) => Promise<MarketplaceSaveResult>;
   persist: () => void;
   bumpToolInvokes: (id: string) => void;
@@ -547,4 +548,31 @@ test('concurrent saveToolNow calls do not overwrite the first confirmed tool wit
   assert.deepEqual(await firstSave, { synced: true });
   assert.deepEqual(await secondSave, { synced: true });
   assert.deepEqual(marketplaceStore.getState().tools, [firstEdited, secondEdited]);
+});
+
+
+test('Skill deletion waits for persistence and restores the record and bindings on failure', async () => {
+  enableRemoteApi('ws-skill-delete');
+  const skill = { id: 'skill-delete', published: false };
+  const agent = { id: 'agent-bound', skillIds: ['skill-delete', 'other'] };
+  marketplaceStore.setState({ skills: [skill], agents: [agent], automations: [], kbDocs: [] });
+  const calls: FetchCall[] = [];
+  const response = deferred<Response>();
+  globalThis.fetch = (async (input, init) => {
+    calls.push(readFetchCall(input, init));
+    return response.promise;
+  }) as typeof fetch;
+  const operation = marketplaceStore.getState().deleteSkillNow('skill-delete');
+  await nextTurn();
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].body.skills, []);
+  assert.deepEqual((calls[0].body.agents[0] as typeof agent).skillIds, ['other']);
+  response.resolve(new Response('save failed', { status: 500 }));
+  assert.equal((await operation).synced, false);
+  assert.deepEqual(marketplaceStore.getState().skills, [skill]);
+  assert.deepEqual(new Set((marketplaceStore.getState().agents[0] as typeof agent).skillIds), new Set(agent.skillIds));
+
+  globalThis.fetch = (async () => new Response('{}', { status: 200 })) as typeof fetch;
+  assert.equal((await marketplaceStore.getState().deleteSkillNow('skill-delete')).synced, true);
+  assert.deepEqual(marketplaceStore.getState().skills, []);
 });

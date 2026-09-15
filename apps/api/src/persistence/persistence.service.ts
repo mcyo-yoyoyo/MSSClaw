@@ -761,6 +761,30 @@ export class PersistenceService {
     // 前端快照不含目录版本号；沿用库中已有值，避免被抹掉后误判为「需要重新播种」
     const existing = (await this.prisma.centerRecord.findUnique({ where: { id } }))
       ?.payload as MarketplacePayload | undefined;
+    if (Array.isArray(existing?.skills) && Array.isArray(payload?.skills)) {
+      const nextIds = new Set(payload.skills.map((item) => (item as { id?: string })?.id));
+      const removed = existing.skills.filter((item) => !nextIds.has((item as { id?: string })?.id));
+      if (removed.length) {
+        const approvals = await this.prisma.centerRecord.findUnique({
+          where: { id: `doc-asset-approvals-${workspaceId}` },
+        });
+        const items = (approvals?.payload as { items?: Array<{ kind?: string; assetId?: string; status?: string }> } | undefined)?.items ?? [];
+        if (removed.some((item) => {
+          const skill = item as { id: string; published?: boolean };
+          return skill.published || items.some((record) => record.kind === 'skill' && record.assetId === skill.id && record.status === 'pending');
+        })) {
+          throw new ConflictException('仅可删除已下架且无待处理审批的 Skill，请刷新后重试');
+        }
+        const removedIds = new Set(removed.map((item) => (item as { id: string }).id));
+        payload = {
+          ...payload,
+          agents: (payload.agents ?? existing.agents ?? []).map((item) => {
+            const agent = item as Record<string, unknown>;
+            return { ...agent, skillIds: Array.isArray(agent.skillIds) ? agent.skillIds.filter((id) => !removedIds.has(String(id))) : [] };
+          }),
+        };
+      }
+    }
     const hasTools = Array.isArray(payload?.tools);
     payload = this.enrichMarketplaceMetadata({
       ...payload,
@@ -1484,7 +1508,7 @@ export class PersistenceService {
           },
         });
       }
-      if (kind === 'tool' && previousPayload) {
+      if ((kind === 'tool' || kind === 'skill') && previousPayload) {
         const nextIds = new Set(items.map((item) => String(item.id)));
         const removedIds = listMappedFromMarketplace(kind, previousPayload)
           .map((item) => String(item.id))

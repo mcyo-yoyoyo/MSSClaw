@@ -32,6 +32,7 @@ import {
 } from '@/domain/skillRuntime';
 import {
   CenterPageHeader,
+  CenterModal,
   CenterSearchInput,
   StatCardGrid,
 } from '@/components/center/CenterShell';
@@ -96,6 +97,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
     setSkillBusinessFilter,
     filteredSkills,
     bumpSkillInvokes,
+    deleteSkillNow,
     showToast,
   } = useMarketplaceStore();
   const hydrateBusinessCatalog = useBusinessScenarioCatalogStore((s) => s.hydrate);
@@ -110,6 +112,9 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
     hydrateReviews();
   }, [hydrateBusinessCatalog, hydrateReviews]);
 
+  const [deleteTarget, setDeleteTarget] = useState<PrototypeSkillSeed | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [detail, setDetail] = useState<PrototypeSkillSeed | null>(null);
   const [editorTarget, setEditorTarget] = useState<SkillEditorTarget>(null);
   const currentDetail = detail
@@ -119,6 +124,30 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
     skill: PrototypeSkillSeed;
     kind: SkillOpsRequestKind;
   } | null>(null);
+  const confirmDelete = async () => {
+    if (!deleteTarget || deleting) return;
+    const current = useMarketplaceStore.getState().skills.find((item) => item.id === deleteTarget.id);
+    if (!current || resolveSkillLifecycleStatus(current, useAssetApprovalStore.getState().history) !== 'unpublished') {
+      setDeleteError('仅可删除已下架且无待处理审批的 Skill，请刷新后重试');
+      return;
+    }
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const result = await deleteSkillNow(current.id);
+      if (!result.synced) {
+        setDeleteError(result.detail || '删除未保存到服务器，请检查连接后重试');
+        return;
+      }
+      setDeleteTarget(null);
+      setDetail((value) => value?.id === current.id ? null : value);
+      showToast('Skill 已删除');
+    } catch {
+      setDeleteError('删除失败，请刷新确认后重试');
+    } finally {
+      setDeleting(false);
+    }
+  };
   /** 空数组 = 不筛（等价「全部」），与职能 / 区域的多选语义一致 */
   const [lifecycleSelection, setLifecycleSelection] = useState<SkillLifecycleStatus[]>([]);
   const [distTab, setDistTab] = useState<DistTab>('dept');
@@ -499,7 +528,11 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
                       <button type="button" onClick={() => { downloadSkillFile(s); showToast(`已下载 Skill 包 ${skillDisplayName(s)}.skill.zip`); }} className="rounded-lg bg-zinc-100 py-1.5 text-[10px] font-medium text-zinc-600">下载</button>
                       <button type="button" onClick={() => setEditorTarget(s.id)} className="rounded-lg bg-zinc-100 py-1.5 text-[10px] font-medium text-zinc-600">编辑</button>
                       <button type="button" onClick={() => setOpsRequest({ skill: s, kind: 'update' })} className="rounded-lg bg-sky-50 py-1.5 text-[10px] font-medium text-sky-900">更新</button>
+                      {resolveSkillLifecycleStatus(s, approvals) === 'unpublished' ? (
+                        <button type="button" disabled={deleting} onClick={() => { setDeleteTarget(s); setDeleteError(null); }} className="rounded-lg bg-red-50 py-1.5 text-[10px] font-medium text-red-700 disabled:opacity-50">删除</button>
+                      ) : (
                       <button type="button" onClick={() => setOpsRequest({ skill: s, kind: 'unpublish' })} className="rounded-lg bg-amber-50 py-1.5 text-[10px] font-medium text-amber-900">下架</button>
+                      )}
                     </div>
                   }
                 />
@@ -531,6 +564,21 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
           }}
         />
       ) : null}
+
+      <CenterModal
+        open={Boolean(deleteTarget)}
+        title="删除 Skill"
+        size="md"
+        onClose={() => { if (!deleting) setDeleteTarget(null); }}
+        actions={<>
+          <button type="button" disabled={deleting} onClick={() => setDeleteTarget(null)} className="rounded-xl border px-4 py-2 text-[12px]">取消</button>
+          <button type="button" disabled={deleting} onClick={() => void confirmDelete()} className="rounded-xl bg-red-600 px-4 py-2 text-[12px] text-white disabled:opacity-50">{deleting ? '删除中…' : '确认删除'}</button>
+        </>}
+      >
+        <p className="text-sm">确定删除 Skill「{deleteTarget ? skillDisplayName(deleteTarget) : ''}」？</p>
+        <p className="mt-2 text-xs text-zinc-500">删除后将从 Skill 目录中移除，并解除 Agent 绑定，此操作不可恢复。历史审批记录及附件留档保留。</p>
+        {deleteError ? <p role="alert" className="mt-3 text-sm text-red-600">{deleteError}</p> : null}
+      </CenterModal>
 
       <SkillOpsRequestModal
         skill={opsRequest?.skill ?? null}

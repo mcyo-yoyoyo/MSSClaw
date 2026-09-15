@@ -23,6 +23,7 @@ import { packageZipErrorMessage } from '@/domain/safeZip';
 import { rebuildKbVectorIndex } from '@/api/kbClient';
 import {
   flushSaveTools,
+  flushSaveMarketplace,
   loadMarketplace,
   loadTools,
   scheduleSaveMarketplace,
@@ -86,6 +87,7 @@ interface MarketplaceState {
   upsertSkill: (skill: PrototypeSkillSeed, isNew?: boolean) => void;
   upsertTool: (tool: PrototypeToolSeed, isNew?: boolean) => void;
   saveToolNow: (tool: PrototypeToolSeed, isNew?: boolean) => Promise<MarketplaceSaveResult>;
+  deleteSkillNow: (id: string) => Promise<MarketplaceSaveResult>;
   deleteToolNow: (id: string) => Promise<MarketplaceSaveResult>;
   upsertAutomation: (automation: PrototypeAutomation, isNew?: boolean) => void;
   upsertKbDoc: (doc: PrototypeKbDocument, isNew?: boolean) => void;
@@ -406,6 +408,34 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
       },
     );
     return operation;
+  },
+
+  deleteSkillNow: async (id) => {
+    if (!useWorkspaceStore.getState().apiConnected) return { synced: false, reason: 'offline' };
+    const workspaceId = useWorkspaceStore.getState().workspaceId;
+    const current = get();
+    const skill = current.skills.find((item) => item.id === id);
+    if (!skill) return { synced: false, reason: 'failed', detail: 'Skill 不存在，请刷新列表' };
+    if (skill.published) return { synced: false, reason: 'failed', detail: '仅可删除已下架的 Skill' };
+    const skills = current.skills.filter((item) => item.id !== id);
+    const agents = current.agents.map((agent) => ({
+      ...agent,
+      skillIds: agent.skillIds.filter((skillId) => skillId !== id),
+    }));
+    // 保存期间的其他编辑也必须使用删除后的快照，避免排队写入把 Skill 恢复。
+    set({ skills, agents });
+    const result = await flushSaveMarketplace(workspaceId, {
+      skills, agents, automations: current.automations, kbDocs: current.kbDocs,
+    }, { reportFailure: false });
+    if (!result.synced && useWorkspaceStore.getState().workspaceId === workspaceId) {
+      const boundAgentIds = new Set(current.agents.filter((agent) => agent.skillIds.includes(id)).map((agent) => agent.id));
+      set((state) => ({
+        skills: state.skills.some((item) => item.id === id) ? state.skills : [...state.skills, skill],
+        agents: state.agents.map((agent) => boundAgentIds.has(agent.id) && !agent.skillIds.includes(id)
+          ? { ...agent, skillIds: [...agent.skillIds, id] } : agent),
+      }));
+    }
+    return result;
   },
 
   deleteToolNow: async (id) => {

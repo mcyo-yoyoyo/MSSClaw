@@ -65,9 +65,10 @@ export class CenterRecordService {
     }
 
     // Marketplace is canonical for agent/skill/tool — overlay mapped items.
+    // Skill 以 marketplace 为准，避免删除后被种子或旧投影补回。
     // 对 tool 而言，marketplace 已经存在就不再返回旧的外部 tool 投影，避免
     // 「配置工具」和「工具运营」看到两份同名目录；内部连接器仍保留兼容读取。
-    let canonicalMarketplaceToolIds: Set<string> | null = null;
+    let canonicalMarketplaceIds: Set<string> | null = null;
     if (kind === 'agent' || kind === 'skill' || kind === 'tool') {
       const marketRow = await this.prisma.centerRecord.findFirst({
         where: { workspaceId, kind: 'marketplace' },
@@ -77,10 +78,10 @@ export class CenterRecordService {
           kind,
           marketRow.payload as MarketplacePayload,
         );
-        if (kind === 'tool') {
-          canonicalMarketplaceToolIds = new Set(mapped.map((item) => String(item.id)));
+        if (kind === 'tool' || kind === 'skill') {
+          canonicalMarketplaceIds = new Set(mapped.map((item) => String(item.id)));
           for (const [id, payload] of byId) {
-            if (isExternalToolPayload(payload) && !canonicalMarketplaceToolIds.has(id)) {
+            if ((kind === 'skill' || isExternalToolPayload(payload)) && !canonicalMarketplaceIds.has(id)) {
               byId.delete(id);
             }
           }
@@ -91,7 +92,7 @@ export class CenterRecordService {
       }
     }
 
-    if (byId.size === 0) return canonicalMarketplaceToolIds ? [] : local;
+    if (byId.size === 0) return canonicalMarketplaceIds ? [] : local;
 
     // Prefer local catalog order, then any DB/marketplace-only extras
     const ordered: Record<string, unknown>[] = [];
@@ -99,9 +100,9 @@ export class CenterRecordService {
     for (const item of local) {
       const id = String(item.id);
       if (
-        canonicalMarketplaceToolIds &&
-        isExternalToolPayload(item) &&
-        !canonicalMarketplaceToolIds.has(id)
+        canonicalMarketplaceIds &&
+        (kind === 'skill' || isExternalToolPayload(item)) &&
+        !canonicalMarketplaceIds.has(id)
       ) {
         seen.add(id);
         continue;
