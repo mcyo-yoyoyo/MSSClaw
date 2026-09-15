@@ -51,11 +51,6 @@ import {
   findHomogenizationHits,
   homogenizationWarningCount,
 } from '@/domain/skillHomogenization';
-import {
-  getSecurityScanGateMode,
-  setSecurityScanGateMode,
-  type SkillSecurityScanGateMode,
-} from '@/domain/skillSecurityScan';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useBusinessScenarioCatalogStore } from '@/stores/businessScenarioCatalogStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
@@ -128,10 +123,6 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
   const [lifecycleSelection, setLifecycleSelection] = useState<SkillLifecycleStatus[]>([]);
   const [distTab, setDistTab] = useState<DistTab>('dept');
   const [distSort, setDistSort] = useState<DistSort>('desc');
-  const [scanGate, setScanGate] = useState<SkillSecurityScanGateMode>(() => getSecurityScanGateMode());
-  useEffect(() => {
-    setScanGate(getSecurityScanGateMode());
-  }, []);
   const approvals = useAssetApprovalStore((s) => s.history);
   const hydrateApprovals = useAssetApprovalStore((s) => s.hydrate);
   useEffect(() => {
@@ -277,8 +268,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
           subtitle="运营看板 · 多维筛选 · 与集市统一的 Skill 卡片 · 发布展示需审批"
           tip={
             <>
-              上传标准包 → 配置中英文与标签 → 设置部门可见或全部门可见。终审通过后前台展示；「上架可调用」控制在线运行，「精选」仅控制 Skill Hub 的精选推荐。安全扫描模块已预留（待对接
-              IT）。输入 <code className="rounded bg-black/[0.04] px-1">/skill名</code> 调用已发布且开启调用的技能。
+              上传标准包 → 配置中英文与标签 → 设置部门可见或全部门可见。终审通过后前台展示；「上架可调用」控制在线运行，「精选」仅控制 Skill Hub 的精选推荐。输入 <code className="rounded bg-black/[0.04] px-1">/skill名</code> 调用已发布且开启调用的技能。
             </>
           }
           actions={
@@ -418,36 +408,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
             </div>
           )}
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 pt-3">
-            <p className="text-[10px] text-zinc-400">
-              安全扫描门禁：{scanGate === 'off' ? '关闭（默认）' : scanGate === 'warn' ? '告警' : '拦截'}
-              · 对接 IT 后可切 block
-            </p>
             <div className="flex flex-wrap gap-1">
-              {(['off', 'warn', 'block'] as SkillSecurityScanGateMode[]).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => {
-                    setSecurityScanGateMode(m);
-                    setScanGate(m);
-                    showToast(
-                      m === 'off'
-                        ? '安全扫描门禁已关闭'
-                        : m === 'warn'
-                          ? '门禁=告警：未通过仍可提交'
-                          : '门禁=拦截：未通过禁止上架/更新审批',
-                    );
-                  }}
-                  className={cn(
-                    'rounded-md px-2 py-0.5 text-[10px] font-semibold',
-                    scanGate === m
-                      ? 'bg-zinc-900 text-white'
-                      : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200',
-                  )}
-                >
-                  {m}
-                </button>
-              ))}
               <button
                 type="button"
                 onClick={() => setAppView('approvals')}

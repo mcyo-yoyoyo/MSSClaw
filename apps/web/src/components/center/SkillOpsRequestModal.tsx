@@ -226,9 +226,6 @@ export function SkillOpsRequestModal({
                 className="block w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[12px] text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-[11px] file:font-semibold file:text-white"
               />
             </FormField>
-            <p className="text-[11px] leading-relaxed text-zinc-500">
-              安全扫描报告附件：当前局域网版本扫描能力待对接 IT，申请单以文字说明为主；对接后将强制附带合规报告。
-            </p>
           </>
         ) : (
           <>

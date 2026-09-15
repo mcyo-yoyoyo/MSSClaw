@@ -1,6 +1,6 @@
 /** Skill 安全扫描状态与上架门禁（局域网可关；对接 IT 后可切 block） */
 
-import { loadSecurityPolicy, saveSecurityPolicy } from '@/domain/securityPolicy';
+import { saveSecurityPolicy } from '@/domain/securityPolicy';
 import type { SkillScanGateMode } from '@/domain/securityPolicy';
 
 export type SkillSecurityScanStatus =
@@ -37,15 +37,9 @@ const DIMENSIONS = [
   },
 ] as const;
 
-/** 读取门禁：优先环境变量，其次平台 security-policy（后端），默认 off */
+/** 暂停扫描门禁；接入真实扫描服务后再恢复配置读取。 */
 export function getSecurityScanGateMode(): SkillSecurityScanGateMode {
-  try {
-    const env = (import.meta as { env?: Record<string, string> }).env?.VITE_SKILL_SCAN_GATE;
-    if (env === 'off' || env === 'warn' || env === 'block') return env;
-  } catch {
-    /* ignore */
-  }
-  return loadSecurityPolicy().skillScanGate;
+  return 'off';
 }
 
 export function setSecurityScanGateMode(mode: SkillSecurityScanGateMode) {

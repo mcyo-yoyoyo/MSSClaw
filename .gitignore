@@ -22,3 +22,6 @@ apps/web/dist/
 
 # 清理脚本的数据库备份，不入库
 deploy/windows/backup/
+
+# 本地导出与检查产物
+/outputs/
