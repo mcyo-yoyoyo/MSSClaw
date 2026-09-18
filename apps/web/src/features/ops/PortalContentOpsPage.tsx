@@ -27,6 +27,7 @@ import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { usePortalContentStore } from '@/stores/portalContentStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { usePlazaToolGuideStore } from '@/stores/plazaToolGuideStore';
+import { PortalHomeFeaturedPanel } from '@/features/ops/PortalHomeFeaturedPanel';
 import { PortalHowToOpsPanel } from '@/features/ops/PortalHowToOpsPanel';
 import { PortalToolOpsPanel } from '@/features/ops/PortalToolOpsPanel';
 import { PortalStationAnnouncePanel } from '@/features/ops/PortalStationAnnouncePanel';
@@ -45,6 +46,7 @@ import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 type EditorTarget = string | 'new' | null;
 type OpsSurface =
+  | 'home'
   | 'packs'
   | 'howto'
   | 'tools'
@@ -86,7 +88,7 @@ export function PortalContentOpsPage() {
   const engagementById = useContentEngagementStore((s) => s.byId);
   const optimizationQueue = useContentEngagementStore((s) => s.optimizationQueue);
 
-  const [opsSurface, setOpsSurface] = useState<OpsSurface>('packs');
+  const [opsSurface, setOpsSurface] = useState<OpsSurface>('home');
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState<DeptFilter>('all');
   const [regionFilter, setRegionFilter] = useState<RegionFilter>('all');
@@ -121,9 +123,11 @@ export function PortalContentOpsPage() {
   const focusCase = useNavigationIntentStore((s) => s.focusCase);
   const focusScenario = useNavigationIntentStore((s) => s.focusScenario);
 
+  // 默认落在首页配置；带场景内容意图跳转进来时切到场景内容。
   useEffect(() => {
     const t = consumePortalType();
     if (!t) return;
+    setOpsSurface('packs');
     if (t === 'training') setSlotFocus('training');
     else if (t === 'case') setSlotFocus('case');
     else setSlotFocus('insight');
@@ -132,6 +136,7 @@ export function PortalContentOpsPage() {
   useEffect(() => {
     const id = consumePortalEditId();
     if (!id) return;
+    setOpsSurface('packs');
     setEditorTarget(id);
     const hit = items.find((i) => i.id === id);
     if (hit) {
@@ -242,7 +247,9 @@ export function PortalContentOpsPage() {
         <CenterPageHeader
           title="门户运营"
           subtitle={
-            opsSurface === 'packs'
+            opsSurface === 'home'
+              ? '首页配置 · 三个精选框的内容与排序'
+              : opsSurface === 'packs'
               ? '场景内容 · 方案包三槽分责维护'
                 : opsSurface === 'tools'
                   ? '工具运营 · 点击卡片查看详情，拖拽后自动保存'
@@ -261,7 +268,12 @@ export function PortalContentOpsPage() {
                               : '工具 How to · 外部 / 公司工具使用教程'
           }
           tip={
-            opsSurface === 'packs' ? (
+            opsSurface === 'home' ? (
+              <>
+                首页「外部工具精选 / 内部办公推荐 / AI工具Hub」只读取这里的配置：选择要展示的内容并排序，每栏展示前 3
+                个，其后为候补。修改后需点击保存才会生效。
+              </>
+            ) : opsSurface === 'packs' ? (
               <>
                 业务用户在 <strong className="font-semibold">AI工具Hub</strong> 看到的是
                 <strong className="font-semibold">场景分类 → 项目卡 → 文档预览 / How to</strong>
@@ -346,6 +358,7 @@ export function PortalContentOpsPage() {
         <div className="mb-4 flex flex-wrap gap-1.5">
           {(
             [
+              { id: 'home' as const, label: '首页配置', group: '首页' },
               { id: 'packs' as const, label: '场景内容', group: '场景' },
               { id: 'scenes' as const, label: '场景分类', group: '场景' },
               { id: 'tools' as const, label: '工具运营', group: '货架' },
@@ -374,7 +387,7 @@ export function PortalContentOpsPage() {
           ))}
         </div>
         <p className="mb-4 text-[10px] leading-relaxed text-zinc-400">
-          分组：场景（内容/分类）→ 货架（上架 / 内部办公场景查看 / 外部工具排序精选 / 外精选分类 / How to）→ 站点（公告/AI新闻/AI快讯邮件/建设口径）。访问与互动指标请到左侧「数据看板」。工具主数据仍在「配置工具」。
+          分组：首页（三个精选框的内容与排序）→ 场景（内容/分类）→ 货架（上架 / 内部办公场景查看 / 外部工具排序精选 / 外精选分类 / How to）→ 站点（公告/AI新闻/AI快讯邮件/建设口径）。访问与互动指标请到左侧「数据看板」。工具主数据仍在「配置工具」。
         </p>
 
         {howtoToast ? (
@@ -383,6 +396,7 @@ export function PortalContentOpsPage() {
           </div>
         ) : null}
 
+        {opsSurface === 'home' ? <PortalHomeFeaturedPanel /> : null}
         {opsSurface === 'howto' ? <PortalHowToOpsPanel /> : null}
         {opsSurface === 'tools' ? (
           <PortalToolOpsPanel />

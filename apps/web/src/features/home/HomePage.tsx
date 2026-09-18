@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { canViewAsset } from '@/domain/assetVisibility';
 import { canExecuteChat } from '@/domain/permissions';
 import { PageStageHero } from '@/components/layout/PageStageHero';
 import { useHomeStore } from '@/stores/homeStore';
@@ -7,25 +6,17 @@ import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
-import { HOME_CHANNEL_PINS } from '@/domain/homeChannelPins';
 import {
-  applyMarketFeaturedPins,
-  listInternalOfficeMarketCards,
-  listMarketToolCards,
-  qualifiesAsFeaturedContent,
   type MarketShelfCard as MarketShelfCardModel,
   type MarketShelfKind,
 } from '@/domain/marketShelf';
 import {
-  resolveAgentBusinessScenario,
-  resolveAgentFeaturedInDoTask,
-} from '@/domain/agentBusinessScenarios';
-import {
-  resolveSkillBusinessScenario,
-  resolveSkillFeaturedInMssMarket,
-} from '@/domain/skillBusinessScenarios';
-import { skillDisplayDesc, skillDisplayName } from '@/domain/skillDisplay';
-import { isSkillRunnable } from '@/domain/skillRuntime';
+  legacyHomeChannelCards,
+  listHomeFeaturedCandidates,
+  resolveHomeFeaturedCards,
+  takeLegacyProjectQuota,
+  type HomeChannelCardContext,
+} from '@/domain/homeFeatured';
 import { openMarketShelf, openMarketToolDetail } from '@/domain/openHomeJourney';
 import { HomeMarketChannels } from '@/components/home/HomeMarketChannels';
 import { StageIntentDock } from '@/components/market/StageIntentDock';
@@ -47,16 +38,9 @@ import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useMarketHiddenStore } from '@/stores/marketHiddenStore';
 import { useExternalToolLayoutStore } from '@/stores/externalToolLayoutStore';
 import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
+import { useHomeFeaturedStore } from '@/stores/homeFeaturedStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { greetingForNow } from '@/domain/timeGreeting';
-import { emptyOrgPerspectiveSelection } from '@/domain/orgAxisTags';
-import { getBusinessScenarioMeta } from '@/domain/businessScenarios';
-import {
-  getAssetRegionLabel,
-  getDeptLabel,
-  getRegionLabel,
-} from '@/domain/orgTaxonomy';
-import { sortByRankMode } from '@/domain/contentEngagement';
 import type { PrototypeAgentSeed, PrototypeSkillSeed } from '@/domain/prototype/types';
 import { resolveHomeProjectDetailTarget } from '@/domain/homeProjectDetail';
 import { MarketSkillDetailModal } from '@/features/market/MarketSkillDetailModal';
@@ -99,6 +83,11 @@ export function HomePage({
   const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const apiConnected = useWorkspaceStore((s) => s.apiConnected);
   const officeSceneEntries = useInternalOfficeSceneCatalogStore((s) => s.entries);
+  const homeFeaturedChannels = useHomeFeaturedStore((s) => s.channels);
+  const homeFeaturedLoaded = useHomeFeaturedStore((s) => s.loaded);
+  const homeFeaturedWorkspaceId = useHomeFeaturedStore((s) => s.workspaceId);
+  const homeFeaturedError = useHomeFeaturedStore((s) => s.error);
+  const hydrateHomeFeatured = useHomeFeaturedStore((s) => s.hydrate);
   const guideRecords = usePlazaToolGuideStore((s) => s.records);
   const pendingBusinessScenario = useNavigationIntentStore((s) => s.pendingBusinessScenario);
   const consumeBusinessScenario = useNavigationIntentStore((s) => s.consumeBusinessScenario);
@@ -113,11 +102,15 @@ export function HomePage({
     hydrateFavorites();
     hydrateHidden();
     ensurePlazaToolGuidesBootstrapped();
-    if (workspaceId && apiConnected) void hydrateExternalToolLayout(workspaceId);
+    if (workspaceId && apiConnected) {
+      void hydrateHomeFeatured(workspaceId);
+      void hydrateExternalToolLayout(workspaceId);
+    }
   }, [
     hydrateRecent,
     hydrateFavorites,
     hydrateHidden,
+    hydrateHomeFeatured,
     hydrateExternalToolLayout,
     workspaceId,
     apiConnected,
@@ -161,155 +154,33 @@ export function HomePage({
     return ids;
   }, [guideRecords]);
 
-  const scopedChannelCards = useMemo(() => {
-    const eng = (id: string) => engagementOf(id);
-    const org = emptyOrgPerspectiveSelection();
-
-    const externalCandidates = listMarketToolCards(
+  const cardContext = useMemo<HomeChannelCardContext>(
+    () => ({
       tools,
-      'external',
+      skills,
+      agents,
       viewer,
-      org,
-      'all',
-      eng,
+      engagementOf: (id: string) => engagementOf(id),
       howtoToolIds,
-    );
-    const externalLayout = externalToolLayout?.all;
-    const externalById = new Map(externalCandidates.map((card) => [card.id, card]));
-    // 首页外精选与市场页、工具运营共用 external-tool-layout；布局未加载时不
-    // 使用旧 market-featured 或前端静态目录伪造精选。
-    const external = externalLayout
-      ? [
-          ...externalLayout.overseasFeaturedIds,
-          ...externalLayout.domesticFeaturedIds,
-        ].flatMap((id) => {
-          const card = externalById.get(id);
-          return card ? [card] : [];
-        })
-      : [];
-    const internal = applyMarketFeaturedPins(
-      listInternalOfficeMarketCards(tools, eng, howtoToolIds, officeSceneEntries),
-      [...HOME_CHANNEL_PINS.internal],
-    );
-    const featuredSkills = sortByRankMode(
-      skills
-        .filter((skill) => skill.published)
-        .filter((skill) => canViewAsset(skill, viewer))
-        .filter((skill) => resolveSkillFeaturedInMssMarket(skill))
-        .map((skill): MarketShelfCardModel => {
-          const engagement = eng(skill.id);
-          const scenarioId = resolveSkillBusinessScenario(skill);
-          const scenarioLabel = scenarioId
-            ? getBusinessScenarioMeta(scenarioId).label
-            : null;
-          const badges: MarketShelfCardModel['badges'] = [];
-          if (skill.ownerDeptIds?.[0]) {
-            badges.push({ label: getDeptLabel(skill.ownerDeptIds[0]), tone: 'dept' });
-          }
-          badges.push({ label: getAssetRegionLabel(skill.ownerRegionId), tone: 'region' });
-          return {
-            id: skill.id,
-            kind: 'projects',
-            assetType: 'skill',
-            title: skillDisplayName(skill),
-            description: skillDisplayDesc(skill).replace(/^【[^】]+】/, '').trim(),
-            outcomeHint: skillDisplayDesc(skill).replace(/^【[^】]+】/, '').trim(),
-            sceneTags: ['Skill', ...(scenarioLabel ? [scenarioLabel] : [])],
-            securityLevel: 'mss',
-            icon: skill.icon || 'fa-cube',
-            logoUrl: skill.iconUrl,
-            badges,
-            featured: true,
-            heat: skill.invokes ?? 0,
-            likes: engagement.likes,
-            dislikes: engagement.dislikes,
-            downloads: engagement.downloads,
-            scopeBadge: (skill.visibility ?? 'public') === 'public' ? 'public' : 'scoped',
-            hasHowto: Boolean(skill.instructions || skill.command),
-            runnable: canRunSkills && isSkillRunnable(skill),
-            primaryAction: 'detail',
-            scenarioId: scenarioId ?? undefined,
-            ownerDeptIds: skill.ownerDeptIds,
-            ownerRegionId: skill.ownerRegionId,
-            updatedAt: skill.updatedAt,
-          };
-        })
-        .filter(qualifiesAsFeaturedContent),
-      // 与 Skill Hub 初始排序一致：查看量高的精选 Skill 优先。
-      'most_viewed',
-      eng,
-    );
+      canRunSkills,
+      canRunAgents,
+    }),
+    // engagementById 变化时重新读取互动数据
+    [tools, skills, agents, viewer, engagementOf, engagementById, howtoToolIds, canRunSkills, canRunAgents],
+  );
 
-    const featuredAgents = sortByRankMode(
-      agents
-        .filter((agent) => agent.published)
-        .filter((agent) => canViewAsset(agent, viewer))
-        .filter((agent) => resolveAgentFeaturedInDoTask(agent))
-        .map((agent): MarketShelfCardModel => {
-          const engagement = eng(agent.id);
-          const scenarioId = resolveAgentBusinessScenario(agent);
-          const scenarioLabel = scenarioId
-            ? getBusinessScenarioMeta(scenarioId).label
-            : null;
-          const badges: MarketShelfCardModel['badges'] = [];
-          if (agent.ownerDeptIds?.[0]) {
-            badges.push({ label: getDeptLabel(agent.ownerDeptIds[0]), tone: 'dept' });
-          }
-          if (agent.ownerRegionIds?.[0]) {
-            badges.push({ label: getRegionLabel(agent.ownerRegionIds[0]), tone: 'region' });
-          }
-          return {
-            id: agent.id,
-            kind: 'projects',
-            assetType: 'agent',
-            title: agent.name,
-            description: agent.desc,
-            outcomeHint: agent.desc,
-            sceneTags: ['Agent', ...(scenarioLabel ? [scenarioLabel] : [])],
-            securityLevel: 'mss',
-            icon: agent.icon || 'fa-robot',
-            badges,
-            featured: true,
-            heat: agent.invokes ?? 0,
-            likes: engagement.likes,
-            dislikes: engagement.dislikes,
-            downloads: engagement.downloads,
-            scopeBadge: (agent.visibility ?? 'public') === 'public' ? 'public' : 'scoped',
-            hasHowto: Boolean(agent.systemPrompt || agent.skillIds?.length),
-            runnable: canRunAgents && Boolean(agent.skillIds?.length),
-            primaryAction: 'detail',
-            scenarioId: scenarioId ?? undefined,
-            ownerDeptIds: agent.ownerDeptIds,
-            ownerRegionId: agent.ownerRegionIds?.[0] ?? null,
-            updatedAt: agent.updatedAt,
-          };
-        })
-        .filter(qualifiesAsFeaturedContent),
-      // 与 Agent Hub 初始排序一致：精选优先，同级按互动热度。
-      'recommended',
-      eng,
-    );
+  // 首页三栏只读取「门户运营 → 首页配置」；从未保存过配置时才沿用旧规则，避免首页空白。
+  const homeFeaturedPending =
+    apiConnected && !homeFeaturedError && (!homeFeaturedLoaded || homeFeaturedWorkspaceId !== workspaceId);
+  const usesHomeFeaturedConfig = Boolean(homeFeaturedChannels) && !homeFeaturedPending;
 
-    // 不使用 HOME_CHANNEL_PINS.projects；首页只消费 Hub 真实精选资产。
-    const projects = [...featuredSkills, ...featuredAgents];
-
-    return { external, internal, projects } satisfies Record<
-      MarketShelfKind,
-      MarketShelfCardModel[]
-    >;
-  }, [
-    tools,
-    skills,
-    agents,
-    externalToolLayout,
-    viewer,
-    engagementOf,
-    engagementById,
-    howtoToolIds,
-    officeSceneEntries,
-    canRunSkills,
-    canRunAgents,
-  ]);
+  const scopedChannelCards = useMemo((): Record<MarketShelfKind, MarketShelfCardModel[]> => {
+    if (homeFeaturedPending) return { external: [], internal: [], projects: [] };
+    if (homeFeaturedChannels) {
+      return resolveHomeFeaturedCards(homeFeaturedChannels, listHomeFeaturedCandidates(cardContext));
+    }
+    return legacyHomeChannelCards({ ...cardContext, externalToolLayout, officeSceneEntries });
+  }, [homeFeaturedPending, homeFeaturedChannels, cardContext, externalToolLayout, officeSceneEntries]);
 
   const favoriteKeys = useMemo(
     () => new Set(favoriteItems.map((f) => `${f.kind}:${f.id}`)),
@@ -322,16 +193,15 @@ export function HomePage({
         .filter((c) => !hiddenKeys.includes(`${c.kind}:${c.id}`))
         .filter((c) => (favoritesOnly ? favoriteKeys.has(capabilityKey(c)) : true));
     const q = marketSearch.trim();
-    const skillIds = new Set(skills.map((skill) => skill.id));
-    const takeProjectQuota = (list: MarketShelfCardModel[]) => [
-      ...list.filter((card) => skillIds.has(card.id)).slice(0, 2),
-      ...list.filter((card) => !skillIds.has(card.id)).slice(0, 1),
-    ];
+    // 首页配置决定 Hub 栏顺序与构成；只有旧规则才按 2 Skill + 1 Agent 补位。
+    const takeProjectQuota = usesHomeFeaturedConfig
+      ? (list: MarketShelfCardModel[]) => list
+      : takeLegacyProjectQuota;
     if (!q) {
       return {
         external: applyFav(scopedChannelCards.external),
         internal: applyFav(scopedChannelCards.internal),
-        // 先应用个人隐藏/收藏筛选，再按 2 Skill + 1 Agent 补位。
+        // 先应用个人隐藏/收藏筛选，再补位。
         projects: takeProjectQuota(applyFav(scopedChannelCards.projects)),
       };
     }
@@ -352,7 +222,7 @@ export function HomePage({
       internal: applyFav(grouped.internal),
       projects: takeProjectQuota(applyFav(grouped.projects)),
     };
-  }, [scopedChannelCards, marketSearch, favoritesOnly, favoriteKeys, hiddenKeys, skills]);
+  }, [scopedChannelCards, usesHomeFeaturedConfig, marketSearch, favoritesOnly, favoriteKeys, hiddenKeys]);
 
   const rememberCard = (card: MarketShelfCardModel) => {
     pushRecent({
@@ -435,6 +305,7 @@ export function HomePage({
             onOpen={openPortalCard}
             onOpenChannel={openMarketShelf}
             searchActive={Boolean(marketSearch.trim())}
+            loading={homeFeaturedPending}
           />
         </div>
       </div>

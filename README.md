@@ -107,26 +107,6 @@ npm run start:api:test
 curl http://localhost:3000/api/v1/health
 ```
 
-## 演示内容与账号
-
-仓库默认包含案例、Agent、Skill、工具和知识库等演示数据。未单独设置密码且演示密码策略开启时，可使用：
-
-| 角色 | 账号 | 初始密码 |
-| --- | --- | --- |
-| 平台运营 | `mcyo@huawei.com` | `mssclaw` |
-| 能力运营 | `jacky@huawei.com` | `mssclaw` |
-| 业务用户 | `dickson@huawei.com` | `mssclaw` |
-
-正式使用前应关闭演示密码，并为每个账号单独设密。
-
-正式试点构建时，可禁止注入演示内容：
-
-```bash
-VITE_INCLUDE_DEMO_CONTENT=false npm run build
-```
-
-这只影响新加载的内置内容，不会自动清理已写入浏览器的数据。已打开过系统的用户需要在“偏好设置 → 演示内容”中清理，或清除对应站点数据。
-
 ## 常用命令
 
 | 命令 | 说明 |
@@ -283,14 +263,6 @@ MSSClaw/
 npm ci
 npm run build
 ```
-
-产物位于 `apps/web/dist`，可由 Nginx、Vercel 或其他静态服务器托管，但必须同时配置可访问的 Nest API 和 `/api` 反向代理。仓库已包含 `vercel.json` 和 GitHub Pages workflow。
-
-已配置的演示地址：
-
-- [Vercel](https://mssclaw.vercel.app)
-- [GitHub Pages](https://mcyo-yoyoyo.github.io/MSSClaw/)
-
 ### 内网部署
 
 共享 API 部署需要同时考虑数据库备份、Blob 持久化、反向代理、密钥管理和并发限制。操作步骤见 [`deploy/LAN-PRODUCTION.md`](./deploy/LAN-PRODUCTION.md)，容量边界见 [`docs/PERFORMANCE.md`](./docs/PERFORMANCE.md)。

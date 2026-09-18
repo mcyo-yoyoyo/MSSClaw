@@ -21,6 +21,7 @@ const ADMIN_WRITABLE_DOC_KINDS = new Set([
   'members',
   'external-tool-layout',
   'internal-office-scenes',
+  'home-featured',
 ]);
 
 /** 工作区成员才能访问的共享凭证文档；游客不得读写真实 API Key。 */

@@ -10,6 +10,7 @@
     "test:ai-brief-dedupe": "npm run build --silent && node --test tests/aiBriefEmailRecipients.test.mjs",
     "test:ai-news-sync": "npm run build --silent && node --test tests/aiDailyNewsSync.test.mjs",
     "test:external-tool-layout": "npm run build --silent && node --test tests/externalToolLayout.test.mjs",
+    "test:home-featured": "npm run build --silent && node --test tests/homeFeatured.test.mjs",
     "test:llm-config": "npm run build --silent && node --test tests/llmConfigExecution.test.mjs",
     "test:account-credentials": "npm run build --silent && node --test tests/accountCredentials.test.mjs",
     "test:auth-workspace-isolation": "npm run build --silent && node --test tests/authWorkspaceIsolation.test.mjs",

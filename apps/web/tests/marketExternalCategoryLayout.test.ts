@@ -10,20 +10,42 @@ const homeSource = readFileSync(
   new URL('../src/features/home/HomePage.tsx', import.meta.url),
   'utf8',
 );
+const homeFeaturedSource = readFileSync(
+  new URL('../src/domain/homeFeatured.ts', import.meta.url),
+  'utf8',
+);
 const layoutStoreSource = readFileSync(
   new URL('../src/stores/externalToolLayoutStore.ts', import.meta.url),
   'utf8',
 );
 
-test('首页外部精选与市场页共用全局布局，布局未加载时不伪造工具', () => {
-  assert.match(homeSource, /useExternalToolLayoutStore/);
-  assert.match(homeSource, /const externalLayout = externalToolLayout\?\.all/);
-  assert.match(homeSource, /externalLayout\.overseasFeaturedIds/);
-  assert.match(homeSource, /externalLayout\.domesticFeaturedIds/);
-  assert.match(homeSource, /: \[\]/);
-  assert.doesNotMatch(homeSource, /HOME_CHANNEL_PINS\.external/);
-  assert.doesNotMatch(homeSource, /EXTERNAL_TOOLS_CATALOG/);
-  assert.doesNotMatch(homeSource, /featuredPins\.external/);
+test('首页三栏保存过首页配置后只读取首页配置', () => {
+  assert.match(homeSource, /useHomeFeaturedStore/);
+  assert.match(
+    homeSource,
+    /if \(homeFeaturedChannels\) \{\s*return resolveHomeFeaturedCards\(homeFeaturedChannels, listHomeFeaturedCandidates\(cardContext\)\);\s*\}\s*return legacyHomeChannelCards\(/,
+    '首页配置存在时不能再读取外部工具布局、办公场景或 Skill / Agent 精选标记',
+  );
+  assert.doesNotMatch(
+    homeFeaturedSource.slice(
+      homeFeaturedSource.indexOf('export function listHomeFeaturedCandidates'),
+      homeFeaturedSource.indexOf('export function takeLegacyProjectQuota'),
+    ),
+    /externalToolLayout|officeSceneEntries|resolveSkillFeaturedInMssMarket|resolveAgentFeaturedInDoTask|HOME_CHANNEL_PINS/,
+    '首页配置的候选池与排序不得依赖其他运营位',
+  );
+});
+
+test('首页未配置时旧规则的外部精选读取全局布局，布局未加载时不伪造工具', () => {
+  assert.match(homeFeaturedSource, /const externalLayout = ctx\.externalToolLayout\?\.all/);
+  assert.match(homeFeaturedSource, /externalLayout\.overseasFeaturedIds/);
+  assert.match(homeFeaturedSource, /externalLayout\.domesticFeaturedIds/);
+  assert.match(homeFeaturedSource, /: \[\]/);
+  for (const source of [homeSource, homeFeaturedSource]) {
+    assert.doesNotMatch(source, /HOME_CHANNEL_PINS\.external/);
+    assert.doesNotMatch(source, /EXTERNAL_TOOLS_CATALOG/);
+    assert.doesNotMatch(source, /featuredPins\.external/);
+  }
 });
 
 test('三类用户货架默认按后台顺序，并在 Hub 卡片上保留目录序号', () => {

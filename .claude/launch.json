@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mssclaw-api",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:api:local"],
+      "port": 3000
+    },
+    {
+      "name": "mssclaw-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--workspace", "@mss-claw/web", "--", "--port", "5174", "--strictPort"],
+      "env": { "BROWSER": "none" },
+      "port": 5174
+    }
+  ]
+}

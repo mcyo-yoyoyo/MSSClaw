@@ -26,6 +26,7 @@ export const PLATFORM_DOC_KINDS = [
   'external-taxonomy',
   'external-tool-layout',
   'internal-office-scenes',
+  'home-featured',
   'org-taxonomy',
   'market-featured',
   'market-favorites',
@@ -125,6 +126,71 @@ function invalidOfficeScenes(path: string, reason: string): never {
 
 function invalidExternalToolLayout(path: string, reason: string): never {
   throw new BadRequestException(`invalid_external_tool_layout:${path}:${reason}`);
+}
+
+/** 首页三栏精选：工具栏存工具 ID；AI工具Hub 栏存 `skill:<id>` / `agent:<id>`。 */
+const HOME_FEATURED_CHANNELS = ['external', 'internal', 'projects'] as const;
+const HOME_FEATURED_MAX_PER_CHANNEL = 30;
+const HOME_FEATURED_TOOL_REF_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const HOME_FEATURED_PROJECT_REF_RE = /^(skill|agent):[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+
+type HomeFeaturedChannel = (typeof HOME_FEATURED_CHANNELS)[number];
+type HomeFeaturedChannels = Record<HomeFeaturedChannel, string[]>;
+
+function homeFeaturedRefPattern(channel: HomeFeaturedChannel): RegExp {
+  return channel === 'projects' ? HOME_FEATURED_PROJECT_REF_RE : HOME_FEATURED_TOOL_REF_RE;
+}
+
+function invalidHomeFeatured(path: string, reason: string): never {
+  throw new BadRequestException(`invalid_home_featured:${path}:${reason}`);
+}
+
+function canonicalizeHomeFeaturedInput(payload: unknown): HomeFeaturedChannels {
+  if (!isJsonObject(payload)) invalidHomeFeatured('payload', 'object_required');
+  const channels = payload.channels;
+  if (!isJsonObject(channels)) invalidHomeFeatured('channels', 'object_required');
+  const result = {} as HomeFeaturedChannels;
+  for (const channel of HOME_FEATURED_CHANNELS) {
+    const raw = channels[channel];
+    if (!Array.isArray(raw)) invalidHomeFeatured(`channels.${channel}`, 'array_required');
+    if (raw.length > HOME_FEATURED_MAX_PER_CHANNEL) {
+      invalidHomeFeatured(`channels.${channel}`, `max_items_${HOME_FEATURED_MAX_PER_CHANNEL}`);
+    }
+    const seen = new Set<string>();
+    result[channel] = raw.map((value, index) => {
+      const path = `channels.${channel}[${index}]`;
+      const ref = typeof value === 'string' ? value.trim() : '';
+      if (!homeFeaturedRefPattern(channel).test(ref)) invalidHomeFeatured(path, 'invalid_ref');
+      if (seen.has(ref)) invalidHomeFeatured(path, 'duplicate');
+      seen.add(ref);
+      return ref;
+    });
+  }
+  return result;
+}
+
+/** 读取时容错：忽略非法项，保证首页不会因为一条脏数据整栏报错。 */
+function homeFeaturedPayloadForRead(payload: unknown): {
+  version: number;
+  revision: number;
+  channels?: HomeFeaturedChannels;
+} {
+  const revision = docRevision(payload);
+  const rawChannels = isJsonObject(payload) ? payload.channels : undefined;
+  if (!isJsonObject(rawChannels)) return { version: 1, revision };
+  const channels = {} as HomeFeaturedChannels;
+  for (const channel of HOME_FEATURED_CHANNELS) {
+    const raw = Array.isArray(rawChannels[channel]) ? rawChannels[channel] : [];
+    channels[channel] = [
+      ...new Set(
+        raw.filter(
+          (ref): ref is string =>
+            typeof ref === 'string' && homeFeaturedRefPattern(channel).test(ref),
+        ),
+      ),
+    ].slice(0, HOME_FEATURED_MAX_PER_CHANNEL);
+  }
+  return { version: 1, revision, channels };
 }
 
 function canonicalExternalToolId(value: unknown, path: string): string {
@@ -890,6 +956,9 @@ export class PlatformDocsService {
       if (kind === 'internal-office-scenes') {
         return { kind, payload: officeScenePayloadForRead(row.payload) };
       }
+      if (kind === 'home-featured') {
+        return { kind, payload: homeFeaturedPayloadForRead(row.payload) };
+      }
       if (kind === 'auth-credentials') {
         return { kind, payload: credentialsPayloadForRead(row.payload) };
       }
@@ -935,6 +1004,12 @@ export class PlatformDocsService {
         members: membersFromPayload(input),
       }));
     }
+    if (kind === 'home-featured') {
+      return this.putRevisionedDoc(workspaceId, 'home-featured', payload, (input) => ({
+        version: 1,
+        channels: canonicalizeHomeFeaturedInput(input),
+      }));
+    }
     const id = docId(workspaceId, kind);
     await this.prisma.centerRecord.upsert({
       where: { id },
@@ -963,6 +1038,8 @@ export class PlatformDocsService {
         byKind[kind] = externalToolLayoutPayloadForRead(row.payload);
       } else if (row && kind === 'internal-office-scenes') {
         byKind[kind] = officeScenePayloadForRead(row.payload);
+      } else if (row && kind === 'home-featured') {
+        byKind[kind] = homeFeaturedPayloadForRead(row.payload);
       } else if (row && kind === 'auth-credentials') {
         byKind[kind] = credentialsPayloadForRead(row.payload);
       } else if (row && kind === 'members') {
@@ -987,7 +1064,7 @@ export class PlatformDocsService {
    */
   private async putRevisionedDoc(
     workspaceId: string,
-    kind: 'auth-credentials' | 'members',
+    kind: 'auth-credentials' | 'members' | 'home-featured',
     payload: unknown,
     canonicalize: (input: unknown) => Record<string, unknown>,
   ) {

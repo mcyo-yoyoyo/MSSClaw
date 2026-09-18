@@ -6,38 +6,31 @@ import {
   type MarketShelfCard as MarketShelfCardModel,
   type MarketShelfKind,
 } from '@/domain/marketShelf';
-
-const CHANNEL_ORDER: MarketShelfKind[] = ['external', 'internal', 'projects'];
-const CHANNEL_BLURB: Record<MarketShelfKind, string | null> = {
-  external: '禁止将公司内部信息上传到外部AI网站',
-  internal: '写报告、查制度、个人问答等',
-  projects: '高价值场景沉淀的 Skill 和 Agent',
-};
-
-const TITLE_COLOR: Record<MarketShelfKind, string> = {
-  external: '#2563eb',
-  internal: '#0d9488',
-  projects: '#c45b5f',
-};
-
-const TOP_N = 3;
+import {
+  HOME_CHANNEL_BLURB,
+  HOME_CHANNEL_DISPLAY_COUNT,
+  HOME_CHANNEL_KINDS,
+  HOME_CHANNEL_TITLE_COLOR,
+} from '@/domain/homeFeatured';
 
 export function HomeMarketChannels({
   cardsByKind,
   onOpen,
   onOpenChannel,
   searchActive,
+  loading,
 }: {
   cardsByKind: Record<MarketShelfKind, MarketShelfCardModel[]>;
   onOpen: (card: MarketShelfCardModel) => void;
   onOpenChannel: (kind: MarketShelfKind) => void;
   searchActive?: boolean;
+  loading?: boolean;
 }) {
   return (
     <section className="grid gap-3 lg:grid-cols-3 lg:gap-3.5">
-      {CHANNEL_ORDER.map((kind) => {
+      {HOME_CHANNEL_KINDS.map((kind) => {
         const meta = MARKET_SHELF_META[kind];
-        const cards = cardsByKind[kind].slice(0, TOP_N);
+        const cards = cardsByKind[kind].slice(0, HOME_CHANNEL_DISPLAY_COUNT);
         return (
           <article
             key={kind}
@@ -52,7 +45,7 @@ export function HomeMarketChannels({
                 <div className="min-w-0 text-center">
                   <h2
                     className="market-channel-title truncate"
-                    style={{ color: TITLE_COLOR[kind] }}
+                    style={{ color: HOME_CHANNEL_TITLE_COLOR[kind] }}
                   >
                     <button
                       type="button"
@@ -63,7 +56,7 @@ export function HomeMarketChannels({
                       {meta.label}
                     </button>
                   </h2>
-                  {CHANNEL_BLURB[kind] ? (
+                  {HOME_CHANNEL_BLURB[kind] ? (
                     <p
                       className={cn(
                         'mt-1.5 truncate text-[12px] leading-snug',
@@ -72,7 +65,7 @@ export function HomeMarketChannels({
                           : 'text-[#6e6e73]',
                       )}
                     >
-                      {CHANNEL_BLURB[kind]}
+                      {HOME_CHANNEL_BLURB[kind]}
                     </p>
                   ) : null}
                 </div>
@@ -94,7 +87,7 @@ export function HomeMarketChannels({
                 ))
               ) : (
                 <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-zinc-200 px-3 py-8 text-center text-[12px] text-[#86868b]">
-                  {searchActive ? '当前搜索下暂无内容' : '暂无上架内容'}
+                  {loading ? '加载中…' : searchActive ? '当前搜索下暂无内容' : '暂无上架内容'}
                 </div>
               )}
             </div>

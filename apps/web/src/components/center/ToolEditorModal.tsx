@@ -129,10 +129,19 @@ function emptyTool(asExternal: boolean): PrototypeToolSeed {
     productIntro: '',
     bestFor: '',
     coreCapabilities: [],
+    usageGuide: [],
     docsUrl: '',
     mediaUrl: '',
     screenshotUrl: '',
   };
+}
+
+/**
+ * 列表类输入在编辑中保留空段与空格，否则刚输入的逗号 / 换行会被立即吞掉；
+ * 保存时再统一清理。
+ */
+function cleanList(items: string[] | undefined): string[] {
+  return (items ?? []).map((item) => item.trim()).filter(Boolean);
 }
 
 interface ToolEditorModalProps {
@@ -143,10 +152,13 @@ interface ToolEditorModalProps {
 function ToolTypeMultiSelect({
   catalog,
   value,
+  required,
   onChange,
 }: {
   catalog: ExternalTaxonomyCatalog;
   value: string[];
+  /** 只有外部工具精选按分类筛选；公司工具可选填 */
+  required: boolean;
   onChange: (next: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -200,7 +212,7 @@ function ToolTypeMultiSelect({
       }}
     >
       <span id={labelId} className="text-[11px] font-semibold text-[#86868b]">
-        用户页分类标签（必填，可多选）
+        用户页分类标签（{required ? '必填' : '选填'}，可多选）
       </span>
       <p className="mb-1 text-[10px] leading-relaxed text-[#86868b]">
         与“外部工具精选”分类条保持一致；内部工具可预配置，仅进入外部货架后参与筛选。
@@ -209,7 +221,7 @@ function ToolTypeMultiSelect({
         ref={triggerRef}
         type="button"
         aria-label={`用户页分类标签：${accessibleSelection}`}
-        aria-required="true"
+        aria-required={required}
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((current) => !current)}
@@ -345,12 +357,17 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
       setForm(emptyTool(false));
       return;
     }
+    const marketShelf = existing.marketShelf ?? resolveConfiguredToolMarketShelf(existing);
     setForm({
       ...existing,
-      marketShelf:
-        existing.marketShelf ?? resolveConfiguredToolMarketShelf(existing),
+      marketShelf,
       marketTitle: existing.marketTitle ?? '',
       businessScenarioIds: resolveToolBusinessScenarios(existing),
+      // 公司工具卡片优先展示卡片简介；旧数据只有描述时带入，避免保存后前台文案变空。
+      cardSummary:
+        marketShelf === 'internal' && !existing.cardSummary?.trim()
+          ? existing.desc
+          : existing.cardSummary,
     });
   }, [target]);
 
@@ -362,6 +379,8 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
 
   const shelf = (form.marketShelf ?? 'none') as MarketShelfSlot;
   const autoPublishInternal = shelf === 'internal';
+  const isExternalShelf = form.sourceType === 'external' || shelf === 'external';
+  const isCompanyShelf = !isExternalShelf && shelf === 'internal';
   const selectedLobeIconId = resolveLobeIconId(form.logoUrl);
 
   const handleSave = async () => {
@@ -394,7 +413,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
     const selectedToolTypeIds = resolveExternalToolTypeSelection(
       form,
     ) as ExternalToolTypeId[];
-    if (!selectedToolTypeIds.length) {
+    if (sourceType === 'external' && !selectedToolTypeIds.length) {
       showToast('请选择用户页分类');
       return;
     }
@@ -409,17 +428,26 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
     // 内部工具保存即上架；外部工具仍保持原有上架状态。
     const wantsPublish = autoPublishInternal || Boolean(form.published);
     const needsApproval = wantsPublish && !Boolean(prev?.published) && !autoPublishInternal;
-    const tags = ensureMarketShelfTags(form.tags ?? [], marketShelf);
+    const tags = ensureMarketShelfTags(cleanList(form.tags), marketShelf);
     const marketTitle = form.marketTitle?.trim() || undefined;
     const businessScenarioIds = (form.businessScenarioIds ?? []) as BusinessScenarioId[];
+    // 外部工具精选与公司工具共用前台详情字段（卡片简介、详细介绍、最适合等）。
+    const usesDetailFields = sourceType === 'external' || marketShelf === 'internal';
+    const detailFields = {
+      cardSummary: form.cardSummary?.trim() || undefined,
+      company: form.company?.trim() || undefined,
+      productIntro: form.productIntro?.trim() || undefined,
+      bestFor: form.bestFor?.trim() || undefined,
+      coreCapabilities: cleanList(form.coreCapabilities),
+      docsUrl: form.docsUrl?.trim() || undefined,
+    };
     const nextTool: PrototypeToolSeed = {
       ...form,
       id,
       name,
-      desc:
-        sourceType === 'external'
-          ? form.cardSummary?.trim() || form.productIntro?.trim() || ''
-          : form.desc.trim(),
+      desc: usesDetailFields
+        ? detailFields.cardSummary || detailFields.productIntro || ''
+        : form.desc.trim(),
       category:
         sourceType === 'external'
           ? 'external'
@@ -428,8 +456,8 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
             : 'connector',
       tags,
       toolTypeId: selectedToolTypeIds[0],
-      toolTypeIds: selectedToolTypeIds,
-      toolTypeLabels: selectedToolTypeLabels,
+      toolTypeIds: selectedToolTypeIds.length ? selectedToolTypeIds : undefined,
+      toolTypeLabels: selectedToolTypeLabels.length ? selectedToolTypeLabels : undefined,
       author: prev?.author ?? userName,
       publisher: form.publisher || userName,
       publisherUserId: form.publisherUserId || userId || undefined,
@@ -454,23 +482,24 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
       marketTitle: marketShelf === 'external' ? marketTitle : undefined,
       businessScenarioIds: businessScenarioIds.length ? businessScenarioIds : undefined,
       featuredInFindCases: marketShelf === 'none' ? false : Boolean(form.featuredInFindCases),
-      ...(sourceType === 'external' || marketShelf === 'external'
+      ...(sourceType === 'external'
         ? {
             region: form.region as ToolRegion,
-            cardSummary: form.cardSummary?.trim() || undefined,
-            company: form.company?.trim() || undefined,
-            productIntro: form.productIntro?.trim() || undefined,
-            bestFor: form.bestFor?.trim() || undefined,
-            coreCapabilities: form.coreCapabilities?.filter(Boolean),
-            docsUrl: form.docsUrl?.trim() || undefined,
+            ...detailFields,
             mediaUrl: form.mediaUrl?.trim() || undefined,
             screenshotUrl: form.screenshotUrl?.trim() || undefined,
           }
-        : {
-            region: undefined,
-            cardSummary: undefined,
-            company: undefined,
-          }),
+        : marketShelf === 'internal'
+          ? {
+              region: undefined,
+              ...detailFields,
+              usageGuide: cleanList(form.usageGuide),
+            }
+          : {
+              region: undefined,
+              cardSummary: undefined,
+              company: undefined,
+            }),
     };
 
     setSaveError(null);
@@ -599,7 +628,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
             placeholder="请输入工具的正式产品名称"
           />
         </FormField>
-        {form.sourceType !== 'external' && shelf !== 'external' ? (
+        {!isExternalShelf && !isCompanyShelf ? (
           <FormField label="描述">
             <FormTextarea
               rows={2}
@@ -609,21 +638,30 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
             />
           </FormField>
         ) : null}
-        {(form.sourceType === 'external' || shelf === 'external') && (
+        {(isExternalShelf || isCompanyShelf) && (
           <>
-            <FormField label="目录区域（海外 / 国内）" hint="决定外精选双栏与筛选统计">
-              <FormSelect
-                value={form.region ?? ''}
-                onChange={(e) =>
-                  setForm({ ...form, region: (e.target.value || undefined) as ToolRegion | undefined })
-                }
-              >
-                <option value="" disabled>请选择目录区域</option>
-                <option value="overseas">海外</option>
-                <option value="domestic">国内</option>
-              </FormSelect>
-            </FormField>
-            <FormField label="卡片简介（核心作用）" hint="用于外部工具货架卡片的一句话简介">
+            {isExternalShelf ? (
+              <FormField label="目录区域（海外 / 国内）" hint="决定外精选双栏与筛选统计">
+                <FormSelect
+                  value={form.region ?? ''}
+                  onChange={(e) =>
+                    setForm({ ...form, region: (e.target.value || undefined) as ToolRegion | undefined })
+                  }
+                >
+                  <option value="" disabled>请选择目录区域</option>
+                  <option value="overseas">海外</option>
+                  <option value="domestic">国内</option>
+                </FormSelect>
+              </FormField>
+            ) : null}
+            <FormField
+              label="卡片简介（核心作用）"
+              hint={
+                isCompanyShelf
+                  ? '用于内部办公推荐卡片的一句话简介，也作为办公场景中的工具说明'
+                  : '用于外部工具货架卡片的一句话简介'
+              }
+            >
               <FormTextarea
                 rows={2}
                 value={form.cardSummary ?? ''}
@@ -631,11 +669,11 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
                 placeholder="一句话说明核心作用"
               />
             </FormField>
-            <FormField label="厂商 / 公司">
+            <FormField label="厂商 / 公司" hint="填写后显示在工具详情页名称旁">
               <FormInput
                 value={form.company ?? ''}
                 onChange={(e) => setForm({ ...form, company: e.target.value })}
-                placeholder="例：OpenAI"
+                placeholder={isCompanyShelf ? '例：华为' : '例：OpenAI'}
               />
             </FormField>
             <FormField label="产品详细介绍" hint="对应工具详情页“产品详细介绍”">
@@ -646,60 +684,70 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
                 placeholder="介绍产品定位、主要能力、适用任务及差异化特点"
               />
             </FormField>
-            <FormField label="最适合" hint="对应工具详情页“最适合”">
+            <FormField
+              label="最适合"
+              hint={
+                isCompanyShelf
+                  ? '对应工具详情页“最适合”；按顿号或逗号拆分后作为卡片场景标签'
+                  : '对应工具详情页“最适合”'
+              }
+            >
               <FormInput
                 value={form.bestFor ?? ''}
                 onChange={(e) => setForm({ ...form, bestFor: e.target.value })}
-                placeholder="例：需要可追溯来源的研究问答"
+                placeholder={isCompanyShelf ? '例：读一下、写一下、问一下' : '例：需要可追溯来源的研究问答'}
               />
             </FormField>
             <FormField label="核心能力" hint="对应工具详情页能力标签，使用逗号分隔">
               <FormInput
                 value={(form.coreCapabilities ?? []).join('，')}
                 onChange={(e) =>
-                  setForm({
-                    ...form,
-                    coreCapabilities: e.target.value
-                      .split(/[,，]/)
-                      .map((item) => item.trim())
-                      .filter(Boolean),
-                  })
+                  setForm({ ...form, coreCapabilities: e.target.value.split(/[,，]/) })
                 }
                 placeholder="例如：深度研究，文件分析，多模态理解"
               />
             </FormField>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FormField label="帮助文档 URL">
+            {isCompanyShelf ? (
+              <FormField label="站内使用指导" hint="每行一步；用于前台内部办公场景搜索">
+                <FormTextarea
+                  rows={4}
+                  value={(form.usageGuide ?? []).join('\n')}
+                  onChange={(e) => setForm({ ...form, usageGuide: e.target.value.split('\n') })}
+                  placeholder={'例：\n打开工具并选择使用模式。\n说明对象、目的与格式要求。'}
+                />
+              </FormField>
+            ) : null}
+            <div className={cn('grid gap-3', isExternalShelf && 'sm:grid-cols-2')}>
+              <FormField label="帮助文档 URL" hint="对应工具详情页“使用指导”按钮">
                 <FormInput
                   value={form.docsUrl ?? ''}
                   onChange={(e) => setForm({ ...form, docsUrl: e.target.value })}
                   placeholder="https://… 官方帮助文档"
                 />
               </FormField>
-              <FormField label="演示 / 介绍媒体 URL">
-                <FormInput
-                  value={form.mediaUrl ?? ''}
-                  onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })}
-                  placeholder="https://… 视频或介绍页"
-                />
-              </FormField>
+              {isExternalShelf ? (
+                <FormField label="演示 / 介绍媒体 URL">
+                  <FormInput
+                    value={form.mediaUrl ?? ''}
+                    onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })}
+                    placeholder="https://… 视频或介绍页"
+                  />
+                </FormField>
+              ) : null}
             </div>
           </>
         )}
-        {(shelf === 'external' ||
-          shelf === 'internal' ||
-          form.sourceType === 'external' ||
-          form.marketShelf === 'internal') && (
+        {(isExternalShelf || isCompanyShelf) && (
           <FormField
             label="品牌 Logo"
             hint={
-              shelf === 'internal' || form.marketShelf === 'internal'
-                ? '内部办公推荐统一使用华为 Logo，无需单独上传。'
+              isCompanyShelf
+                ? '可上传工具自有 Logo；不配置则统一使用华为 Logo。'
                 : '可从 LobeHub AI 图标库选择或上传文件；不配置则按官网地址自动取 favicon。'
             }
           >
             <div className="flex items-center gap-3">
-              {form.logoUrl || form.homepageUrl ? (
+              {form.logoUrl || form.homepageUrl || isCompanyShelf ? (
                 <div className="shrink-0" aria-label="Logo 预览">
                   <ToolLogo
                     name={form.name || '工具'}
@@ -710,79 +758,79 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
                   />
                 </div>
               ) : null}
-              {shelf === 'internal' || form.marketShelf === 'internal' ? (
-                <p className="text-[11px] leading-relaxed text-zinc-500">
-                  已绑定华为品牌标识，与货架展示一致。
-                </p>
-              ) : (
-                <div className="min-w-0 flex-1 space-y-2">
-                  <div className="flex items-start gap-2">
-                    <FormSelect
-                      aria-label="LobeHub 品牌 Logo"
-                      value={selectedLobeIconId}
-                      onChange={(e) => {
-                        const icon = LOBE_ICON_OPTIONS.find((item) => item.id === e.target.value);
-                        if (!icon) return;
-                        setForm((current) => ({ ...current, logoUrl: lobeIconLogoUrl(icon) }));
-                      }}
-                      className="mt-0 min-w-0 flex-1"
-                    >
-                      <option value="" disabled>
-                        从 300+ AI 品牌中选择…
-                      </option>
-                      {LOBE_ICON_GROUP_ORDER.map((group) => (
-                        <optgroup key={group} label={LOBE_ICON_GROUP_LABEL[group]}>
-                          {LOBE_ICON_OPTIONS.filter((icon) => icon.group === group).map((icon) => (
-                            <option key={icon.id} value={icon.id}>
-                              {icon.fullTitle}
-                            </option>
-                          ))}
-                        </optgroup>
-                      ))}
-                    </FormSelect>
-                    <a
-                      href="https://lobehub.com/icons"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex h-10 shrink-0 items-center rounded-xl border border-zinc-200 bg-white px-3 text-[11px] font-semibold text-zinc-700 transition hover:bg-zinc-50"
-                    >
-                      浏览图标库
-                    </a>
-                  </div>
-                  <p className="text-[10px] leading-relaxed text-zinc-500">
-                    图标来自 @lobehub/icons，选择后会保存国内 CDN 的 SVG 地址；也可在下方上传
-                    PNG / JPEG / WebP / SVG / ICO 覆盖。
-                  </p>
-                  <input
-                    type="file"
-                    aria-label="上传品牌 Logo 文件"
-                    accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon"
-                    className="block w-full text-[12px] text-zinc-600 file:mr-2 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-[11px] file:font-semibold file:text-white"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      e.target.value = '';
-                      if (!file) return;
-                      void readLogoFile(file)
-                        .then((dataUrl) => {
-                          setForm((current) => ({ ...current, logoUrl: dataUrl }));
-                          showToast('Logo 已上传');
-                        })
-                        .catch((err: Error) => showToast(err.message || '上传失败'));
-                    }}
-                  />
-                  {form.logoUrl ? (
-                    <button
-                      type="button"
-                      className="text-[11px] font-medium text-zinc-500 hover:text-zinc-800"
-                      onClick={() =>
-                        setForm((current) => ({ ...current, logoUrl: undefined }))
-                      }
-                    >
-                      清除自定义 Logo，改用官网 favicon
-                    </button>
-                  ) : null}
-                </div>
-              )}
+              <div className="min-w-0 flex-1 space-y-2">
+                {isExternalShelf ? (
+                  <>
+                    <div className="flex items-start gap-2">
+                      <FormSelect
+                        aria-label="LobeHub 品牌 Logo"
+                        value={selectedLobeIconId}
+                        onChange={(e) => {
+                          const icon = LOBE_ICON_OPTIONS.find((item) => item.id === e.target.value);
+                          if (!icon) return;
+                          setForm((current) => ({ ...current, logoUrl: lobeIconLogoUrl(icon) }));
+                        }}
+                        className="mt-0 min-w-0 flex-1"
+                      >
+                        <option value="" disabled>
+                          从 300+ AI 品牌中选择…
+                        </option>
+                        {LOBE_ICON_GROUP_ORDER.map((group) => (
+                          <optgroup key={group} label={LOBE_ICON_GROUP_LABEL[group]}>
+                            {LOBE_ICON_OPTIONS.filter((icon) => icon.group === group).map((icon) => (
+                              <option key={icon.id} value={icon.id}>
+                                {icon.fullTitle}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </FormSelect>
+                      <a
+                        href="https://lobehub.com/icons"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex h-10 shrink-0 items-center rounded-xl border border-zinc-200 bg-white px-3 text-[11px] font-semibold text-zinc-700 transition hover:bg-zinc-50"
+                      >
+                        浏览图标库
+                      </a>
+                    </div>
+                    <p className="text-[10px] leading-relaxed text-zinc-500">
+                      图标来自 @lobehub/icons，选择后会保存国内 CDN 的 SVG 地址；也可在下方上传
+                      PNG / JPEG / WebP / SVG / ICO 覆盖。
+                    </p>
+                  </>
+                ) : null}
+                <input
+                  type="file"
+                  aria-label="上传品牌 Logo 文件"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon"
+                  className="block w-full text-[12px] text-zinc-600 file:mr-2 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-[11px] file:font-semibold file:text-white"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (!file) return;
+                    void readLogoFile(file)
+                      .then((dataUrl) => {
+                        setForm((current) => ({ ...current, logoUrl: dataUrl }));
+                        showToast('Logo 已上传');
+                      })
+                      .catch((err: Error) => showToast(err.message || '上传失败'));
+                  }}
+                />
+                {form.logoUrl ? (
+                  <button
+                    type="button"
+                    className="text-[11px] font-medium text-zinc-500 hover:text-zinc-800"
+                    onClick={() =>
+                      setForm((current) => ({ ...current, logoUrl: undefined }))
+                    }
+                  >
+                    {isCompanyShelf
+                      ? '清除自定义 Logo，改用华为 Logo'
+                      : '清除自定义 Logo，改用官网 favicon'}
+                  </button>
+                ) : null}
+              </div>
             </div>
           </FormField>
         )}
@@ -790,6 +838,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
           key={String(target)}
           catalog={toolTypeCatalog}
           value={resolveExternalToolTypeSelection(form)}
+          required={isExternalShelf}
           onChange={(next) =>
             setForm((current) => ({
               ...current,
@@ -805,16 +854,8 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
         >
           <FormInput
             aria-label="其他检索标签"
-            value={form.tags.join(', ')}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                tags: e.target.value
-                  .split(',')
-                  .map((t) => t.trim())
-                  .filter(Boolean),
-              })
-            }
+            value={form.tags.join(',')}
+            onChange={(e) => setForm({ ...form, tags: e.target.value.split(/[,，]/) })}
           />
         </FormField>
         <OwnershipFormFields

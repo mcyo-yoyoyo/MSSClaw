@@ -20,6 +20,7 @@ export type PlatformDocKind =
   | 'external-taxonomy'
   | 'external-tool-layout'
   | 'internal-office-scenes'
+  | 'home-featured'
   | 'org-taxonomy'
   | 'market-featured'
   | 'market-favorites'
