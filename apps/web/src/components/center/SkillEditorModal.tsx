@@ -58,6 +58,11 @@ import {
   packageUploadSizeError,
 } from '@/domain/packageUpload';
 import { packageZipErrorMessage } from '@/domain/safeZip';
+import {
+  isRarPackageName,
+  normalizePackageUploadFile,
+  RAR_PACKAGE_ACCEPT,
+} from '@/domain/rarUpload';
 import { useTemporaryWorkspaceBlobs } from '@/hooks/useTemporaryWorkspaceBlobs';
 import { evaluateAndPersistSkill } from '@/domain/skillEvaluation';
 
@@ -341,18 +346,26 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     const uploadGeneration = temporaryPackageBlobs.currentGeneration();
     setParsing(true);
     try {
-      const items = await parseSkillUpload(file);
+      // RAR 先转成 ZIP，解析与原包留档都用转换后的文件
+      const upload = await normalizePackageUploadFile(file);
+      const items = await parseSkillUpload(upload);
       if (!temporaryPackageBlobs.isCurrent(uploadGeneration)) return;
       if (!items[0]) {
-        showToast('未能识别标准 Skill 包（支持 .skill.zip / SKILL.md / JSON）');
+        showToast('未能识别标准 Skill 包（支持 .skill.zip / .rar / SKILL.md / JSON）');
         return;
       }
       applyParsed(items[0], file.name);
       // 提报时上传的 zip 同时留档为原包，用户不必到高级项里再传一次
-      if (file.name.toLowerCase().endsWith('.zip')) {
-        const ok = await storePackageBlob(file, uploadGeneration);
+      if (upload.name.toLowerCase().endsWith('.zip')) {
+        const ok = await storePackageBlob(upload, uploadGeneration);
         if (!temporaryPackageBlobs.isCurrent(uploadGeneration)) return;
-        showToast(ok ? '已解析并留档 Skill 原包' : '已解析，但原包留档失败（详情页将无文件树）');
+        showToast(
+          ok
+            ? upload === file
+              ? '已解析并留档 Skill 原包'
+              : '已解析并留档 Skill 原包（RAR 已转为 ZIP）'
+            : '已解析，但原包留档失败（详情页将无文件树）',
+        );
       }
     } catch (error) {
       if (temporaryPackageBlobs.isCurrent(uploadGeneration)) {
@@ -711,13 +724,14 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
               <p className="text-[15px] font-semibold text-zinc-900">一键上传 Skill 包</p>
               <p className="mx-auto mt-1 max-w-md text-[12px] leading-relaxed text-zinc-500">
                 支持业界常见 <code className="text-zinc-700">.skill.zip</code> /
+                <code className="text-zinc-700"> .rar</code> /
                 <code className="text-zinc-700"> SKILL.md</code> / 清单 JSON（≤{PACKAGE_UPLOAD_MAX_LABEL}）。
                 自动解析名称、描述与正文，保存后生成 TRACE 五维评测报告。
               </p>
               <input
                 ref={fileRef}
                 type="file"
-                accept=".zip,.skill.zip,.md,.skill.md,.json,application/zip"
+                accept={`.zip,.skill.zip,.md,.skill.md,.json,${RAR_PACKAGE_ACCEPT},application/zip`}
                 className="hidden"
                 onChange={(e) => void handleUpload(e.target.files?.[0] ?? null)}
               />
@@ -935,19 +949,19 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
               </FormField>
               <FormField
                 label="Skill 压缩包"
-                hint={`上传 .zip（≤${PACKAGE_UPLOAD_MAX_LABEL}）；详情页「文件」将解压展示完整目录树，并可下载原包`}
+                hint={`上传 .zip 或 .rar（≤${PACKAGE_UPLOAD_MAX_LABEL}，RAR 会自动转为 ZIP）；详情页「文件」将解压展示完整目录树，并可下载原包`}
               >
                 <div className="space-y-2">
                   <input
                     type="file"
-                    accept=".zip,application/zip"
+                    accept={`.zip,${RAR_PACKAGE_ACCEPT},application/zip`}
                     disabled={uploadingPackage}
                     onChange={async (e) => {
                       const file = e.target.files?.[0];
                       e.target.value = '';
                       if (!file) return;
-                      if (!file.name.toLowerCase().endsWith('.zip')) {
-                        showToast('请上传 .zip 格式的 Skill 包');
+                      if (!file.name.toLowerCase().endsWith('.zip') && !isRarPackageName(file.name)) {
+                        showToast('请上传 .zip 或 .rar 格式的 Skill 包');
                         return;
                       }
                       const sizeError = packageUploadSizeError(file);
@@ -956,11 +970,24 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                         return;
                       }
                       const uploadGeneration = temporaryPackageBlobs.currentGeneration();
-                      const ok = await storePackageBlob(file, uploadGeneration);
+                      // RAR 转换期间同样显示「上传中」并禁用选择框
+                      setUploadingPackage(true);
+                      let upload: File;
+                      try {
+                        upload = await normalizePackageUploadFile(file);
+                      } catch (error) {
+                        if (temporaryPackageBlobs.isCurrent(uploadGeneration)) {
+                          setUploadingPackage(false);
+                          showToast(packageZipErrorMessage(error, 'RAR 转换失败，请改用 ZIP 上传'));
+                        }
+                        return;
+                      }
+                      if (!temporaryPackageBlobs.isCurrent(uploadGeneration)) return;
+                      const ok = await storePackageBlob(upload, uploadGeneration);
                       if (!temporaryPackageBlobs.isCurrent(uploadGeneration)) return;
                       showToast(
                         ok
-                          ? `已上传 Skill 包：${file.name}`
+                          ? `已上传 Skill 包：${upload.name}`
                           : 'Skill 包上传失败，请检查后端连接后重试',
                       );
                     }}

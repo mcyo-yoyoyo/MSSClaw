@@ -17,6 +17,8 @@ import {
   PACKAGE_UPLOAD_MAX_LABEL,
   packageUploadSizeError,
 } from '@/domain/packageUpload';
+import { normalizePackageUploadFile, RAR_PACKAGE_ACCEPT } from '@/domain/rarUpload';
+import { packageZipErrorMessage } from '@/domain/safeZip';
 
 export type SkillOpsRequestKind = 'update' | 'unpublish';
 
@@ -83,9 +85,18 @@ export function SkillOpsRequestModal({
       }
       setSubmitting(true);
       const workspaceId = currentWorkspaceId();
+      // RAR 先转成 ZIP 再归档
+      let upload: File;
+      try {
+        upload = await normalizePackageUploadFile(packageFile);
+      } catch (error) {
+        showToast(packageZipErrorMessage(error, 'RAR 转换失败，请改用 ZIP 上传'));
+        setSubmitting(false);
+        return;
+      }
       let uploaded: Awaited<ReturnType<typeof uploadWorkspacePackage>>;
       try {
-        uploaded = await uploadWorkspacePackage(workspaceId, packageFile);
+        uploaded = await uploadWorkspacePackage(workspaceId, upload);
       } catch {
         showToast('完整包上传失败，请检查后端连接后重试');
         setSubmitting(false);
@@ -203,11 +214,11 @@ export function SkillOpsRequestModal({
             </FormField>
             <FormField
               label="完整 Skill 包"
-              hint={`必填；随审批单归档，支持 zip / tar.gz（≤${PACKAGE_UPLOAD_MAX_LABEL}）`}
+              hint={`必填；随审批单归档，支持 zip / rar / tar.gz（≤${PACKAGE_UPLOAD_MAX_LABEL}，rar 会自动转为 zip）`}
             >
               <input
                 type="file"
-                accept=".zip,.tar,.gz,.tgz,application/zip,application/gzip"
+                accept={`.zip,.tar,.gz,.tgz,${RAR_PACKAGE_ACCEPT},application/zip,application/gzip`}
                 onChange={(event) => {
                   const file = event.target.files?.[0] ?? null;
                   if (!file) {

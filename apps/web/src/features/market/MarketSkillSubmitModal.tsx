@@ -34,6 +34,7 @@ import {
   packageUploadSizeError,
 } from '@/domain/packageUpload';
 import { packageZipErrorMessage } from '@/domain/safeZip';
+import { normalizePackageUploadFile, RAR_PACKAGE_ACCEPT } from '@/domain/rarUpload';
 import {
   deleteWorkspaceBlob,
   isPackageUploadContextCurrent,
@@ -152,13 +153,15 @@ export function MarketSkillSubmitModal({
     }
     setParsing(true);
     try {
-      const items = await parseSkillUpload(file);
+      // RAR 先转成 ZIP，解析与原包留档都用转换后的文件
+      const upload = await normalizePackageUploadFile(file);
+      const items = await parseSkillUpload(upload);
       if (!items[0]) {
-        showToast('未能识别标准 Skill 包（支持 .skill.zip / SKILL.md / JSON）');
+        showToast('未能识别标准 Skill 包（支持 .skill.zip / .rar / SKILL.md / JSON）');
         return;
       }
       applyParsed(items[0], file.name);
-      setPackageFile(file.name.toLowerCase().endsWith('.zip') ? file : null);
+      setPackageFile(upload.name.toLowerCase().endsWith('.zip') ? upload : null);
     } catch (error) {
       showToast(packageZipErrorMessage(error, 'Skill 包解析失败，请检查格式'));
     } finally {
@@ -334,7 +337,7 @@ export function MarketSkillSubmitModal({
             <div className="min-w-0">
               <p className="text-[12px] font-semibold text-zinc-800">上传 Skill 包（推荐）</p>
               <p className="mt-0.5 text-[11px] text-zinc-500">
-                支持 .skill.zip / SKILL.md / JSON（≤{PACKAGE_UPLOAD_MAX_LABEL}），与能力开发「配置Skill」一致
+                支持 .skill.zip / .rar / SKILL.md / JSON（≤{PACKAGE_UPLOAD_MAX_LABEL}），与能力开发「配置Skill」一致
               </p>
               {packName ? (
                 <p className="mt-1 truncate text-[11px] font-medium text-emerald-700">
@@ -347,7 +350,7 @@ export function MarketSkillSubmitModal({
               <input
                 ref={fileRef}
                 type="file"
-                accept=".zip,.skill,.md,.json,application/zip,text/markdown,application/json"
+                accept={`.zip,.skill,.md,.json,${RAR_PACKAGE_ACCEPT},application/zip,text/markdown,application/json`}
                 className="hidden"
                 onChange={(e) => void handleUpload(e.target.files?.[0] ?? null)}
               />

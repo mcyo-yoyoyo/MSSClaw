@@ -37,6 +37,7 @@
     "test:tool-type-selection": "node --experimental-strip-types --test tests/toolTypeSelection.test.ts",
     "test:internal-office-scene-order": "node --experimental-strip-types --test tests/internalOfficeSceneOrder.test.ts",
     "test:internal-office-scene-grid": "node --experimental-strip-types --test tests/internalOfficeSceneGridComposition.test.ts",
+    "test:rar-package": "node --experimental-strip-types --test tests/rarPackage.test.ts",
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
@@ -47,6 +48,7 @@
     "chart.js": "^4.4.8",
     "clsx": "^2.1.1",
     "fflate": "^0.8.3",
+    "node-unrar-js": "2.0.2",
     "pdfjs-dist": "6.2.108",
     "react": "^19.0.0",
     "react-chartjs-2": "^5.3.0",

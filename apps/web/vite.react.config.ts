@@ -155,6 +155,8 @@ export default defineConfig({
             return undefined;
           }
           if (id.includes('pdfjs-dist')) return 'vendor-pdf-preview';
+          // RAR 解压只在上传 .rar 时按需加载，不能并进首屏的 vendor
+          if (id.includes('node-unrar-js')) return 'vendor-unrar';
           if (id.includes('@office-kit/pptx')) return 'vendor-pptx-preview';
           if (id.includes('chart.js') || id.includes('react-chartjs')) return 'vendor-charts';
           if (id.includes('react-dom') || id.includes('/react/')) return 'vendor-react';

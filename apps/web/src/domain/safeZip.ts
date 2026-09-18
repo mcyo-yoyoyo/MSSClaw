@@ -25,6 +25,11 @@ export const PACKAGE_ZIP_LIMITS = {
 export type PackageZipErrorCode =
   | 'aborted'
   | 'invalid_zip'
+  | 'invalid_rar'
+  | 'encrypted_rar'
+  | 'multi_volume_rar'
+  | 'rar_unavailable'
+  | 'empty_archive'
   | 'compressed_too_large'
   | 'too_many_entries'
   | 'too_many_files'
@@ -77,16 +82,17 @@ function normalizeEntry(info: UnzipFileInfo): SafeZipEntry {
   };
 }
 
-function assertSafePath(entry: SafeZipEntry): void {
-  const segments = entry.path.split('/').filter(Boolean);
+/** 包内路径（已统一为 /）不得为空、过长、绝对路径、带盘符或含 `..`；ZIP 与 RAR 共用。 */
+export function assertSafeArchivePath(path: string, format: 'ZIP' | 'RAR' = 'ZIP'): void {
+  const segments = path.split('/').filter(Boolean);
   if (
-    !entry.path ||
-    entry.path.length > PACKAGE_ZIP_LIMITS.maxPathLength ||
-    entry.path.startsWith('/') ||
-    /^[a-zA-Z]:\//.test(entry.path) ||
+    !path ||
+    path.length > PACKAGE_ZIP_LIMITS.maxPathLength ||
+    path.startsWith('/') ||
+    /^[a-zA-Z]:\//.test(path) ||
     segments.some((segment) => segment === '..' || segment.includes('\0'))
   ) {
-    throw new PackageZipError('unsafe_path', `ZIP 包含不安全路径：${entry.path || '（空路径）'}`);
+    throw new PackageZipError('unsafe_path', `${format} 包含不安全路径：${path || '（空路径）'}`);
   }
 }
 
@@ -129,7 +135,7 @@ export function inspectPackageZip(bytes: Uint8Array): Promise<SafeZipInspection>
             }
 
             const entry = normalizeEntry(info);
-            assertSafePath(entry);
+            assertSafeArchivePath(entry.path);
             const key = entry.path.replace(/\/$/, '');
             if (seen.has(key)) {
               throw new PackageZipError('duplicate_path', `ZIP 包含重复路径：${entry.path}`);
