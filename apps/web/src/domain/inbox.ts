@@ -1,4 +1,4 @@
-export type InboxMessageKind = 'system' | 'user' | 'deliverable' | 'ai_news';
+export type InboxMessageKind = 'system' | 'user' | 'deliverable' | 'ai_news' | 'announce';
 
 export interface InboxMessage {
   id: string;
@@ -19,6 +19,8 @@ export interface InboxMessage {
     query?: string;
     /** AI 新闻发布日 YYYY-MM-DD */
     newsDate?: string;
+    /** 站内公告标签，与首页公告条同色 */
+    announcementTag?: string;
     cadence?: 'daily' | 'weekly';
   };
 }
@@ -43,6 +45,14 @@ export function isApprovalSuccessNotification(
   );
 }
 
+/**
+ * 「我的消息」目前只展示站内公告；系统提醒、交付推送等先不露出。
+ * 页面列表和顶栏未读角标共用这条规则，放宽时改这里一处即可。
+ */
+export function isVisibleInboxMessage(message: Pick<InboxMessage, 'kind'>): boolean {
+  return message.kind === 'announce';
+}
+
 export function inboxKindLabel(kind: InboxMessageKind): string {
   switch (kind) {
     case 'deliverable':
@@ -51,6 +61,8 @@ export function inboxKindLabel(kind: InboxMessageKind): string {
       return '成员消息';
     case 'ai_news':
       return 'AI新闻';
+    case 'announce':
+      return '站内公告';
     default:
       return '系统通知';
   }

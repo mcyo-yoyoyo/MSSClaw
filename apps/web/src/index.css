@@ -3515,25 +3515,77 @@
 
 
 
-/* AI�㳡 �� ���ܾ�ѡ�㲥�� */
-@keyframes plaza-marquee {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
+/* Home station announcement ticker: one title per line, pages vertically. */
+.station-ticker {
+  position: relative;
+  height: 1.25rem;
+  overflow: hidden;
 }
 
-.plaza-marquee-track {
-  animation-name: plaza-marquee;
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-  will-change: transform;
+.station-ticker-line {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
 }
 
-.plaza-marquee-paused {
-  animation-play-state: paused;
+.station-ticker-enter {
+  animation: station-ticker-up-in 380ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
+.station-ticker-leave {
+  animation: station-ticker-up-out 380ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.station-ticker-enter-back {
+  animation: station-ticker-down-in 380ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.station-ticker-leave-back {
+  animation: station-ticker-down-out 380ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes station-ticker-up-in {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes station-ticker-up-out {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(-100%); opacity: 0; }
+}
+
+@keyframes station-ticker-down-in {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes station-ticker-down-out {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(100%); opacity: 0; }
+}
+
+@keyframes station-ticker-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes station-ticker-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* Reduced motion: swap lines without moving them. */
 @media (prefers-reduced-motion: reduce) {
-  .plaza-marquee-track {
-    animation: none;
+  .station-ticker-enter,
+  .station-ticker-enter-back {
+    animation: station-ticker-fade-in 160ms linear both;
+  }
+
+  .station-ticker-leave,
+  .station-ticker-leave-back {
+    animation: station-ticker-fade-out 160ms linear both;
   }
 }

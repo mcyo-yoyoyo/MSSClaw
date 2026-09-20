@@ -8,6 +8,7 @@ import { useWorkflowStore } from '@/stores/workflowStore';
 import { useMemoryStore } from '@/stores/memoryStore';
 import { usePromptStore } from '@/stores/promptStore';
 import { usePortalContentStore } from '@/stores/portalContentStore';
+import { useStationAnnouncementStore } from '@/stores/stationAnnouncementStore';
 
 /** Isolated toast subscriptions — prevents App shell re-renders on toast updates */
 export function GlobalToastHost() {
@@ -27,6 +28,8 @@ export function GlobalToastHost() {
   const dismissPromptToast = usePromptStore((s) => s.dismissToast);
   const portalToast = usePortalContentStore((s) => s.toast);
   const dismissPortalToast = usePortalContentStore((s) => s.dismissToast);
+  const announceToast = useStationAnnouncementStore((s) => s.toast);
+  const dismissAnnounceToast = useStationAnnouncementStore((s) => s.dismissToast);
 
   const sources = useMemo(
     () => [
@@ -38,6 +41,7 @@ export function GlobalToastHost() {
       { key: 'memory', message: memoryToast, dismiss: dismissMemoryToast },
       { key: 'prompt', message: promptToast, dismiss: dismissPromptToast },
       { key: 'portal', message: portalToast, dismiss: dismissPortalToast },
+      { key: 'station-announce', message: announceToast, dismiss: dismissAnnounceToast },
     ],
     [
       pushToast,
@@ -48,6 +52,7 @@ export function GlobalToastHost() {
       memoryToast,
       promptToast,
       portalToast,
+      announceToast,
       dismissToast,
       dismissSwitchToast,
       dismissSettingsToast,
@@ -56,6 +61,7 @@ export function GlobalToastHost() {
       dismissMemoryToast,
       dismissPromptToast,
       dismissPortalToast,
+      dismissAnnounceToast,
     ],
   );
 

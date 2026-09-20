@@ -19,6 +19,7 @@ import {
 } from '@/domain/homeFeatured';
 import { openMarketShelf, openMarketToolDetail } from '@/domain/openHomeJourney';
 import { HomeMarketChannels } from '@/components/home/HomeMarketChannels';
+import { StationAnnounceBanner } from '@/components/home/StationAnnounceBanner';
 import { StageIntentDock } from '@/components/market/StageIntentDock';
 import {
   capabilityKey,
@@ -266,6 +267,8 @@ export function HomePage({
         ) : null}
 
         <div className="flex w-full flex-col gap-3 pb-6 md:gap-3.5">
+          <StationAnnounceBanner className="border-b border-zinc-100/90 pb-2" />
+
           <PageStageHero
             tone="home"
             layout="stack"

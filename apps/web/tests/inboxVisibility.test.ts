@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isApprovalSuccessNotification } from '../src/domain/inbox.ts';
+import {
+  isApprovalSuccessNotification,
+  isVisibleInboxMessage,
+} from '../src/domain/inbox.ts';
 
 const approvalMessage = (title: string, fromName = 'MSS 质量与运营') => ({
   kind: 'system' as const,
@@ -18,4 +21,11 @@ test('keeps rejection and unrelated system notifications visible', () => {
   assert.equal(isApprovalSuccessNotification(approvalMessage('上架审批已驳回', '审批中心')), false);
   assert.equal(isApprovalSuccessNotification(approvalMessage('功能上线：三货架与 MSS 工具集市')), false);
   assert.equal(isApprovalSuccessNotification(approvalMessage('上架审批已通过', '其他系统')), false);
+});
+
+test('「我的消息」当前只展示站内公告，其余通知不露出', () => {
+  assert.equal(isVisibleInboxMessage({ kind: 'announce' }), true);
+  for (const kind of ['system', 'deliverable', 'user', 'ai_news'] as const) {
+    assert.equal(isVisibleInboxMessage({ kind }), false);
+  }
 });

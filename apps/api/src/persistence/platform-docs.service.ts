@@ -10,6 +10,10 @@ import {
   SEED_INTERNAL_OFFICE_SCENES,
 } from '../data/market-doc-seeds';
 import { PortalAnalyticsService } from './portal-analytics.service';
+import {
+  canonicalizeStationAnnouncements,
+  syncStationAnnouncementBroadcast,
+} from './station-announcement-broadcast';
 
 /** 允许持久化的平台文档 kind（对应原前端 localStorage 配置） */
 export const PLATFORM_DOC_KINDS = [
@@ -1010,6 +1014,9 @@ export class PlatformDocsService {
         channels: canonicalizeHomeFeaturedInput(input),
       }));
     }
+    if (kind === 'station-announcements') {
+      return this.putStationAnnouncementsDoc(workspaceId, payload);
+    }
     const id = docId(workspaceId, kind);
     await this.prisma.centerRecord.upsert({
       where: { id },
@@ -1024,6 +1031,41 @@ export class PlatformDocsService {
       },
     });
     return { kind, payload };
+  }
+
+  /**
+   * 公告发布：先规范化落库（带 revision 乐观锁，避免两个运营互相覆盖），
+   * 再把变更同步成全员广播消息，首页的「未读」和我的消息的详情都挂在它上面。
+   */
+  private async putStationAnnouncementsDoc(workspaceId: string, payload: unknown) {
+    const existing = await this.prisma.centerRecord.findUnique({
+      where: { id: docId(workspaceId, 'station-announcements') },
+    });
+    const previous = canonicalizeStationAnnouncements(existing?.payload).items;
+    const saved = await this.putRevisionedDoc(
+      workspaceId,
+      'station-announcements',
+      payload,
+      (input) => canonicalizeStationAnnouncements(input),
+    );
+    const next = canonicalizeStationAnnouncements(saved.payload).items;
+    try {
+      await syncStationAnnouncementBroadcast(
+        this.prisma as unknown as Parameters<typeof syncStationAnnouncementBroadcast>[0],
+        workspaceId,
+        previous,
+        next,
+      );
+    } catch (error) {
+      // 文档已经写成功；广播失败不能把一次成功的发布判成失败。同步是幂等的，
+      // 下一次保存会重新对齐，首页在缺记录时也按未读展示。
+      this.logger.warn(
+        `station_announcement_broadcast_failed:${workspaceId}:${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      );
+    }
+    return saved;
   }
 
   async listDocs(workspaceId: string) {
@@ -1064,7 +1106,7 @@ export class PlatformDocsService {
    */
   private async putRevisionedDoc(
     workspaceId: string,
-    kind: 'auth-credentials' | 'members' | 'home-featured',
+    kind: 'auth-credentials' | 'members' | 'home-featured' | 'station-announcements',
     payload: unknown,
     canonicalize: (input: unknown) => Record<string, unknown>,
   ) {

@@ -1,6 +1,7 @@
 ﻿import { create } from 'zustand';
 import {
   isApprovalSuccessNotification,
+  isVisibleInboxMessage,
   type InboxMessage,
   type InboxMessageKind,
 } from '@/domain/inbox';
@@ -55,9 +56,10 @@ export const useInboxStore = create<InboxState>((set, get) => ({
     void (async () => {
       const { hydrateInboxMessages } = await import('@/domain/persistence/inboxStorage');
       const uid = getCurrentUserId();
-      const messages = await hydrateInboxMessages(wsId, uid);
+      const { messages, fromServer } = await hydrateInboxMessages(wsId, uid);
       set({ messages, ready: true });
-      if (uid) get().seedDemoIfEmpty(uid);
+      // 接口拉挂了也会得到空列表，这时再灌演示消息就会越攒越多
+      if (uid && (fromServer || !canUseInboxApi())) get().seedDemoIfEmpty(uid);
     })();
   },
 
@@ -119,9 +121,11 @@ export const useInboxStore = create<InboxState>((set, get) => ({
 
   unreadCount: (userId) => {
     const uid = userId ?? getCurrentUserId();
+    // 只数「我的消息」里真正看得到的那些，否则角标点不掉
     return get().messages.filter(
       (m) =>
         !isApprovalSuccessNotification(m) &&
+        isVisibleInboxMessage(m) &&
         !m.read &&
         (m.toUserId === uid || m.toUserId === '*'),
     ).length;

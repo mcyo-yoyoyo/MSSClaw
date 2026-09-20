@@ -2,14 +2,17 @@
  * 站内公告类型与演示种子（与 store 解耦，避免循环依赖）
  */
 
-/** 首页站内动态仅露出 AI 相关三类（另含跑马灯中的 AI快讯） */
-export type StationAnnouncementBadge = 'AI上线' | 'AI培训';
+/** 公告标签由运营自填（历史上是固定枚举）；空串表示不展示标签 */
+export type StationAnnouncementTag = string;
 
 export type StationAnnouncement = {
   id: string;
   title: string;
   body: string;
-  badge: StationAnnouncementBadge;
+  /** 标签文本，落库字段名沿用 badge */
+  badge: StationAnnouncementTag;
+  /** 标签颜色 #rrggbb；留空表示按标签文字自动取色 */
+  badgeColor?: string;
   /** ISO 发布时间 */
   publishedAt: string;
 };

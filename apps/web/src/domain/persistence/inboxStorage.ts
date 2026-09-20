@@ -14,18 +14,22 @@ export function saveInboxMessages(workspaceId: string, messages: InboxMessage[])
   memoryInbox.set(workspaceId, structuredClone(messages));
 }
 
+/**
+ * `fromServer` 区分「服务端确认为空」和「拉取失败退回内存」——后者不能当成
+ * 新用户，否则一次接口抖动就会再灌一遍演示消息。
+ */
 export async function hydrateInboxMessages(
   workspaceId: string,
   userId: string,
-): Promise<InboxMessage[]> {
+): Promise<{ messages: InboxMessage[]; fromServer: boolean }> {
   if (!canUseInboxApi() || !userId) {
-    return loadInboxMessages(workspaceId);
+    return { messages: loadInboxMessages(workspaceId), fromServer: false };
   }
   try {
     const messages = await fetchInboxMessages(workspaceId, userId);
     memoryInbox.set(workspaceId, messages);
-    return structuredClone(messages);
+    return { messages: structuredClone(messages), fromServer: true };
   } catch {
-    return loadInboxMessages(workspaceId);
+    return { messages: loadInboxMessages(workspaceId), fromServer: false };
   }
 }

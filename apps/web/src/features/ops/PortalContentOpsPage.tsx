@@ -256,7 +256,7 @@ export function PortalContentOpsPage() {
                 : opsSurface === 'extaxonomy'
                   ? '外精选分类 · 工具类型与工作场景字典'
                   : opsSurface === 'announce'
-                      ? '站点触达 · 首页站内公告跑马灯'
+                      ? '站点触达 · 首页站内公告'
                       : opsSurface === 'ainews'
                         ? '站点触达 · 每日 / 每周 AI 新闻'
                         : opsSurface === 'aibrief'
@@ -386,10 +386,6 @@ export function PortalContentOpsPage() {
             </button>
           ))}
         </div>
-        <p className="mb-4 text-[10px] leading-relaxed text-zinc-400">
-          分组：首页（三个精选框的内容与排序）→ 场景（内容/分类）→ 货架（上架 / 内部办公场景查看 / 外部工具排序精选 / 外精选分类 / How to）→ 站点（公告/AI新闻/AI快讯邮件/建设口径）。访问与互动指标请到左侧「数据看板」。工具主数据仍在「配置工具」。
-        </p>
-
         {howtoToast ? (
           <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-800">
             {howtoToast}

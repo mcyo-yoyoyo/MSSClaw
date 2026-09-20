@@ -12,6 +12,7 @@
     "build:react": "tsc -b && vite build --config vite.react.config.ts",
     "preview": "vite preview",
     "preview:react": "vite preview --config vite.react.config.ts",
+    "test:station-announcements": "node --experimental-strip-types --test tests/stationAnnouncements.test.ts",
     "test:external-order": "node --experimental-strip-types --test tests/externalFeaturedOrder.test.ts",
     "test:external-tool-layout": "node --experimental-strip-types --test tests/externalToolLayout.test.ts",
     "test:external-tool-layout-store": "node --experimental-strip-types --test tests/externalToolLayoutStore.test.ts",
