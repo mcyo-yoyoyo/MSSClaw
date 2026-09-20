@@ -25,6 +25,8 @@
     "preview:react": "npm run preview:react --workspace @mss-claw/web",
     "smoke": "npm run smoke --workspace @mss-claw/web",
     "test:oauth": "npm run test:oauth-login --workspace @mss-claw/api && npm run test:auth-oauth-mode --workspace @mss-claw/web",
-    "probe:oauth": "node apps/api/scripts/probe-uniportal-userinfo.mjs"
+    "probe:oauth": "node apps/api/scripts/probe-uniportal-userinfo.mjs",
+    "preflight:oauth": "node apps/api/scripts/preflight-uniportal-oauth.mjs",
+    "verify:oauth": "npm run build:api --silent && node apps/api/scripts/e2e-oauth-login.mjs"
   }
 }

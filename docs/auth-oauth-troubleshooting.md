@@ -6,6 +6,26 @@
 
 ---
 
+## 0. 三级验证阶梯
+
+登录流程能被脚本验证到什么程度，取决于是否需要"真人在 IDaaS 输密码"这一步。按需要的人工量从少到多：
+
+| 层级 | 命令 | 碰真实 IDaaS | 需要真人 | 验到什么 |
+|------|------|:---:|:---:|------|
+| **① 本平台全链路** | `npm run verify:oauth` | 否 | 否 | 启动真实 Nest + 真实 SQLite，用假 IDaaS 跑完整登录。验路由挂载、守卫、会话落库、令牌透传、密码通道已关、state 防重放、授权码一次性、登出失效 |
+| **② 上游配置预检** | `npm run preflight:oauth` | **是** | 否 | 网络连通、**client_id 是否注册**、**redirect_uri 是否匹配**、端点路径。每项都带"故意填错"的对照组，防止把"上游没校验"误判成"配置正确" |
+| **③ 字段实测** | `npm run probe:oauth -- --env=beta` | **是** | **是**（浏览器登录一次） | userinfo 实际返回哪些字段，以及 **client_secret 是否正确** |
+
+**建议顺序**：改完代码跑 ①；配完参数跑 ②；②全绿后跑一次 ③ 把字段定下来；最后在部署环境点一次真实登录。
+
+### 哪些事脚本验不了
+
+- **client_secret 的正确性**。实测 `uniportal-beta` 的 `accesstoken` 端点**先校验 `code`**：真假 secret 都回 `E_10009`，所以用假 code 反推不出 secret。它只能在一次真实换码里被验到——③ 里 secret 若不对会明确报 `E_10002`。
+- **用户在 IDaaS 登录页输密码那一步**。这是设计使然，没有非交互式授权方式可绕。
+- **部署机的网络**。①② 在哪台机器跑就只代表那台机器；部署机要用 `GET /auth/oauth/diagnostics` 的 `upstream` 项单独复验。
+
+---
+
 ## 1. 部署步骤
 
 ```bash
@@ -198,6 +218,8 @@ AUTH_MODE=password
 
 ## 6. 上线前自查清单
 
+- [ ] `npm run verify:oauth` 全绿（本平台侧无问题）
+- [ ] `npm run preflight:oauth` 全绿（client_id / redirect_uri 已注册）
 - [ ] `diagnostics` 的 `ready=true`，`upstream.ok=true`
 - [ ] `authorizeUrlSample` 里的 `redirect_uri` 与 IDaaS 注册值逐字符一致
 - [ ] 真人登录成功，日志里 `identity` 行的字段映射符合预期
