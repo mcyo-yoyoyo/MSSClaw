@@ -120,6 +120,7 @@ test('工具库存按来源归类并兼容旧货架，场景绑定工具按 ID �
   assert.deepEqual(result, {
     totalTools: 4,
     publishedTools: 3,
+    shelfTools: 3,
     externalTools: 2,
     companyTools: 2,
     officeScenes: 3,

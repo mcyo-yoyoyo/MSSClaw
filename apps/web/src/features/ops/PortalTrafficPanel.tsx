@@ -1565,7 +1565,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
         <StatBand columns="grid-cols-1 sm:grid-cols-3">
           <BandItem
             label="工具总数"
-            value={formatOptionalCount(overviewHasAssets ? overviewToolTotal : inventory.totalTools)}
+            value={formatOptionalCount(overviewHasAssets ? overviewToolTotal : inventory.shelfTools)}
             note="已上架外部工具 + 公司工具"
           />
           <BandItem label="Skill 数" value={formatOptionalCount(overviewSummary.skill)} note="已上架 Skill" />

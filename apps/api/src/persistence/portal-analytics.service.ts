@@ -1460,7 +1460,11 @@ export class PortalAnalyticsService {
         externalDomestic: 0,
       },
     );
-    assetSummary.tools = catalog.filter((row) => row.assetType === 'tool' && !row.officeScene && row.published).length;
+    // 工具数 = 真正出现在用户货架上的工具（外部 + 公司），和下面两张拆分卡片自洽；
+    // 已上架但没有配置货架位的工具用户看不到，不计入。
+    assetSummary.tools = toolInventory.filter(
+      (row) => row.published && (row.external || row.company),
+    ).length;
     assetSummary.skills = catalog.filter((row) => row.assetType === 'skill' && row.published).length;
     assetSummary.agents = catalog.filter((row) => row.assetType === 'agent' && row.published).length;
     assetSummary.tool = assetSummary.tools;
@@ -1763,6 +1767,10 @@ export class PortalAnalyticsService {
     // rows are compatibility projections and may contain stale delete/publish
     // state. Keep them out of the inventory so the singleton is authoritative.
     const hasGlobalTools = rows.some((row) => row.kind === GLOBAL_TOOLS_RECORD_KIND);
+    // 用户页面的货架只消费 marketplace 快照（工具再由全局 singleton 覆盖），所以
+    // 快照存在时 agent/skill/tool 的 center 记录也只是兼容投影：删除回收漏掉的残留、
+    // 只在中心 API 上线过而从未上架到货架的资产都在里面。计入会让看板高于用户看到的数。
+    const hasMarketplace = rows.some((row) => row.kind === 'marketplace');
     const byId = new Map<string, AssetCatalogRow>();
     const boundToolIds = new Set<string>();
     const asRecord = (value: unknown): Record<string, unknown> | null =>
@@ -1803,22 +1811,39 @@ export class PortalAnalyticsService {
         typeof item.published === 'boolean'
           ? item.published
           : boolValue(item.status ?? item.lifecycle ?? item.pipelineStage, defaults.published ?? false);
-      const external =
-        defaults.external === true ||
-        sourceType === 'external' ||
-        category === 'external' ||
-        tags.includes('external') ||
-        tags.includes('ai-saas');
-      const company =
-        defaults.company === true ||
-        sourceType === 'company' ||
-        sourceType === 'internal' ||
-        category === 'company' ||
-        category === 'internal' ||
-        category === 'platform' ||
-        category === 'connector' ||
-        stringValue(item.assetScope ?? item.audience).toLowerCase() === 'company';
       const officeScene = defaults.officeScene === true || type === 'office-scene' || type === 'office_scene';
+      // 工具落在哪个货架必须跟用户页面同一套规则（web domain/aiToolCategories
+      // resolveConfiguredToolMarketShelf）：显式 marketShelf 优先，否则只认 ai-saas /
+      // hw-internal 标签，两个标签都没有就不进任何货架。宽松兜底会把用户页面上看不到的
+      // 工具算进外部/公司工具数，也会让同一个工具同时命中两边。
+      // 这里只解析配置的货架位、不看上架状态——所有计数都已经按 published 过滤。
+      const marketShelf = stringValue(item.marketShelf).toLowerCase();
+      const toolShelf: 'external' | 'internal' | 'none' =
+        marketShelf === 'external' || marketShelf === 'internal' || marketShelf === 'none'
+          ? marketShelf
+          : !tags.includes('ai-saas') && !tags.includes('hw-internal')
+            ? 'none'
+            : (sourceType || (tags.includes('hw-internal') ? 'internal' : 'external')) === 'internal'
+              ? 'internal'
+              : 'external';
+      const isShelfTool = type === 'tool' && !officeScene;
+      const external = isShelfTool
+        ? toolShelf === 'external'
+        : defaults.external === true ||
+          sourceType === 'external' ||
+          category === 'external' ||
+          tags.includes('external') ||
+          tags.includes('ai-saas');
+      const company = isShelfTool
+        ? toolShelf === 'internal'
+        : defaults.company === true ||
+          sourceType === 'company' ||
+          sourceType === 'internal' ||
+          category === 'company' ||
+          category === 'internal' ||
+          category === 'platform' ||
+          category === 'connector' ||
+          stringValue(item.assetScope ?? item.audience).toLowerCase() === 'company';
       const bound =
         defaults.bound === true ||
         boolValue(item.bound ?? item.linked ?? item.isBound, false) ||
@@ -1862,7 +1887,7 @@ export class PortalAnalyticsService {
         continue;
       }
       if (['agent', 'skill', 'tool'].includes(row.kind)) {
-        if (row.kind === 'tool' && hasGlobalTools) continue;
+        if (hasMarketplace || (row.kind === 'tool' && hasGlobalTools)) continue;
         add(payload, { assetType: row.kind });
         continue;
       }

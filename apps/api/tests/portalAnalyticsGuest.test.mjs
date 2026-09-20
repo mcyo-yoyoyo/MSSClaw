@@ -555,7 +555,15 @@ test('global tool singleton is authoritative for analytics inventory', async () 
     kind: 'tool-catalog',
     payload: {
       initialized: true,
-      tools: [{ id: 'tool-live', name: '新名称', sourceType: 'external', published: false }],
+      tools: [
+        {
+          id: 'tool-live',
+          name: '新名称',
+          sourceType: 'external',
+          marketShelf: 'external',
+          published: false,
+        },
+      ],
     },
   };
   const db = recordingPrisma(null, centerRows, globalToolsRow);
@@ -608,6 +616,61 @@ test('asset details include only published tools, skills and agents', async () =
   assert.equal(report.assets.summary.unpublished, 3);
 });
 
+test('asset counts follow the user shelf: marketplace snapshot wins and shelf-less tools drop out', async () => {
+  const centerRows = [
+    // 已从货架删除、但镜像投影没被回收的残留记录
+    {
+      id: 'agent-removed',
+      kind: 'agent',
+      payload: { id: 'agent-removed', name: '已删除 Agent', status: 'online', published: true },
+    },
+    // 只在中心 API 上线过、从未出现在用户货架上的 Agent
+    {
+      id: 'agent-center-only',
+      kind: 'agent',
+      payload: { id: 'agent-center-only', name: '中心 Agent', status: 'online' },
+    },
+    {
+      id: 'skill-removed',
+      kind: 'skill',
+      payload: { id: 'skill-removed', name: '已删除 Skill', published: true },
+    },
+    {
+      id: 'marketplace-ws-test',
+      kind: 'marketplace',
+      payload: {
+        agents: [{ id: 'agent-live', name: '在架 Agent', published: true }],
+        skills: [{ id: 'skill-live', name: '在架 Skill', published: true }],
+        tools: [
+          {
+            id: 'tool-shelf',
+            name: '外部货架工具',
+            sourceType: 'external',
+            marketShelf: 'external',
+            published: true,
+          },
+          // 已上架但没有货架位：用户在外部和公司货架上都看不到它
+          { id: 'tool-noshelf', name: '无货架位工具', sourceType: 'external', published: true },
+        ],
+      },
+    },
+  ];
+  const report = await new PortalAnalyticsService(recordingPrisma(null, centerRows).prisma)
+    .getReport('ws-test', 1);
+
+  assert.equal(report.assets.summary.agent, 1);
+  assert.equal(report.assets.summary.skill, 1);
+  assert.equal(report.assets.summary.external, 1);
+  assert.equal(report.assets.summary.company, 0);
+  assert.equal(report.assets.summary.tool, 1);
+  assert.equal(
+    report.assets.rows.some((row) =>
+      ['agent-removed', 'agent-center-only', 'skill-removed'].includes(row.contentId)),
+    false,
+  );
+  assert.equal(report.assets.rows.find((row) => row.contentId === 'tool-noshelf')?.source, 'none');
+});
+
 test('black asset report excludes portal-content and treats only explicit redirect as redirect', async () => {
   const today = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Shanghai',
@@ -619,7 +682,13 @@ test('black asset report excludes portal-content and treats only explicit redire
     {
       id: 'tool-company',
       kind: 'tool',
-      payload: { id: 'tool-company', name: '公司工具', sourceType: 'company', published: true },
+      payload: {
+        id: 'tool-company',
+        name: '公司工具',
+        sourceType: 'company',
+        marketShelf: 'internal',
+        published: true,
+      },
     },
     {
       id: 'tool-other',

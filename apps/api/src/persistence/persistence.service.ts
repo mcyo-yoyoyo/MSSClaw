@@ -1508,7 +1508,13 @@ export class PersistenceService {
           },
         });
       }
-      if ((kind === 'tool' || kind === 'skill') && previousPayload) {
+      // 货架删除必须回收镜像：留下的 center 记录会被中心 API 当成还在架上的资产，
+      // 也会让看板的已上架数高于用户页面。只在本次请求确实带了该列表时回收——
+      // 旧客户端省略列表不等于清空货架。
+      const listPresent = Array.isArray(
+        kind === 'agent' ? payload.agents : kind === 'skill' ? payload.skills : payload.tools,
+      );
+      if (previousPayload && listPresent) {
         const nextIds = new Set(items.map((item) => String(item.id)));
         const removedIds = listMappedFromMarketplace(kind, previousPayload)
           .map((item) => String(item.id))
