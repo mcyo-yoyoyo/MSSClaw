@@ -17,6 +17,7 @@
     "test:external-tool-layout": "node --experimental-strip-types --test tests/externalToolLayout.test.ts",
     "test:external-tool-layout-store": "node --experimental-strip-types --test tests/externalToolLayoutStore.test.ts",
     "test:inbox-visibility": "node --experimental-strip-types --test tests/inboxVisibility.test.ts",
+    "test:auth-oauth-mode": "node --experimental-strip-types --test tests/authOAuthMode.test.ts",
     "test:guest-session": "node --experimental-strip-types --test tests/guestSession.test.ts",
     "test:member-store": "node --experimental-strip-types --test tests/memberStorePersistence.test.ts",
     "test:modal-backdrop": "node --experimental-strip-types --test tests/modalBackdropPolicy.test.ts",

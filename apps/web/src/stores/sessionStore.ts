@@ -13,6 +13,8 @@ import {
   logoutWithApi,
 } from '@/api/platformDocsApi';
 import { isApiEnabled } from '@/api/client';
+import { fetchOAuthLogoutUrl } from '@/api/authOAuthApi';
+import { currentAuthMode } from '@/stores/authModeStore';
 import { getVisitorId } from '@/domain/visitorIdentity';
 import { useShellPerspectiveStore } from '@/stores/shellPerspectiveStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -203,6 +205,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   login: async (email, password) => {
+    // oauth 模式下密码通道在服务端已被 403；前端也拦一道，避免把 403 当成"密码错了"
+    if (currentAuthMode() === 'oauth') {
+      return { ok: false, error: '当前环境已启用企业统一身份登录，请从登录页跳转认证' };
+    }
     const ws = useWorkspaceStore.getState().workspaceId || 'ws-mss-ai';
     const visitorId = get().visitorId || getVisitorId();
     sessionEpoch += 1;
@@ -244,6 +250,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
 
     // Offline fallback: memory-only session (no browser user profile cache)
+    //
+    // 【安全红线】企业统一身份模式下绝不能走到这里：本地账号表 + 演示口令会让
+    // "把 API 打挂"变成一条绕过 SSO 的登录路径。上面的 oauth 早退已经挡住了
+    // 正常调用，这里再兜一道，防止将来有人绕开早退直接调用。
+    if (currentAuthMode() === 'oauth') {
+      return { ok: false, error: '统一身份服务暂不可达，请稍后重试' };
+    }
     const result = await authenticate(email, password);
     if (!result.ok) return { ok: false, error: result.error };
     writeToken(null);
@@ -268,6 +281,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     void logoutWithApi(ws);
     writeToken(null);
     get().enterGuest({ suppressGate: true });
+
+    // oauth 模式必须再跳一次 IDaaS 退出，否则 SSO 凭证还在，
+    // 下次点登录会被静默登回，用户观感就是「退不出去」。
+    if (currentAuthMode() === 'oauth') {
+      void (async () => {
+        const url = await fetchOAuthLogoutUrl();
+        if (url) window.location.assign(url);
+      })();
+    }
   },
 
   getUserId: () => get().user?.id ?? '',

@@ -11,6 +11,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { PlatformDocsService } from './platform-docs.service';
+import { authMode } from '../auth/oauth.config';
 
 /** 仅 super_admin 可读：内含全站密码 salt + hash */
 const ADMIN_ONLY_DOC_KINDS = new Set(['auth-credentials']);
@@ -141,6 +142,14 @@ export class AuthController {
     @Body()
     body: { email?: string; password?: string; workspaceId?: string; visitorId?: string },
   ) {
+    // 切到企业统一身份登录后必须关死密码通道，否则演示口令仍能绕过 SSO 拿到令牌。
+    // 这是整套改造里最关键的一道闸，不要因为"方便调试"打开。
+    if (authMode() === 'oauth') {
+      throw new ForbiddenException({
+        error: 'password_login_disabled',
+        message: '当前环境已启用企业统一身份登录，请从登录页跳转认证',
+      });
+    }
     return this.docs.login(body ?? {});
   }
 

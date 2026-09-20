@@ -849,9 +849,11 @@ const SEEDABLE_ACCOUNT_WORKSPACE_IDS = new Set<string>([
 /** 登录时通过的口令来源。跨工作区复用会话时据此判断目标空间的要求是否更严 */
 interface SessionAuthProvenance {
   workspaceId: string;
-  method: 'password' | 'demo';
+  method: 'password' | 'demo' | 'oauth';
   /** 通过的凭证指纹（salt+hash 的摘要），不含口令本身 */
   credFingerprint: string | null;
+  /** oauth 登录时 IDaaS 侧的稳定用户标识（uuid），用于跨工作区重新解析身份 */
+  externalId?: string | null;
 }
 
 interface StoredSessionEntry {
@@ -893,6 +895,10 @@ function sessionUserForMember(member: Record<string, unknown>, workspaceId: stri
     deptIds: Array.isArray(member.deptIds) ? member.deptIds : [],
     regionId: (member.regionId as string | null) ?? null,
     workspaceId,
+    // OAuth 登录带回的上游属性；password 登录时为空，前端按有无渲染
+    externalId: member.externalId ? String(member.externalId) : null,
+    postName: member.postName ? String(member.postName) : null,
+    orgPath: member.orgPath ? String(member.orgPath) : null,
   };
 }
 
@@ -1442,6 +1448,168 @@ export class PlatformDocsService {
     return { ok: true, user, token, expiresAt };
   }
 
+  /**
+   * OAuth(IDaaS) 登录落地：身份已由上游证明，这里只负责「找到/建好平台成员」并签发平台令牌。
+   *
+   * 与 login() 共用 putSession / sessionUserForMember / recordDailyLogin，
+   * 因此 me()、跨工作区复用、RBAC 全部沿用既有逻辑，不需要第二套会话体系。
+   *
+   * 返回的 code 会一路透传到前端错误面板，每个 code 在
+   * docs/auth-oauth-troubleshooting.md 里都有对应的处置办法。
+   */
+  async loginWithOAuth(input: {
+    workspaceId: string;
+    email: string;
+    externalId: string;
+    name: string;
+    postName: string;
+    orgPath: string;
+    visitorId?: string;
+    jitProvision: boolean;
+    defaultRole: string;
+    allowedEmailDomains: string[];
+    sessionTtlHours: number;
+  }): Promise<
+    | { ok: true; user: Record<string, unknown>; token: string; expiresAt: string; provisioned: boolean }
+    | { ok: false; code: string; error: string; detail?: string }
+  > {
+    const workspaceId = input.workspaceId || DEFAULT_WORKSPACE_ID;
+    const email = normalizedAccountEmail(input.email);
+    const externalId = input.externalId.trim();
+
+    if (!email && !externalId) {
+      return {
+        ok: false,
+        code: 'oauth_identity_empty',
+        error: '统一身份没有返回可用的账号信息',
+        detail: 'userinfo 里既没取到邮箱/账号也没取到 uuid，需要用 OAUTH_FIELD_* 校正字段名',
+      };
+    }
+
+    const membersDoc = await this.getDoc(workspaceId, 'members');
+    const members = membersFromPayload(membersDoc.payload);
+
+    // externalId 优先：账号或邮箱变更后仍能认出同一个人
+    let member =
+      (externalId
+        ? members.find((m) => String(m.externalId ?? '').trim() === externalId)
+        : undefined) ??
+      (email ? members.find((m) => normalizedAccountEmail(m.email) === email) : undefined);
+
+    let provisioned = false;
+    if (!member) {
+      if (!input.jitProvision) {
+        return {
+          ok: false,
+          code: 'oauth_identity_unmapped',
+          error: '账号尚未开通平台权限，请联系平台运营',
+          detail: `未在工作区 ${workspaceId} 的成员表里找到 email=${email || '(空)'} / externalId=${externalId || '(空)'}`,
+        };
+      }
+      if (!email) {
+        return {
+          ok: false,
+          code: 'oauth_jit_needs_email',
+          error: '账号尚未开通平台权限，请联系平台运营',
+          detail: '开启了自动建号但上游没给邮箱/账号，无法确定成员主键',
+        };
+      }
+      const domain = email.split('@')[1] ?? '';
+      if (input.allowedEmailDomains.length && !input.allowedEmailDomains.includes(domain)) {
+        return {
+          ok: false,
+          code: 'oauth_domain_not_allowed',
+          error: '该账号不在允许范围内',
+          detail: `邮箱域 ${domain} 不在 OAUTH_ALLOWED_EMAIL_DOMAINS(${input.allowedEmailDomains.join(',')}) 内`,
+        };
+      }
+      member = {
+        id: `u-oauth-${randomBytes(4).toString('hex')}`,
+        name: input.name || email.split('@')[0],
+        email,
+        role: input.defaultRole,
+        avatar: 'bg-zinc-600',
+        lastActive: '刚刚',
+        status: 'active',
+        deptIds: [],
+        regionId: null,
+        externalId: externalId || null,
+        postName: input.postName || null,
+        orgPath: input.orgPath || null,
+      };
+      provisioned = true;
+    }
+
+    if (member.status === 'suspended') {
+      return {
+        ok: false,
+        code: 'oauth_member_suspended',
+        error: '账号已停用，请联系平台运营',
+        detail: `成员 ${String(member.id)} status=suspended`,
+      };
+    }
+
+    // 上游属性以 IDaaS 为准，每次登录刷新；平台侧不提供编辑入口，避免两份数据打架。
+    const refreshed: Record<string, unknown> = {
+      ...member,
+      externalId: externalId || member.externalId || null,
+      postName: input.postName || member.postName || null,
+      orgPath: input.orgPath || member.orgPath || null,
+      name: input.name || member.name,
+      lastActive: '刚刚',
+    };
+    const changed =
+      provisioned ||
+      JSON.stringify(refreshed) !== JSON.stringify(member);
+    if (changed) {
+      // 写成员表失败不能阻断登录：身份已经证明过了，属性回写是尽力而为。
+      try {
+        const nextMembers = provisioned
+          ? [...members, refreshed]
+          : members.map((m) => (String(m.id) === String(member!.id) ? refreshed : m));
+        await this.putRevisionedDoc(
+          workspaceId,
+          'members',
+          { ...(membersDoc.payload as Record<string, unknown>), members: nextMembers },
+          (raw) => ({ members: membersFromPayload(raw) }),
+        );
+      } catch (error) {
+        this.logger.warn(
+          `[oauth] 回写成员属性失败（登录继续）：${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    const user = sessionUserForMember(refreshed, workspaceId);
+    const token = randomBytes(24).toString('hex');
+    const ttlMs = Math.max(1, input.sessionTtlHours) * 60 * 60 * 1000;
+    const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+    await this.putSession(workspaceId, token, {
+      user,
+      expiresAt,
+      auth: {
+        workspaceId,
+        method: 'oauth',
+        credFingerprint: null,
+        externalId: externalId || null,
+      },
+    });
+
+    try {
+      await this.portalAnalytics.recordDailyLogin({
+        workspaceId,
+        userId: String(user.id ?? ''),
+        visitorId: input.visitorId,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Daily login analytics failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    return { ok: true, user, token, expiresAt, provisioned };
+  }
+
   async me(token: string | undefined, workspaceId = 'ws-mss-ai') {
     if (!token) return { ok: false as const, error: '未登录' };
     const resolved = await this.findSession(workspaceId, token);
@@ -1542,10 +1710,14 @@ export class PlatformDocsService {
       },
     );
 
+    const auth = session.auth;
+    // OAuth 会话的身份由 IDaaS 统一证明，目标空间也在 oauth 模式下运行时即可携带；
+    // 拿密码指纹去比对它永远不成立，会让切换工作区必然失败。
+    if (auth?.method === 'oauth') return process.env.AUTH_MODE?.trim().toLowerCase() === 'oauth';
+
     const targetCred = payload.credentials[email];
     if (!targetCred) return payload.policy.allowDemoPassword === true;
 
-    const auth = session.auth;
     if (!auth || auth.method !== 'password' || !auth.credFingerprint) return false;
     return auth.credFingerprint === credentialFingerprint(targetCred);
   }
@@ -1576,11 +1748,17 @@ export class PlatformDocsService {
     const members = membersFromPayload(membersPayload);
     const sourceEmail = normalizedAccountEmail(sourceUser.email);
     const sourceId = String(sourceUser.id ?? '').trim();
-    const member = members.find((candidate) => {
-      const candidateEmail = normalizedAccountEmail(candidate.email);
-      if (sourceEmail && candidateEmail) return candidateEmail === sourceEmail;
-      return Boolean(sourceId) && String(candidate.id ?? '').trim() === sourceId;
-    });
+    const sourceExternalId = String(sourceUser.externalId ?? '').trim();
+    // externalId 优先：OAuth 身份在上游改了邮箱后仍要能在目标空间认出同一个人
+    const member =
+      (sourceExternalId
+        ? members.find((candidate) => String(candidate.externalId ?? '').trim() === sourceExternalId)
+        : undefined) ??
+      members.find((candidate) => {
+        const candidateEmail = normalizedAccountEmail(candidate.email);
+        if (sourceEmail && candidateEmail) return candidateEmail === sourceEmail;
+        return Boolean(sourceId) && String(candidate.id ?? '').trim() === sourceId;
+      });
     if (!member || member.status === 'suspended') return null;
     return sessionUserForMember(member, workspaceId);
   }

@@ -105,15 +105,33 @@ export function setApiAuthKey(value: string): void {
   localStorage.setItem(LS_API_AUTH_KEY, trimmed);
 }
 
+/** 会话令牌存放位置。sessionStore 与 OAuth 回调页共用同一个 key。 */
+export const SESSION_TOKEN_KEY = 'mssclaw_auth_token';
+
+export function readSessionToken(): string | null {
+  try {
+    return sessionStorage.getItem(SESSION_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function writeSessionToken(token: string | null): void {
+  try {
+    if (!token) sessionStorage.removeItem(SESSION_TOKEN_KEY);
+    else sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function apiAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
   const key = getApiAuthKey();
   if (key) headers['X-API-Key'] = key;
   try {
     const token =
-      typeof sessionStorage !== 'undefined'
-        ? sessionStorage.getItem('mssclaw_auth_token')?.trim()
-        : '';
+      typeof sessionStorage !== 'undefined' ? readSessionToken()?.trim() : '';
     if (token) {
       headers.Authorization = `Bearer ${token}`;
       headers['X-Session-Token'] = token;

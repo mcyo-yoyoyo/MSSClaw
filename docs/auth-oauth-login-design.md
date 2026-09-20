@@ -1,6 +1,8 @@
 # 登录改造方案设计 · 开发用账号密码 / 测试生产用 UniPortal OAuth2
 
-> 状态：待评审（2026-09-20）
+> 状态：**已实现，待内网联调**（分支 `jianghong`，2026-09-20）
+> 部署与排障：[auth-oauth-troubleshooting.md](auth-oauth-troubleshooting.md)
+> 配置模板：`deploy/oauth.env.example` → `apps/api/.env.oauth`
 > 范围：`apps/web` 登录入口与会话装载、`apps/api` `/api/v1/auth/*`、部署与配置
 > 目标：**开发环境保留账号密码登录，测试与生产环境统一走 IDaaS（UniPortal）OAuth2 授权码流程**，且两条路径共用同一套会话与 RBAC。
 
@@ -158,25 +160,56 @@ Body：`{ code, state, workspaceId?, visitorId? }`
 
 ---
 
-## 5. 身份映射（本方案最大的不确定项）
+## 5. 身份映射
 
-规范 §4.3 默认只返回 `uuid`，附加属性需在 IDaaS 管理平台配置。据此分三档：
+### 5.1 先实测，再定稿
 
-**首选 —— 让 IDaaS 下发 `email`（或 w3 账号）+ `name`**
-映射规则与现在的密码登录完全一致：邮箱归一化后查 `members`，命中即签发；同时把 `uuid` 回写到该成员记录（`WorkspaceMemberSchema` 增加可选字段 `externalId`），后续优先按 uuid 命中，邮箱变更不影响。
-> **需要向 IDaaS 管理员确认并申请的附加属性：`email` / `w3account` / `name`（可选 `dept`）。这是本方案落地的前置条件。**
+规范 §4.3 的示例只给了 `uuid`，但附加属性是在 IDaaS 管理平台按应用配置的——实际很可能已经带回**账号（w3/邮箱）与岗位名称**。字段叫什么名字（`account` / `w3Account` / `postName` / `jobTitle` …）只有对着真实环境跑一次才知道，不能靠猜。
 
-**次选 —— 只有 uuid**
-新增平台文档 `auth-oauth-bindings`：`{ bindings: { [uuid]: memberId }, revision }`，写入沿用现有乐观锁 `putRevisionedDoc` 模式。首次登录无绑定时，返回 `oauth_identity_unmapped`，由平台运营在组织权限页按 uuid 预绑定。运营成本高，仅作为附加属性申请不下来时的兜底。另注意 `authorizeSessionForWorkspace()` 是按**邮箱**在目标工作区 `members` 里找人的，纯 uuid 身份在切换工作区时会解析不到，需要同步把匹配逻辑扩展为 `externalId` 优先。
+为此提供探针脚本 [probe-uniportal-userinfo.mjs](../apps/api/scripts/probe-uniportal-userinfo.mjs)，走完整的 authorize → accesstoken → userinfo，把原始 JSON、字段清单、映射体检三段直接打出来：
 
-**JIT 自动开户（开关 `OAUTH_JIT_PROVISION`）**
-仅在拿得到 email 时可用。未命中成员则以 `role=business_user`、`status=active`、`deptIds=[]` 建号，写入 `members` 文档并记审计日志。
-硬约束：
-- JIT **绝不下发** `capability_ops` / `super_admin`；提权只能由运营在组织权限页手工操作。
-- JIT 只对配置的邮箱域生效（`OAUTH_ALLOWED_EMAIL_DOMAINS=huawei.com`）。
-- 生产建议首期 `OAUTH_JIT_PROVISION=0`，先用名单制灰度，稳定后再开。
+```bash
+# 回调地址注册的是测试域名：脚本打印授权链接，浏览器登录后把回调 URL 粘回来
+node apps/api/scripts/probe-uniportal-userinfo.mjs --env=beta
 
----
+# 回调地址能注册成 localhost：全自动，脚本起本地服务收 code
+node apps/api/scripts/probe-uniportal-userinfo.mjs --env=beta --serve
+
+# 管理平台调完附加属性后反复验证（access_token 30 分钟内有效）
+node apps/api/scripts/probe-uniportal-userinfo.mjs --env=beta --access-token=<token>
+```
+
+凭据从命令行 / 进程环境 / `apps/api/.env` 依次读取；`client_secret` 不会被打印，也不会写进 `--out` 文件。脚本沿用「先直连、失败再按需回退 `HTTPS_PROXY`」的出网策略，顺带就把 §12 的网络可达性风险一并验掉了。
+
+**实测结果（待回填）**：
+
+| 平台需要 | IDaaS 字段 | 样例 | 备注 |
+|----------|-----------|------|------|
+| 身份主键（账号/邮箱） | `？` | | 决定用邮箱匹配还是 uuid 预绑定 |
+| 稳定唯一 ID | `uuid` | `uuid~aFdYNTI5Mjk1` | 写入成员 `externalId` |
+| 姓名 | `？` | | 写入成员 `name` |
+| 岗位名称 | `？` | | 见 §5.3 |
+| 部门 / 组织 | `？` | | 见 §5.3 |
+
+### 5.2 匹配与开户规则
+
+**账号/邮箱可用时（预期路径）**：邮箱归一化后查 `members`，与现在的密码登录完全一致；命中后把 `uuid` 回写成员的 `externalId`（`WorkspaceMemberSchema` 增可选字段），后续优先按 `externalId` 命中，账号或邮箱变更不影响身份。
+
+**只有 uuid 时（兜底）**：新增平台文档 `auth-oauth-bindings`（`{ bindings: { [uuid]: memberId }, revision }`，沿用现有乐观锁 `putRevisionedDoc`），首次登录无绑定则返回 `oauth_identity_unmapped`，由运营按 uuid 预绑定。运营成本高。另注意 `authorizeSessionForWorkspace()` 是按**邮箱**在目标工作区 `members` 里找人的，纯 uuid 身份切换工作区时会解析不到，需同步把匹配逻辑扩展为 `externalId` 优先。
+
+**JIT 自动开户（开关 `OAUTH_JIT_PROVISION`）**：仅在拿得到账号/邮箱时可用。未命中则以 `role=business_user`、`status=active` 建号并记审计日志。硬约束：
+- JIT **绝不下发** `capability_ops` / `super_admin`，提权只能由运营在组织权限页手工操作。
+- 只对白名单邮箱域生效（`OAUTH_ALLOWED_EMAIL_DOMAINS=huawei.com`）。
+- 生产首期建议 `OAUTH_JIT_PROVISION=0`，名单制灰度稳定后再开。
+
+### 5.3 岗位与部门怎么用
+
+如果实测确认带回岗位名称，建议这样消费：
+
+- **存**：`WorkspaceMemberSchema` 增可选 `postName`（岗位）与 `orgPath`（组织全路径），每次登录用上游值刷新——以 IDaaS 为准，平台侧不提供编辑入口，避免两份数据打架。
+- **展示**：成员列表、「我的」页、内容作者信息可直接显示岗位，比只显示角色更有辨识度。
+- **部门映射**：上游多半是组织全路径字符串（如 `MSS/数字化与信息化部`），而平台 `deptIds` 是枚举。需要一张对照表（建议做成平台文档 `org-mapping`，运营可维护），匹配不上时 `deptIds` 留空而不是瞎猜。
+- **不要用岗位推导平台角色**。`platformRole` 决定能不能改治理配置，而岗位是上游自由文本、随组织调整随时会变；用它自动提权等于把权限边界交给了另一个系统的字段值。岗位可以作为运营批量配权的**筛选依据**，但最终落库的角色必须是显式操作的结果。
 
 ## 6. 会话策略
 
@@ -293,6 +326,8 @@ VITE_AUTH_MODE=password
 - 回调视图：清 URL、恢复 `returnTo`、错误态可重试
 - oauth 模式下 API 不可达时**不得**落入本地兜底登录（回归防线）
 
+**上游契约（P1 开工前）**：先跑一次 §5.1 的探针，把字段映射表回填到本文档，再据此写 `uniportal.client.ts` 的解析与单测 fixture。
+
 **联调冒烟（测试环境，必做）**：正常登录 → 刷新保持 → 登出后确认不被 SSO 静默登回 → 换用户登录 → 授权码重放被拒 → 停用账号后 12h 内失效。
 
 ---
@@ -309,19 +344,41 @@ VITE_AUTH_MODE=password
 
 回滚：改 `AUTH_MODE=password` 重启即可退回账号密码，前端产物无需重新构建。
 
+### 11.1 已落地的文件
+
+**后端（新增 `apps/api/src/auth/`）**
+
+| 文件 | 职责 |
+|------|------|
+| `oauth.config.ts` | 环境变量解析 + 配置自检（`validateOAuthConfig`），字段别名可由 `OAUTH_FIELD_*` 覆盖 |
+| `oauth-state.store.ts` | state 一次性 + TTL + 实例标识，带 `stats()` 供诊断 |
+| `oauth-trace.ts` | traceId、分步日志、undici 错误链解析与网络层处置建议 |
+| `uniportal.client.ts` | authorize/accesstoken/userinfo/logout；先直连后按需回退代理；上游错误码翻译 |
+| `oauth-identity.ts` | userinfo 字段提取（多别名、优先级匹配），输出命中与未命中明细 |
+| `auth-oauth.service.ts` | 流程编排 + 启动自检日志 + `diagnostics()` |
+| `auth-oauth.controller.ts` | `/auth/config`、`/auth/oauth/{authorize-url,callback,logout-url,diagnostics}` |
+| `auth.module.ts` | 装配，`onModuleInit` 打配置自检 |
+
+**后端（修改）**：`platform-docs.service.ts` 增 `loginWithOAuth()`、会话来源加 `oauth`、跨工作区与成员匹配支持 `externalId`；`platform-docs.controller.ts` 在 oauth 模式下把 `POST /auth/login` 关成 403；`health.controller.ts` 回登录模式；`app.module.ts` 加载 `.env.oauth`。
+
+**前端（新增）**：`domain/authMode.ts`、`api/authOAuthApi.ts`、`stores/authModeStore.ts`、`features/auth/OAuthLoginPanel.tsx`、`features/auth/OAuthCallbackView.tsx`。
+**前端（修改）**：`main.tsx` 按路径分流回调页；`LoginPage`/`AuthGateOverlay` 按模式渲染；`sessionStore` 在 oauth 模式下拒绝密码登录、禁用离线兜底、登出联动 IDaaS；`App.tsx` 启动先定模式；`api/client.ts` 抽出令牌读写。
+
+**验证**：`npm run test:oauth`（后端 14 例 + 前端 6 例，用本地假 IDaaS 覆盖换码、state 重放、上游错误码、字段别名纠正、JIT 约束、停用成员、网络不可达、诊断不泄密、离线兜底封堵）。
+
 ---
 
 ## 12. 风险与待确认
 
 **风险**
 1. `state` 存内存 → 多实例部署或重启期间登录会失败（用户重点一次即可恢复）。当前是单 Node 进程 + SQLite，可接受；若将来上多实例，需换共享存储（可复用现有 revisioned 文档机制）。
-2. 网络可达性：Nest 出网调 IDaaS 是否需要 `proxyjp` 代理未定，需在测试环境实测；不通会导致全员登录失败，属于上线前必须验证项。
+2. 网络可达性：开发机实测 `uniportal(-beta).huawei.com:443` 直连与代理均可通（authorize 端点返回 `E_10001`，即服务在线且路径正确）。**但部署机网络不同，必须用 `GET /auth/oauth/diagnostics` 的 `upstream` 项复验**；不通会导致全员登录失败，属上线前必验项。
 3. `redirect_uri` 注册值与实际部署域名/端口/文根任一不一致，IDaaS 会直接拒绝——上线前需逐字符核对。
 4. 登录墙的"原动作重放"能力会退化（§8.2），需产品确认可接受。
 5. 切 oauth 后 `sessionStorage` 令牌在新标签页失效，用户需再点一次登录（§6）。
 
 **待确认（阻塞 P1）**
-- [ ] IDaaS 是否能为本应用下发附加属性 `email` / `w3account` / `name`？拿不到只能走 uuid 预绑定，运营成本显著上升。
+- [ ] **跑探针确认 userinfo 实际字段**（`node apps/api/scripts/probe-uniportal-userinfo.mjs --env=beta`），回填 §5.1 映射表。预期能拿到账号与岗位名称；若只有 uuid，需申请管理平台补配附加属性，否则只能走 uuid 预绑定。
 - [ ] 测试与生产是否为两套 `client_id` / `client_secret`？
 - [ ] 测试/生产对外域名与端口（用于注册 `redirect_uri` 与 `OAUTH_LOGOUT_REDIRECT`）。
 - [ ] Nest 所在机器访问 `uniportal(-beta).huawei.com` 是否需要走代理。

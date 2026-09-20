@@ -12,10 +12,13 @@ import { KnowledgeRagModule } from './knowledge-rag/knowledge-rag.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { OptionalApiKeyGuard } from './common/optional-api-key.guard';
 import { AiKnowledgeModule } from './ai-knowledge/ai-knowledge.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    // .env.oauth 单独放企业统一身份登录的配置（deploy/oauth.env.example 是模板），
+    // 与既有 .env 分开，改登录配置不必动数据库/LLM 那些项。前者优先。
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: ['.env.oauth', '.env'] }),
     // AI 快讯每日归档等定时任务
     ScheduleModule.forRoot(),
     // 默认：每 IP 每分钟 6000 次（内网 NAT 友好）；可用 THROTTLE_* 覆盖
@@ -32,6 +35,7 @@ import { AiKnowledgeModule } from './ai-knowledge/ai-knowledge.module';
     PersistenceModule,
     KnowledgeRagModule,
     AiKnowledgeModule,
+    AuthModule,
   ],
   controllers: [HealthController],
   providers: [

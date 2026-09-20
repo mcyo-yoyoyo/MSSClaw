@@ -13,6 +13,7 @@
     "test:home-featured": "npm run build --silent && node --test tests/homeFeatured.test.mjs",
     "test:llm-config": "npm run build --silent && node --test tests/llmConfigExecution.test.mjs",
     "test:account-credentials": "npm run build --silent && node --test tests/accountCredentials.test.mjs",
+    "test:oauth-login": "npm run build --silent && node --test tests/oauthLogin.test.mjs",
     "test:auth-workspace-isolation": "npm run build --silent && node --test tests/authWorkspaceIsolation.test.mjs",
     "test:market-engagement-auth": "npm run build --silent && node --test tests/marketEngagementAuth.test.mjs tests/marketEngagementEvents.test.mjs tests/marketEngagementCatalog.test.mjs tests/marketEngagementSqlite.test.mjs",
     "test:market-engagement-sqlite": "npm run build --silent && node --test tests/marketEngagementSqlite.test.mjs",

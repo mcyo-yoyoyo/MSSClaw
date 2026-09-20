@@ -23,6 +23,8 @@
     "start:api:prod": "node apps/api/scripts/start-api.mjs production",
     "preview": "npm run preview --workspace @mss-claw/web",
     "preview:react": "npm run preview:react --workspace @mss-claw/web",
-    "smoke": "npm run smoke --workspace @mss-claw/web"
+    "smoke": "npm run smoke --workspace @mss-claw/web",
+    "test:oauth": "npm run test:oauth-login --workspace @mss-claw/api && npm run test:auth-oauth-mode --workspace @mss-claw/web",
+    "probe:oauth": "node apps/api/scripts/probe-uniportal-userinfo.mjs"
   }
 }

@@ -1,5 +1,7 @@
 import { writeAppRouteToLocation } from '@/domain/appRoute';
 import { LoginForm } from '@/features/auth/LoginForm';
+import { OAuthLoginPanel } from '@/features/auth/OAuthLoginPanel';
+import { useAuthModeStore } from '@/stores/authModeStore';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useSessionStore } from '@/stores/sessionStore';
 
@@ -14,12 +16,27 @@ const LOGIN_HERO_JPG = `${baseBrand}login-hero.jpg`;
  */
 export function LoginPage() {
   const enterGuest = useSessionStore((s) => s.enterGuest);
+  const authMode = useAuthModeStore((s) => s.mode);
+  const modeResolved = useAuthModeStore((s) => s.resolved);
+
+  const cardClass =
+    'rounded-2xl border border-zinc-200/80 bg-white/92 p-7 shadow-[0_18px_50px_-28px_rgba(24,24,27,0.45)] backdrop-blur-md md:p-8';
 
   const browseAsGuest = () => {
     enterGuest();
     writeAppRouteToLocation({ view: 'home' }, true);
     useAppViewStore.getState().setAppView('home');
   };
+
+  const guestButton = (
+    <button
+      type="button"
+      onClick={browseAsGuest}
+      className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 text-[13px] font-medium text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50"
+    >
+      以游客身份浏览
+    </button>
+  );
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-[#f4f4f6]">
@@ -55,18 +72,16 @@ export function LoginPage() {
             </p>
           </header>
 
-          <LoginForm
-            className="space-y-4 rounded-2xl border border-zinc-200/80 bg-white/92 p-7 shadow-[0_18px_50px_-28px_rgba(24,24,27,0.45)] backdrop-blur-md md:space-y-5 md:p-8"
-            footer={
-              <button
-                type="button"
-                onClick={browseAsGuest}
-                className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 text-[13px] font-medium text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50"
-              >
-                以游客身份浏览
-              </button>
-            }
-          />
+          {/* 模式未定前先占位：避免闪一下密码表单再被 OAuth 面板顶掉 */}
+          {!modeResolved ? (
+            <div className={`${cardClass} flex h-[320px] items-center justify-center`}>
+              <div className="h-7 w-7 animate-spin rounded-full border-[3px] border-zinc-200 border-t-[#e0122f]" />
+            </div>
+          ) : authMode === 'oauth' ? (
+            <OAuthLoginPanel className={`space-y-4 ${cardClass} md:space-y-5`} footer={guestButton} />
+          ) : (
+            <LoginForm className={`space-y-4 ${cardClass} md:space-y-5`} footer={guestButton} />
+          )}
         </div>
       </div>
     </div>

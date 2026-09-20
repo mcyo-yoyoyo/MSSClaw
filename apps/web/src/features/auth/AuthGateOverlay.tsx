@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 import { LoginForm } from '@/features/auth/LoginForm';
+import { OAuthLoginPanel } from '@/features/auth/OAuthLoginPanel';
+import { useAuthModeStore } from '@/stores/authModeStore';
 import { useAuthGateStore } from '@/stores/authGateStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 
@@ -9,6 +11,8 @@ import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
  */
 export function AuthGateOverlay() {
   const open = useAuthGateStore((s) => s.open);
+  const action = useAuthGateStore((s) => s.action);
+  const authMode = useAuthModeStore((s) => s.mode);
   const close = useAuthGateStore((s) => s.close);
   const resolveAfterLogin = useAuthGateStore((s) => s.resolveAfterLogin);
 
@@ -47,6 +51,24 @@ export function AuthGateOverlay() {
             <i className="fa-solid fa-xmark text-[14px]" />
           </button>
         </div>
+        {/* OAuth 是整页跳走的，就地登录+重放原动作做不到；
+            这里只记住"回来该打开哪个页面"，写操作回来后由用户再点一次。 */}
+        {authMode === 'oauth' ? (
+          <OAuthLoginPanel
+            className="space-y-4 px-7 pb-7"
+            intent={action ?? ''}
+            hint="登录后会回到当前页面，请再点一次刚才的操作"
+            footer={
+              <button
+                type="button"
+                onClick={close}
+                className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 text-[13px] font-medium text-zinc-600 transition hover:border-zinc-300 hover:bg-zinc-50"
+              >
+                继续以游客浏览
+              </button>
+            }
+          />
+        ) : (
         <LoginForm
           className="space-y-4 px-7 pb-7"
           onSuccess={finishLogin}
@@ -60,6 +82,7 @@ export function AuthGateOverlay() {
             </button>
           }
         />
+        )}
       </div>
     </div>
   );

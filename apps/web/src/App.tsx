@@ -52,6 +52,7 @@ import { getNavMetaLabel } from '@/domain/navPresentation';
 import { roleNavDisabledToast } from '@/domain/permissions';
 import { useShellPerspectiveStore } from '@/stores/shellPerspectiveStore';
 import { useSessionStore } from '@/stores/sessionStore';
+import { useAuthModeStore } from '@/stores/authModeStore';
 import { TaskGlobalModals } from '@/components/task/TaskGlobalModals';
 import { SkillChatDrawer } from '@/components/chat/SkillChatDrawer';
 import { openAiAssistantForNewTask } from '@/domain/openNewTask';
@@ -67,6 +68,7 @@ export function App() {
   const isGuest = useSessionStore((s) => s.isGuest);
   const sessionBootstrapped = useSessionStore((s) => s.bootstrapped);
   const hydrateFromServer = useSessionStore((s) => s.hydrateFromServer);
+  const resolveAuthMode = useAuthModeStore((s) => s.resolve);
   const shellPerspective = useShellPerspectiveStore((s) => s.perspective);
   const switchWorkspace = useWorkspaceStore((s) => s.switchWorkspace);
   const bootstrap = useWorkspaceStore((s) => s.bootstrap);
@@ -176,8 +178,10 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    // 登录模式要先于会话装载确定：登录墙与登录页都按它渲染
+    void resolveAuthMode();
     void hydrateFromServer();
-  }, [hydrateFromServer]);
+  }, [hydrateFromServer, resolveAuthMode]);
 
   useEffect(() => {
     void (async () => {
