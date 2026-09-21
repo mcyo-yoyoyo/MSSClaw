@@ -628,12 +628,11 @@ function StackedBar({
  * 跑过校验：亮度带、彩度下限、protan/deutan 分离度、对比度全部通过。别换成
  * STACK_SHADES 那套灰阶——堆叠条只有相邻两块接触，折线是三条交叠，灰阶分不出身份。
  */
-// 跟总览卡片同口径：都画不去重的浏览人次。图例合计是按天累加的，
-// 画每日 UV 会把跨天回访重复计数，合计也就对不上卡片。
+// 与总览卡片同口径：每日 UV，图例合计按天累加，正好等于卡片上的访问人次。
 const TREND_SERIES = [
   { key: 'pv', label: '页面浏览数 PV', color: '#2a78d6' },
-  { key: 'userPv', label: '登录用户浏览数', color: '#eb6834' },
-  { key: 'guestPv', label: '游客浏览数', color: '#199e70' },
+  { key: 'userUv', label: '用户数 UV', color: '#eb6834' },
+  { key: 'guestUv', label: '游客数', color: '#199e70' },
 ] as const satisfies ReadonlyArray<{
   key: keyof PortalAnalyticsTrafficCounts;
   label: string;
@@ -1376,6 +1375,21 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
   const overviewHasAssets = Boolean(overviewState.report?.assets);
   const overviewToolTotal = overviewSummary.tool ?? overviewSummary.external + overviewSummary.company;
   const overviewSeries = overviewState.report?.series ?? [];
+  /**
+   * 访问人次：每日 UV 按天累加。区间去重会把「一周来了五天的人」算成 1，
+   * 运营要看的是访问热度；PV 又是另一回事（一次访问翻十页算十次）。
+   */
+  const overviewVisits = useMemo(
+    () =>
+      overviewSeries.reduce(
+        (sum, point) => ({
+          userUv: sum.userUv + (point.userUv ?? 0),
+          guestUv: sum.guestUv + (point.guestUv ?? 0),
+        }),
+        { userUv: 0, guestUv: 0 },
+      ),
+    [overviewSeries],
+  );
   const overviewRangeLabel = overviewState.report
     ? `${formatDate(overviewState.report.range.from)} – ${formatDate(overviewState.report.range.to)}`
     : undefined;
@@ -1560,14 +1574,14 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
           <HeroRow>
             <HeroStat label="页面浏览数 PV" value={formatCount(overviewTraffic.pv)} note="含游客与登录用户，不去重" />
             <HeroStat
-              label="登录用户浏览数"
-              value={formatCount(overviewTraffic.userPv)}
-              note="登录用户浏览人次，不去重"
+              label="用户数 UV"
+              value={formatCount(overviewVisits.userUv)}
+              note="登录用户，按天累计，跨天不去重"
             />
             <HeroStat
-              label="游客浏览数"
-              value={formatCount(overviewTraffic.guestPv)}
-              note="未登录访客浏览人次，不去重"
+              label="游客数"
+              value={formatCount(overviewVisits.guestUv)}
+              note="未登录访客，按天累计，跨天不去重"
             />
           </HeroRow>
         )}
