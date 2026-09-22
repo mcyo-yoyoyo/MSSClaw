@@ -26,6 +26,11 @@
 
 ---
 
+> 还没拿到 client_id / secret？先看 [auth-oauth-application-checklist.md](auth-oauth-application-checklist.md)
+> （要申请哪些参数、哪两项最容易漏）。第 ① 层验证不需要任何参数，现在就能跑。
+
+---
+
 ## 1. 部署步骤
 
 ```bash

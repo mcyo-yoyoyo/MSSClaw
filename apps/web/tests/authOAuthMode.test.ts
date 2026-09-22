@@ -8,6 +8,7 @@ type SessionState = {
   isAuthenticated: boolean;
   isGuest: boolean;
   login: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  logout: () => Promise<void>;
 };
 
 type AuthModeState = { mode: 'password' | 'oauth'; resolved: boolean };
@@ -146,4 +147,57 @@ test('password 模式下，离线兜底登录仍然可用（不影响开发环�
 
   assert.equal(result.ok, true, '开发环境必须保持原有账号密码登录体验');
   assert.equal(sessionStore.getState().isAuthenticated, true);
+});
+
+test('oauth 登出先作废平台会话，再跳转 IDaaS', async () => {
+  authModeStore.setState({ mode: 'oauth' });
+  sessionStorage.setItem('mssclaw_auth_token', 'SESSION');
+  const calls: string[] = [];
+  let releaseLogout!: () => void;
+  let markStarted!: () => void;
+  const logoutBlocked = new Promise<void>((resolve) => (releaseLogout = resolve));
+  const logoutStarted = new Promise<void>((resolve) => (markStarted = resolve));
+  const previousLocation = Object.getOwnPropertyDescriptor(globalThis, 'location');
+
+  Object.defineProperty(globalThis, 'location', {
+    configurable: true,
+    value: {
+      hostname: 'localhost',
+      origin: 'http://localhost:5173',
+      assign: (url: string) => calls.push(`redirect:${url}`),
+    },
+  });
+  globalThis.fetch = (async (input) => {
+    const url = String(input);
+    if (url.endsWith('/api/v1/auth/logout')) {
+      calls.push('platform:start');
+      markStarted();
+      await logoutBlocked;
+      calls.push('platform:done');
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url.endsWith('/api/v1/auth/oauth/logout-url')) {
+      calls.push('idaas:url');
+      return Response.json({ url: 'https://uniportal-beta.huawei.com/logout' });
+    }
+    return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }) as typeof fetch;
+
+  try {
+    const logout = sessionStore.getState().logout();
+    await logoutStarted;
+    assert.deepEqual(calls, ['platform:start']);
+    releaseLogout();
+    await logout;
+    assert.deepEqual(calls, [
+      'platform:start',
+      'platform:done',
+      'idaas:url',
+      'redirect:https://uniportal-beta.huawei.com/logout',
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousLocation) Object.defineProperty(globalThis, 'location', previousLocation);
+    else delete (globalThis as { location?: unknown }).location;
+  }
 });

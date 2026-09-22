@@ -17,7 +17,7 @@ type SessionState = {
     email: string,
     password: string,
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
 };
 
 type AuthGateState = {

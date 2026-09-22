@@ -1466,7 +1466,6 @@ export class PlatformDocsService {
     orgPath: string;
     visitorId?: string;
     jitProvision: boolean;
-    defaultRole: string;
     allowedEmailDomains: string[];
     sessionTtlHours: number;
   }): Promise<
@@ -1527,7 +1526,7 @@ export class PlatformDocsService {
         id: `u-oauth-${randomBytes(4).toString('hex')}`,
         name: input.name || email.split('@')[0],
         email,
-        role: input.defaultRole,
+        role: 'business_user',
         avatar: 'bg-zinc-600',
         lastActive: '刚刚',
         status: 'active',

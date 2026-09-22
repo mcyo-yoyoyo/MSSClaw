@@ -253,7 +253,7 @@ export async function fetchSessionMeApi(workspaceId?: string): Promise<
 export async function logoutWithApi(workspaceId?: string): Promise<void> {
   if (!isApiEnabled()) return;
   try {
-    await fetch(apiUrl('/api/v1/auth/logout'), {
+    await fetchWithTimeout(apiUrl('/api/v1/auth/logout'), {
       method: 'POST',
       headers: jsonHeaders(),
       body: JSON.stringify({ workspaceId }),

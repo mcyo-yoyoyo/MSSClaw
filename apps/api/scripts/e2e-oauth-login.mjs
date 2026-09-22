@@ -155,6 +155,7 @@ async function main() {
     API_KEY: '',
     CORS_ORIGIN: baseUrl,
   };
+  delete env.RUST_LOG; // Prisma schema engine 会被外部 Rust 日志设置干扰
 
   let nest;
   try {
@@ -214,7 +215,7 @@ async function main() {
       await fetch(`${baseUrl}/api/v1/auth/oauth/callback`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, state: authorize.state, workspaceId: 'ws-mss-ai' }),
+        body: JSON.stringify({ code, state: authorize.state }),
       })
     ).json();
     check('回调换到平台令牌', login.ok === true, JSON.stringify(login));

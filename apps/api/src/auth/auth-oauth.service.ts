@@ -107,7 +107,6 @@ export class AuthOAuthService {
   async handleCallback(input: {
     code: string;
     state: string;
-    workspaceId?: string;
     visitorId?: string;
   }): Promise<CallbackSuccess | CallbackFailure> {
     const config = oauthConfig();
@@ -146,7 +145,7 @@ export class AuthOAuthService {
           : '重新点一次登录',
       );
     }
-    const workspaceId = input.workspaceId || checked.entry.workspaceId;
+    const workspaceId = checked.entry.workspaceId;
     trace.step('state_ok', `ws=${workspaceId}`);
 
     // 2) 授权码换 access_token
@@ -201,7 +200,6 @@ export class AuthOAuthService {
       orgPath: identity.orgPath,
       visitorId: input.visitorId,
       jitProvision: config.jitProvision,
-      defaultRole: config.defaultRole,
       allowedEmailDomains: config.allowedEmailDomains,
       sessionTtlHours: config.sessionTtlHours,
     });

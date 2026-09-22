@@ -34,14 +34,13 @@ export class AuthOAuthController {
   @HttpCode(200)
   callback(
     @Body()
-    body: { code?: string; state?: string; workspaceId?: string; visitorId?: string },
+    body: { code?: string; state?: string; visitorId?: string },
   ) {
     // 失败也返回 200 + ok:false：前端要把 code/detail/traceId 完整渲染出来，
     // 而不是被 fetch 的非 2xx 分支吞成一句"网络错误"。
     return this.oauth.handleCallback({
       code: String(body?.code ?? '').trim(),
       state: String(body?.state ?? '').trim(),
-      workspaceId: body?.workspaceId,
       visitorId: body?.visitorId,
     });
   }

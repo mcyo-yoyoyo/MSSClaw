@@ -23,7 +23,6 @@ export interface OAuthConfig {
   proxyEnabled: boolean;
   proxyUrl: string;
   jitProvision: boolean;
-  defaultRole: string;
   allowedEmailDomains: string[];
   /** 上游只给工号不给邮箱时，用它补成 <账号>@<域> 去匹配成员表 */
   defaultEmailDomain: string;
@@ -111,7 +110,6 @@ export function oauthConfig(): OAuthConfig {
     proxyEnabled: bool('OAUTH_PROXY_ENABLED', false),
     proxyUrl: str('HTTPS_PROXY') || str('https_proxy'),
     jitProvision: bool('OAUTH_JIT_PROVISION', false),
-    defaultRole: str('OAUTH_DEFAULT_ROLE', 'business_user'),
     allowedEmailDomains: list('OAUTH_ALLOWED_EMAIL_DOMAINS').map((d) => d.toLowerCase()),
     defaultEmailDomain: str('OAUTH_DEFAULT_EMAIL_DOMAIN').toLowerCase().replace(/^@/, ''),
     debugUserInfo: bool('OAUTH_DEBUG_USERINFO', false),
@@ -203,7 +201,7 @@ export function validateOAuthConfig(config = oauthConfig()): ConfigCheck[] {
     true,
     'info',
     config.jitProvision
-      ? `开启，新用户自动建号为 ${config.defaultRole}${config.allowedEmailDomains.length ? `（限 ${config.allowedEmailDomains.join('/')}）` : '（未限邮箱域，建议配 OAUTH_ALLOWED_EMAIL_DOMAINS）'}`
+      ? `开启，新用户自动建号为 business_user${config.allowedEmailDomains.length ? `（限 ${config.allowedEmailDomains.join('/')}）` : '（未限邮箱域，建议配 OAUTH_ALLOWED_EMAIL_DOMAINS）'}`
       : '关闭，未登记的用户会被拒绝登录',
   );
   if (config.jitProvision && !config.allowedEmailDomains.length) {

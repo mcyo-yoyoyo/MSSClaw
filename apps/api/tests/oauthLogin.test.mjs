@@ -163,6 +163,17 @@ test('state 不可重放：同一个 state 第二次必失败', async () => {
   }
 });
 
+test('回调工作区只认 state 绑定值，不接受请求体改写', async () => {
+  const h = await harness({ profile: { uuid: 'uuid~abc', email: 'jianghong@huawei.com' } });
+  try {
+    const result = await h.login({ workspaceId: 'ws-other' });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.user.workspaceId, 'ws-mss-ai');
+  } finally {
+    await h.close();
+  }
+});
+
 test('state 不存在时给出「是不是重启过 / 多实例」的排查方向', async () => {
   const h = await harness();
   try {
@@ -229,11 +240,11 @@ test('字段完全认不出来时，错误里要带上游实际字段名，好�
   }
 });
 
-test('JIT 建号只会给默认角色，且受邮箱域白名单限制', async () => {
+test('JIT 建号固定为 business_user，环境变量不能提权', async () => {
   const h = await harness({
     members: [],
     profile: { uuid: 'u1', email: 'newbie@huawei.com', userName: '新人' },
-    env: { OAUTH_JIT_PROVISION: '1' },
+    env: { OAUTH_JIT_PROVISION: '1', OAUTH_DEFAULT_ROLE: 'super_admin' },
   });
   try {
     const result = await h.login();

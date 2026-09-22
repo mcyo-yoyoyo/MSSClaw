@@ -61,7 +61,7 @@ interface SessionState {
     email: string,
     password: string,
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
   getUserId: () => string;
   getUserName: () => string;
   getPlatformRole: () => PlatformRole;
@@ -276,19 +276,18 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   /** 登出回落游客态而非登录页：门户内容保持可浏览 */
-  logout: () => {
+  logout: async () => {
     const ws = useWorkspaceStore.getState().workspaceId || 'ws-mss-ai';
-    void logoutWithApi(ws);
+    const platformLogout = logoutWithApi(ws);
     writeToken(null);
     get().enterGuest({ suppressGate: true });
 
     // oauth 模式必须再跳一次 IDaaS 退出，否则 SSO 凭证还在，
     // 下次点登录会被静默登回，用户观感就是「退不出去」。
     if (currentAuthMode() === 'oauth') {
-      void (async () => {
-        const url = await fetchOAuthLogoutUrl();
-        if (url) window.location.assign(url);
-      })();
+      await platformLogout;
+      const url = await fetchOAuthLogoutUrl();
+      if (url) window.location.assign(url);
     }
   },
 

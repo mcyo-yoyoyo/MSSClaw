@@ -111,7 +111,6 @@ export interface OAuthCallbackFailure {
 export async function completeOAuthLogin(params: {
   code: string;
   state: string;
-  workspaceId?: string;
   visitorId?: string;
 }): Promise<OAuthCallbackSuccess | OAuthCallbackFailure> {
   try {
