@@ -1,0 +1,1 @@
+import{u as t}from"./index-CsIGTj9O.js";import"./page-task-ND5gDWiH.js";import"./aiNewsStore-pd7kVcus.js";function a(){const e=t.getState(),s=e.messages.filter(n=>n.kind!=="ai_news");s.length!==e.messages.length&&(t.setState({messages:s}),e.persist())}export{a as e};
