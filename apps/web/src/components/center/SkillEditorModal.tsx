@@ -26,7 +26,7 @@ import {
   isWorkspaceBlobUploadContextCurrent,
   type UploadedWorkspaceBlob,
   uploadWorkspaceBlob,
-  uploadWorkspacePackage,
+  uploadWorkspaceOpsPackage,
 } from '@/api/blobApi';
 import { currentWorkspaceId } from '@/api/platformDocsApi';
 import type { PortalCasePreviewFile } from '@/domain/prototype/portalContent';
@@ -52,11 +52,7 @@ import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 import { shareSyncSaveHint } from '@/domain/shareSync';
 import { SkillAvatar } from '@/components/brand/SkillAvatar';
-import {
-  formatPackageSize,
-  PACKAGE_UPLOAD_MAX_LABEL,
-  packageUploadSizeError,
-} from '@/domain/packageUpload';
+import { formatPackageSize } from '@/domain/packageUpload';
 import { packageZipErrorMessage } from '@/domain/safeZip';
 import {
   isRarPackageName,
@@ -301,16 +297,11 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     file: File,
     expectedGeneration = temporaryPackageBlobs.currentGeneration(),
   ): Promise<boolean> => {
-    const sizeError = packageUploadSizeError(file);
-    if (sizeError) {
-      showToast(sizeError);
-      return false;
-    }
     const replacedPackageBlob = form.packageBlob;
     setUploadingPackage(true);
     const workspaceId = currentWorkspaceId();
     try {
-      const uploaded = await uploadWorkspacePackage(workspaceId, file);
+      const uploaded = await uploadWorkspaceOpsPackage(workspaceId, file);
       if (!temporaryPackageBlobs.trackUploaded(workspaceId, uploaded, expectedGeneration)) {
         return false;
       }
@@ -337,18 +328,12 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
 
   const handleUpload = async (file: File | null) => {
     if (!file) return;
-    const sizeError = packageUploadSizeError(file);
-    if (sizeError) {
-      showToast(sizeError);
-      if (fileRef.current) fileRef.current.value = '';
-      return;
-    }
     const uploadGeneration = temporaryPackageBlobs.currentGeneration();
     setParsing(true);
     try {
       // RAR 先转成 ZIP，解析与原包留档都用转换后的文件
-      const upload = await normalizePackageUploadFile(file);
-      const items = await parseSkillUpload(upload);
+      const upload = await normalizePackageUploadFile(file, { maxBytes: null });
+      const items = await parseSkillUpload(upload, { maxCompressedBytes: null });
       if (!temporaryPackageBlobs.isCurrent(uploadGeneration)) return;
       if (!items[0]) {
         showToast('未能识别标准 Skill 包（支持 .skill.zip / .rar / SKILL.md / JSON）');
@@ -725,7 +710,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
               <p className="mx-auto mt-1 max-w-md text-[12px] leading-relaxed text-zinc-500">
                 支持业界常见 <code className="text-zinc-700">.skill.zip</code> /
                 <code className="text-zinc-700"> .rar</code> /
-                <code className="text-zinc-700"> SKILL.md</code> / 清单 JSON（≤{PACKAGE_UPLOAD_MAX_LABEL}）。
+                <code className="text-zinc-700"> SKILL.md</code> / 清单 JSON。
                 自动解析名称、描述与正文，保存后生成 TRACE 五维评测报告。
               </p>
               <input
@@ -949,7 +934,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
               </FormField>
               <FormField
                 label="Skill 压缩包"
-                hint={`上传 .zip 或 .rar（≤${PACKAGE_UPLOAD_MAX_LABEL}，RAR 会自动转为 ZIP）；详情页「文件」将解压展示完整目录树，并可下载原包`}
+                hint="上传 .zip 或 .rar（RAR 会自动转为 ZIP）；详情页「文件」将解压展示完整目录树，并可下载原包"
               >
                 <div className="space-y-2">
                   <input
@@ -964,17 +949,12 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                         showToast('请上传 .zip 或 .rar 格式的 Skill 包');
                         return;
                       }
-                      const sizeError = packageUploadSizeError(file);
-                      if (sizeError) {
-                        showToast(sizeError);
-                        return;
-                      }
                       const uploadGeneration = temporaryPackageBlobs.currentGeneration();
                       // RAR 转换期间同样显示「上传中」并禁用选择框
                       setUploadingPackage(true);
                       let upload: File;
                       try {
-                        upload = await normalizePackageUploadFile(file);
+                        upload = await normalizePackageUploadFile(file, { maxBytes: null });
                       } catch (error) {
                         if (temporaryPackageBlobs.isCurrent(uploadGeneration)) {
                           setUploadingPackage(false);

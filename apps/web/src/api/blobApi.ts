@@ -110,16 +110,15 @@ export function isPackageUploadContextCurrent(
 ): boolean {
   const context = blob.__packageUploadContext;
   const currentApiBase = getApiBase();
-  const currentUploadUrl = freezeRequestUrl(
-    apiUrlForBase(
-      currentApiBase,
-      `/api/v1/workspaces/${workspaceId}/blobs/packages`,
+  const currentUploadUrls = ['blobs/packages', 'blobs/packages/ops'].map((endpoint) =>
+    freezeRequestUrl(
+      apiUrlForBase(currentApiBase, `/api/v1/workspaces/${workspaceId}/${endpoint}`),
     ),
   );
   return (
     context.workspaceId === workspaceId &&
     context.apiBase === currentApiBase &&
-    context.uploadUrl === currentUploadUrl &&
+    currentUploadUrls.includes(context.uploadUrl) &&
     sameHeaders(context.authHeaders, apiAuthHeaders())
   );
 }
@@ -132,7 +131,7 @@ function packageDeleteUrl(uploadUrl: string, responseUrl: string, blobId: string
       absoluteUploadUrl,
       typeof location === 'undefined' ? 'http://mssclaw.local' : location.origin,
     );
-    const match = url.pathname.match(/^(.*\/)packages\/?$/);
+    const match = url.pathname.match(/^(.*\/)packages(?:\/ops)?\/?$/);
     if (!match?.[1]) throw new Error('unexpected_package_upload_url');
     url.pathname = `${match[1]}${encodeURIComponent(blobId)}`;
     url.search = '';
@@ -140,7 +139,7 @@ function packageDeleteUrl(uploadUrl: string, responseUrl: string, blobId: string
     return url.toString();
   } catch {
     const fallback = effectiveUploadUrl.replace(
-      /\/packages\/?(?:[?#].*)?$/,
+      /\/packages(?:\/ops)?\/?(?:[?#].*)?$/,
       `/${encodeURIComponent(blobId)}`,
     );
     return freezeRequestUrl(fallback);
@@ -304,20 +303,15 @@ export async function deleteUploadedWorkspaceBlob(
   await deleteWorkspaceBlob(blob.__workspaceBlobUploadContext.workspaceId, blob);
 }
 
-/**
- * Skill / Agent 原始包使用二进制请求上传，避免大文件转 data URL / base64 时的体积与内存膨胀。
- */
-export async function uploadWorkspacePackage(
+async function uploadWorkspacePackageTo(
   workspaceId: string,
   file: File,
+  endpoint: 'blobs/packages' | 'blobs/packages/ops',
 ): Promise<UploadedPackageBlob> {
-  const sizeError = packageUploadSizeError(file);
-  if (sizeError) throw new Error(`package_too_large:${sizeError}`);
-
   const apiBase = getApiBase();
   const authHeaders = apiAuthHeaders();
   const uploadUrl = freezeRequestUrl(
-    apiUrlForBase(apiBase, `/api/v1/workspaces/${workspaceId}/blobs/packages`),
+    apiUrlForBase(apiBase, `/api/v1/workspaces/${workspaceId}/${endpoint}`),
   );
   const res = await fetch(uploadUrl, {
     method: 'POST',
@@ -358,6 +352,24 @@ export async function uploadWorkspacePackage(
     writable: false,
   });
   return result as UploadedPackageBlob;
+}
+
+/** 用户侧 Skill / Agent 原始包：保留 200MB 上限。 */
+export async function uploadWorkspacePackage(
+  workspaceId: string,
+  file: File,
+): Promise<UploadedPackageBlob> {
+  const sizeError = packageUploadSizeError(file);
+  if (sizeError) throw new Error(`package_too_large:${sizeError}`);
+  return uploadWorkspacePackageTo(workspaceId, file, 'blobs/packages');
+}
+
+/** 运营后台 Skill 原始包：服务端鉴权后流式上传，不设应用层体积上限。 */
+export function uploadWorkspaceOpsPackage(
+  workspaceId: string,
+  file: File,
+): Promise<UploadedPackageBlob> {
+  return uploadWorkspacePackageTo(workspaceId, file, 'blobs/packages/ops');
 }
 
 async function externalizeOne(

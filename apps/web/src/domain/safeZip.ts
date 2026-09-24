@@ -66,6 +66,11 @@ export interface SafeZipInspection {
   totalUncompressedBytes: number;
 }
 
+export interface PackageZipSizeOptions {
+  /** null 仅由已鉴权的运营后台使用；其余调用默认 200MB。 */
+  maxCompressedBytes?: number | null;
+}
+
 function zipBomb(message: string, code: PackageZipErrorCode): PackageZipError {
   return new PackageZipError(code, `ZIP 安全校验失败：${message}，疑似 ZIP bomb`);
 }
@@ -109,10 +114,19 @@ function invalidZipError(error: unknown): PackageZipError {
 /**
  * 只扫描中央目录，不解压文件内容。扫描在发现超限时立即中止，因此恶意超多条目不会遍历到底。
  */
-export function inspectPackageZip(bytes: Uint8Array): Promise<SafeZipInspection> {
-  if (bytes.byteLength > PACKAGE_ZIP_LIMITS.maxCompressedBytes) {
+export function inspectPackageZip(
+  bytes: Uint8Array,
+  options: PackageZipSizeOptions = {},
+): Promise<SafeZipInspection> {
+  const maxCompressedBytes = options.maxCompressedBytes === undefined
+    ? PACKAGE_ZIP_LIMITS.maxCompressedBytes
+    : options.maxCompressedBytes;
+  if (maxCompressedBytes !== null && bytes.byteLength > maxCompressedBytes) {
     return Promise.reject(
-      new PackageZipError('compressed_too_large', 'ZIP 压缩包超过 200MB'),
+      new PackageZipError(
+        'compressed_too_large',
+        `ZIP 压缩包超过 ${Math.round(maxCompressedBytes / MIB)}MB`,
+      ),
     );
   }
 
@@ -272,9 +286,9 @@ export function extractInspectedZipEntries(
 export async function readPackageZipMetadata(
   bytes: Uint8Array,
   matches: (path: string) => boolean,
-  signal?: AbortSignal,
+  options: PackageZipSizeOptions & { signal?: AbortSignal } = {},
 ): Promise<Record<string, Uint8Array>> {
-  const inspection = await inspectPackageZip(bytes);
+  const inspection = await inspectPackageZip(bytes, options);
   const selected = new Set(
     inspection.entries
       .filter((entry) => !entry.isDirectory && matches(entry.path))
@@ -283,7 +297,7 @@ export async function readPackageZipMetadata(
   return extractInspectedZipEntries(bytes, inspection, selected, {
     maxSelectedFileBytes: PACKAGE_ZIP_LIMITS.maxMetadataFileBytes,
     maxSelectedTotalBytes: PACKAGE_ZIP_LIMITS.maxMetadataTotalBytes,
-    signal,
+    signal: options.signal,
   });
 }
 

@@ -10,6 +10,7 @@ import {
 import { downloadPackageBlob, fetchPackageBlob } from '@/api/blobApi';
 import { PACKAGE_UPLOAD_MAX_BYTES } from '@/domain/packageUpload';
 import { packageZipErrorMessage } from '@/domain/safeZip';
+import { useSessionStore } from '@/stores/sessionStore';
 
 interface PackageSource {
   url: string;
@@ -102,6 +103,8 @@ function DirNode({
  * 解压放在前端而非上传时入库，是为了不把几十个文件的内容塞进 CenterRecord 那条 JSON。
  */
 export function PackageFileTree({ source }: { source: PackageSource }) {
+  const role = useSessionStore((state) => state.user?.platformRole);
+  const allowLargePackage = role === 'super_admin' || role === 'capability_ops';
   const [parsed, setParsed] = useState<Awaited<ReturnType<typeof buildPackageFileTreeAsync>> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<PackageFile | null>(null);
@@ -118,16 +121,18 @@ export function PackageFileTree({ source }: { source: PackageSource }) {
     setDownloadError(null);
     (async () => {
       try {
-        if (source.size > PACKAGE_UPLOAD_MAX_BYTES) {
+        if (!allowLargePackage && source.size > PACKAGE_UPLOAD_MAX_BYTES) {
           throw new Error('资源包超过 200MB，已拒绝读取');
         }
         const res = await fetchPackageBlob(source.url, controller.signal);
         const contentLength = Number(res.headers.get('Content-Length') || 0);
-        if (contentLength > PACKAGE_UPLOAD_MAX_BYTES) {
+        if (!allowLargePackage && contentLength > PACKAGE_UPLOAD_MAX_BYTES) {
           throw new Error('资源包超过 200MB，已拒绝读取');
         }
         const buf = new Uint8Array(await res.arrayBuffer());
-        const next = await buildPackageFileTreeAsync(buf, controller.signal);
+        const next = await buildPackageFileTreeAsync(buf, controller.signal, {
+          maxCompressedBytes: allowLargePackage ? null : undefined,
+        });
         if (!controller.signal.aborted) setParsed(next);
       } catch (e) {
         if (!controller.signal.aborted) {
@@ -140,7 +145,7 @@ export function PackageFileTree({ source }: { source: PackageSource }) {
     return () => {
       controller.abort();
     };
-  }, [source.size, source.url]);
+  }, [allowLargePackage, source.size, source.url]);
 
   useEffect(() => {
     if (parsed && !selected) {

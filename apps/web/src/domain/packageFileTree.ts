@@ -3,6 +3,7 @@ import {
   extractInspectedZipEntries,
   inspectPackageZip,
   PACKAGE_ZIP_LIMITS,
+  type PackageZipSizeOptions,
   type SafeZipEntry,
 } from '@/domain/safeZip';
 
@@ -95,8 +96,9 @@ function previewPriority(entry: SafeZipEntry): number {
 export async function buildPackageFileTreeAsync(
   bytes: Uint8Array,
   signal?: AbortSignal,
+  options: PackageZipSizeOptions = {},
 ): Promise<{ root: PackageDir; fileCount: number; totalUncompressedBytes: number }> {
-  const inspection = await inspectPackageZip(bytes);
+  const inspection = await inspectPackageZip(bytes, options);
   const previewMessages = new Map<string, string>();
   const selected = new Set<string>();
   let previewTotal = 0;

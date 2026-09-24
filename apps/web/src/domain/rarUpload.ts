@@ -13,7 +13,10 @@ export function isRarPackageName(name: string): boolean {
  * 上传前整理包文件：RAR 转成 ZIP，其他格式原样返回。
  * 解压组件（含 WASM）只在选中 RAR 时按需加载，不进首屏包。
  */
-export async function normalizePackageUploadFile(file: File): Promise<File> {
+export async function normalizePackageUploadFile(
+  file: File,
+  options: { maxBytes?: number | null } = {},
+): Promise<File> {
   if (!isRarPackageName(file.name)) return file;
   let rar: typeof import('@/domain/rarPackage');
   try {
@@ -21,5 +24,8 @@ export async function normalizePackageUploadFile(file: File): Promise<File> {
   } catch {
     throw new PackageZipError('rar_unavailable', RAR_UNAVAILABLE_MESSAGE);
   }
-  return rar.rarFileToZipFile(file);
+  return rar.rarFileToZipFile(
+    file,
+    options.maxBytes === undefined ? undefined : options.maxBytes,
+  );
 }

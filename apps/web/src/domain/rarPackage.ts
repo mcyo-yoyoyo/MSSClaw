@@ -1,7 +1,7 @@
 import { zip, type AsyncZippable } from 'fflate';
 import { createExtractorFromData, type Extractor } from 'node-unrar-js';
 import unrarWasmUrl from 'node-unrar-js/esm/js/unrar.wasm?url';
-import { PACKAGE_UPLOAD_MAX_BYTES, PACKAGE_UPLOAD_MAX_LABEL } from '@/domain/packageUpload';
+import { PACKAGE_UPLOAD_MAX_BYTES } from '@/domain/packageUpload';
 import { RAR_UNAVAILABLE_MESSAGE } from '@/domain/rarUpload';
 import {
   assertSafeArchivePath,
@@ -164,9 +164,13 @@ function zipFiles(files: AsyncZippable): Promise<Uint8Array> {
 export async function convertRarToZip(
   data: ArrayBuffer,
   openArchive: OpenRarArchive,
+  maxBytes: number | null = PACKAGE_UPLOAD_MAX_BYTES,
 ): Promise<Uint8Array> {
-  if (data.byteLength > PACKAGE_ZIP_LIMITS.maxCompressedBytes) {
-    throw new PackageZipError('compressed_too_large', `RAR 压缩包超过 ${PACKAGE_UPLOAD_MAX_LABEL}`);
+  if (maxBytes !== null && data.byteLength > maxBytes) {
+    throw new PackageZipError(
+      'compressed_too_large',
+      `RAR 压缩包超过 ${Math.round(maxBytes / MIB)}MB`,
+    );
   }
   const head = new Uint8Array(data, 0, Math.min(data.byteLength, RAR_SIGNATURE.length));
   if (!RAR_SIGNATURE.every((byte, index) => head[index] === byte)) {
@@ -180,10 +184,10 @@ export async function convertRarToZip(
   } catch {
     throw new PackageZipError('invalid_rar', 'RAR 转换为 ZIP 失败，请改用 ZIP 上传');
   }
-  if (zipped.byteLength > PACKAGE_UPLOAD_MAX_BYTES) {
+  if (maxBytes !== null && zipped.byteLength > maxBytes) {
     throw new PackageZipError(
       'compressed_too_large',
-      `RAR 转成 ZIP 后超过 ${PACKAGE_UPLOAD_MAX_LABEL}，请精简后再上传`,
+      `RAR 转成 ZIP 后超过 ${Math.round(maxBytes / MIB)}MB，请精简后再上传`,
     );
   }
   return zipped;
@@ -207,9 +211,14 @@ function loadUnrarWasm(): Promise<ArrayBuffer> {
 }
 
 /** 浏览器入口：读取用户选中的 .rar，返回内容相同的 .zip 文件。 */
-export async function rarFileToZipFile(file: File): Promise<File> {
-  const zipped = await convertRarToZip(await file.arrayBuffer(), async (data) =>
-    createExtractorFromData({ data, wasmBinary: await loadUnrarWasm() }),
+export async function rarFileToZipFile(
+  file: File,
+  maxBytes: number | null = PACKAGE_UPLOAD_MAX_BYTES,
+): Promise<File> {
+  const zipped = await convertRarToZip(
+    await file.arrayBuffer(),
+    async (data) => createExtractorFromData({ data, wasmBinary: await loadUnrarWasm() }),
+    maxBytes,
   );
   // fflate 的输出由普通 ArrayBuffer 承载，可直接作为 BlobPart，无需再复制一份
   return new File([zipped as Uint8Array<ArrayBuffer>], rarZipFileName(file.name), {

@@ -337,7 +337,7 @@ export function MarketSkillSubmitModal({
             <div className="min-w-0">
               <p className="text-[12px] font-semibold text-zinc-800">上传 Skill 包（推荐）</p>
               <p className="mt-0.5 text-[11px] text-zinc-500">
-                支持 .skill.zip / .rar / SKILL.md / JSON（≤{PACKAGE_UPLOAD_MAX_LABEL}），与能力开发「配置Skill」一致
+                支持 .skill.zip / .rar / SKILL.md / JSON（用户提报≤{PACKAGE_UPLOAD_MAX_LABEL}）
               </p>
               {packName ? (
                 <p className="mt-1 truncate text-[11px] font-medium text-emerald-700">

@@ -12,7 +12,11 @@ type Extractor = { getFileList: () => unknown; extract: () => unknown };
 type OpenArchive = (data: ArrayBuffer) => Promise<Extractor>;
 
 type RarPackageModule = {
-  convertRarToZip: (data: ArrayBuffer, openArchive: OpenArchive) => Promise<Uint8Array>;
+  convertRarToZip: (
+    data: ArrayBuffer,
+    openArchive: OpenArchive,
+    maxBytes?: number | null,
+  ) => Promise<Uint8Array>;
   rarFileToZipFile: (file: File) => Promise<File>;
   rarZipFileName: (name: string) => string;
 };
@@ -25,6 +29,7 @@ type RarUploadModule = {
 type SkillExportModule = {
   parseSkillUpload: (
     file: File,
+    options?: { maxCompressedBytes?: number | null },
   ) => Promise<Array<{ name?: string; desc?: string; instructions?: string }>>;
 };
 
@@ -119,6 +124,23 @@ test('RAR4（Windows 反斜杠路径）同样可以转换', async () => {
     ]),
   );
   assert.deepEqual(unzipText(zip), { 'demo/SKILL.md': SKILL_MD, 'demo/ref/a.txt': 'aaa' });
+});
+
+test('运营后台可显式跳过压缩包体积配额，默认调用仍可设置并执行上限', async () => {
+  const source = buildRar5([{ name: 'demo/SKILL.md', data: SKILL_MD }]);
+  await rejectsWith(
+    rar.convertRarToZip(toArrayBuffer(source), openArchive, 1),
+    'compressed_too_large',
+  );
+
+  const zip = await rar.convertRarToZip(toArrayBuffer(source), openArchive, null);
+  const file = new File([zip], 'demo.zip');
+  await rejectsWith(
+    skillExport.parseSkillUpload(file, { maxCompressedBytes: 1 }),
+    'compressed_too_large',
+  );
+  const [skill] = await skillExport.parseSkillUpload(file, { maxCompressedBytes: null });
+  assert.equal(skill?.name, 'demo-skill');
 });
 
 test('并发转换互不串数据，失败的转换不影响后续转换', async () => {

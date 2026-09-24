@@ -10,13 +10,9 @@ import { shareSyncSaveHint } from '@/domain/shareSync';
 import {
   deleteWorkspaceBlob,
   isPackageUploadContextCurrent,
-  uploadWorkspacePackage,
+  uploadWorkspaceOpsPackage,
 } from '@/api/blobApi';
 import { currentWorkspaceId } from '@/api/platformDocsApi';
-import {
-  PACKAGE_UPLOAD_MAX_LABEL,
-  packageUploadSizeError,
-} from '@/domain/packageUpload';
 import { normalizePackageUploadFile, RAR_PACKAGE_ACCEPT } from '@/domain/rarUpload';
 import { packageZipErrorMessage } from '@/domain/safeZip';
 
@@ -78,25 +74,20 @@ export function SkillOpsRequestModal({
         showToast('请上传完整 Skill 包');
         return;
       }
-      const sizeError = packageUploadSizeError(packageFile);
-      if (sizeError) {
-        showToast(sizeError);
-        return;
-      }
       setSubmitting(true);
       const workspaceId = currentWorkspaceId();
       // RAR 先转成 ZIP 再归档
       let upload: File;
       try {
-        upload = await normalizePackageUploadFile(packageFile);
+        upload = await normalizePackageUploadFile(packageFile, { maxBytes: null });
       } catch (error) {
         showToast(packageZipErrorMessage(error, 'RAR 转换失败，请改用 ZIP 上传'));
         setSubmitting(false);
         return;
       }
-      let uploaded: Awaited<ReturnType<typeof uploadWorkspacePackage>>;
+      let uploaded: Awaited<ReturnType<typeof uploadWorkspaceOpsPackage>>;
       try {
-        uploaded = await uploadWorkspacePackage(workspaceId, upload);
+        uploaded = await uploadWorkspaceOpsPackage(workspaceId, upload);
       } catch {
         showToast('完整包上传失败，请检查后端连接后重试');
         setSubmitting(false);
@@ -214,7 +205,7 @@ export function SkillOpsRequestModal({
             </FormField>
             <FormField
               label="完整 Skill 包"
-              hint={`必填；随审批单归档，支持 zip / rar / tar.gz（≤${PACKAGE_UPLOAD_MAX_LABEL}，rar 会自动转为 zip）`}
+              hint="必填；随审批单归档，支持 zip / rar / tar.gz（rar 会自动转为 zip）"
             >
               <input
                 type="file"
@@ -223,13 +214,6 @@ export function SkillOpsRequestModal({
                   const file = event.target.files?.[0] ?? null;
                   if (!file) {
                     setPackageFile(null);
-                    return;
-                  }
-                  const sizeError = packageUploadSizeError(file);
-                  if (sizeError) {
-                    event.target.value = '';
-                    setPackageFile(null);
-                    showToast(sizeError);
                     return;
                   }
                   setPackageFile(file);
