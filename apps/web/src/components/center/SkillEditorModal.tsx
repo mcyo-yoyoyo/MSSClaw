@@ -332,8 +332,16 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     setParsing(true);
     try {
       // RAR 先转成 ZIP，解析与原包留档都用转换后的文件
-      const upload = await normalizePackageUploadFile(file, { maxBytes: null });
-      const items = await parseSkillUpload(upload, { maxCompressedBytes: null });
+      const upload = await normalizePackageUploadFile(file, {
+        maxCompressedBytes: null,
+        maxEntries: null,
+        maxFiles: null,
+      });
+      const items = await parseSkillUpload(upload, {
+        maxCompressedBytes: null,
+        maxEntries: null,
+        maxFiles: null,
+      });
       if (!temporaryPackageBlobs.isCurrent(uploadGeneration)) return;
       if (!items[0]) {
         showToast('未能识别标准 Skill 包（支持 .skill.zip / .rar / SKILL.md / JSON）');
@@ -954,7 +962,11 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                       setUploadingPackage(true);
                       let upload: File;
                       try {
-                        upload = await normalizePackageUploadFile(file, { maxBytes: null });
+                        upload = await normalizePackageUploadFile(file, {
+                          maxCompressedBytes: null,
+                          maxEntries: null,
+                          maxFiles: null,
+                        });
                       } catch (error) {
                         if (temporaryPackageBlobs.isCurrent(uploadGeneration)) {
                           setUploadingPackage(false);

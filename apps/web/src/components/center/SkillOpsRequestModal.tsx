@@ -79,7 +79,11 @@ export function SkillOpsRequestModal({
       // RAR 先转成 ZIP 再归档
       let upload: File;
       try {
-        upload = await normalizePackageUploadFile(packageFile, { maxBytes: null });
+        upload = await normalizePackageUploadFile(packageFile, {
+          maxCompressedBytes: null,
+          maxEntries: null,
+          maxFiles: null,
+        });
       } catch (error) {
         showToast(packageZipErrorMessage(error, 'RAR 转换失败，请改用 ZIP 上传'));
         setSubmitting(false);

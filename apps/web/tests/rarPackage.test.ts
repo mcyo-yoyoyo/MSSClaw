@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { after, before, test } from 'node:test';
 
-import { strFromU8, unzipSync } from 'fflate';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { createServer, type ViteDevServer } from 'vite';
 
 import { buildRar4, buildRar5 } from './rarFixture.ts';
@@ -15,7 +15,7 @@ type RarPackageModule = {
   convertRarToZip: (
     data: ArrayBuffer,
     openArchive: OpenArchive,
-    maxBytes?: number | null,
+    options?: ArchiveInspectionOptions,
   ) => Promise<Uint8Array>;
   rarFileToZipFile: (file: File) => Promise<File>;
   rarZipFileName: (name: string) => string;
@@ -23,13 +23,19 @@ type RarPackageModule = {
 
 type RarUploadModule = {
   isRarPackageName: (name: string) => boolean;
-  normalizePackageUploadFile: (file: File) => Promise<File>;
+  normalizePackageUploadFile: (file: File, options?: ArchiveInspectionOptions) => Promise<File>;
+};
+
+type ArchiveInspectionOptions = {
+  maxCompressedBytes?: number | null;
+  maxEntries?: number | null;
+  maxFiles?: number | null;
 };
 
 type SkillExportModule = {
   parseSkillUpload: (
     file: File,
-    options?: { maxCompressedBytes?: number | null },
+    options?: ArchiveInspectionOptions,
   ) => Promise<Array<{ name?: string; desc?: string; instructions?: string }>>;
 };
 
@@ -129,17 +135,60 @@ test('RAR4（Windows 反斜杠路径）同样可以转换', async () => {
 test('运营后台可显式跳过压缩包体积配额，默认调用仍可设置并执行上限', async () => {
   const source = buildRar5([{ name: 'demo/SKILL.md', data: SKILL_MD }]);
   await rejectsWith(
-    rar.convertRarToZip(toArrayBuffer(source), openArchive, 1),
+    rar.convertRarToZip(toArrayBuffer(source), openArchive, { maxCompressedBytes: 1 }),
     'compressed_too_large',
   );
 
-  const zip = await rar.convertRarToZip(toArrayBuffer(source), openArchive, null);
+  const zip = await rar.convertRarToZip(toArrayBuffer(source), openArchive, {
+    maxCompressedBytes: null,
+  });
   const file = new File([zip], 'demo.zip');
   await rejectsWith(
     skillExport.parseSkillUpload(file, { maxCompressedBytes: 1 }),
     'compressed_too_large',
   );
   const [skill] = await skillExport.parseSkillUpload(file, { maxCompressedBytes: null });
+  assert.equal(skill?.name, 'demo-skill');
+});
+
+test('运营后台可跳过文件与条目数量配额，默认调用仍限制 2000 个文件', async () => {
+  const source = buildRar5([
+    { name: 'demo/SKILL.md', data: SKILL_MD },
+    { name: 'demo/extra.txt', data: 'x' },
+  ]);
+  await rejectsWith(
+    rar.convertRarToZip(toArrayBuffer(source), openArchive, { maxFiles: 1 }),
+    'too_many_files',
+  );
+  await rejectsWith(
+    rar.convertRarToZip(toArrayBuffer(source), openArchive, {
+      maxFiles: null,
+      maxEntries: 1,
+    }),
+    'too_many_entries',
+  );
+  await rar.convertRarToZip(toArrayBuffer(source), openArchive, {
+    maxFiles: null,
+    maxEntries: null,
+  });
+
+  const entries = Object.fromEntries([
+    ['demo/SKILL.md', strToU8(SKILL_MD)],
+    ...Array.from({ length: 2_500 }, (_, index) => [
+      `demo/files/${index}.txt`,
+      strToU8('x'),
+    ] as const),
+  ]);
+  const file = new File([zipSync(entries)], 'many-files.zip');
+  await rejectsWith(skillExport.parseSkillUpload(file), 'too_many_files');
+  await rejectsWith(
+    skillExport.parseSkillUpload(file, { maxFiles: null }),
+    'too_many_entries',
+  );
+  const [skill] = await skillExport.parseSkillUpload(file, {
+    maxFiles: null,
+    maxEntries: null,
+  });
   assert.equal(skill?.name, 'demo-skill');
 });
 

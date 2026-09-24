@@ -102,9 +102,16 @@ function DirNode({
  * 资源包文件树：按需拉取 blob 并在浏览器内解压。Skill / Agent 共用。
  * 解压放在前端而非上传时入库，是为了不把几十个文件的内容塞进 CenterRecord 那条 JSON。
  */
-export function PackageFileTree({ source }: { source: PackageSource }) {
+export function PackageFileTree({
+  source,
+  allowOpsInspection = false,
+}: {
+  source: PackageSource;
+  allowOpsInspection?: boolean;
+}) {
   const role = useSessionStore((state) => state.user?.platformRole);
-  const allowLargePackage = role === 'super_admin' || role === 'capability_ops';
+  const allowLargePackage = allowOpsInspection
+    && (role === 'super_admin' || role === 'capability_ops');
   const [parsed, setParsed] = useState<Awaited<ReturnType<typeof buildPackageFileTreeAsync>> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<PackageFile | null>(null);
@@ -132,6 +139,8 @@ export function PackageFileTree({ source }: { source: PackageSource }) {
         const buf = new Uint8Array(await res.arrayBuffer());
         const next = await buildPackageFileTreeAsync(buf, controller.signal, {
           maxCompressedBytes: allowLargePackage ? null : undefined,
+          maxEntries: allowLargePackage ? null : undefined,
+          maxFiles: allowLargePackage ? null : undefined,
         });
         if (!controller.signal.aborted) setParsed(next);
       } catch (e) {

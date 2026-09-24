@@ -66,9 +66,11 @@ export interface SafeZipInspection {
   totalUncompressedBytes: number;
 }
 
-export interface PackageZipSizeOptions {
-  /** null 仅由已鉴权的运营后台使用；其余调用默认 200MB。 */
+export interface PackageArchiveInspectionOptions {
+  /** null 仅由已鉴权的运营后台使用；其余调用使用 PACKAGE_ZIP_LIMITS。 */
   maxCompressedBytes?: number | null;
+  maxEntries?: number | null;
+  maxFiles?: number | null;
 }
 
 function zipBomb(message: string, code: PackageZipErrorCode): PackageZipError {
@@ -116,11 +118,17 @@ function invalidZipError(error: unknown): PackageZipError {
  */
 export function inspectPackageZip(
   bytes: Uint8Array,
-  options: PackageZipSizeOptions = {},
+  options: PackageArchiveInspectionOptions = {},
 ): Promise<SafeZipInspection> {
   const maxCompressedBytes = options.maxCompressedBytes === undefined
     ? PACKAGE_ZIP_LIMITS.maxCompressedBytes
     : options.maxCompressedBytes;
+  const maxEntries = options.maxEntries === undefined
+    ? PACKAGE_ZIP_LIMITS.maxEntries
+    : options.maxEntries;
+  const maxFiles = options.maxFiles === undefined
+    ? PACKAGE_ZIP_LIMITS.maxFiles
+    : options.maxFiles;
   if (maxCompressedBytes !== null && bytes.byteLength > maxCompressedBytes) {
     return Promise.reject(
       new PackageZipError(
@@ -141,9 +149,9 @@ export function inspectPackageZip(
         bytes,
         {
           filter: (info) => {
-            if (entries.length >= PACKAGE_ZIP_LIMITS.maxEntries) {
+            if (maxEntries !== null && entries.length >= maxEntries) {
               throw zipBomb(
-                `目录条目超过 ${PACKAGE_ZIP_LIMITS.maxEntries} 个`,
+                `目录条目超过 ${maxEntries} 个`,
                 'too_many_entries',
               );
             }
@@ -159,9 +167,9 @@ export function inspectPackageZip(
 
             if (!entry.isDirectory) {
               fileCount += 1;
-              if (fileCount > PACKAGE_ZIP_LIMITS.maxFiles) {
+              if (maxFiles !== null && fileCount > maxFiles) {
                 throw zipBomb(
-                  `文件数量超过 ${PACKAGE_ZIP_LIMITS.maxFiles} 个`,
+                  `文件数量超过 ${maxFiles} 个`,
                   'too_many_files',
                 );
               }
@@ -286,7 +294,7 @@ export function extractInspectedZipEntries(
 export async function readPackageZipMetadata(
   bytes: Uint8Array,
   matches: (path: string) => boolean,
-  options: PackageZipSizeOptions & { signal?: AbortSignal } = {},
+  options: PackageArchiveInspectionOptions & { signal?: AbortSignal } = {},
 ): Promise<Record<string, Uint8Array>> {
   const inspection = await inspectPackageZip(bytes, options);
   const selected = new Set(
