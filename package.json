@@ -27,6 +27,7 @@
     "test:oauth": "npm run test:oauth-login --workspace @mss-claw/api && npm run test:auth-oauth-mode --workspace @mss-claw/web",
     "probe:oauth": "node apps/api/scripts/probe-uniportal-userinfo.mjs",
     "preflight:oauth": "node apps/api/scripts/preflight-uniportal-oauth.mjs",
-    "verify:oauth": "npm run build:api --silent && node apps/api/scripts/e2e-oauth-login.mjs"
+    "verify:oauth": "npm run build:api --silent && node apps/api/scripts/e2e-oauth-login.mjs",
+    "verify:oauth:deployed": "node apps/api/scripts/verify-deployed-oauth-login.mjs"
   }
 }
