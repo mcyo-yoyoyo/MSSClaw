@@ -74,11 +74,27 @@ http {
       try_files $uri $uri/ /index.html;
     }
 
+    # 运营后台 Skill 包：API 会再次校验 super_admin / capability_ops；0 仅关闭 Nginx 体积上限。
+    location ~ ^/api/v1/workspaces/[^/]+/blobs/packages/ops$ {
+      limit_req zone=mss_api burst=40 nodelay;
+      client_max_body_size 0;
+      proxy_request_buffering off;
+      proxy_http_version 1.1;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header Connection "";
+      proxy_send_timeout 600s;
+      proxy_read_timeout 600s;
+      proxy_buffering off;
+      proxy_pass http://mssclaw_api;
+    }
+
     # 可选：反代 Nest（内网多用户共享必须开启；勿把 /api 交给 SPA try_files）
     # 健康检查须返回 JSON：GET /api/v1/health → {"status":"ok","service":"mss-claw-api",...}
     location /api/ {
       limit_req zone=mss_api burst=40 nodelay;
-      # Skill / Agent 包允许 200 MiB；留出少量协议余量。普通附件仍由 API 限制为 12 MiB。
+      # 用户侧 Skill / Agent 包允许 200 MiB；留出少量协议余量。普通附件仍由 API 限制为 12 MiB。
       client_max_body_size 210m;
       proxy_request_buffering off; # 大包直接流向 Nest，避免 Nginx 先完整落临时文件
       proxy_http_version 1.1;

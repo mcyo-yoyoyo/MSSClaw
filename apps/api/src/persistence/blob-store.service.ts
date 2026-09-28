@@ -114,13 +114,17 @@ export class BlobStoreService {
       name: string;
       stream: Readable;
       contentLength?: number;
+      /** null 仅用于已鉴权的运营后台上传；普通调用仍使用配置上限。 */
+      maxBytes?: number | null;
     },
   ): Promise<UploadedPackageBlob> {
     const mimeType = packageArchiveMimeType(input.name);
     if (!mimeType) throw new Error('unsupported_package_type');
 
-    const maxBytes = this.packageBlobMaxBytes();
-    if (input.contentLength !== undefined && input.contentLength > maxBytes) {
+    const maxBytes = input.maxBytes === null
+      ? null
+      : input.maxBytes ?? this.packageBlobMaxBytes();
+    if (maxBytes !== null && input.contentLength !== undefined && input.contentLength > maxBytes) {
       throw new Error(`package_blob_too_large:${maxBytes}`);
     }
 
@@ -145,7 +149,7 @@ export class BlobStoreService {
         for await (const chunk of input.stream) {
           const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
           size += bytes.length;
-          if (size > maxBytes) {
+          if (maxBytes !== null && size > maxBytes) {
             throw new Error(`package_blob_too_large:${maxBytes}`);
           }
           hash.update(bytes);

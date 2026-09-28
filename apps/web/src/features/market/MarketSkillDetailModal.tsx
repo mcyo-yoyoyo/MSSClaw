@@ -767,7 +767,10 @@ export function MarketSkillDetailModal({
             ) : null}
 
             {tab === 'files' && skill.packageBlob ? (
-              <PackageFileTree source={skill.packageBlob} />
+              <PackageFileTree
+                source={skill.packageBlob}
+                allowOpsInspection={Boolean(adminActions)}
+              />
             ) : null}
 
             {tab === 'files' && !skill.packageBlob ? (

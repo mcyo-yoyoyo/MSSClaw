@@ -23,7 +23,7 @@
 ## 已做的代码侧加固（API）
 
 - JSON body 上限默认 `20mb`（`JSON_BODY_LIMIT`）
-- Skill / Agent 原始包走二进制流式上传，默认上限 200 MiB（`PACKAGE_BLOB_MAX_BYTES`）；普通附件仍默认 12 MiB
+- 用户侧 Skill / Agent 原始包走二进制流式上传，默认上限 200 MiB（`PACKAGE_BLOB_MAX_BYTES`）；运营后台 Skill 专用端点校验角色后不设体积上限；普通附件仍默认 12 MiB
 - `helmet` + `compression`
 - 全局限流 `@nestjs/throttler`（`THROTTLE_LIMIT` / `THROTTLE_TTL_MS`）
 - 可选 `API_KEY`（请求头 `X-API-Key`；健康检查豁免）

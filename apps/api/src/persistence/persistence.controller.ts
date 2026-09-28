@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Header,
   Headers,
@@ -383,11 +384,41 @@ export class PersistenceController {
     }
   }
 
-  /** Skill / Agent 原包：直接流式写盘，避免 200MiB 文件的 base64 膨胀与内存复制。 */
+  /** 用户侧 Skill / Agent 原包：流式写盘，保留配置的体积上限。 */
   @Post('blobs/packages')
   async putPackageBlob(
     @Param('workspaceId') workspaceId: string,
     @Req() req: Request,
+  ) {
+    return this.storePackageBlob(workspaceId, req);
+  }
+
+  /** 运营后台 Skill 原包：仅平台运营/能力开发可用，不设应用层体积上限。 */
+  @Post('blobs/packages/ops')
+  async putOpsPackageBlob(
+    @Param('workspaceId') workspaceId: string,
+    @Req() req: Request,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    const session = await this.docs.me(
+      sessionToken(authorization, xSessionToken),
+      workspaceId,
+    );
+    if (!session.ok) {
+      throw new UnauthorizedException(session.error || 'package_upload_login_required');
+    }
+    const role = String(session.user?.platformRole ?? '');
+    if (role !== 'super_admin' && role !== 'capability_ops') {
+      throw new ForbiddenException('package_upload_ops_required');
+    }
+    return this.storePackageBlob(workspaceId, req, null);
+  }
+
+  private async storePackageBlob(
+    workspaceId: string,
+    req: Request,
+    maxBytes?: number | null,
   ) {
     const encodedName = req.header('x-file-name')?.trim();
     if (!encodedName) throw new BadRequestException('x_file_name_required');
@@ -417,6 +448,7 @@ export class PersistenceController {
         name,
         stream: req,
         contentLength,
+        maxBytes,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'package_blob_failed';

@@ -1,4 +1,7 @@
-import { PackageZipError } from '@/domain/safeZip';
+import {
+  PackageZipError,
+  type PackageArchiveInspectionOptions,
+} from '@/domain/safeZip';
 
 /** 文件选择框额外接受 RAR；选中后在浏览器里转成 ZIP，之后仍走原有的 ZIP 链路。 */
 export const RAR_PACKAGE_ACCEPT = '.rar,application/vnd.rar,application/x-rar-compressed';
@@ -13,7 +16,10 @@ export function isRarPackageName(name: string): boolean {
  * 上传前整理包文件：RAR 转成 ZIP，其他格式原样返回。
  * 解压组件（含 WASM）只在选中 RAR 时按需加载，不进首屏包。
  */
-export async function normalizePackageUploadFile(file: File): Promise<File> {
+export async function normalizePackageUploadFile(
+  file: File,
+  options: PackageArchiveInspectionOptions = {},
+): Promise<File> {
   if (!isRarPackageName(file.name)) return file;
   let rar: typeof import('@/domain/rarPackage');
   try {
@@ -21,5 +27,5 @@ export async function normalizePackageUploadFile(file: File): Promise<File> {
   } catch {
     throw new PackageZipError('rar_unavailable', RAR_UNAVAILABLE_MESSAGE);
   }
-  return rar.rarFileToZipFile(file);
+  return rar.rarFileToZipFile(file, options);
 }

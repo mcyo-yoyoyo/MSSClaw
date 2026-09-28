@@ -628,6 +628,7 @@ function StackedBar({
  * 跑过校验：亮度带、彩度下限、protan/deutan 分离度、对比度全部通过。别换成
  * STACK_SHADES 那套灰阶——堆叠条只有相邻两块接触，折线是三条交叠，灰阶分不出身份。
  */
+// 与总览卡片同口径：每日 UV，图例合计按天累加，正好等于卡片上的访问人次。
 const TREND_SERIES = [
   { key: 'pv', label: '页面浏览数 PV', color: '#2a78d6' },
   { key: 'userUv', label: '用户数 UV', color: '#eb6834' },
@@ -1374,6 +1375,21 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
   const overviewHasAssets = Boolean(overviewState.report?.assets);
   const overviewToolTotal = overviewSummary.tool ?? overviewSummary.external + overviewSummary.company;
   const overviewSeries = overviewState.report?.series ?? [];
+  /**
+   * 访问人次：每日 UV 按天累加。区间去重会把「一周来了五天的人」算成 1，
+   * 运营要看的是访问热度；PV 又是另一回事（一次访问翻十页算十次）。
+   */
+  const overviewVisits = useMemo(
+    () =>
+      overviewSeries.reduce(
+        (sum, point) => ({
+          userUv: sum.userUv + (point.userUv ?? 0),
+          guestUv: sum.guestUv + (point.guestUv ?? 0),
+        }),
+        { userUv: 0, guestUv: 0 },
+      ),
+    [overviewSeries],
+  );
   const overviewRangeLabel = overviewState.report
     ? `${formatDate(overviewState.report.range.from)} – ${formatDate(overviewState.report.range.to)}`
     : undefined;
@@ -1557,8 +1573,16 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
         ) : (
           <HeroRow>
             <HeroStat label="页面浏览数 PV" value={formatCount(overviewTraffic.pv)} note="含游客与登录用户，不去重" />
-            <HeroStat label="用户数 UV" value={formatCount(overviewTraffic.userUv)} note="登录用户，按用户 ID 去重" />
-            <HeroStat label="游客数" value={formatCount(overviewTraffic.guestUv)} note="未登录访客" />
+            <HeroStat
+              label="用户数 UV"
+              value={formatCount(overviewVisits.userUv)}
+              note="登录用户，按天累计，跨天不去重"
+            />
+            <HeroStat
+              label="游客数"
+              value={formatCount(overviewVisits.guestUv)}
+              note="未登录访客，按天累计，跨天不去重"
+            />
           </HeroRow>
         )}
 
