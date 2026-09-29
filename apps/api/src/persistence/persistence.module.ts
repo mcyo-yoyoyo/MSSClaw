@@ -10,6 +10,8 @@ import { PortalAnalyticsController } from './portal-analytics.controller';
 import { PortalAnalyticsService } from './portal-analytics.service';
 import { AiBriefSubscriptionsController } from './ai-brief-subscriptions.controller';
 import { AiBriefSubscriptionsService } from './ai-brief-subscriptions.service';
+import { CaseInsightsController } from './case-insights.controller';
+import { CaseInsightsService } from './case-insights.service';
 
 @Module({
   controllers: [
@@ -20,6 +22,7 @@ import { AiBriefSubscriptionsService } from './ai-brief-subscriptions.service';
     AiDailyNewsController,
     PortalAnalyticsController,
     AiBriefSubscriptionsController,
+    CaseInsightsController,
   ],
   providers: [
     PersistenceService,
@@ -28,6 +31,7 @@ import { AiBriefSubscriptionsService } from './ai-brief-subscriptions.service';
     AiNewsArchiveService,
     PortalAnalyticsService,
     AiBriefSubscriptionsService,
+    CaseInsightsService,
   ],
   exports: [PersistenceService, BlobStoreService, PlatformDocsService],
 })

@@ -18,6 +18,7 @@ import {
 import { useAiBriefEmailCopyStore } from '@/stores/aiBriefEmailCopyStore';
 import { PageCanvas } from '@/components/layout/PageCanvas';
 import { PageStageHero } from '@/components/layout/PageStageHero';
+import { CaseInsightsView } from './CaseInsightsView';
 
 type CalendarMonth = { year: number; month: number };
 
@@ -315,6 +316,7 @@ export function AiBriefPage() {
   const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
   const [searchDraft, setSearchDraft] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [contentMode, setContentMode] = useState<'news' | 'cases'>('news');
 
   useEffect(() => {
     // 每次进入快讯页主动同步，避免开发热更新或上游短暂失败后长期停留在兜底内容。
@@ -471,7 +473,7 @@ export function AiBriefPage() {
           </div>
         </PageStageHero>
 
-        {mssBoard.length ? (
+        {contentMode === 'news' && mssBoard.length ? (
           <section className="mb-3 rounded-[18px] border border-[#0071e3]/15 bg-[#f4f8fd] px-4 py-3.5">
             <div className="mb-2.5 flex items-baseline justify-between gap-2">
               <h2 className="text-[13px] font-semibold tracking-tight text-[#1d1d1f]">
@@ -509,10 +511,13 @@ export function AiBriefPage() {
               <button
                 key={category.id}
                 type="button"
-                onClick={() => setCategoryFilter(category.id)}
+                onClick={() => {
+                  setContentMode('news');
+                  setCategoryFilter(category.id);
+                }}
                 className={cn(
                   'relative px-3 py-2 text-[13px] font-medium transition after:absolute after:inset-x-2 after:-bottom-[11px] after:h-0.5 after:rounded-full after:bg-transparent',
-                  categoryFilter === category.id
+                  contentMode === 'news' && categoryFilter === category.id
                     ? 'font-semibold text-[#0071e3] after:bg-[#0071e3]'
                     : 'text-zinc-500 hover:text-zinc-900',
                 )}
@@ -520,7 +525,20 @@ export function AiBriefPage() {
                 {category.label}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => setContentMode('cases')}
+              className={cn(
+                'relative px-3 py-2 text-[13px] font-medium transition after:absolute after:inset-x-2 after:-bottom-[11px] after:h-0.5 after:rounded-full after:bg-transparent',
+                contentMode === 'cases'
+                  ? 'font-semibold text-[#0071e3] after:bg-[#0071e3]'
+                  : 'text-zinc-500 hover:text-zinc-900',
+              )}
+            >
+              案例洞察
+            </button>
           </div>
+          {contentMode === 'news' ? (
           <div className="flex w-full shrink-0 flex-col gap-2 sm:flex-row lg:w-auto">
             <DateCalendarFilter
               startDate={dateRange.startDate}
@@ -552,8 +570,10 @@ export function AiBriefPage() {
               </button>
             </form>
           </div>
+          ) : null}
         </div>
 
+        {contentMode === 'cases' ? <CaseInsightsView /> : (
         <div className="min-h-0 flex-1">
           <main className="min-h-0 flex-1">
             {loading && !flat.length ? (
@@ -669,6 +689,7 @@ export function AiBriefPage() {
             )}
           </main>
         </div>
+        )}
       </PageCanvas>
     </div>
   );

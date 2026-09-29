@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675">
+  <rect width="1200" height="675" fill="#17271f"/>
+  <rect x="42" y="42" width="1116" height="591" rx="10" fill="#20372b" stroke="#55725f"/>
+  <circle cx="1058" cy="112" r="28" fill="#d6a45e"/>
+  <text x="600" y="112" fill="#b8c5ba" text-anchor="middle" font-family="Arial, Microsoft YaHei, sans-serif" font-size="22">OPENAI CUSTOMER STORY</text>
+  <text x="600" y="315" fill="#ffffff" text-anchor="middle" font-family="Georgia, Songti SC, Microsoft YaHei, serif" font-size="72" font-weight="700">NVIDIA</text>
+  <text x="600" y="382" fill="#b8c5ba" text-anchor="middle" font-family="Arial, Microsoft YaHei, sans-serif" font-size="28">企业 AI 落地案例</text>
+  <line x1="230" y1="528" x2="970" y2="528" stroke="#55725f"/>
+  <text x="600" y="582" fill="#dce5dd" text-anchor="middle" font-family="Arial, Microsoft YaHei, sans-serif" font-size="24">AI CASEBOOK</text>
+</svg>
