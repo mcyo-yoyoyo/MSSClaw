@@ -457,8 +457,8 @@ export function CatalogAgentDetailModal({
   const activeTab = visibleTabs.some((item) => item.id === tab) ? tab : 'overview';
   const packageBlob = agent.packageBlob;
 
-  // 带管理操作的弹窗属于运营预览，不计入用户详情行为。
-  const trackDetail = !adminActions;
+  // 带管理操作的弹窗属于运营预览，不计入用户详情行为；整页呈现时由详情页记（区分直达）。
+  const trackDetail = !adminActions && !asPage;
   useEffect(() => {
     if (!trackDetail || detailTrackedRef.current === agent.id) return;
     detailTrackedRef.current = agent.id;

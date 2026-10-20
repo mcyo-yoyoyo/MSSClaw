@@ -25,7 +25,8 @@ interface ContentEngagementState {
   get: (id: string) => ContentEngagement;
   userVote: (id: string) => UserVote;
   bumpExposure: (id: string, assetType?: MarketAssetType) => void;
-  bumpDetail: (id: string, assetType?: MarketAssetType) => void;
+  /** 详情页直达时 action 传 detail_direct（代替 detail，见 domain/directEntry） */
+  bumpDetail: (id: string, assetType?: MarketAssetType, action?: 'detail' | 'detail_direct') => void;
   bumpView: (id: string, assetType?: MarketAssetType) => void;
   bumpUse: (id: string, assetType?: MarketAssetType) => void;
   bumpRedirect: (id: string, assetType?: MarketAssetType) => void;
@@ -111,7 +112,7 @@ export const useContentEngagementStore = create<ContentEngagementState>((set, ge
   get: (id) => get().byId[id] ?? emptyEngagement(id),
   userVote: (id) => get().userVotes[id] ?? null,
   bumpExposure: (id, assetType) => runMutation(set, id, 'exposure', undefined, assetType),
-  bumpDetail: (id, assetType) => runMutation(set, id, 'detail', undefined, assetType),
+  bumpDetail: (id, assetType, action = 'detail') => runMutation(set, id, action, undefined, assetType),
   bumpView: (id, assetType) => runMutation(set, id, 'view', undefined, assetType),
   bumpUse: (id, assetType) => runMutation(set, id, 'use', undefined, assetType),
   bumpRedirect: (id, assetType) => runMutation(set, id, 'redirect', undefined, assetType),

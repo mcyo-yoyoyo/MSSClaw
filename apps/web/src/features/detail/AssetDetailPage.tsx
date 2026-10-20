@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { MssZhishuMark } from '@/components/brand/MssZhishuMark';
 import {
   assetDetailUrl,
@@ -8,9 +8,10 @@ import {
 } from '@/domain/appRoute';
 import type { AppView } from '@/domain/appView';
 import { setAiBriefContentMode } from '@/domain/aiBriefContentMode';
-import { assetShareText, copyText } from '@/domain/assetShare';
+import { copyText } from '@/domain/assetShare';
 import { canViewAsset } from '@/domain/assetVisibility';
 import { prepareCaseArticleHtml } from '@/domain/caseArticleHtml';
+import { takeDetailAction } from '@/domain/directEntry';
 import { allowsMarketScenarioRun } from '@/domain/marketRunCapability';
 import { canExecuteChat } from '@/domain/permissions';
 import type { AppViewRouterHandlers } from '@/features/AppViewRouter';
@@ -21,6 +22,7 @@ import { MarketSkillDetailModal } from '@/features/market/MarketSkillDetailModal
 import { MarketToolDetailModal } from '@/features/market/MarketToolDetailModal';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useAuthGateStore } from '@/stores/authGateStore';
+import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { usePortalContentStore } from '@/stores/portalContentStore';
@@ -75,6 +77,8 @@ export function AssetDetailPage({ handlers }: { handlers: AppViewRouterHandlers 
   const portalContent = usePortalContentStore((s) => s.items);
   const navPreset = useNavPresentationStore((s) => s.preset);
   const caseState = useCaseInsightArticle(type === 'case' ? id : undefined);
+  const bumpDetail = useContentEngagementStore((s) => s.bumpDetail);
+  const trackedRef = useRef<string | null>(null);
 
   const viewer = useMemo(
     () => ({
@@ -101,11 +105,19 @@ export function AssetDetailPage({ handlers }: { handlers: AppViewRouterHandlers 
   else access = 'ok';
 
   const title = caseState.status === 'ready' ? caseState.article.title : asset?.name ?? '';
-  const summary = caseState.status === 'ready' ? caseState.article.summary : asset?.desc;
 
   useEffect(() => {
     if (access === 'ok' && title) document.title = `${title} - MSS AI提效平台`;
   }, [access, title]);
+
+  // 每打开一个资产记一次详情浏览；页面新打开就落在这里的记直达（看板「分享浏览数」）
+  useEffect(() => {
+    if (access !== 'ok' || !type || !id) return;
+    const key = `${type}:${id}`;
+    if (trackedRef.current === key) return;
+    trackedRef.current = key;
+    bumpDetail(id, type, takeDetailAction(type, id));
+  }, [access, bumpDetail, id, type]);
 
   const listView: AppView =
     type === 'case'
@@ -129,8 +141,8 @@ export function AssetDetailPage({ handlers }: { handlers: AppViewRouterHandlers 
 
   const share = async () => {
     if (!type || !id) return;
-    const copied = await copyText(assetShareText(title, summary, assetDetailUrl(type as DetailAssetType, id)));
-    showToast(copied ? '已复制分享内容，可粘贴发送' : '复制失败，请手动复制地址栏链接');
+    const copied = await copyText(assetDetailUrl(type as DetailAssetType, id));
+    showToast(copied ? '已复制链接' : '复制失败，请手动复制地址栏链接');
   };
 
   const allowRun = allowsMarketScenarioRun(navPreset) && (canExecuteChat(user?.platformRole) || isGuest);

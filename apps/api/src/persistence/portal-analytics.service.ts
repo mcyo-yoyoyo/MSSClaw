@@ -56,7 +56,7 @@ const GATE_ACTIONS = new Set([
 
 const EVENT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
-const BLACK_ASSET_TYPES = new Set(['tool', 'skill', 'agent', 'office-scene']);
+const BLACK_ASSET_TYPES = new Set(['tool', 'skill', 'agent', 'office-scene', 'case']);
 
 type CountValue = bigint | number | string | null;
 type PortalVisitorType = 'user' | 'guest';
@@ -314,8 +314,11 @@ export interface PortalAnalyticsReport {
       name: string;
       exposurePv: number;
       exposureUv: number;
+      /** 详情浏览数：detail + detail_direct（含旧的 view），只算所选区间 */
       detailPv: number;
       detailUv: number;
+      /** 分享浏览数：detail_direct，详情浏览数的子集 */
+      sharePv: number;
       downloads: number;
       downloadUv: number;
       likes: number;
@@ -873,7 +876,7 @@ export class PortalAnalyticsService {
           e."date_key" AS "date",
           e."content_id" AS "contentId",
           e."asset_type" AS "assetType",
-          SUM(CASE WHEN e."action" IN ('view', 'detail') THEN 1 ELSE 0 END) AS "views",
+          SUM(CASE WHEN e."action" IN ('view', 'detail', 'detail_direct') THEN 1 ELSE 0 END) AS "views",
           SUM(CASE WHEN e."action" = 'favorite' THEN 1 ELSE 0 END) AS "favorites",
           SUM(CASE WHEN e."action" = 'like' THEN 1 ELSE 0 END) AS "likes",
           SUM(CASE WHEN e."action" = 'dislike' THEN 1 ELSE 0 END) AS "dislikes",
@@ -927,7 +930,7 @@ export class PortalAnalyticsService {
           COUNT(DISTINCT e."visitor_hash") AS "uv"
         FROM "market_engagement_event" AS e
         WHERE e."date_key" BETWEEN ${from} AND ${to}
-          AND e."action" IN ('exposure', 'view', 'detail', 'download', 'request:download', 'like', 'dislike', 'favorite', 'redirect')
+          AND e."action" IN ('exposure', 'view', 'detail', 'detail_direct', 'download', 'request:download', 'like', 'dislike', 'favorite', 'redirect')
         GROUP BY e."content_id", e."asset_type", e."action"
       `),
       optionalRows(this.prisma.$queryRaw<BehaviorDownloadRow[]>`
@@ -1023,13 +1026,16 @@ export class PortalAnalyticsService {
       rows.push(row);
       catalogById.set(row.contentId, rows);
     }
-    const isBlackCatalogAsset = (contentId: string, rawAssetType?: string | null): boolean => {
-      const rows = catalogById.get(contentId) ?? [];
-      if (!rows.some((row) => BLACK_ASSET_TYPES.has(row.assetType) && row.assetType !== 'office-scene')) return false;
+    // 案例只进资产明细（withCases）；总览趋势、累计和调用统计仍只算工具 / Skill / Agent。
+    const isBlackCatalogAsset = (contentId: string, rawAssetType?: string | null, withCases = false): boolean => {
+      const rows = (catalogById.get(contentId) ?? []).filter(
+        (row) => row.assetType !== 'office-scene' && (withCases || row.assetType !== 'case'),
+      );
+      if (!rows.length) return false;
       const assetType = stringValue(rawAssetType).toLowerCase();
       // Older facts have no trustworthy dimension; keep them compatible while
       // rejecting an explicit type that disagrees with the catalog.
-      return !assetType || assetType === 'unknown' || rows.some((row) => row.assetType === assetType && row.assetType !== 'office-scene');
+      return !assetType || assetType === 'unknown' || rows.some((row) => row.assetType === assetType);
     };
 
     const totalsRow = totalsRows[0];
@@ -1247,6 +1253,7 @@ export class PortalAnalyticsService {
       exposureUv: number;
       detailPv: number;
       detailUv: number;
+      sharePv: number;
       downloads: number;
       downloadUv: number;
       likes: number;
@@ -1273,6 +1280,7 @@ export class PortalAnalyticsService {
       exposureUv: 0,
       detailPv: 0,
       detailUv: 0,
+      sharePv: 0,
       downloads: 0,
       downloadUv: 0,
       likes: 0,
@@ -1296,7 +1304,7 @@ export class PortalAnalyticsService {
     for (const row of catalog) assetMap.set(row.contentId, emptyAsset(row.contentId, row));
     for (const row of behaviorAssetRows) {
       const contentId = stringValue(row.contentId);
-      if (!contentId || !isBlackCatalogAsset(contentId, row.assetType)) continue;
+      if (!contentId || !isBlackCatalogAsset(contentId, row.assetType, true)) continue;
       const asset = assetMap.get(contentId);
       if (!asset) continue;
       const events = count(row.events);
@@ -1308,8 +1316,11 @@ export class PortalAnalyticsService {
           break;
         case 'view':
         case 'detail':
+        case 'detail_direct':
           asset.detailPv += events;
           asset.detailUv += uv;
+          // 分享浏览是详情浏览的子集
+          if (row.action === 'detail_direct') asset.sharePv += events;
           break;
         case 'download':
         case 'request:download':
@@ -1346,7 +1357,6 @@ export class PortalAnalyticsService {
       const downloads = count(row.downloads);
       const favorites = count(row.favorites);
       asset.exposurePv = Math.max(asset.exposurePv, views);
-      asset.detailPv = Math.max(asset.detailPv, views);
       asset.redirects = Math.max(asset.redirects, uses);
       asset.likes = Math.max(asset.likes, likes);
       asset.dislikes = Math.max(asset.dislikes, dislikes);
@@ -1400,6 +1410,8 @@ export class PortalAnalyticsService {
     const toolInventory = catalog.filter((row) => row.assetType === 'tool' && !row.officeScene);
     const assetSummary = catalog.reduce(
       (summary, row) => {
+        // 资产数以货架为准，案例不计入
+        if (row.assetType === 'case') return summary;
         summary.total += 1;
         if (row.published) summary.published += 1;
         else summary.unpublished += 1;
@@ -1868,6 +1880,16 @@ export class PortalAnalyticsService {
       if (boundToolIds.has(rawId) || boundToolIds.has(contentId)) {
         byId.set(contentId, { ...asset, bound: true });
       }
+    }
+    // 案例：已发布且未删除的文章进资产明细的「案例」标签（测试替身可能没有这张表）
+    if ((this.prisma as unknown as { caseInsightArticle?: unknown }).caseInsightArticle) {
+      const cases = await this.prisma.caseInsightArticle.findMany({
+        where: { status: 'published', deletedAt: null },
+        select: { id: true, title: true, publishedTitle: true },
+      });
+      cases.forEach((item) =>
+        add({ id: item.id, name: item.publishedTitle || item.title, published: true }, { assetType: 'case' }),
+      );
     }
     return [...byId.values()];
   }

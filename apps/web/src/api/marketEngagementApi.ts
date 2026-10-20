@@ -2,10 +2,11 @@ import { apiAuthHeaders, apiUrl } from '@/api/client';
 import type { ContentEngagement } from '@/domain/contentEngagement';
 
 export type MarketUserVote = 'like' | 'dislike' | null;
-export type MarketAssetType = 'tool' | 'skill' | 'agent' | 'office-scene' | 'unknown';
+export type MarketAssetType = 'tool' | 'skill' | 'agent' | 'office-scene' | 'case' | 'unknown';
 export type MarketEngagementAction =
   | 'exposure'
   | 'detail'
+  | 'detail_direct'
   | 'view'
   | 'use'
   | 'redirect'

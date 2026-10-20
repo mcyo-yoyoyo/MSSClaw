@@ -29,8 +29,11 @@ export interface PortalAnalyticsAssetRow {
   department?: string | null;
   exposurePv: number;
   exposureUv: number;
+  /** 详情浏览数（含分享进入），只算所选区间 */
   detailPv: number;
   detailUv: number;
+  /** 分享浏览数：详情页直达（detail_direct），详情浏览数的子集 */
+  sharePv: number;
   downloads: number;
   downloadUv: number;
   skillAgentDownloads?: number;

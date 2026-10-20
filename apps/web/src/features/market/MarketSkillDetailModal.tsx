@@ -307,8 +307,8 @@ export function MarketSkillDetailModal({
   const regionLabel = getAssetRegionLabel(skill.ownerRegionId);
   const isAllDepartmentsVisible = (skill.visibility ?? 'public') === 'public';
   const scopeLabel = getSkillVisibilityLabel(skill.visibility);
-  // 运营编辑弹窗是只读预览，不把管理员查看记入用户详情 UV/PV。
-  const trackDetail = !adminActions;
+  // 运营编辑弹窗是只读预览，不把管理员查看记入用户详情 UV/PV；整页呈现时由详情页记（区分直达）。
+  const trackDetail = !adminActions && !asPage;
 
   useEffect(() => {
     if (!trackDetail || detailTrackedRef.current === skill.id) return;

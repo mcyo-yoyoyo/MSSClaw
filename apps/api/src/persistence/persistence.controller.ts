@@ -38,6 +38,7 @@ import { PLATFORM_WORKSPACE_ID as workspaceId } from '../common/platform-workspa
 const MARKET_ENGAGEMENT_ACTIONS = new Set([
   'exposure',
   'detail',
+  'detail_direct',
   'view',
   'use',
   'redirect',
@@ -58,6 +59,7 @@ const MARKET_ENGAGEMENT_ACTIONS = new Set([
 const ANONYMOUS_MARKET_ENGAGEMENT_ACTIONS = new Set([
   'exposure',
   'detail',
+  'detail_direct',
   'view',
   'use',
   'redirect',
@@ -227,7 +229,7 @@ export class PersistenceController {
       active?: boolean;
       eventId?: string;
       visitorId?: string;
-      assetType?: 'tool' | 'skill' | 'agent' | 'office-scene' | 'unknown';
+      assetType?: 'tool' | 'skill' | 'agent' | 'office-scene' | 'case' | 'unknown';
       success?: boolean;
       durationMs?: number;
       inputTokens?: number;
@@ -287,7 +289,7 @@ export class PersistenceController {
       active?: boolean;
       eventId?: string;
       visitorId?: string;
-      assetType?: 'tool' | 'skill' | 'agent' | 'office-scene' | 'unknown';
+      assetType?: 'tool' | 'skill' | 'agent' | 'office-scene' | 'case' | 'unknown';
       success?: boolean;
       durationMs?: number;
       inputTokens?: number;

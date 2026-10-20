@@ -75,10 +75,11 @@ export function MarketToolDetailModal({
   );
 
   useEffect(() => {
-    if (previewOnly || !tool || detailTrackedRef.current === tool.id) return;
+    // 整页呈现时由详情页记（区分直达），这里不重复记
+    if (previewOnly || asPage || !tool || detailTrackedRef.current === tool.id) return;
     detailTrackedRef.current = tool.id;
     bumpDetail(tool.id, 'tool');
-  }, [bumpDetail, previewOnly, tool?.id]);
+  }, [asPage, bumpDetail, previewOnly, tool?.id]);
 
   const openUrl = () => {
     if (previewOnly) return;

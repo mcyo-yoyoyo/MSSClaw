@@ -108,10 +108,11 @@ function engagementHarness(
     : []);
   const prisma = {
     appSetting: { findUnique: async () => workspaceExists ? ({ value: { catalog: {} } }) : null },
-    // 门户内容、办公场景、中心资源在各自的表里；这些用例只用资产
+    // 门户内容、办公场景、中心资源、案例在各自的表里；这些用例只用资产
     portalContent: { findMany: async () => [] },
     officeScene: { findMany: async () => [] },
     centerResource: { findMany: async () => [] },
+    caseInsightArticle: { findMany: async () => [] },
     ...assetModels(contentRows),
     marketEngagement: { findUnique: async () => metric && ({ ...metric }) },
     marketEngagementEvent: { deleteMany: async () => ({ count: 0 }) },

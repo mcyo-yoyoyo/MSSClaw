@@ -30,7 +30,7 @@ import { useWorkspaceStore } from '@/stores/workspaceStore';
  * 时只发一次；某块单独换区间才会多发一次。
  */
 
-type AssetTab = 'externalTool' | 'companyTool' | 'skill' | 'agent';
+type AssetTab = 'externalTool' | 'companyTool' | 'skill' | 'agent' | 'case';
 type RangeKey = 'today' | 'last7Days' | 'last30Days' | 'custom';
 type ModuleId = 'overview' | 'users' | 'assets' | 'behavior';
 /** 文档要求行为指标按这四类分别统计。 */
@@ -82,6 +82,7 @@ const ASSET_TABS: Array<{ value: AssetTab; label: string }> = [
   { value: 'companyTool', label: '内部工具' },
   { value: 'skill', label: 'Skill' },
   { value: 'agent', label: 'Agent' },
+  { value: 'case', label: '案例' },
 ];
 
 const PAGE_METRICS: Array<{ routeKey: string; label: string }> = [
@@ -245,6 +246,7 @@ function regionLabel(region: PortalAnalyticsAssetRow['region']): string {
 
 function matchesAssetTab(row: PortalAnalyticsAssetRow, tab: AssetTab): boolean {
   const type = row.assetType.toLowerCase();
+  if (tab === 'case') return type === 'case';
   if (tab === 'skill') return type.includes('skill');
   if (tab === 'agent') return type.includes('agent');
   if (!type.includes('tool')) return false;
@@ -1495,7 +1497,8 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
       '资产名称',
       '资产 ID',
       '地区',
-      '浏览数',
+      '详情浏览数',
+      '分享浏览数',
       '收藏数',
       '点赞数',
       '点踩数',
@@ -1509,6 +1512,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
       row.contentId,
       regionLabel(row.region),
       String(row.detailPv),
+      String(row.sharePv),
       String(row.favorites),
       String(row.likes),
       String(row.dislikes),
@@ -1845,11 +1849,17 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
               <tr>
                 <Th>名称</Th>
                 {assetTab === 'externalTool' ? <Th>海外 / 国内</Th> : null}
-                <Th align="right">浏览数</Th>
-                <Th align="right">收藏数</Th>
-                <Th align="right">点赞数</Th>
-                <Th align="right">点踩数</Th>
-                <Th align="right">{assetTab === 'externalTool' ? '跳转数' : '下载数'}</Th>
+                <Th align="right">详情浏览数</Th>
+                <Th align="right">分享浏览数</Th>
+                {/* 案例没有收藏、点赞、下载，只看浏览 */}
+                {assetTab === 'case' ? null : (
+                  <>
+                    <Th align="right">收藏数</Th>
+                    <Th align="right">点赞数</Th>
+                    <Th align="right">点踩数</Th>
+                    <Th align="right">{assetTab === 'externalTool' ? '跳转数' : '下载数'}</Th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -1867,17 +1877,22 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                     <Td align="right" className="font-semibold text-zinc-900">
                       {formatCount(row.detailPv)}
                     </Td>
-                    <Td align="right">{formatCount(row.favorites)}</Td>
-                    <Td align="right">{formatCount(row.likes)}</Td>
-                    <Td align="right">{formatCount(row.dislikes)}</Td>
-                    <Td align="right" className="font-semibold text-zinc-900">
-                      {assetTab === 'externalTool' ? formatCount(row.redirects) : formatCount(row.downloads)}
-                    </Td>
+                    <Td align="right">{formatCount(row.sharePv)}</Td>
+                    {assetTab === 'case' ? null : (
+                      <>
+                        <Td align="right">{formatCount(row.favorites)}</Td>
+                        <Td align="right">{formatCount(row.likes)}</Td>
+                        <Td align="right">{formatCount(row.dislikes)}</Td>
+                        <Td align="right" className="font-semibold text-zinc-900">
+                          {assetTab === 'externalTool' ? formatCount(row.redirects) : formatCount(row.downloads)}
+                        </Td>
+                      </>
+                    )}
                   </Row>
                 ))
               ) : (
                 <EmptyRow
-                  colSpan={assetTab === 'externalTool' ? 7 : 6}
+                  colSpan={assetTab === 'externalTool' ? 8 : assetTab === 'case' ? 3 : 7}
                   label={assetsState.loading ? '读取中' : assetsHasFacts ? '当前类型暂无资产事实' : '资产明细未采集'}
                 />
               )}

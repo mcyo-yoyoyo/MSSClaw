@@ -100,6 +100,8 @@ export interface InboxMessageInput {
 export type MarketEngagementAction =
   | 'exposure'
   | 'detail'
+  /** 详情页直达（页面新打开就落在详情页，多为分享链接）；看板「分享浏览数」只数它 */
+  | 'detail_direct'
   | 'view'
   | 'use'
   | 'redirect'
@@ -124,6 +126,7 @@ export type MarketEngagementEventAction =
 export const MARKET_ENGAGEMENT_EVENT_ACTIONS = new Set<MarketEngagementEventAction>([
   'exposure',
   'detail',
+  'detail_direct',
   'view',
   'use',
   'redirect',
@@ -763,7 +766,7 @@ export class PersistenceService {
     const requestedAssetType =
       optionalTrimmedString(input.assetType, 'invalid_market_engagement_asset_type').toLowerCase() ||
       'unknown';
-    if (!['unknown', 'tool', 'skill', 'agent', 'office-scene'].includes(requestedAssetType)) {
+    if (!['unknown', 'tool', 'skill', 'agent', 'office-scene', 'case'].includes(requestedAssetType)) {
       throw new BadRequestException('invalid_market_engagement_asset_type');
     }
     const factNumber = (value: number | undefined, field: string): number | null => {
@@ -864,9 +867,9 @@ export class PersistenceService {
 
       if (action === 'exposure') {
         behaviorAction = 'exposure';
-      } else if (action === 'detail' || action === 'view' || action === 'use' || action === 'redirect' || action === 'download') {
+      } else if (action === 'detail' || action === 'detail_direct' || action === 'view' || action === 'use' || action === 'redirect' || action === 'download') {
         const field =
-          action === 'detail' || action === 'view'
+          action === 'detail' || action === 'detail_direct' || action === 'view'
             ? 'views'
             : action === 'use' || action === 'redirect'
               ? 'uses'
@@ -996,16 +999,19 @@ export class PersistenceService {
     if (!workspace) throw new NotFoundException('market_engagement_workspace_not_found');
 
     const assetKinds: AssetKind[] = ['tool', 'skill', 'agent', 'automation', 'kbDoc'];
-    const [portalItems, scenes, resources, ...assetIds] = await Promise.all([
+    const [portalItems, scenes, resources, cases, ...assetIds] = await Promise.all([
       this.prisma.portalContent.findMany({ select: { id: true } }),
       this.prisma.officeScene.findMany({ select: { id: true } }),
       this.prisma.centerResource.findMany({ where: { kind: { in: ['workflow', 'knowledge'] } }, select: { id: true } }),
+      // 案例只认用户看得到的：已发布且未删除
+      this.prisma.caseInsightArticle.findMany({ where: { status: 'published', deletedAt: null }, select: { id: true } }),
       ...assetKinds.map((kind) => readAssetIds(this.prisma, kind)),
     ]);
     const knownIds = new Set(MARKET_ENGAGEMENT_STATIC_CONTENT_IDS);
     assetIds.flat().forEach((id) => knownIds.add(id));
     portalItems.forEach((item) => knownIds.add(item.id));
     resources.forEach((item) => knownIds.add(item.id));
+    cases.forEach((item) => knownIds.add(item.id));
     scenes.forEach((scene) => knownIds.add(`office-scene-${scene.id}`));
     return knownIds;
   }
