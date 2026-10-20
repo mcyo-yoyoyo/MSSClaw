@@ -150,6 +150,44 @@ model AiBriefEmailSubscription {
   @@index([workspaceId, email])
 }
 
+/// 海外案例洞察：草稿与线上版本分开，未发布内容不得进入访客接口。
+model CaseInsightArticle {
+  id                 String   @id @default(uuid())
+  workspaceId        String
+  sourceCaseId       String?
+  title              String
+  summary            String   @default("")
+  company            String   @default("")
+  sourceUrl          String   @default("")
+  domainIds          Json
+  tags               Json
+  draftHtml          String   @default("")
+  publishedHtml      String?
+  draftCoverImage    String?
+  publishedCoverImage String?
+  deletedAt          DateTime?
+  deletedFromStatus  String?
+  draftMarkdown      String
+  publishedMarkdown  String?
+  publishedTitle     String?
+  publishedSummary   String?
+  publishedCompany   String?
+  publishedSourceUrl String?
+  publishedDomainIds Json?
+  publishedTags      Json?
+  status             String   @default("draft")
+  sortOrder          Int      @default(0)
+  version            Int      @default(1)
+  publishedVersion   Int?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  publishedAt        DateTime?
+
+  @@index([workspaceId, status, sortOrder])
+  @@index([workspaceId, updatedAt])
+  @@unique([workspaceId, sourceCaseId])
+}
+
 /// 工作区消息正文。广播消息使用 toUserId="*"，定向消息保存具体用户 id。
 model InboxMessageRecord {
   workspaceId String

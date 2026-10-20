@@ -35,6 +35,7 @@ import { PortalAiNewsPanel } from '@/features/ops/PortalAiNewsPanel';
 import { PortalSceneCategoryPanel } from '@/features/ops/PortalSceneCategoryPanel';
 import { PortalBuildStatsCopyPanel } from '@/features/ops/PortalBuildStatsCopyPanel';
 import { PortalAiBriefEmailPanel } from '@/features/ops/PortalAiBriefEmailPanel';
+import { PortalCaseInsightsPanel } from '@/features/ops/PortalCaseInsightsPanel';
 import { PortalExternalTaxonomyPanel } from '@/features/ops/PortalExternalTaxonomyPanel';
 import { useBusinessScenarioCatalogStore } from '@/stores/businessScenarioCatalogStore';
 import { useExternalTaxonomyCatalogStore } from '@/stores/externalTaxonomyCatalogStore';
@@ -54,6 +55,7 @@ type OpsSurface =
   | 'announce'
   | 'ainews'
   | 'aibrief'
+  | 'caseinsights'
   | 'scenes'
   | 'buildstats';
 
@@ -261,6 +263,8 @@ export function PortalContentOpsPage() {
                         ? '站点触达 · 每日 / 每周 AI 新闻'
                         : opsSurface === 'aibrief'
                           ? '站点触达 · AI快讯邮件订阅与模板'
+                          : opsSurface === 'caseinsights'
+                            ? '站点内容 · 案例洞察导入与发布'
                           : opsSurface === 'scenes'
                             ? '场景分类字典 · 文案 / 图标 / 顺序'
                             : opsSurface === 'buildstats'
@@ -300,6 +304,8 @@ export function PortalContentOpsPage() {
               <>
                 查看 AI快讯邮件订阅名单并导出 Excel；同时配置「下载」生成的 HTML 邮件壳与平台落地链接。
               </>
+            ) : opsSurface === 'caseinsights' ? (
+              <>导入完整 Markdown 或 HTML 案例，在后台编辑、预览并发布；未发布内容不会在 AI 快讯展示。</>
             ) : opsSurface === 'scenes' ? (
               <>
                 调整 MSS 集市场景分类的展示名、简介、图标与顺序。编码 S1–S8 固定，避免打断项目 /
@@ -367,6 +373,7 @@ export function PortalContentOpsPage() {
               { id: 'announce' as const, label: '站内公告', group: '站点' },
               { id: 'ainews' as const, label: 'AI新闻', group: '站点' },
               { id: 'aibrief' as const, label: 'AI快讯邮件', group: '站点' },
+              { id: 'caseinsights' as const, label: '案例洞察', group: '站点' },
               { id: 'buildstats' as const, label: '建设概况口径', group: '站点' },
             ] as const
           ).map((tab) => (
@@ -401,6 +408,7 @@ export function PortalContentOpsPage() {
         {opsSurface === 'announce' ? <PortalStationAnnouncePanel /> : null}
         {opsSurface === 'ainews' ? <PortalAiNewsPanel /> : null}
         {opsSurface === 'aibrief' ? <PortalAiBriefEmailPanel /> : null}
+        {opsSurface === 'caseinsights' ? <PortalCaseInsightsPanel /> : null}
         {opsSurface === 'scenes' ? <PortalSceneCategoryPanel /> : null}
         {opsSurface === 'buildstats' ? <PortalBuildStatsCopyPanel /> : null}
 

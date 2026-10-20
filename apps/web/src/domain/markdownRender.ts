@@ -13,10 +13,28 @@ function inlineFormat(text: string): string {
   s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   s = s.replace(/__(.+?)__/g, '<strong>$1</strong>');
   s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt: string, raw: string) => {
+    const url = safeMarkdownUrl(raw, true);
+    return url ? `<img src="${url}" alt="${alt}" loading="lazy"/>` : alt;
+  });
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label: string, raw: string) => {
+    const url = safeMarkdownUrl(raw);
+    return url ? `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>` : label;
+  });
   // 单星号斜体（避开已处理的 strong 标记）
   s = s.replace(/(^|[\s（(「])\*([^*\n]+)\*(?=[\s）)」.,，。!！?？]|$)/g, '$1<em>$2</em>');
   return s;
+}
+
+function safeMarkdownUrl(raw: string, image = false): string {
+  const decoded = raw.replace(/&amp;/g, '&').replace(/&quot;/g, '"').trim();
+  try {
+    const url = new URL(decoded);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return '';
+    return esc(url.href);
+  } catch {
+    return image ? '' : '';
+  }
 }
 
 function splitTableCells(line: string): string[] {

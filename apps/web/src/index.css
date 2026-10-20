@@ -110,6 +110,21 @@
   }
 }
 
+.case-insight-prose { color: #27272a; font-size: 14px; line-height: 1.8; overflow-wrap: anywhere; }
+.case-insight-prose h1 { font-size: 22px; font-weight: 700; line-height: 1.4; margin: 0 0 18px; }
+.case-insight-prose h2 { font-size: 18px; font-weight: 650; line-height: 1.45; margin: 28px 0 10px; }
+.case-insight-prose h3, .case-insight-prose h4 { font-size: 15px; font-weight: 650; margin: 22px 0 8px; }
+.case-insight-prose p, .case-insight-prose ul, .case-insight-prose ol, .case-insight-prose blockquote { margin: 0 0 13px; }
+.case-insight-prose ul, .case-insight-prose ol { padding-left: 22px; }
+.case-insight-prose li { margin-bottom: 5px; }
+.case-insight-prose a { color: #0066cc; text-decoration: underline; }
+.case-insight-prose blockquote { border-left: 3px solid #d4d4d8; padding-left: 14px; color: #52525b; }
+.case-insight-prose img { max-width: 100%; height: auto; margin: 14px 0; }
+.case-insight-prose pre { overflow-x: auto; border-radius: 6px; background: #f4f4f5; padding: 12px; font-size: 12px; }
+.case-insight-prose .md-table-wrap { overflow-x: auto; margin: 16px 0; }
+.case-insight-prose table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.case-insight-prose th, .case-insight-prose td { border: 1px solid #e4e4e7; padding: 8px 10px; text-align: left; }
+
 .market-channel-panel::before {
   content: '';
   position: absolute;

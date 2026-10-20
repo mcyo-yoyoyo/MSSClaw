@@ -5,6 +5,7 @@ import '@/stores/orgTaxonomyStore';
 import { App } from './App';
 import { OAuthCallbackView } from '@/features/auth/OAuthCallbackView';
 import { isOAuthCallbackPath } from '@/domain/authMode';
+import { CaseInsightArticlePage } from './features/ai-brief/CaseInsightArticlePage';
 import './index.css';
 
 /**
@@ -12,5 +13,13 @@ import './index.css';
  * 回调只需要换令牌，不该顺带把工作区目录、集市数据全拉一遍。
  */
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>{isOAuthCallbackPath() ? <OAuthCallbackView /> : <App />}</StrictMode>,
+  <StrictMode>
+    {isOAuthCallbackPath() ? (
+      <OAuthCallbackView />
+    ) : window.location.hash.startsWith('#/case-insight?') ? (
+      <CaseInsightArticlePage />
+    ) : (
+      <App />
+    )}
+  </StrictMode>,
 );
