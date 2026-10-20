@@ -22,7 +22,9 @@
 --            /api/v1/blobs/<id>，旧地址永久 301 跳转。
 --   第 2 期  换 PG：现有 12 张表按本文件迁过去（去掉 workspace_id），Workspace 表的内容存入 app_setting('workspace')，
 --            其余 JSON 文档仍在过渡表 center_record，接口不变（2026-10-20 完成）。
---   第 3 期  资产：tool / skill / skill_version / agent / agent_skill / automation / kb_document
+--   第 3 期  资产：tool / skill / skill_version / agent / agent_skill / automation / kb_document（2026-10-21 完成）。
+--            接口仍是整份快照收发（GET/PUT /marketplace、/tools），后端拆成逐行写入；快照里出现没有列的字段直接拒绝保存。
+--            迁移脚本 apps/api/scripts/migrate-assets-to-tables.mjs 写完资产表后删除 global-tools、marketplace 行和 agent/skill/tool 投影行。
 --   第 4 期  身份：member / member_credential / auth_session
 --   第 5 期  个人数据：market_favorite / market_user_vote / market_recent_view / market_hidden_item / skill_review
 --   第 6 期  其余：配置、审批、审计、门户内容、办公场景、对话、消息、资讯、执行、AI 智库、模型配置；之后删除 center_record
@@ -145,9 +147,11 @@ create index chat_session_owner_idx on chat_session (owner_member_id, updated_at
 
 -- B1 工具【第 3 期】来源：center_record id=global-tools 的 tools[]（77 条）
 --   各工作区 marketplace.tools（每个约 164 条的过时副本）和 kind=tool 投影行不迁移。
+--   B1、B2、B4、B6、B7 都有 position：快照数组顺序。前端新增资产插在数组最前，顺序就是默认展示顺序，整份 PUT 必须保序。
 create table tool (
   no                      bigserial primary key,                -- 对外编号（分享链接用）
   id                      text not null unique,                 -- 字符串 id，收藏 / 统计 / 精选布局 / 办公场景等都用它关联
+  position                integer not null,                     -- 快照数组顺序
   name                    text not null,
   market_title            text,                                 -- 外精选卡主标题
   description             text not null,                        -- desc
@@ -187,7 +191,7 @@ create table tool (
   tags                    jsonb not null,
   scenario_tags           jsonb,
   business_scenario_ids   jsonb,                                -- S1–S8
-  invokes                 integer not null default 0,           -- 调用次数展示值，只通过「加 1」接口原子更新
+  invokes                 integer not null default 0,           -- 调用次数展示值；目前仍随整份快照写入，改成「加 1」接口原子更新需前端配合，后续再做
   featured_in_find_cases  boolean,                              -- 旧精选字段，只读兼容
   created_at              timestamptz(3) not null default now(),
   updated_at              timestamptz(3) not null
@@ -197,6 +201,7 @@ create table tool (
 create table skill (
   no                     bigserial primary key,                 -- 对外编号
   id                     text not null unique,
+  position               integer not null,                      -- 快照数组顺序
   name                   text not null,                         -- 主展示名（兼容旧数据）
   name_zh                text,                                  -- 与 name 不一定相同（本地 21 条不同），分开存
   name_en                text,
@@ -257,6 +262,7 @@ create table skill_version (
 create table agent (
   no                    bigserial primary key,                  -- 对外编号
   id                    text not null unique,
+  position              integer not null,                       -- 快照数组顺序
   name                  text not null,
   description           text not null,                          -- desc
   value_proposition     text,                                   -- 一句话价值
@@ -316,6 +322,7 @@ create index agent_skill_skill_idx on agent_skill (skill_id);
 -- B6 自动化【第 3 期】来源：ws-cn-marketing 的 marketplace.automations[]
 create table automation (
   id          text primary key,
+  position    integer not null,                                 -- 快照数组顺序
   name        text not null,
   description text not null,                                    -- desc
   agent_id    text not null,
@@ -332,6 +339,7 @@ create table automation (
 -- B7 知识库文档【第 3 期】来源：ws-cn-marketing 的 marketplace.kbDocs[]
 create table kb_document (
   id                text primary key,
+  position          integer not null,                           -- 快照数组顺序
   title             text not null,
   description       text not null,                              -- desc
   collection_id     text not null,                              -- collection
@@ -859,7 +867,8 @@ create index portal_conversion_event_journey_idx on portal_conversion_event (jou
 
 -- 通用 JSON 记录【第 2 期建，第 6 期结束后删除】来源：CenterRecord（只迁 ws-cn-marketing 与全局记录）
 --   记录 id 沿用旧值（如 marketplace-ws-cn-marketing），后端按固定工作区拼出，所以不需要 workspace_id 列。
---   各期把对应 kind 迁到正式表后删掉这里的对应行。kind=agent/skill/tool 投影行第 2 期照迁（中心 API 仍读它们），第 3 期资产表上线后删除。
+--   各期把对应 kind 迁到正式表后删掉这里的对应行。kind=agent/skill/tool 投影行第 2 期照迁，第 3 期迁移脚本已删除；
+--   旧版专家页的 /agents、/skills 改为从资产表实时映射，只有 Agent 人设可改（写回 agent.system_prompt）。
 create table center_record (
   id         text primary key,
   kind       text not null,

@@ -49,7 +49,19 @@ function controllerWith(session = { ok: false, error: '未登录' }) {
   };
 }
 
-function recordingPrisma(queryRows, centerRows = [], globalToolsRow = null) {
+/** 资产表替身：assets = { tools, skills, agents, automations, kbDocs }，数组顺序即 position */
+function assetTables(assets) {
+  const table = (rows = []) => ({ findMany: async () => rows.map((row, position) => ({ ...row, position })) });
+  return {
+    tool: table(assets.tools),
+    skill: table(assets.skills),
+    agent: table(assets.agents),
+    automation: table(assets.automations),
+    kbDocument: table(assets.kbDocs),
+  };
+}
+
+function recordingPrisma(queryRows, centerRows = [], assets = null) {
   // 写入走 createMany(skipDuplicates)；每日上限先 count 再写，这里 count 恒为 0。
   const executeCalls = [];
   const countCalls = [];
@@ -71,9 +83,8 @@ function recordingPrisma(queryRows, centerRows = [], globalToolsRow = null) {
     prisma: {
       centerRecord: {
         findMany: async () => centerRows,
-        findUnique: async ({ where } = {}) =>
-          where?.id === 'global-tools' ? globalToolsRow : null,
       },
+      ...(assets ? assetTables(assets) : {}),
       portalPageView: writer('portalPageView'),
       portalConversionEvent: writer('portalConversionEvent'),
       portalDailyLogin: writer('portalDailyLogin'),
@@ -535,42 +546,27 @@ test('custom ranges are inclusive, bounded and reject invalid dates', async () =
   }
 });
 
-test('global tool singleton is authoritative for analytics inventory', async () => {
+test('asset tables are authoritative for analytics inventory; leftover projection rows are ignored', async () => {
+  // 第 2 期遗留的投影行（已从货架删除的工具）不能再被计入
   const centerRows = [
     {
       id: 'tool-removed',
       kind: 'tool',
       payload: { id: 'tool-removed', name: '已删除工具', sourceType: 'external', published: true },
     },
-    {
-      id: 'marketplace-ws-test',
-      kind: 'marketplace',
-      payload: {
-        tools: [
-          { id: 'tool-live', name: '旧名称', sourceType: 'external', published: true },
-          { id: 'tool-removed', name: '已删除工具', sourceType: 'external', published: true },
-        ],
-        agents: [{ id: 'agent-keep', name: '保留 Agent', published: true }],
-      },
-    },
   ];
-  const globalToolsRow = {
-    id: 'global-tools',
-    kind: 'tool-catalog',
-    payload: {
-      initialized: true,
-      tools: [
-        {
-          id: 'tool-live',
-          name: '新名称',
-          sourceType: 'external',
-          marketShelf: 'external',
-          published: false,
-        },
-      ],
-    },
-  };
-  const db = recordingPrisma(null, centerRows, globalToolsRow);
+  const db = recordingPrisma(null, centerRows, {
+    tools: [
+      {
+        id: 'tool-live',
+        name: '新名称',
+        sourceType: 'external',
+        marketShelf: 'external',
+        published: false,
+      },
+    ],
+    agents: [{ id: 'agent-keep', name: '保留 Agent', published: true }],
+  });
   const catalog = await new PortalAnalyticsService(db.prisma).readAssetCatalog('ws-test');
 
   assert.deepEqual(
@@ -590,28 +586,11 @@ test('global tool singleton is authoritative for analytics inventory', async () 
   assert.equal(catalog.some((row) => row.contentId === 'agent-keep'), true);
 });
 
-test('analytics keeps workspace tool fallback before singleton migration', async () => {
-  const centerRows = [
-    {
-      id: 'tool-legacy',
-      kind: 'tool',
-      payload: { id: 'tool-legacy', name: '旧工具', sourceType: 'external', published: true },
-    },
-  ];
-  const db = recordingPrisma(null, centerRows);
-  const catalog = await new PortalAnalyticsService(db.prisma).readAssetCatalog('ws-test');
-  assert.deepEqual(catalog.map((row) => row.contentId), ['tool-legacy']);
-});
-
 test('asset details include only published tools, skills and agents', async () => {
-  const centerRows = ['tool', 'skill', 'agent'].flatMap((kind) =>
-    [true, false].map((published) => ({
-      id: `${kind}-${published}`,
-      kind,
-      payload: { id: `${kind}-${published}`, name: kind, published, sourceType: 'external' },
-    })),
-  );
-  const report = await new PortalAnalyticsService(recordingPrisma(null, centerRows).prisma)
+  const rows = (kind) =>
+    [true, false].map((published) => ({ id: `${kind}-${published}`, name: kind, published, sourceType: 'external' }));
+  const assets = { tools: rows('tool'), skills: rows('skill'), agents: rows('agent') };
+  const report = await new PortalAnalyticsService(recordingPrisma(null, [], assets).prisma)
     .getReport('ws-test', 1);
   assert.deepEqual(report.assets.rows.map((row) => row.contentId).sort(), [
     'agent-true', 'skill-true', 'tool-true',
@@ -620,9 +599,9 @@ test('asset details include only published tools, skills and agents', async () =
   assert.equal(report.assets.summary.unpublished, 3);
 });
 
-test('asset counts follow the user shelf: marketplace snapshot wins and shelf-less tools drop out', async () => {
+test('asset counts follow the user shelf: asset tables win and shelf-less tools drop out', async () => {
   const centerRows = [
-    // 已从货架删除、但镜像投影没被回收的残留记录
+    // 已从货架删除、但镜像投影没被回收的残留记录（第 3 期迁移会删掉，这里确认即使残留也不计入）
     {
       id: 'agent-removed',
       kind: 'agent',
@@ -639,27 +618,23 @@ test('asset counts follow the user shelf: marketplace snapshot wins and shelf-le
       kind: 'skill',
       payload: { id: 'skill-removed', name: '已删除 Skill', published: true },
     },
-    {
-      id: 'marketplace-ws-test',
-      kind: 'marketplace',
-      payload: {
-        agents: [{ id: 'agent-live', name: '在架 Agent', published: true }],
-        skills: [{ id: 'skill-live', name: '在架 Skill', published: true }],
-        tools: [
-          {
-            id: 'tool-shelf',
-            name: '外部货架工具',
-            sourceType: 'external',
-            marketShelf: 'external',
-            published: true,
-          },
-          // 已上架但没有货架位：用户在外部和公司货架上都看不到它
-          { id: 'tool-noshelf', name: '无货架位工具', sourceType: 'external', published: true },
-        ],
-      },
-    },
   ];
-  const report = await new PortalAnalyticsService(recordingPrisma(null, centerRows).prisma)
+  const assets = {
+    agents: [{ id: 'agent-live', name: '在架 Agent', published: true }],
+    skills: [{ id: 'skill-live', name: '在架 Skill', published: true }],
+    tools: [
+      {
+        id: 'tool-shelf',
+        name: '外部货架工具',
+        sourceType: 'external',
+        marketShelf: 'external',
+        published: true,
+      },
+      // 已上架但没有货架位：用户在外部和公司货架上都看不到它
+      { id: 'tool-noshelf', name: '无货架位工具', sourceType: 'external', published: true },
+    ],
+  };
+  const report = await new PortalAnalyticsService(recordingPrisma(null, centerRows, assets).prisma)
     .getReport('ws-test', 1);
 
   assert.equal(report.assets.summary.agent, 1);
@@ -682,23 +657,19 @@ test('black asset report excludes portal-content and treats only explicit redire
     month: '2-digit',
     day: '2-digit',
   }).format(new Date());
-  const centerRows = [
-    {
-      id: 'tool-company',
-      kind: 'tool',
-      payload: {
+  const assets = {
+    tools: [
+      {
         id: 'tool-company',
         name: '公司工具',
         sourceType: 'company',
         marketShelf: 'internal',
         published: true,
       },
-    },
-    {
-      id: 'tool-other',
-      kind: 'tool',
-      payload: { id: 'tool-other', name: '其他工具', published: true },
-    },
+      { id: 'tool-other', name: '其他工具', published: true },
+    ],
+  };
+  const centerRows = [
     {
       id: 'portal-only',
       kind: 'portal-content',
@@ -801,7 +772,7 @@ test('black asset report excludes portal-content and treats only explicit redire
       return [{ views: 10, favorites: 2, likes: 3, dislikes: 1, redirects: 4, downloads: 5 }];
     }
     return [];
-  }, centerRows);
+  }, centerRows, assets);
 
   const report = await new PortalAnalyticsService(db.prisma).getReport('ws-test', 1);
   assert.equal(report.assets.summary.company, 1);

@@ -204,3 +204,236 @@ model InboxUserMessageState {
   @@index([messageId], map: "inbox_message_state_message_idx")
   @@map("inbox_message_state")
 }
+
+// ---------------------------------------------------------------------------
+// 第 3 期资产表（docs/database-design.sql B1–B7）。字段名与接口 JSON 的键一致，
+// 便于整份快照收发；position 保存快照数组顺序（前端新增资产插在最前，顺序即默认展示顺序）。
+// createdAt / updatedAt 是行时间，资产自带的同名字符串存在 sourceCreatedAt / sourceUpdatedAt。
+
+/// 工具：原 center_record global-tools 的 tools[]
+model Tool {
+  no                    BigInt   @id @default(autoincrement())
+  id                    String   @unique
+  position              Int
+  name                  String
+  marketTitle           String?  @map("market_title")
+  desc                  String   @map("description")
+  cardSummary           String?  @map("card_summary")
+  category              String
+  sourceType            String?  @map("source_type")
+  marketShelf           String?  @map("market_shelf")
+  region                String?
+  company               String?
+  author                String
+  publisher             String?  @map("publisher_name")
+  publisherUserId       String?  @map("publisher_member_id")
+  published             Boolean
+  visibility            String?
+  ownerDeptIds          Json?    @map("owner_dept_ids")
+  ownerRegionId         String?  @map("owner_region_id")
+  ownerRegionIds        Json?    @map("owner_region_ids")
+  icon                  String
+  logoUrl               String?  @map("logo_url")
+  homepageUrl           String?  @map("homepage_url")
+  docsUrl               String?  @map("docs_url")
+  mediaUrl              String?  @map("media_url")
+  screenshotUrl         String?  @map("screenshot_url")
+  versionLabel          String?  @map("version_label")
+  deliveryForm          String?  @map("delivery_form")
+  connectorType         String?  @map("connector_type")
+  toolTypeId            String?  @map("tool_type_id")
+  toolTypeIds           Json?    @map("tool_type_ids")
+  toolTypeLabels        Json?    @map("tool_type_labels")
+  externalCategoryRanks Json?    @map("external_category_ranks")
+  externalSortOrder     Int?     @map("external_sort_order")
+  externalSortRank      Int?     @map("external_sort_rank")
+  bestFor               String?  @map("best_for")
+  productIntro          String?  @map("product_intro")
+  coreCapabilities      Json?    @map("core_capabilities")
+  usageGuide            Json?    @map("usage_guide")
+  tags                  Json
+  scenarioTags          Json?    @map("scenario_tags")
+  businessScenarioIds   Json?    @map("business_scenario_ids")
+  invokes               Int      @default(0)
+  featuredInFindCases   Boolean? @map("featured_in_find_cases")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("tool")
+}
+
+/// Skill：原 marketplace.skills[]
+model Skill {
+  no                  BigInt         @id @default(autoincrement())
+  id                  String         @unique
+  position            Int
+  name                String
+  nameZh              String?        @map("name_zh")
+  nameEn              String?        @map("name_en")
+  desc                String         @map("description")
+  descZh              String?        @map("description_zh")
+  descEn              String?        @map("description_en")
+  category            String
+  command             String
+  author              String
+  publisher           String?        @map("publisher_name")
+  publisherUserId     String?        @map("publisher_member_id")
+  version             String
+  connector           String
+  published           Boolean
+  callable            Boolean?
+  featuredInDoTask    Boolean?       @map("featured_in_do_task")
+  featuredInMssMarket Boolean?       @map("featured_in_mss_market")
+  businessScenarioId  String?        @map("business_scenario_id")
+  sourceType          String?        @map("source_type")
+  visibility          String?
+  ownerDeptIds        Json?          @map("owner_dept_ids")
+  ownerRegionId       String?        @map("owner_region_id")
+  ownerRegionIds      Json?          @map("owner_region_ids")
+  homepageUrl         String?        @map("homepage_url")
+  scenarioTags        Json?          @map("scenario_tags")
+  invokes             Int            @default(0)
+  icon                String
+  iconUrl             String?        @map("icon_url")
+  accentColor         String?        @map("accent_color")
+  tags                Json
+  searchKeywords      Json?          @map("search_keywords")
+  instructions        String?
+  planSteps           Json?          @map("plan_steps")
+  usageNotes          String?        @map("usage_notes")
+  packageBlob         Json?          @map("package_blob")
+  detail              Json?
+  traceEvaluation     Json?          @map("trace_evaluation")
+  updatedBy           String?        @map("updated_by")
+  sourceCreatedAt     String?        @map("source_created_at")
+  sourceUpdatedAt     String?        @map("source_updated_at")
+  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  versions            SkillVersion[]
+
+  @@map("skill")
+}
+
+/// Skill 版本：原 skill.versions[]，position 保持数组顺序
+model SkillVersion {
+  skillNo     BigInt  @map("skill_no")
+  version     String
+  position    Int
+  notes       String?
+  status      String?
+  packageBlob Json?   @map("package_blob")
+  publishedAt String? @map("published_at")
+  skill       Skill   @relation(fields: [skillNo], references: [no], onDelete: Cascade, map: "skill_version_skill_no_fkey")
+
+  @@id([skillNo, version])
+  @@map("skill_version")
+}
+
+/// Agent：原 marketplace.agents[]
+model Agent {
+  no                  BigInt       @id @default(autoincrement())
+  id                  String       @unique
+  position            Int
+  name                String
+  desc                String       @map("description")
+  valueProposition    String?      @map("value_proposition")
+  category            String
+  bizLine             String       @map("biz_line")
+  homeTag             String       @map("home_tag")
+  author              String
+  publisher           String?      @map("publisher_name")
+  publisherUserId     String?      @map("publisher_member_id")
+  maintainer          String?
+  published           Boolean
+  featuredInDoTask    Boolean?     @map("featured_in_do_task")
+  lifecycleStatus     String?      @map("lifecycle_status")
+  businessScenarioId  String?      @map("business_scenario_id")
+  sourceType          String?      @map("source_type")
+  visibility          String?
+  ownerDeptIds        Json?        @map("owner_dept_ids")
+  ownerRegionIds      Json?        @map("owner_region_ids")
+  scenarioTags        Json?        @map("scenario_tags")
+  capabilityTypeIds   Json?        @map("capability_type_ids")
+  invokes             Int          @default(0)
+  primarySkillId      String?      @map("primary_skill_id")
+  chatId              String       @map("chat_id")
+  icon                String
+  color               String
+  avatarPresetId      String?      @map("avatar_preset_id")
+  avatarUrl           String?      @map("avatar_url")
+  systemPrompt        String?      @map("system_prompt")
+  demoPrompt          String?      @map("demo_prompt")
+  demoUrl             String?      @map("demo_url")
+  solutionDocUrl      String?      @map("solution_doc_url")
+  feedbackUrl         String?      @map("feedback_url")
+  installCommand      String?      @map("install_command")
+  version             String?
+  versionSummary      String?      @map("version_summary")
+  requiresHumanReview Boolean?     @map("requires_human_review")
+  packageBlob         Json?        @map("package_blob")
+  planSteps           Json?        @map("plan_steps")
+  detail              Json?
+  sourceCreatedAt     String?      @map("source_created_at")
+  sourceUpdatedAt     String?      @map("source_updated_at")
+  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  skills              AgentSkill[]
+
+  @@map("agent")
+}
+
+/// Agent 编排的 Skill：原 agent.skillIds[]；skill_id 不加外键（可能引用未上架或已删除的 Skill）
+model AgentSkill {
+  agentNo  BigInt @map("agent_no")
+  skillId  String @map("skill_id")
+  position Int
+  agent    Agent  @relation(fields: [agentNo], references: [no], onDelete: Cascade, map: "agent_skill_agent_no_fkey")
+
+  @@id([agentNo, skillId])
+  @@index([skillId], map: "agent_skill_skill_idx")
+  @@map("agent_skill")
+}
+
+/// 自动化：原 marketplace.automations[]
+model Automation {
+  id        String   @id
+  position  Int
+  name      String
+  desc      String   @map("description")
+  agentId   String   @map("agent_id")
+  skillIds  Json     @map("skill_ids")
+  schedule  String
+  enabled   Boolean
+  lastRun   String   @map("last_run")
+  icon      String?
+  published Boolean?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("automation")
+}
+
+/// 知识库文档：原 marketplace.kbDocs[]
+model KbDocument {
+  id              String   @id
+  position        Int
+  title           String
+  desc            String   @map("description")
+  collection      String   @map("collection_id")
+  type            String   @map("doc_type")
+  size            String   @map("size_label")
+  pages           Int
+  clearance       String
+  indexed         Boolean
+  chunks          Int
+  author          String
+  tags            Json
+  chunkTexts      Json?    @map("chunk_texts")
+  content         String?
+  published       Boolean?
+  sourceUpdatedAt String   @map("source_updated_at")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("kb_document")
+}

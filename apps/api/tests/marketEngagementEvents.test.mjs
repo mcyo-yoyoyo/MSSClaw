@@ -2,6 +2,21 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PersistenceService } from '../dist/persistence/persistence.service.js';
 
+/** 资产在资产表里：用例仍用 marketplace 形状描述内容，这里转成各资产表的替身 */
+function assetModels(rows) {
+  const marketplace = rows.find((row) => row.kind === 'marketplace')?.payload ?? {};
+  const model = (key) => ({
+    findMany: async () => (marketplace[key] ?? []).map((item) => ({ id: item.id })),
+  });
+  return {
+    tool: model('tools'),
+    skill: model('skills'),
+    agent: model('agents'),
+    automation: model('automations'),
+    kbDocument: model('kbDocs'),
+  };
+}
+
 function engagementHarness(
   initialInteraction = null,
   { metricExists = true, knownContent = true, workspaceExists = true, centerRows } = {},
@@ -70,14 +85,16 @@ function engagementHarness(
       },
     },
   };
+  const contentRows = centerRows ?? (knownContent
+    ? [{ id: 'marketplace-ws-test', kind: 'marketplace', payload: { tools: [{ id: 'tool-1' }] } }]
+    : []);
   const prisma = {
     appSetting: { findUnique: async () => workspaceExists ? ({ value: { catalog: {} } }) : null },
     centerRecord: {
       findUnique: async () => null,
-      findMany: async () => centerRows ?? (knownContent
-        ? [{ id: 'marketplace-ws-test', kind: 'marketplace', payload: { tools: [{ id: 'tool-1' }] } }]
-        : []),
+      findMany: async () => contentRows.filter((row) => row.kind !== 'marketplace'),
     },
+    ...assetModels(contentRows),
     marketEngagement: { findUnique: async () => metric && ({ ...metric }) },
     marketEngagementEvent: { deleteMany: async () => ({ count: 0 }) },
     $transaction: async (operation) => operation(tx),
@@ -285,15 +302,10 @@ test('legacy JSON migration imports only current catalog content and ignores for
   };
   const prisma = {
     appSetting: { findUnique: async () => ({ value: { catalog: {} } }) },
+    ...assetModels([{ kind: 'marketplace', payload: { tools: [{ id: 'tool-1' }] } }]),
     centerRecord: {
       findUnique: async () => legacyRow,
-      findMany: async () => [
-        {
-          id: 'marketplace-ws-test',
-          kind: 'marketplace',
-          payload: { tools: [{ id: 'tool-1' }] },
-        },
-      ],
+      findMany: async () => [],
       update: async ({ data }) => {
         normalizedPayload = data.payload;
         return { ...legacyRow, payload: data.payload };

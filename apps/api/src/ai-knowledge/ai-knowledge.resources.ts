@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { readFile, stat } from 'node:fs/promises';
+import { readAssets } from '../persistence/asset-catalog';
 import { PrismaService } from '../prisma/prisma.service';
 import type { DemandDraft, SolutionResource } from './ai-knowledge.types';
 import { matchesRequiredCaseIntent } from './ai-knowledge.relevance';
@@ -292,22 +293,12 @@ export class AiKnowledgeResourceService {
   }
 
   private async marketplaceItems(
-    workspaceId: string,
+    _workspaceId: string,
     key: 'tools' | 'skills' | 'agents',
   ): Promise<CatalogItem[]> {
-    const row = await this.prisma.centerRecord.findUnique({
-      where: { id: `marketplace-${workspaceId}` },
-      select: { payload: true },
-    });
-    if (!row) return [];
-    const payload = row.payload as CatalogItem;
-    const items = payload[key];
-    if (!Array.isArray(items)) return [];
-    return items.filter((item): item is CatalogItem => {
-      if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
-      const record = item as CatalogItem;
-      return record.published !== false;
-    });
+    const kind = key === 'tools' ? 'tool' : key === 'skills' ? 'skill' : 'agent';
+    const items = (await readAssets(this.prisma, kind)) as CatalogItem[];
+    return items.filter((item) => item.published !== false);
   }
 
   private async loadLocalCases(): Promise<CatalogItem[]> {

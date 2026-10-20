@@ -109,9 +109,21 @@ docker compose -f deploy/docker-compose.infra.yml up -d postgres
 2. 启动 PostgreSQL，把 `apps/api/.env` 的 `DATABASE_URL` 换成 PG 连接串，执行 `npx prisma migrate deploy`（在 `apps/api` 下）建表
 3. 预览：`npm run migrate:sqlite-to-pg --workspace @mss-claw/api -- /绝对路径/prod.db`，核对各工作区数据量，确认 `ws-cn-marketing` 以外的空间只是种子数据或可以舍弃
 4. 执行：同一命令末尾加 `--apply`。目标表必须为空，全部写入在一个事务里，失败整体回滚；输出「完成。」才算成功
-5. 文件存储还没迁到 MinIO 的，接着做下面「文件存储」的迁移步骤（`migrate:blob-refs` 改的是 PG 里的数据，必须在第 4 步之后）
-6. 启动 API，抽查登录、三个货架、看板数字、一个附件
-7. SQLite 文件保留到下个版本；回滚 = 停 API、`DATABASE_URL` 改回 SQLite、部署上一个版本
+5. 文件存储还没迁到 MinIO 的，接着做下面「文件存储」的迁移步骤（`migrate:blob-refs` 改的是 PG 里的数据，必须在第 4 步之后、第 6 步之前）
+6. 拆资产表：见下面「资产表」的第 3、4 步
+7. 启动 API，抽查登录、三个货架、看板数字、一个附件
+8. SQLite 文件保留到下个版本；回滚 = 停 API、`DATABASE_URL` 改回 SQLite、部署上一个版本
+
+**资产表（第 3 期，停机进行）**：工具、Skill、Agent、自动化、知识库文档从 JSON 记录拆进独立的表。已经跑在 PG 上的环境升级时：
+
+1. 停止 API；`pg_dump` 备份（命令见上）
+2. `npx prisma migrate deploy`（在 `apps/api` 下）建资产表
+3. 预览：`npm run migrate:assets --workspace @mss-claw/api`，逐条校验，每一类都不能有「不合格」；有的话先修正源数据
+4. 执行：`npm run migrate:assets --workspace @mss-claw/api -- --apply`。资产表必须为空，写入与删除旧 JSON 记录在一个事务里；读回核对每类都输出「一致」才算成功
+5. 启动 API，抽查三个货架、Skill / Agent Hub、看板资产数，再用运营账号改一条工具保存一次
+6. 回滚 = 停 API、用第 1 步的备份 `pg_restore`、部署上一个版本
+
+注意：API 启动后如果资产表是空的，第一次读取工具目录会用内置清单自动播种。所以第 4 步之前不要启动 API。
 
 ### 文件存储（MinIO）
 
@@ -130,7 +142,7 @@ docker compose -f deploy/docker-compose.infra.yml up -d minio
 1. 停止 API；备份 `BLOB_ROOT` 目录和数据库文件
 2. 在 `apps/api/.env` 配好 `S3_*`，并把 `BLOB_ROOT` 指向旧目录
 3. `npm run migrate:blobs --workspace @mss-claw/api`：输出「失败 0」才算完成，可重复执行，已复制的会跳过
-4. `npm run migrate:blob-refs --workspace @mss-claw/api`（数据库已迁到 PG 之后）：把数据库里内嵌的图片（工具 Logo、Skill 图标、Agent 头像、案例封面等 data URL）上传到对象存储并替换成地址，同时把旧的 `/api/v1/workspaces/<ws>/blobs/<id>` 地址改写为 `/api/v1/blobs/<id>`；输出「失败 0」才算完成，可重复执行。SVG 和 HTML 正文里嵌着的图片保持原样
+4. `npm run migrate:blob-refs --workspace @mss-claw/api`（数据库已迁到 PG 之后、拆资产表之前）：把数据库里内嵌的图片（工具 Logo、Skill 图标、Agent 头像、案例封面等 data URL）上传到对象存储并替换成地址，同时把旧的 `/api/v1/workspaces/<ws>/blobs/<id>` 地址改写为 `/api/v1/blobs/<id>`；输出「失败 0」才算完成，可重复执行。SVG 和 HTML 正文里嵌着的图片保持原样
 5. 启动 API，抽查一个附件、一个能力包、一个工具 Logo 能正常显示或下载
 6. 旧目录保留到下个版本，确认无误后再删除
 
@@ -181,7 +193,7 @@ docker compose -f deploy/docker-compose.infra.yml up -d minio
 
 | 场景 | 建议 |
 |------|------|
-| 数据库 | PostgreSQL；大部分业务数据仍是过渡表里的整份 JSON，同一文档并发写靠 revision 冲突提示，后续各期拆成正式表 |
+| 数据库 | PostgreSQL；货架资产已是正式表但仍按整份快照保存（后保存的覆盖先保存的），成员、配置等仍是过渡表里的整份 JSON，靠 revision 冲突提示，后续各期拆成正式表 |
 | 附件与能力包 | 普通附件仍默认 ≤12MB；用户侧 Skill / Agent 原始包默认 ≤200MiB；已鉴权的运营后台 Skill 原包流式上传不设体积上限；JSON 只存 `url`/`blobId` |
 | 限流 | 默认 6000/IP/分钟（应对公司 NAT）；过严会出现集体 429 |
 | How to | 部分仍偏本机 localStorage；核心案例 / 货架走共享 API |

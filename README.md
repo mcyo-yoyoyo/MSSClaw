@@ -196,12 +196,13 @@ GET /api/v1/ai-daily-news
 DATABASE_URL="postgresql://mssclaw:mssclaw_dev@127.0.0.1:5432/mssclaw?schema=public"
 ```
 
-目标库表见 [`docs/database-design.sql`](./docs/database-design.sql)，分六期落地。当前（第 2 期）主要的表：
+目标库表见 [`docs/database-design.sql`](./docs/database-design.sql)，分六期落地。当前（第 3 期）主要的表：
 
 | 表 | 主要内容 |
 | --- | --- |
-| `app_setting` | 平台配置；`workspace` 键存原工作空间元数据、目录 JSON 和任务会话 |
-| `center_record` | 过渡表：Agent、Skill、工具、工作流、知识库配置、市场数据、门户内容、执行记录、成员权限、账号凭据、登录会话、审计和平台配置等 JSON 数据，后续各期拆成正式表 |
+| `tool` / `skill` / `skill_version` / `agent` / `agent_skill` / `automation` / `kb_document` | 货架资产；接口仍按整份快照收发，后端逐行写入 |
+| `app_setting` | 平台配置；`workspace` 键存原工作空间元数据、目录 JSON 和任务会话，`tool-catalog.meta` 存工具目录版本 |
+| `center_record` | 过渡表：工作流、门户内容、执行记录、成员权限、账号凭据、登录会话、审计和平台配置等 JSON 数据，后续各期拆成正式表 |
 | 统计与消息 | 互动累计与行为事件、门户访问、每日登录、登录墙转化、站内信、快讯订阅、案例洞察 |
 
 API 测试会在同一个库里建临时 schema 并在结束时删除；连接串取 `TEST_DATABASE_URL`，其次 `DATABASE_URL`。
@@ -285,7 +286,7 @@ npm run build
 
 ## 当前边界
 
-- 大部分业务数据仍以整份 JSON 存在过渡表 `center_record`，同一文档的并发写入靠 revision 乐观锁，后续各期拆成正式表。
+- 货架资产已拆成正式表，但仍按整份快照写入，两人同时保存时后保存的覆盖先保存的；成员、配置、门户内容等仍以整份 JSON 存在过渡表 `center_record`，靠 revision 乐观锁，后续各期拆成正式表。
 - API Key 和当前会话认证用于演示级保护，不等同于完整的企业 SSO、JWT 与细粒度 RBAC。
 - LLM 执行使用 OpenAI 兼容接口；工作流编排和 Agent runtime 仍处于持续演进阶段。
 - 后端接口不可用时，部分页面仍可能展示本地兜底数据，但新增和修改不保证保存或跨设备同步。

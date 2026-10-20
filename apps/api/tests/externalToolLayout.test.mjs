@@ -47,6 +47,12 @@ function fakePrisma(
     appSetting: {
       findUnique: async () => (workspaceExists ? { value: { catalog: {} } } : null),
     },
+    // 工具在 tool 表；用例里沿用 marketplace 形状的辅助行提供工具清单
+    tool: {
+      findMany: async () =>
+        (auxiliaryRows.find((candidate) => candidate.kind === 'marketplace')?.payload.tools ?? [])
+          .map((tool, position) => ({ ...tool, position })),
+    },
     centerRecord: {
       findUnique: async () => row,
       findFirst: async ({ where }) => {
@@ -354,7 +360,7 @@ test('first GET migrates custom legacy external pins by marketplace region and p
     categories: {},
   });
   assert.deepEqual(prisma.state().seededCreate?.payload, result.payload);
-  assert.equal(prisma.state().findFirstCalls, 2);
+  assert.equal(prisma.state().findFirstCalls, 1);
 });
 
 test('GET keeps an existing external layout without consulting or applying legacy pins', async () => {

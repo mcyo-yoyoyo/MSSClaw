@@ -1,5 +1,3 @@
-import type { Prisma } from '@prisma/client';
-
 export interface MarketplacePayload {
   agents?: unknown[];
   skills?: unknown[];
@@ -129,25 +127,4 @@ export function mapMarketplaceToolToCenter(raw: unknown): JsonRecord | null {
     author: str(t.author, 'marketplace'),
     published: Boolean(t.published),
   };
-}
-
-export function listMappedFromMarketplace(
-  kind: 'agent' | 'skill' | 'tool',
-  payload: MarketplacePayload | null | undefined,
-): JsonRecord[] {
-  if (!payload) return [];
-  const mapper =
-    kind === 'agent'
-      ? mapMarketplaceAgentToCenter
-      : kind === 'skill'
-        ? mapMarketplaceSkillToCenter
-        : mapMarketplaceToolToCenter;
-  const source =
-    kind === 'agent' ? payload.agents : kind === 'skill' ? payload.skills : payload.tools;
-  if (!Array.isArray(source)) return [];
-  return source.map(mapper).filter((x): x is JsonRecord => Boolean(x));
-}
-
-export function toPrismaJson(payload: JsonRecord): Prisma.InputJsonValue {
-  return payload as Prisma.InputJsonValue;
 }

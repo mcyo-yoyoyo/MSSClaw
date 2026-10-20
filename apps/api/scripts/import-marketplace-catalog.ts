@@ -1,4 +1,5 @@
-import { Prisma, PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
+import { readAssets, readToolCatalogMeta, replaceAssets, writeToolCatalogMeta } from '../src/persistence/asset-catalog';
 import * as path from 'path';
 import * as XLSX from 'xlsx';
 import {
@@ -149,30 +150,28 @@ async function main() {
   const importedSkills = importPublished(workbook, 'Skill清单', 'Skill配置', 'Skill ID');
   const importedAgents = importPublished(workbook, 'Agent清单', 'Agent配置', 'Agent ID');
   const importedTools = toolsFromCatalog();
-  const existingRow = await prisma.centerRecord.findUnique({
-    where: { id: `marketplace-${workspaceId}` },
-  });
-  const existing = (existingRow?.payload ?? {}) as JsonRecord;
+  // 第 3 期起资产在资产表里：已有记录的字段优先，清单只补新资产，写入在一个事务里。
+  const [existingAgents, existingSkills, existingTools, meta] = await Promise.all([
+    readAssets(prisma, 'agent'),
+    readAssets(prisma, 'skill'),
+    readAssets(prisma, 'tool'),
+    readToolCatalogMeta(prisma),
+  ]);
   const payload = {
-    ...existing,
-    agents: mergeById(importedAgents, existing.agents),
-    skills: mergeById(importedSkills, existing.skills),
-    tools: mergeById(importedTools, existing.tools),
-    automations: Array.isArray(existing.automations) ? existing.automations : [],
-    kbDocs: Array.isArray(existing.kbDocs) ? existing.kbDocs : [],
-    externalCatalogVersion: EXTERNAL_TOOLS_EXCEL_VERSION,
-    internalCatalogVersion: INTERNAL_TOOLS_EXCEL_VERSION,
+    agents: mergeById(importedAgents, existingAgents),
+    skills: mergeById(importedSkills, existingSkills),
+    tools: mergeById(importedTools, existingTools),
   };
-
-  await prisma.centerRecord.upsert({
-    where: { id: `marketplace-${workspaceId}` },
-    create: {
-      id: `marketplace-${workspaceId}`,
-      kind: 'marketplace',
-      payload: payload as Prisma.InputJsonValue,
-    },
-    update: { payload: payload as Prisma.InputJsonValue },
-  });
+  await prisma.$transaction(async (tx) => {
+    await replaceAssets(tx, 'agent', payload.agents);
+    await replaceAssets(tx, 'skill', payload.skills);
+    await replaceAssets(tx, 'tool', payload.tools);
+    await writeToolCatalogMeta(tx, {
+      ...meta,
+      externalCatalogVersion: EXTERNAL_TOOLS_EXCEL_VERSION,
+      internalCatalogVersion: INTERNAL_TOOLS_EXCEL_VERSION,
+    });
+  }, { timeout: 120_000 });
 
   console.log(JSON.stringify({
     workspaceId,

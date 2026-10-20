@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Optional } from '@nestjs/common';
 import { createHash, randomUUID } from 'crypto';
+import { readAssets } from './asset-catalog';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   GLOBAL_TOOLS_RECORD_ID,
@@ -1690,40 +1691,27 @@ export class PortalAnalyticsService {
     const client = (this.prisma as unknown as {
       centerRecord?: {
         findMany?: (args: unknown) => Promise<Array<{ id: string; kind: string; payload: unknown }>>;
-        findUnique?: (args: unknown) => Promise<{ id: string; kind: string; payload: unknown } | null>;
       };
     }).centerRecord;
     if (!client?.findMany) return [];
     const rows = await client.findMany({
       where: {
         kind: {
-          in: [
-            'marketplace',
-            'portal-content',
-            'doc:internal-office-scenes',
-            'doc:members',
-            'agent',
-            'skill',
-            'tool',
-            'workflow',
-            'knowledge',
-          ],
+          in: ['portal-content', 'doc:internal-office-scenes', 'doc:members', 'workflow', 'knowledge'],
         },
       },
       select: { id: true, kind: true, payload: true },
     });
-    const result = Array.isArray(rows) ? rows : [];
-    const globalTools = await client.findUnique?.({
-      where: { id: GLOBAL_TOOLS_RECORD_ID },
-      select: { id: true, kind: true, payload: true },
-    });
-    if (globalTools && !result.some((row) => row.id === globalTools.id)) {
-      result.push({
-        ...globalTools,
-        // Keep the global singleton explicit; readAssetCatalog handles this
-        // kind separately from workspace marketplace snapshots.
-        kind: GLOBAL_TOOLS_RECORD_KIND,
-      });
+    const result = Array.isArray(rows) ? [...rows] : [];
+    // 资产在资产表里：拼成旧的「货架快照行 + 全局工具行」，readAssetCatalog 的统计口径不用动。
+    if ((this.prisma as unknown as { tool?: unknown }).tool) {
+      const [tools, agents, skills, automations, kbDocs] = await Promise.all(
+        (['tool', 'agent', 'skill', 'automation', 'kbDoc'] as const).map((kind) => readAssets(this.prisma, kind)),
+      );
+      result.push(
+        { id: GLOBAL_TOOLS_RECORD_ID, kind: GLOBAL_TOOLS_RECORD_KIND, payload: { tools } },
+        { id: `marketplace-${workspaceId}`, kind: 'marketplace', payload: { agents, skills, automations, kbDocs } },
+      );
     }
     return result;
   }

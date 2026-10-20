@@ -1,43 +1,48 @@
 #!/usr/bin/env node
 /**
- * 清空 Skill Hub / Agent Hub 内容与全部互动数据。
+ * 清空 Skill Hub / Agent Hub 内容与全部互动数据（PostgreSQL）。
  *
  * 会做的事：
- *   1. 删除全部 Skill / Agent 本体（marketplace 聚合 + 散落的单条记录）
+ *   1. 删除全部 Skill / Agent（skill、agent 表；Skill 版本与 Agent 编排随之级联删除）
  *   2. 清空点赞 / 点踩 / 查看 / 收藏 / 下载 / 使用 计数（含工具）
  *   3. 清空最近浏览与收藏列表
  *
- * 不会动：工具、知识库、工作流、审批记录、成员、登录凭据、AI 快讯归档。
+ * 不会动：工具、知识库、自动化、审批记录、成员、登录凭据、AI 快讯归档、行为事件（看板趋势）。
  *
- * 为什么要删「散落的单条记录」：后端 getMarketplace 发现 marketplace 记录缺失时，
- * 会从 kind IN (agent, skill, tool, workflow, knowledge) 的单条记录重建聚合。
- * 只清聚合、不删单条，将来一旦触发重建，Skill/Agent 就会全部复活。
- *
- * 用法（在仓库根目录）：
+ * 用法（在仓库根目录，执行前先停掉 API 服务）：
  *   node deploy/windows/clear-hub-data.mjs            预览，不改动任何数据
- *   node deploy/windows/clear-hub-data.mjs --apply    实际执行（会先自动备份数据库）
+ *   node deploy/windows/clear-hub-data.mjs --apply    实际执行（先备份数据库，备份失败则不执行）
  *
  * 可选参数：
- *   --workspace=<id>   只处理指定工作区，默认全部
  *   --keep-content     只清互动数据，保留 Skill/Agent 本体
+ *
+ * 数据库取 DATABASE_URL（进程环境优先，否则读 apps/api/.env），必须是 postgresql:// 连接串，
+ * 只处理连接串 schema 参数指定的 schema（默认 public）。
+ *
+ * 备份：改动前用 pg_dump -Fc 把该 schema 导出到 deploy/windows/backup/。优先用本机 pg_dump
+ * 直连 DATABASE_URL；本机没有或失败时，改用 deploy/docker-compose.infra.yml 里 postgres 容器
+ * 自带的 pg_dump，并先核对容器与 DATABASE_URL 是同一个 PG 实例，防止备到别的库。
+ * 两种都失败就拒绝执行。全部改动在一个事务里；回滚用 pg_restore，命令在执行完成后打印。
  */
 
-import { existsSync, copyFileSync, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
 
 const require = createRequire(import.meta.url);
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const composeExec = ['compose', '-f', join(repoRoot, 'deploy', 'docker-compose.infra.yml'), 'exec', '-T', 'postgres'];
+// --clean 先删掉该 schema 里的表再按备份重建；--single-transaction 中途失败则整体不生效
+const restoreFlags = '--clean --if-exists --single-transaction';
 
 const args = process.argv.slice(2);
 const apply = args.includes('--apply');
 const keepContent = args.includes('--keep-content');
-const onlyWorkspace = args.find((a) => a.startsWith('--workspace='))?.split('=')[1];
 
 /** 优先使用进程环境，否则从 apps/api/.env 解析 DATABASE_URL。 */
 function resolveDatabase() {
-  const prismaDir = join(repoRoot, 'apps', 'api', 'prisma');
   const envPath = join(repoRoot, 'apps', 'api', '.env');
   let value = process.env.DATABASE_URL?.trim();
   if (!value) {
@@ -50,37 +55,85 @@ function resolveDatabase() {
     value = line.slice(line.indexOf('=') + 1).trim().replace(/^["']|["']$/g, '');
   }
 
-  if (!value.startsWith('file:')) throw new Error(`只支持 sqlite（file:），当前是 ${value}`);
-  // Prisma 的相对路径以 schema 所在目录为基准；标准 file:// URL 也一并支持。
-  const dbPath = value.startsWith('file://')
-    ? fileURLToPath(value)
-    : resolve(prismaDir, value.slice('file:'.length));
+  // 只打印协议部分，连接串里有口令
+  if (!/^postgres(ql)?:\/\//.test(value)) {
+    throw new Error(`只支持 PostgreSQL（postgresql://），当前是 ${value.slice(0, value.indexOf(':') + 1) || value}`);
+  }
+  const url = new URL(value);
   return {
-    dbPath,
-    datasourceUrl: `file:${dbPath.replaceAll('\\', '/')}`,
+    datasourceUrl: value,
+    host: url.hostname.replace(/^\[|\]$/g, '') || 'localhost',
+    port: url.port || '5432',
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    database: decodeURIComponent(url.pathname.slice(1)),
+    schema: url.searchParams.get('schema') || 'public',
   };
 }
 
-/**
- * 备份前必须先把 WAL 落盘。SQLite 开着 WAL 时最近的写入还留在 dev.db-wal 里，
- * 只复制主库文件会得到一个不完整的快照；同样地，还原时若 -wal 还在，
- * 打开数据库会重放 WAL，把刚还原的内容再次覆盖掉。
- */
-async function backup(prisma, dbPath) {
-  await prisma.$queryRawUnsafe('PRAGMA wal_checkpoint(TRUNCATE)');
-  const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15);
-  const dir = join(repoRoot, 'deploy', 'windows', 'backup');
-  mkdirSync(dir, { recursive: true });
-  const dest = join(dir, `db-before-clear-${stamp}.db`);
-  copyFileSync(dbPath, dest);
-  return dest;
+/** 同步跑命令，失败时抛出带 stderr 的错误。 */
+function run(cmd, cmdArgs, options = {}) {
+  const result = spawnSync(cmd, cmdArgs, { encoding: 'utf8', ...options });
+  if (result.error) throw new Error(`${cmd}：${result.error.message}`);
+  if (result.status !== 0) throw new Error(`${cmd} 退出码 ${result.status}：${(result.stderr || '').trim()}`);
+  return result.stdout;
 }
 
-const { dbPath, datasourceUrl } = resolveDatabase();
-if (!existsSync(dbPath)) throw new Error(`数据库文件不存在：${dbPath}`);
-console.log(`数据库：${dbPath}`);
+/** 本机 pg_dump 直连 DATABASE_URL。返回回滚命令（在仓库根目录执行）。 */
+function dumpWithLocalPgDump(db, dest) {
+  run('pg_dump', ['-Fc', '-w', '-h', db.host, '-p', db.port, '-U', db.user, '-n', db.schema, '-f', dest, db.database], {
+    env: { ...process.env, PGPASSWORD: db.password },
+  });
+  return [`pg_restore ${restoreFlags} -h ${db.host} -p ${db.port} -U ${db.user} -d ${db.database} "${dest}"`];
+}
+
+/** 用 infra compose 里 postgres 容器的 pg_dump。返回回滚命令（在仓库根目录执行）。 */
+async function dumpWithDockerPgDump(db, dest) {
+  // 容器未必就是 DATABASE_URL 指向的实例（库可能在另一台机器，或本机还有别的 PG），备错库等于没备
+  const sql = 'select system_identifier::text as id from pg_control_system()';
+  const [{ id: expected }] = await prisma.$queryRawUnsafe(sql);
+  const actual = run('docker', [...composeExec, 'psql', '-U', db.user, '-d', db.database, '-Atc', sql]).trim();
+  if (actual !== expected) {
+    throw new Error(`docker 里的 postgres（实例 ${actual}）不是 DATABASE_URL 指向的实例（${expected}）`);
+  }
+  const fd = openSync(dest, 'w');
+  try {
+    run('docker', [...composeExec, 'pg_dump', '-Fc', '-U', db.user, '-n', db.schema, db.database], {
+      stdio: ['ignore', fd, 'pipe'],
+    });
+  } finally {
+    closeSync(fd);
+  }
+  // 不用 < 重定向：PowerShell 不支持
+  return [
+    `docker compose -f deploy/docker-compose.infra.yml cp "${dest}" postgres:/tmp/restore.dump`,
+    `docker compose -f deploy/docker-compose.infra.yml exec -T postgres pg_restore ${restoreFlags} -U ${db.user} -d ${db.database} /tmp/restore.dump`,
+  ];
+}
+
+async function backup(db) {
+  const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+  const dir = join(repoRoot, 'deploy', 'windows', 'backup');
+  mkdirSync(dir, { recursive: true });
+  const dest = join(dir, `db-before-clear-${stamp}.dump`);
+  const failures = [];
+  for (const dump of [dumpWithLocalPgDump, dumpWithDockerPgDump]) {
+    try {
+      const restoreCommands = await dump(db, dest);
+      if (statSync(dest).size === 0) throw new Error('备份文件为空');
+      return { backupPath: dest, restoreCommands };
+    } catch (error) {
+      failures.push(error.message);
+      rmSync(dest, { force: true });
+    }
+  }
+  throw new Error(`无法备份数据库，未做任何改动：\n  ${failures.join('\n  ')}`);
+}
+
+const db = resolveDatabase();
+console.log(`数据库：${db.user}@${db.host}:${db.port}/${db.database}（schema ${db.schema}）`);
 console.log(`模式  ：${apply ? '实际执行' : '预览（不改动数据）'}`);
-console.log(`范围  ：${onlyWorkspace || '全部工作区'}｜${keepContent ? '仅清互动数据' : '删 Skill/Agent 本体 + 清互动数据'}`);
+console.log(`范围  ：${keepContent ? '仅清互动数据' : '删 Skill/Agent 本体 + 清互动数据'}`);
 console.log('');
 
 // 复用 api workspace 已安装并生成的 Prisma Client
@@ -93,15 +146,14 @@ try {
 }
 
 const prisma = new PrismaClient({
-  datasourceUrl,
+  datasourceUrl: db.datasourceUrl,
 });
-const workspaceWhere = onlyWorkspace ? { workspaceId: onlyWorkspace } : undefined;
 
 async function main() {
   /** 统计将要影响的行数 */
   const [marketEngagementCount, marketUserInteractionCount] = await Promise.all([
-    prisma.marketEngagement.count({ where: workspaceWhere }),
-    prisma.marketUserInteraction.count({ where: workspaceWhere }),
+    prisma.marketEngagement.count(),
+    prisma.marketUserInteraction.count(),
   ]);
   const counts = {
     MarketEngagement: marketEngagementCount,
@@ -109,69 +161,49 @@ async function main() {
   };
 
   const docKinds = ['doc:content-engagement', 'doc:market-recent', 'doc:market-favorites'];
-  const contentKinds = ['skill', 'agent'];
 
   const docRows = await prisma.centerRecord.findMany({
-    where: { kind: { in: docKinds }, ...workspaceWhere },
-    select: { id: true, kind: true, workspaceId: true },
+    where: { kind: { in: docKinds } },
+    select: { id: true, kind: true },
   });
 
-  const contentRows = keepContent
-    ? []
-    : await prisma.centerRecord.findMany({
-        where: { kind: { in: contentKinds }, ...workspaceWhere },
-        select: { id: true, kind: true, workspaceId: true },
-      });
-
-  const marketRows = await prisma.centerRecord.findMany({
-    where: { kind: 'marketplace', ...workspaceWhere },
-    select: { id: true, workspaceId: true, payload: true },
-  });
+  const [skillCount, agentCount, toolCount] = await Promise.all([
+    prisma.skill.count(),
+    prisma.agent.count(),
+    prisma.tool.count(),
+  ]);
 
   console.log('将要清理：');
   console.log(`  MarketEngagement       ${counts.MarketEngagement} 行（点赞/点踩/查看/收藏/下载/使用 计数）`);
   console.log(`  MarketUserInteraction  ${counts.MarketUserInteraction} 行（每个用户的投票与收藏状态）`);
   console.log(`  互动相关 doc 记录       ${docRows.length} 条（content-engagement / market-recent / market-favorites）`);
   if (!keepContent) {
-    const skillCount = contentRows.filter((r) => r.kind === 'skill').length;
-    const agentCount = contentRows.filter((r) => r.kind === 'agent').length;
-    console.log(`  Skill 单条记录          ${skillCount} 条`);
-    console.log(`  Agent 单条记录          ${agentCount} 条`);
+    console.log(`  Skill                  ${skillCount} 条（连同版本记录）`);
+    console.log(`  Agent                  ${agentCount} 条（连同编排的 Skill 列表）`);
   }
-  console.log('');
-  console.log('marketplace 聚合（工具保留，只清 skills / agents）：');
-  for (const row of marketRows) {
-    const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
-    console.log(
-      `  ${row.workspaceId.padEnd(22)} skills ${String((payload.skills || []).length).padStart(3)} → 0` +
-        `｜agents ${String((payload.agents || []).length).padStart(3)} → 0` +
-        `｜tools ${String((payload.tools || []).length).padStart(3)}（保留）`,
-    );
-  }
+  console.log(`  工具                   ${toolCount} 条（保留）`);
   console.log('');
 
   if (!apply) {
-    console.log('以上为预览。确认无误后加 --apply 实际执行：');
+    console.log('以上为预览。确认无误后先停掉 API 服务，再加 --apply 实际执行：');
     console.log('  node deploy\\windows\\clear-hub-data.mjs --apply');
     return;
   }
 
-  // API 在跑时清库很危险：它进程内的写入会在之后覆盖清理结果
-  const wal = `${dbPath}-wal`;
-  if (existsSync(wal) && statSync(wal).size > 0) {
-    console.error('检测到活动的 WAL 文件，说明可能仍有进程在使用数据库。');
-    console.error('请先停掉 API 服务再执行清理，否则清理结果会被覆盖。');
-    console.error(`（若确认服务已停，可删除 ${wal} 后重试）`);
+  let backupResult;
+  try {
+    backupResult = await backup(db);
+  } catch (error) {
+    console.error(error.message);
     process.exitCode = 1;
     return;
   }
-
-  const backupPath = await backup(prisma, dbPath);
+  const { backupPath, restoreCommands } = backupResult;
   console.log(`已备份数据库 → ${backupPath}`);
 
   await prisma.$transaction(async (tx) => {
-    await tx.marketEngagement.deleteMany({ where: workspaceWhere });
-    await tx.marketUserInteraction.deleteMany({ where: workspaceWhere });
+    await tx.marketEngagement.deleteMany();
+    await tx.marketUserInteraction.deleteMany();
 
     // 互动类 doc 记录清成空对象，而不是删行——前端 hydrate 读不到会走兜底逻辑
     const contentEngagementIds = docRows.filter((row) => row.kind === 'doc:content-engagement').map((row) => row.id);
@@ -189,36 +221,21 @@ async function main() {
       });
     }
 
-    if (!keepContent && contentRows.length > 0) {
-      await tx.centerRecord.deleteMany({
-        where: { id: { in: contentRows.map((row) => row.id) } },
-      });
-    }
-
     if (!keepContent) {
-      for (const row of marketRows) {
-        const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
-        payload.skills = [];
-        payload.agents = [];
-        await tx.centerRecord.update({
-          where: { id: row.id },
-          data: { payload },
-        });
-      }
+      // skill_version、agent_skill 外键级联删除
+      await tx.skill.deleteMany();
+      await tx.agent.deleteMany();
     }
   });
-
-  await prisma.$queryRawUnsafe('PRAGMA wal_checkpoint(TRUNCATE)');
 
   console.log('');
   console.log('清理完成。请启动 API 服务，并让浏览器强制刷新（Ctrl+F5）。');
   console.log('');
-  console.log('如需回滚（务必按顺序）：');
+  console.log('如需回滚：');
   console.log('  1. 停掉 API 服务');
-  console.log(`  2. 删除 ${dbPath}-wal 和 ${dbPath}-shm（若存在）`);
-  console.log(`  3. 复制 ${backupPath} 覆盖 ${dbPath}`);
-  console.log('  4. 启动 API');
-  console.log('  跳过第 2 步会导致 WAL 重放，还原后数据仍是空的。');
+  console.log('  2. 在仓库根目录执行：');
+  for (const command of restoreCommands) console.log(`       ${command}`);
+  console.log('  3. 启动 API');
 }
 
 try {

@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, Logger } from '@nes
 import { createHash, randomBytes } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { ensureWorkspace, findWorkspace } from '../workspaces/workspace-setting';
+import { readAssets } from './asset-catalog';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   SEED_BUSINESS_SCENARIO_CATALOG,
@@ -1775,17 +1776,14 @@ export class PlatformDocsService {
   }
 
   private async initialExternalToolLayoutSeed(workspaceId: string) {
-    const [marketFeatured, marketplace] = await Promise.all([
+    const [marketFeatured, tools] = await Promise.all([
       this.prisma.centerRecord.findFirst({
         where: { kind: 'doc:market-featured' },
         select: { payload: true },
       }),
-      this.prisma.centerRecord.findFirst({
-        where: { kind: 'marketplace' },
-        select: { payload: true },
-      }),
+      readAssets(this.prisma, 'tool'),
     ]);
-    return buildExternalToolLayoutSeed(marketFeatured?.payload, marketplace?.payload);
+    return buildExternalToolLayoutSeed(marketFeatured?.payload, { tools });
   }
 
   private async seedIfNeeded(workspaceId: string, kind: PlatformDocKind): Promise<unknown> {

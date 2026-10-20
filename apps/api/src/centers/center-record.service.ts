@@ -1,104 +1,62 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  getNextAgentStatus,
   getNextPromptLifecycle,
-  getNextSkillLifecycle,
   getNextWorkflowStatus,
   type CenterKind,
 } from './center-lifecycle';
-import { listMappedFromMarketplace } from '../persistence/marketplace-center-sync';
-import type { MarketplacePayload } from '../persistence/marketplace-center-sync';
+import { readAssets } from '../persistence/asset-catalog';
+import {
+  mapMarketplaceAgentToCenter,
+  mapMarketplaceSkillToCenter,
+  mapMarketplaceToolToCenter,
+} from '../persistence/marketplace-center-sync';
 
-function isExternalToolPayload(value: unknown): boolean {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const tool = value as Record<string, unknown>;
-  const tags = Array.isArray(tool.tags) ? tool.tags.map(String) : [];
-  return (
-    tool.sourceType === 'external' ||
-    tool.marketShelf === 'external' ||
-    tool.category === 'external' ||
-    tags.includes('ai-saas') ||
-    tags.includes('external')
-  );
+/** Agent / Skill / 工具在资产表里；中心接口按旧形状实时映射出来，只有 Agent 人设可以改。 */
+const ASSET_CENTER_KINDS = {
+  agent: mapMarketplaceAgentToCenter,
+  skill: mapMarketplaceSkillToCenter,
+  tool: mapMarketplaceToolToCenter,
+} as const;
+type AssetCenterKind = keyof typeof ASSET_CENTER_KINDS;
+
+function isAssetCenterKind(kind: CenterKind | string): kind is AssetCenterKind {
+  return kind in ASSET_CENTER_KINDS;
 }
+
+const ASSET_MANAGED_IN_MARKET = '上下架和资产信息请到货架运营里修改';
 
 @Injectable()
 export class CenterRecordService {
   constructor(private readonly prisma: PrismaService) {}
 
   async list(workspaceId: string, kind: CenterKind) {
+    if (isAssetCenterKind(kind)) return this.listAssets(kind);
     const rows = await this.prisma.centerRecord.findMany({
       where: { kind },
       orderBy: { updatedAt: 'desc' },
     });
+    return rows.map((row) => row.payload as Record<string, unknown>);
+  }
 
-    const byId = new Map<string, Record<string, unknown>>();
-    for (const row of rows) {
-      const payload = row.payload as Record<string, unknown>;
-      const id = String(payload.id ?? row.id);
-      byId.set(id, payload);
-    }
-
-    // Marketplace is canonical for agent/skill/tool — overlay mapped items.
-    // Skill 以 marketplace 为准，避免删除后被种子或旧投影补回。
-    // 对 tool 而言，marketplace 已经存在就不再返回旧的外部 tool 投影，避免
-    // 「配置工具」和「工具运营」看到两份同名目录；内部连接器仍保留兼容读取。
-    if (kind === 'agent' || kind === 'skill' || kind === 'tool') {
-      const marketRow = await this.prisma.centerRecord.findFirst({
-        where: { kind: 'marketplace' },
-      });
-      if (marketRow) {
-        const mapped = listMappedFromMarketplace(
-          kind,
-          marketRow.payload as MarketplacePayload,
-        );
-        if (kind === 'tool' || kind === 'skill') {
-          const canonicalMarketplaceIds = new Set(mapped.map((item) => String(item.id)));
-          for (const [id, payload] of byId) {
-            if ((kind === 'skill' || isExternalToolPayload(payload)) && !canonicalMarketplaceIds.has(id)) {
-              byId.delete(id);
-            }
-          }
-        }
-        for (const item of mapped) {
-          byId.set(String(item.id), item);
-        }
-      }
-    }
-
-    return [...byId.values()];
+  private async listAssets(kind: AssetCenterKind) {
+    const items = await readAssets(this.prisma, kind);
+    return items
+      .map((item) => ASSET_CENTER_KINDS[kind](item))
+      .filter((item): item is Record<string, unknown> => Boolean(item));
   }
 
   async findOne(workspaceId: string, kind: CenterKind, id: string) {
-    let hasMarketplaceTools = false;
-    if (kind === 'tool') {
-      const marketRow = await this.prisma.centerRecord.findFirst({
-        where: { kind: 'marketplace' },
-      });
-      if (marketRow) {
-        hasMarketplaceTools = true;
-        const mapped = listMappedFromMarketplace(
-          kind,
-          marketRow.payload as MarketplacePayload,
-        );
-        const marketplaceTool = mapped.find((item) => String(item.id) === id);
-        if (marketplaceTool) return marketplaceTool;
-      }
+    if (isAssetCenterKind(kind)) {
+      const item = (await this.listAssets(kind)).find((candidate) => String(candidate.id) === id);
+      if (!item) throw new NotFoundException(`${kind} ${id} not found`);
+      return item;
     }
-
     const row = await this.prisma.centerRecord.findFirst({
       where: { id, kind },
     });
-
-    if (row) {
-      if (hasMarketplaceTools && isExternalToolPayload(row.payload)) {
-        throw new NotFoundException(`${kind} ${id} not found`);
-      }
-      return row.payload as Record<string, unknown>;
-    }
-
+    if (row) return row.payload as Record<string, unknown>;
     throw new NotFoundException(`${kind} ${id} not found`);
   }
 
@@ -108,6 +66,7 @@ export class CenterRecordService {
     id: string,
     patch: Record<string, unknown>,
   ) {
+    if (isAssetCenterKind(kind)) return this.updateAsset(workspaceId, kind, id, patch);
     const current = await this.findOne(workspaceId, kind, id);
     const next = {
       ...current,
@@ -130,6 +89,22 @@ export class CenterRecordService {
     return next;
   }
 
+  /** 旧版 Agent Studio 改人设：写回 Agent 的系统提示词；其余字段一律去货架运营改。 */
+  private async updateAsset(
+    workspaceId: string,
+    kind: AssetCenterKind,
+    id: string,
+    patch: Record<string, unknown>,
+  ) {
+    const keys = Object.keys(patch).filter((key) => patch[key] !== undefined);
+    if (kind !== 'agent' || keys.some((key) => key !== 'persona') || typeof patch.persona !== 'string') {
+      throw new ConflictException(ASSET_MANAGED_IN_MARKET);
+    }
+    await this.findOne(workspaceId, kind, id);
+    await this.prisma.agent.update({ where: { id }, data: { systemPrompt: patch.persona } });
+    return this.findOne(workspaceId, kind, id);
+  }
+
   async advancePromptLifecycle(workspaceId: string, id: string) {
     const current = await this.findOne(workspaceId, 'prompt', id);
     const next = getNextPromptLifecycle(String(current.lifecycle));
@@ -137,18 +112,12 @@ export class CenterRecordService {
     return this.updatePayload(workspaceId, 'prompt', id, { lifecycle: next });
   }
 
-  async advanceAgentStatus(workspaceId: string, id: string) {
-    const current = await this.findOne(workspaceId, 'agent', id);
-    const next = getNextAgentStatus(String(current.status));
-    if (!next) throw new NotFoundException('No next agent status');
-    return this.updatePayload(workspaceId, 'agent', id, { status: next });
+  async advanceAgentStatus(_workspaceId: string, _id: string): Promise<never> {
+    throw new ConflictException(ASSET_MANAGED_IN_MARKET);
   }
 
-  async advanceSkillLifecycle(workspaceId: string, id: string) {
-    const current = await this.findOne(workspaceId, 'skill', id);
-    const next = getNextSkillLifecycle(String(current.lifecycle));
-    if (!next) throw new NotFoundException('No next skill lifecycle');
-    return this.updatePayload(workspaceId, 'skill', id, { lifecycle: next });
+  async advanceSkillLifecycle(_workspaceId: string, _id: string): Promise<never> {
+    throw new ConflictException(ASSET_MANAGED_IN_MARKET);
   }
 
   async advanceWorkflowStatus(workspaceId: string, id: string) {

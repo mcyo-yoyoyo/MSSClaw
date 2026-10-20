@@ -3,6 +3,7 @@ import test from 'node:test';
 import { PersistenceService } from '../dist/persistence/persistence.service.js';
 import { PrismaService } from '../dist/prisma/prisma.service.js';
 import { ensureWorkspace } from '../dist/workspaces/workspace-setting.js';
+import { replaceAssets } from '../dist/persistence/asset-catalog.js';
 import { createTestDatabase } from './helpers/pgTestDatabase.mjs';
 
 function assertAllFulfilled(results, label) {
@@ -24,18 +25,8 @@ async function withTemporaryDatabase(run) {
     prisma = new PrismaService();
     await prisma.onModuleInit();
     await ensureWorkspace(prisma);
-    await prisma.centerRecord.create({
-      data: {
-        id: 'marketplace-ws-sqlite-concurrency',
-        kind: 'marketplace',
-        payload: {
-          tools: [
-            { id: 'tool-replay-concurrency' },
-            { id: 'tool-rate-concurrency' },
-          ],
-        },
-      },
-    });
+    const tool = (id) => ({ id, name: id, desc: '', category: 'external', author: 'test', published: true, icon: 'fa-cube', tags: [] });
+    await replaceAssets(prisma, 'tool', [tool('tool-replay-concurrency'), tool('tool-rate-concurrency')]);
 
     await run({ prisma, service: new PersistenceService(prisma) });
   } finally {
