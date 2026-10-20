@@ -136,6 +136,15 @@ docker compose -f deploy/docker-compose.infra.yml up -d postgres
 
 注意：成员表为空时 API 会播种演示成员，所以第 4 步之前同样不要启动 API。
 
+**个人数据表（第 5 期，停机进行）**：收藏、最近浏览、隐藏、Skill 评价从 JSON 文档拆进独立的表，点赞点踩拆进 market_user_vote。
+
+1. 停止 API；`pg_dump` 备份
+2. `npx prisma migrate deploy`（在 `apps/api` 下）：建表，同时把旧互动表里的点赞点踩复制过去并删除旧表
+3. 预览：`npm run migrate:personal-data --workspace @mss-claw/api`，核对各项条数和「跳过」列出的记录
+4. 执行：同一命令末尾加 `-- --apply`，输出「与预期一致」才算成功
+5. 前端随这一期一起发版（收藏等改走 /api/v1/me/... 接口），启动 API 后用一个账号收藏、取消收藏、写备注各试一次
+6. 回滚 = 停 API、`pg_restore` 第 1 步的备份、前后端都部署上一个版本
+
 ### 文件存储（MinIO）
 
 附件与 Skill / Agent 能力包存于 S3 兼容对象存储，API 启动时校验连通性和桶，连不上直接退出。

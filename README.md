@@ -196,12 +196,13 @@ GET /api/v1/ai-daily-news
 DATABASE_URL="postgresql://mssclaw:mssclaw_dev@127.0.0.1:5432/mssclaw?schema=public"
 ```
 
-目标库表见 [`docs/database-design.sql`](./docs/database-design.sql)，分六期落地。当前（第 4 期）主要的表：
+目标库表见 [`docs/database-design.sql`](./docs/database-design.sql)，分六期落地。当前（第 5 期）主要的表：
 
 | 表 | 主要内容 |
 | --- | --- |
 | `tool` / `skill` / `skill_version` / `agent` / `agent_skill` / `automation` / `kb_document` | 货架资产；接口仍按整份快照收发，后端逐行写入 |
 | `member` / `member_credential` / `auth_session` | 成员、密码（sha256 加盐）、登录会话（只存令牌哈希）；接口仍是 `/docs/members`、`/docs/auth-credentials` |
+| `market_favorite` / `market_user_vote` / `market_recent_view` / `market_hidden_item` / `skill_review` | 个人数据；收藏、最近浏览、隐藏按条读写（`/api/v1/me/...`，只能读写自己的） |
 | `app_setting` | 平台配置；`workspace` 键存原工作空间元数据、目录 JSON 和任务会话，`tool-catalog.meta` 存工具目录版本，`auth-policy` 存演示口令开关 |
 | `collection_revision` | 整份保存的集合（成员表、密码表）的版本号，用来拒绝过期的整份覆盖 |
 | `center_record` | 过渡表：工作流、门户内容、执行记录、审计和平台配置等 JSON 数据，后续各期拆成正式表 |

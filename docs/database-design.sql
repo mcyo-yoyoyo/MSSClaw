@@ -28,7 +28,9 @@
 --   第 4 期  身份：member / member_credential / auth_session（2026-10-21 完成）。
 --            接口不变（/docs/members、/docs/auth-credentials 整份收发，版本号改用 collection_revision）；
 --            迁移脚本 apps/api/scripts/migrate-identity-to-tables.mjs。密码挂在成员上，前端改为先保存成员再设密码。
---   第 5 期  个人数据：market_favorite / market_user_vote / market_recent_view / market_hidden_item / skill_review
+--   第 5 期  个人数据：market_favorite / market_user_vote / market_recent_view / market_hidden_item / skill_review（2026-10-21 完成）。
+--            收藏、最近浏览、隐藏改成按条读写的 /me/... 接口（服务端按会话认人，别人的读不到也改不了），前端随之改；
+--            Skill 评价界面没有写入口，改为只读。数据库迁移从旧互动表复制点赞点踩后删表，其余由 migrate-personal-data.mjs 迁入。
 --   第 6 期  其余：配置、审批、审计、门户内容、办公场景、对话、消息、资讯、执行、AI 智库、模型配置；之后删除 center_record
 --
 -- 字段核对范围：第 2 期的表按现有 schema.prisma 逐列转换；第 3 期的资产表已对照 TS 类型和存量数据逐字段核对；
@@ -500,8 +502,10 @@ create table collection_revision (
 -- D. 个人数据与互动（按字符串 id 关联成员和资产，不加外键）
 -- ============================================================================
 
--- D1 收藏（唯一来源）【第 5 期】来源：doc:market-favorites.byUserId[uid][] 与 market_user_interaction.favorited
---   现状是前端同时写收藏文档和互动接口，存了两份；待定（草案问题 3）：收藏数改从本表统计，还是只由一条写入路径维护 favorites 计数。
+-- D1 收藏（唯一来源）【第 5 期】来源：doc:market-favorites.byUserId[uid][]（旧互动表的 favorited 不迁）
+--   草案问题 3 已定（2026-10-21）：收藏数仍是 market_engagement_stat.favorites 计数器，历史数字保留；
+--   收藏只有一条写入路径（PUT/DELETE /me/market-favorites），同一事务里写本表、按真实状态变化加减计数、记行为事实。
+--   每人最多 40 条，超出淘汰最早的并让对应计数减一；收藏写入不受统计限流。
 create table market_favorite (
   member_id  text not null,
   shelf_kind text not null,                                     -- external / internal / projects
@@ -517,6 +521,7 @@ create table market_favorite (
   primary key (member_id, shelf_kind, asset_type, asset_id)
 );
 create index market_favorite_content_idx on market_favorite (content_id);   -- 按资产统计收藏数
+create index market_favorite_member_content_idx on market_favorite (member_id, content_id);   -- 判断某人是否已收藏某内容
 
 -- D2 点赞 / 点踩【第 5 期】来源：market_user_interaction（去掉 favorited 列）
 create table market_user_vote (
@@ -549,7 +554,8 @@ create table market_hidden_item (
   primary key (member_id, shelf_kind, asset_id)
 );
 
--- D5 Skill 评价【第 5 期】来源：doc:skill-reviews.bySkillId[skillId][]；每个 Skill 最多保留 80 条（沿用前端上限）
+-- D5 Skill 评价【第 5 期】来源：doc:skill-reviews.bySkillId[skillId][]；每个 Skill 最多保留 80 条（沿用前端上限）。
+--   界面上没有写评价的入口，接口只读（/docs/skill-reviews 照旧形状返回），要开放写入时再加按条接口。
 create table skill_review (
   id          text primary key,
   skill_id    text not null,                                    -- Skill 字符串 id
@@ -882,7 +888,7 @@ create table center_record (
 );
 create index center_record_kind_idx on center_record (kind);
 
--- 用户互动状态【第 2 期建，第 5 期拆成 market_user_vote 与 market_favorite 后删除】来源：MarketUserInteraction
+-- 用户互动状态【第 2 期建，第 5 期已删除：点赞点踩复制到 market_user_vote，收藏改由 market_favorite 表达】来源：MarketUserInteraction
 create table market_user_interaction (
   member_id  text not null,                                     -- userId
   content_id text not null,

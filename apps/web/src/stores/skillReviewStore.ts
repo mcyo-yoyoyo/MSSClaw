@@ -1,15 +1,13 @@
 import { create } from 'zustand';
-import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
 import {
   canUsePlatformDocsApi,
   fetchPlatformDoc,
   peekPlatformDocMemory,
-  scheduleSavePlatformDoc,
   setPlatformDocMemory,
 } from '@/api/platformDocsApi';
 
+/** Skill 评价只读：界面上没有写评价的入口，服务端也不再接受整份覆盖写入 */
 const DOC_KIND = 'skill-reviews' as const;
-const MAX_PER_SKILL = 80;
 
 export type SkillReviewItem = {
   id: string;
@@ -28,27 +26,11 @@ type ReviewsDoc = {
   bySkillId?: Record<string, SkillReviewItem[]>;
 };
 
-function authenticatedUserId(): string {
-  const userId = getCurrentUserId();
-  if (!userId) throw new Error('skill_review_requires_authenticated_user');
-  return userId;
-}
-
-function persist(bySkillId: Record<string, SkillReviewItem[]>) {
-  authenticatedUserId();
-  if (!canUsePlatformDocsApi()) return;
-  const payload: ReviewsDoc = { bySkillId };
-  setPlatformDocMemory(DOC_KIND, payload);
-  void scheduleSavePlatformDoc(DOC_KIND, payload);
-}
-
 interface SkillReviewState {
   bySkillId: Record<string, SkillReviewItem[]>;
   hydrate: () => void;
   listFor: (skillId: string) => SkillReviewItem[];
   statsFor: (skillId: string) => { count: number; avg: number; good: number; bad: number };
-  addReview: (skillId: string, rating: number, text: string) => void;
-  replyReview: (skillId: string, reviewId: string, reply: string) => void;
 }
 
 export const useSkillReviewStore = create<SkillReviewState>((set, get) => ({
@@ -86,37 +68,5 @@ export const useSkillReviewStore = create<SkillReviewState>((set, get) => ({
     const good = list.filter((r) => r.rating >= 4).length;
     const bad = list.filter((r) => r.rating <= 2).length;
     return { count: list.length, avg: Math.round((sum / list.length) * 10) / 10, good, bad };
-  },
-
-  addReview: (skillId, rating, text) => {
-    const userId = authenticatedUserId();
-    const clamped = Math.min(5, Math.max(1, Math.round(rating)));
-    const item: SkillReviewItem = {
-      id: `rev_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      skillId,
-      userId,
-      userName: getCurrentUserName() || '匿名用户',
-      rating: clamped,
-      text: text.trim().slice(0, 500),
-      at: Date.now(),
-    };
-    const prev = get().bySkillId[skillId] ?? [];
-    const nextList = [item, ...prev].slice(0, MAX_PER_SKILL);
-    const bySkillId = { ...get().bySkillId, [skillId]: nextList };
-    set({ bySkillId });
-    persist(bySkillId);
-  },
-
-  replyReview: (skillId, reviewId, reply) => {
-    authenticatedUserId();
-    const prev = get().bySkillId[skillId] ?? [];
-    const nextList = prev.map((r) =>
-      r.id === reviewId
-        ? { ...r, reply: reply.trim().slice(0, 500), replyAt: Date.now() }
-        : r,
-    );
-    const bySkillId = { ...get().bySkillId, [skillId]: nextList };
-    set({ bySkillId });
-    persist(bySkillId);
   },
 }));

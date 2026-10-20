@@ -46,17 +46,15 @@ model MarketEngagement {
   @@map("market_engagement_stat")
 }
 
-/// 过渡表：用户对市场内容的状态，第 5 期拆成 market_user_vote 与 market_favorite 后删除。
-model MarketUserInteraction {
+/// 点赞 / 点踩：每人每个内容一行，vote 为空表示已取消
+model MarketUserVote {
   userId    String   @map("member_id")
   contentId String   @map("content_id")
   vote      String?
-  favorited Boolean  @default(false)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@id([userId, contentId])
-  @@index([userId, favorited], map: "market_user_interaction_favorited_idx")
-  @@map("market_user_interaction")
+  @@map("market_user_vote")
 }
 
 /// 市场内容的行为事实。累计表只保存当前总量，本表用于按日期统计浏览、收藏、点赞、点踩与跳转趋势。
@@ -501,4 +499,71 @@ model CollectionRevision {
   updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("collection_revision")
+}
+
+// ---------------------------------------------------------------------------
+// 第 5 期个人数据（docs/database-design.sql D1–D5）。按字符串 id 关联成员和资产，不加外键。
+// assetType 在旧记录里没有时存空串（主键列不能为空）。
+
+/// 收藏：「谁收藏了什么」只此一份；收藏数仍由 market_engagement_stat.favorites 计数
+model MarketFavorite {
+  memberId  String   @map("member_id")
+  shelfKind String   @map("shelf_kind")
+  assetType String   @default("") @map("asset_type")
+  assetId   String   @map("asset_id")
+  contentId String   @map("content_id")
+  title     String
+  icon      String?
+  logoUrl   String?  @map("logo_url")
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([memberId, shelfKind, assetType, assetId])
+  @@index([contentId], map: "market_favorite_content_idx")
+  @@index([memberId, contentId], map: "market_favorite_member_content_idx")
+  @@map("market_favorite")
+}
+
+/// 最近浏览：每人保留最近 12 条
+model MarketRecentView {
+  memberId  String   @map("member_id")
+  shelfKind String   @map("shelf_kind")
+  assetType String   @default("") @map("asset_type")
+  assetId   String   @map("asset_id")
+  title     String
+  icon      String?
+  logoUrl   String?  @map("logo_url")
+  viewedAt  DateTime @map("viewed_at") @db.Timestamptz(3)
+
+  @@id([memberId, shelfKind, assetType, assetId])
+  @@map("market_recent_view")
+}
+
+/// 用户隐藏的货架项
+model MarketHiddenItem {
+  memberId  String   @map("member_id")
+  shelfKind String   @map("shelf_kind")
+  assetId   String   @map("asset_id")
+  hiddenAt  DateTime @default(now()) @map("hidden_at") @db.Timestamptz(3)
+
+  @@id([memberId, shelfKind, assetId])
+  @@map("market_hidden_item")
+}
+
+/// Skill 评价：每个 Skill 最多保留 80 条
+model SkillReview {
+  id         String    @id
+  skillId    String    @map("skill_id")
+  memberId   String    @map("member_id")
+  memberName String    @map("member_name")
+  rating     Int       @db.SmallInt
+  content    String
+  reply      String?
+  repliedAt  DateTime? @map("replied_at") @db.Timestamptz(3)
+  createdAt  DateTime  @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([skillId, createdAt], map: "skill_review_skill_idx")
+  @@map("skill_review")
 }

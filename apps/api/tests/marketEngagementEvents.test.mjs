@@ -18,7 +18,7 @@ function assetModels(rows) {
 }
 
 function engagementHarness(
-  initialInteraction = null,
+  initialVote = null,
   { metricExists = true, knownContent = true, workspaceExists = true, centerRows } = {},
 ) {
   let metric = metricExists ? {
@@ -31,7 +31,10 @@ function engagementHarness(
     favorites: 0,
     updatedAt: new Date(),
   } : null;
-  let interaction = initialInteraction;
+  let vote = initialVote;
+  let favorites = [];
+  const matches = (row, where) => Object.entries(where).every(([key, value]) =>
+    value && typeof value === 'object' && 'in' in value ? value.in.includes(row[key]) : row[key] === value);
   const events = [];
   const eventIds = new Set();
 
@@ -63,11 +66,26 @@ function engagementHarness(
         return { ...metric };
       },
     },
-    marketUserInteraction: {
-      findUnique: async () => interaction,
+    marketUserVote: {
+      findUnique: async () => vote,
       upsert: async ({ create, update }) => {
-        interaction = interaction ? { ...interaction, ...update } : { ...create };
-        return interaction;
+        vote = vote ? { ...vote, ...update } : { ...create };
+        return vote;
+      },
+    },
+    marketFavorite: {
+      count: async ({ where }) => favorites.filter((row) => matches(row, where)).length,
+      findFirst: async ({ where }) => favorites.find((row) => matches(row, where)) ?? null,
+      findMany: async ({ where, skip = 0 }) => favorites.filter((row) => matches(row, where)).slice(skip),
+      deleteMany: async ({ where }) => {
+        favorites = favorites.filter((row) => !matches(row, where));
+      },
+      create: async ({ data }) => favorites.push({ ...data }),
+      update: async ({ where, data }) => {
+        const key = where.memberId_shelfKind_assetType_assetId;
+        const row = favorites.find((item) => matches(item, key));
+        Object.assign(row, data);
+        return row;
       },
     },
     marketEngagementEvent: {
@@ -104,7 +122,8 @@ function engagementHarness(
     service: new PersistenceService(prisma),
     getMetric: () => metric,
     events,
-    getInteraction: () => interaction,
+    getVote: () => vote,
+    getFavorites: () => favorites,
   };
 }
 
@@ -137,18 +156,21 @@ test('favorite facts count only transitions into the active state', async () => 
     userId: 'user-1',
     active: true,
     eventId: 'event-favorite-1',
+    favorite: { shelfKind: 'external', assetType: 'tool', assetId: 'tool-1', title: '工具 1' },
   });
   await harness.service.mutateMarketEngagement('ws-test', 'tool-1', {
     action: 'favorite',
     userId: 'user-1',
     active: true,
     eventId: 'event-favorite-2',
+    favorite: { shelfKind: 'external', assetType: 'tool', assetId: 'tool-1', title: '工具 1' },
   });
   await harness.service.mutateMarketEngagement('ws-test', 'tool-1', {
     action: 'favorite',
     userId: 'user-1',
     active: false,
     eventId: 'event-favorite-3',
+    favorite: { shelfKind: 'external', assetType: 'tool', assetId: 'tool-1', title: '工具 1' },
   });
 
   assert.equal(harness.getMetric().favorites, 0);
@@ -157,7 +179,7 @@ test('favorite facts count only transitions into the active state', async () => 
     'request:favorite',
     'request:favorite',
   ]);
-  assert.equal(harness.getInteraction().favorited, false);
+  assert.deepEqual(harness.getFavorites(), [], '取消后收藏表里不再有这一行');
 });
 
 test('vote facts count activation and switching, but not cancellation', async () => {
@@ -191,7 +213,7 @@ test('vote facts count activation and switching, but not cancellation', async ()
     'like',
     'dislike',
   ]);
-  assert.equal(harness.getInteraction().vote, 'dislike');
+  assert.equal(harness.getVote().vote, 'dislike');
 });
 
 test('replaying the same event id does not increment or append a second fact', async () => {

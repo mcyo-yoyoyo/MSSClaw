@@ -1,34 +1,13 @@
 import { create } from 'zustand';
 import type { MarketShelfKind } from '@/domain/marketShelf';
 import { getCurrentUserId } from '@/domain/currentUser';
-import {
-  canUsePlatformDocsApi,
-  fetchPlatformDoc,
-  peekPlatformDocMemory,
-  scheduleSavePlatformDoc,
-  setPlatformDocMemory,
-} from '@/api/platformDocsApi';
-
-const DOC_KIND = 'market-hidden' as const;
+import { canUsePlatformDocsApi } from '@/api/platformDocsApi';
+import { fetchHidden, hideMarketItem } from '@/api/personalDataApi';
 
 export type MarketHiddenKey = `${MarketShelfKind}:${string}`;
 
-type HiddenDoc = {
-  byUserId?: Record<string, MarketHiddenKey[]>;
-};
-
-function userBucket(): string | null {
-  return getCurrentUserId() || null;
-}
-
-function persistForUser(keys: MarketHiddenKey[]) {
-  const uid = userBucket();
-  if (!uid || !canUsePlatformDocsApi()) return;
-  const mem = peekPlatformDocMemory<HiddenDoc>(DOC_KIND) ?? {};
-  const byUserId = { ...(mem.byUserId ?? {}), [uid]: keys };
-  const payload: HiddenDoc = { byUserId };
-  setPlatformDocMemory(DOC_KIND, payload);
-  void scheduleSavePlatformDoc(DOC_KIND, payload);
+function signedIn(): boolean {
+  return Boolean(getCurrentUserId()) && canUsePlatformDocsApi();
 }
 
 interface MarketHiddenState {
@@ -43,16 +22,13 @@ export const useMarketHiddenStore = create<MarketHiddenState>((set, get) => ({
 
   hydrate: () => {
     void (async () => {
-      const uid = userBucket();
-      if (!uid || !canUsePlatformDocsApi()) {
+      if (!signedIn()) {
         set({ keys: [] });
         return;
       }
       try {
-        const remote = await fetchPlatformDoc<HiddenDoc>(DOC_KIND);
-        const keys = Array.isArray(remote?.byUserId?.[uid]) ? remote.byUserId[uid] : [];
-        if (remote) setPlatformDocMemory(DOC_KIND, remote);
-        set({ keys });
+        const remote = await fetchHidden();
+        set({ keys: remote.keys as MarketHiddenKey[] });
       } catch {
         set({ keys: [] });
       }
@@ -64,8 +40,11 @@ export const useMarketHiddenStore = create<MarketHiddenState>((set, get) => ({
   hide: (id, kind) => {
     const key: MarketHiddenKey = `${kind}:${id}`;
     if (get().keys.includes(key)) return;
-    const next = [...get().keys, key];
-    persistForUser(next);
-    set({ keys: next });
+    const previous = get().keys;
+    set({ keys: [...previous, key] });
+    if (!signedIn()) return;
+    void hideMarketItem(kind, id)
+      .then((result) => set({ keys: result.keys as MarketHiddenKey[] }))
+      .catch(() => set({ keys: previous }));
   },
 }));

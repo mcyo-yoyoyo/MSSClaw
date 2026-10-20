@@ -61,6 +61,21 @@ export interface GlobalToolsPayload {
   migratedAt?: string;
 }
 
+/** 收藏写入时带的展示快照（个人收藏清单直接显示它） */
+export interface FavoriteSnapshot {
+  shelfKind: string;
+  /** 旧收藏没有资产类型时为空串 */
+  assetType: string;
+  assetId: string;
+  title: string;
+  icon?: string | null;
+  logoUrl?: string | null;
+  note?: string | null;
+}
+
+/** 每人最多保留的收藏数（沿用前端上限）；超出时淘汰最早的收藏，计数随之减一 */
+export const MAX_FAVORITES = 40;
+
 export interface PortalContentPayload {
   items?: unknown[];
   /** 乐观锁版本；客户端 PUT 时带 expectedRevision */
@@ -421,6 +436,90 @@ function mergeExcelInternalTools(source: unknown[] | undefined): unknown[] {
   }), ...updated];
 }
 
+type FavoriteTx = Prisma.TransactionClient;
+
+/**
+ * 写一条收藏。旧收藏没有资产类型（空串），和带类型的同一资产视为同一条：
+ * 收藏时把旧行换成带类型的行（保留备注和收藏时间），取消时两种都删。
+ */
+async function writeFavoriteRow(
+  tx: FavoriteTx,
+  memberId: string,
+  contentId: string,
+  favorite: FavoriteSnapshot,
+  active: boolean,
+): Promise<void> {
+  const sameAsset = {
+    memberId,
+    shelfKind: favorite.shelfKind,
+    assetId: favorite.assetId,
+    ...(favorite.assetType ? { assetType: { in: [favorite.assetType, ''] } } : {}),
+  };
+  if (!active) {
+    await tx.marketFavorite.deleteMany({ where: sameAsset });
+    return;
+  }
+  const existing = await tx.marketFavorite.findFirst({ where: sameAsset, orderBy: { assetType: 'desc' } });
+  const snapshot = {
+    contentId,
+    title: favorite.title,
+    icon: favorite.icon ?? null,
+    logoUrl: favorite.logoUrl ?? null,
+    ...(favorite.note !== undefined ? { note: favorite.note } : {}),
+  };
+  if (existing && existing.assetType === favorite.assetType) {
+    await tx.marketFavorite.update({
+      where: { memberId_shelfKind_assetType_assetId: { memberId, shelfKind: favorite.shelfKind, assetType: favorite.assetType, assetId: favorite.assetId } },
+      data: snapshot,
+    });
+    return;
+  }
+  if (existing) await tx.marketFavorite.deleteMany({ where: sameAsset });
+  await tx.marketFavorite.create({
+    data: {
+      memberId,
+      shelfKind: favorite.shelfKind,
+      assetType: favorite.assetType,
+      assetId: favorite.assetId,
+      ...snapshot,
+      note: favorite.note ?? existing?.note ?? null,
+      createdAt: existing?.createdAt ?? new Date(),
+    },
+  });
+}
+
+/** 超过收藏上限时淘汰最早的收藏；某个内容因此不再被收藏，计数减一并记一条取消收藏事实。 */
+async function evictOldFavorites(
+  tx: FavoriteTx,
+  memberId: string,
+  fact: { dateKey: string; visitorHash: string; visitorType: string; occurredAt: Date },
+): Promise<void> {
+  const evicted = await tx.marketFavorite.findMany({
+    where: { memberId },
+    orderBy: { createdAt: 'desc' },
+    skip: MAX_FAVORITES,
+  });
+  for (const row of evicted) {
+    await tx.marketFavorite.delete({
+      where: { memberId_shelfKind_assetType_assetId: { memberId, shelfKind: row.shelfKind, assetType: row.assetType, assetId: row.assetId } },
+    });
+    if (await tx.marketFavorite.count({ where: { memberId, contentId: row.contentId } })) continue;
+    const decremented = await tx.marketEngagement.updateMany({
+      where: { contentId: row.contentId },
+      data: { favorites: { increment: -1 } },
+    });
+    if (!decremented.count) continue;
+    await tx.marketEngagementEvent.create({
+      data: {
+        contentId: row.contentId,
+        assetType: row.assetType || 'unknown',
+        action: 'favorite_cancel',
+        ...fact,
+      },
+    });
+  }
+}
+
 @Injectable()
 export class PersistenceService {
   private marketEngagementRetentionChecks = 0;
@@ -651,18 +750,19 @@ export class PersistenceService {
   /** userId 为空表示游客：只返回聚合计数，不带个人投票/收藏态 */
   async getMarketEngagement(workspaceId: string, userId: string) {
     await this.ensureLegacyMarketEngagementMigrated(workspaceId);
-    const [metrics, interactions] = await Promise.all([
+    const [metrics, votes, favorites] = await Promise.all([
       this.prisma.marketEngagement.findMany(),
+      userId ? this.prisma.marketUserVote.findMany({ where: { userId } }) : Promise.resolve([]),
       userId
-        ? this.prisma.marketUserInteraction.findMany({ where: { userId } })
+        ? this.prisma.marketFavorite.findMany({ where: { memberId: userId }, select: { contentId: true } })
         : Promise.resolve([]),
     ]);
     return {
       byId: Object.fromEntries(metrics.map((row) => [row.contentId, this.toEngagement(row)])),
       userVotes: Object.fromEntries(
-        interactions.map((row) => [row.contentId, row.vote === 'like' || row.vote === 'dislike' ? row.vote : null]),
+        votes.map((row) => [row.contentId, row.vote === 'like' || row.vote === 'dislike' ? row.vote : null]),
       ),
-      favorites: Object.fromEntries(interactions.map((row) => [row.contentId, row.favorited])),
+      favorites: Object.fromEntries(favorites.map((row) => [row.contentId, true])),
     };
   }
 
@@ -681,6 +781,8 @@ export class PersistenceService {
       inputTokens?: number;
       outputTokens?: number;
       errorCode?: string;
+      /** 收藏 / 取消收藏必须带：收藏表是「谁收藏了什么」的唯一来源 */
+      favorite?: FavoriteSnapshot;
     },
   ) {
     const eventId = optionalTrimmedString(
@@ -746,18 +848,18 @@ export class PersistenceService {
       let metric = await tx.marketEngagement.findUnique({
         where: { contentId },
       });
-      let interaction = userId
-        ? await tx.marketUserInteraction.findUnique({
-            where: { userId_contentId: { userId, contentId } },
-          })
+      let vote = userId
+        ? (await tx.marketUserVote.findUnique({ where: { userId_contentId: { userId, contentId } } }))?.vote ?? null
         : null;
+      let favorited = userId ? (await tx.marketFavorite.count({ where: { memberId: userId, contentId } })) > 0 : false;
 
       const requestEventRowId = randomUUID();
       const requestAction = `request:${action}`;
       const rateWindowStart = new Date(occurredAt.getTime() - MARKET_ENGAGEMENT_RATE_WINDOW_MS);
       // 写入已按进程排队；分钟/每日上限先计数再插入，多实例并发时最多多记几条。
       // eventId 唯一键保证重试幂等（skipDuplicates = ON CONFLICT DO NOTHING）；旧事实没有 eventId，列保持 nullable。
-      const overLimit = visitorHash !== null && (
+      // 收藏不受统计限流：限流会让这次收藏连同收藏表一起丢掉；计数只随真实状态变化，刷不上去。
+      const overLimit = !input.favorite && visitorHash !== null && (
         await tx.marketEngagementEvent.count({
           where: { visitorHash, occurredAt: { gte: rateWindowStart } },
         }) >= MARKET_ENGAGEMENT_VISITOR_RATE_LIMIT ||
@@ -786,7 +888,7 @@ export class PersistenceService {
       })).count;
 
       if (accepted === 0) {
-        return this.marketEngagementStateFromRows(contentId, metric, interaction);
+        return this.marketEngagementStateFromRows(contentId, metric, { vote, favorited });
       }
 
       if (!metric) {
@@ -822,23 +924,21 @@ export class PersistenceService {
         behaviorAction = action;
       } else if (action === 'favorite' || action === 'unfavorite' || action === 'favorite_cancel') {
         if (!metric) throw new BadRequestException('market_engagement_metric_unavailable');
+        if (!input.favorite) throw new BadRequestException('market_favorite_snapshot_required');
         const explicitCancel = action === 'unfavorite' || action === 'favorite_cancel';
-        const next = explicitCancel ? false : input.active ?? !interaction?.favorited;
-        const previous = interaction?.favorited ?? false;
-        if (next !== previous) {
+        const previous = favorited;
+        await writeFavoriteRow(tx, userId, contentId, input.favorite, explicitCancel ? false : input.active ?? !previous);
+        favorited = (await tx.marketFavorite.count({ where: { memberId: userId, contentId } })) > 0;
+        if (favorited !== previous) {
           metric = await tx.marketEngagement.update({
             where: { contentId },
-            data: { favorites: { increment: next ? 1 : -1 } },
+            data: { favorites: { increment: favorited ? 1 : -1 } },
           });
-          behaviorAction = next ? 'favorite' : explicitCancel ? 'favorite_cancel' : null;
+          behaviorAction = favorited ? 'favorite' : explicitCancel ? 'favorite_cancel' : null;
         } else if (explicitCancel) {
           behaviorAction = 'favorite_cancel';
         }
-        interaction = await tx.marketUserInteraction.upsert({
-          where: { userId_contentId: { userId, contentId } },
-          create: { userId, contentId, favorited: next },
-          update: { favorited: next },
-        });
+        await evictOldFavorites(tx, userId, { dateKey, visitorHash, visitorType, occurredAt });
       } else if (
         action === 'like' ||
         action === 'unlike' ||
@@ -853,9 +953,7 @@ export class PersistenceService {
         const requestedVote = action === 'dislike' || action === 'undislike' || action === 'dislike_cancel'
           ? 'dislike'
           : 'like';
-        const previousVote = interaction?.vote === 'like' || interaction?.vote === 'dislike'
-          ? interaction.vote
-          : null;
+        const previousVote = vote === 'like' || vote === 'dislike' ? vote : null;
         const nextVote = explicitCancel
           ? previousVote === requestedVote
             ? null
@@ -881,11 +979,12 @@ export class PersistenceService {
         } else if (explicitCancel) {
           behaviorAction = requestedVote === 'like' ? 'like_cancel' : 'dislike_cancel';
         }
-        interaction = await tx.marketUserInteraction.upsert({
+        await tx.marketUserVote.upsert({
           where: { userId_contentId: { userId, contentId } },
           create: { userId, contentId, vote: nextVote },
           update: { vote: nextVote },
         });
+        vote = nextVote;
       } else if (action === 'call') {
         behaviorAction = 'call';
       }
@@ -897,7 +996,7 @@ export class PersistenceService {
         });
       }
 
-      return this.marketEngagementStateFromRows(contentId, metric, interaction);
+      return this.marketEngagementStateFromRows(contentId, metric, { vote, favorited });
       }, {
         maxWait: 15_000,
         timeout: 15_000,
@@ -971,7 +1070,7 @@ export class PersistenceService {
       favorites: number;
       updatedAt: Date;
     } | null,
-    interaction: { vote: string | null; favorited: boolean } | null,
+    state: { vote: string | null; favorited: boolean },
   ) {
     const row = metric ?? {
       contentId,
@@ -986,10 +1085,10 @@ export class PersistenceService {
     return {
       engagement: this.toEngagement(row),
       userVote:
-        interaction?.vote === 'like' || interaction?.vote === 'dislike'
-          ? interaction.vote
+        state.vote === 'like' || state.vote === 'dislike'
+          ? state.vote
           : null,
-      favorited: interaction?.favorited ?? false,
+      favorited: state.favorited,
     };
   }
 

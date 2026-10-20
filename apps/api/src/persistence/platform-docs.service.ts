@@ -17,6 +17,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { ensureWorkspace } from '../workspaces/workspace-setting';
 import { readAssets } from './asset-catalog';
+import { readSkillReviewsDoc } from './personal-data';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   SEED_BUSINESS_SCENARIO_CATALOG,
@@ -49,9 +50,6 @@ export const PLATFORM_DOC_KINDS = [
   'home-featured',
   'org-taxonomy',
   'market-featured',
-  'market-favorites',
-  'market-recent',
-  'market-hidden',
   'content-engagement',
   'audit-log',
   'ai-news-prefs',
@@ -817,6 +815,7 @@ export class PlatformDocsService {
       return { kind, payload: await readMembersDoc(this.prisma) };
     }
     if (kind === 'auth-credentials') return { kind, payload: await readCredentialsDoc(this.prisma) };
+    if (kind === 'skill-reviews') return { kind, payload: await readSkillReviewsDoc(this.prisma) };
 
     const row = await this.prisma.centerRecord.findUnique({
       where: { id: docId(workspaceId, kind) },
@@ -936,8 +935,9 @@ export class PlatformDocsService {
     await ensureMembersSeeded(this.prisma);
     byKind.members = await readMembersDoc(this.prisma);
     byKind['auth-credentials'] = await readCredentialsDoc(this.prisma);
+    byKind['skill-reviews'] = await readSkillReviewsDoc(this.prisma);
     for (const kind of PLATFORM_DOC_KINDS) {
-      if (kind === 'members' || kind === 'auth-credentials') continue;
+      if (kind === 'members' || kind === 'auth-credentials' || kind === 'skill-reviews') continue;
       const row = rows.find((r) => r.id === docId(workspaceId, kind));
       if (row && kind === 'external-tool-layout') {
         byKind[kind] = externalToolLayoutPayloadForRead(row.payload);
@@ -1422,20 +1422,12 @@ export class PlatformDocsService {
       payload = { logs: [] };
     } else if (kind === 'market-featured') {
       payload = { pins: [] };
-    } else if (kind === 'market-favorites') {
-      payload = { items: [] };
-    } else if (kind === 'market-recent') {
-      payload = { items: [] };
-    } else if (kind === 'market-hidden') {
-      payload = { byUserId: {} };
     } else if (kind === 'content-engagement') {
       payload = { map: {}, votes: {} };
     } else if (kind === 'ai-news-prefs') {
       payload = { byUser: {} };
     } else if (kind === 'asset-approvals') {
       payload = { items: [], watchedByUserId: {} };
-    } else if (kind === 'skill-reviews') {
-      payload = { bySkillId: {} };
     } else if (kind === 'llm-config') {
       // 与前端 DEFAULT_LLM_CONFIG / seedPlatformModels 对齐，权威在 DB
       payload = {

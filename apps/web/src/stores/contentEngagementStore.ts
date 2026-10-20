@@ -30,7 +30,8 @@ interface ContentEngagementState {
   bumpUse: (id: string, assetType?: MarketAssetType) => void;
   bumpRedirect: (id: string, assetType?: MarketAssetType) => void;
   bumpDownload: (id: string, assetType?: MarketAssetType) => void;
-  bumpFavorite: (id: string, delta: 1 | -1, assetType?: MarketAssetType) => void;
+  /** 收藏接口在服务端同一事务里改了计数，直接写入返回的结果 */
+  applyEngagement: (id: string, engagement: unknown) => void;
   toggleLike: (id: string, assetType?: MarketAssetType) => void;
   toggleDislike: (id: string, assetType?: MarketAssetType) => void;
   optimizationQueue: () => ContentEngagement[];
@@ -115,8 +116,8 @@ export const useContentEngagementStore = create<ContentEngagementState>((set, ge
   bumpUse: (id, assetType) => runMutation(set, id, 'use', undefined, assetType),
   bumpRedirect: (id, assetType) => runMutation(set, id, 'redirect', undefined, assetType),
   bumpDownload: (id, assetType) => runMutation(set, id, 'download', undefined, assetType),
-  bumpFavorite: (id, delta, assetType) =>
-    runMutation(set, id, delta > 0 ? 'favorite' : 'unfavorite', delta > 0, assetType),
+  applyEngagement: (id, engagement) =>
+    set((state) => ({ byId: { ...state.byId, [id]: normalizeEngagement(engagement as ContentEngagement) } })),
   toggleLike: (id, assetType) => runMutation(set, id, 'like', undefined, assetType),
   toggleDislike: (id, assetType) => runMutation(set, id, 'dislike', undefined, assetType),
 

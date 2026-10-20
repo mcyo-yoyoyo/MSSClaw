@@ -3,16 +3,10 @@ import type { MarketShelfKind } from '@/domain/marketShelf';
 import type { MarketAssetType } from '@/api/marketEngagementApi';
 import { getCurrentUserId } from '@/domain/currentUser';
 import { RETIRED_DEMO_TOOL_IDS } from '@/domain/prototype/tools';
-import {
-  canUsePlatformDocsApi,
-  fetchPlatformDoc,
-  peekPlatformDocMemory,
-  scheduleSavePlatformDoc,
-  setPlatformDocMemory,
-} from '@/api/platformDocsApi';
+import { canUsePlatformDocsApi } from '@/api/platformDocsApi';
+import { fetchRecent, pushRecentView } from '@/api/personalDataApi';
 
 const MAX = 12;
-const DOC_KIND = 'market-recent' as const;
 const LEGACY_LS_KEY = 'mssclaw:market-recent-v1';
 const RETIRED = new Set<string>(RETIRED_DEMO_TOOL_IDS);
 
@@ -70,17 +64,22 @@ function takeLegacyLocal(): RecentMarketItem[] {
   }
 }
 
-function persistForUser(items: RecentMarketItem[]) {
-  const next = pruneItems(items);
-  const uid = userBucket();
-  if (!uid || !canUsePlatformDocsApi()) return next;
-  const mem = peekPlatformDocMemory<RecentDoc>(DOC_KIND) ?? {};
-  const byUserId: Record<string, RecentMarketItem[]> = { ...(mem.byUserId ?? {}) };
-  byUserId[uid] = next;
-  const payload: RecentDoc = { byUserId };
-  setPlatformDocMemory(DOC_KIND, payload);
-  void scheduleSavePlatformDoc(DOC_KIND, payload);
-  return next;
+function signedIn(): boolean {
+  return Boolean(userBucket()) && canUsePlatformDocsApi();
+}
+
+/** 浏览记录写入串行，最后一次响应即服务端最新清单；失败不打扰用户，保留本地顺序。 */
+let writeQueue: Promise<void> = Promise.resolve();
+
+function saveView(item: Omit<RecentMarketItem, 'at'>, set: (partial: Partial<RecentMarketState>) => void) {
+  writeQueue = writeQueue.then(async () => {
+    try {
+      const result = await pushRecentView<RecentMarketItem>(item);
+      set({ items: pruneItems(result.items) });
+    } catch {
+      /* 最近浏览只是便利功能 */
+    }
+  });
 }
 
 interface RecentMarketState {
@@ -95,25 +94,16 @@ export const useRecentMarketStore = create<RecentMarketState>((set, get) => ({
   hydrate: () => {
     void (async () => {
       const leftover = takeLegacyLocal();
-      const uid = userBucket();
-      if (!uid || !canUsePlatformDocsApi()) {
+      if (!signedIn()) {
         set({ items: leftover });
         return;
       }
       try {
-        const remote = await fetchPlatformDoc<RecentDoc>(DOC_KIND);
-        const items = readUserItems(remote, uid);
-        if (remote) setPlatformDocMemory(DOC_KIND, remote);
-        if (items.length) {
-          set({ items });
-          return;
-        }
-        if (leftover.length) {
-          persistForUser(leftover);
-          set({ items: leftover });
-          return;
-        }
-        set({ items: [] });
+        const remote = await fetchRecent<RecentMarketItem>();
+        const items = pruneItems(remote.items);
+        set({ items: items.length ? items : leftover });
+        // 旧版本地缓存一次性写回服务端：从最早的开始，保持原顺序
+        if (!items.length) [...leftover].reverse().forEach((item) => saveView(item, set));
       } catch {
         set({ items: leftover });
       }
@@ -122,10 +112,12 @@ export const useRecentMarketStore = create<RecentMarketState>((set, get) => ({
 
   push: (item) => {
     if (RETIRED.has(item.id)) return;
-    const next = persistForUser([
-      { ...item, at: Date.now() },
-      ...get().items.filter((x) => !sameRecentAsset(x, item as RecentMarketItem)),
-    ]);
-    set({ items: next });
+    set({
+      items: pruneItems([
+        { ...item, at: Date.now() },
+        ...get().items.filter((x) => !sameRecentAsset(x, item as RecentMarketItem)),
+      ]),
+    });
+    if (signedIn()) saveView(item, set);
   },
 }));

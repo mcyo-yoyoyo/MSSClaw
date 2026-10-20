@@ -12,6 +12,7 @@ import { AiBriefSubscriptionsController } from './ai-brief-subscriptions.control
 import { AiBriefSubscriptionsService } from './ai-brief-subscriptions.service';
 import { CaseInsightsController } from './case-insights.controller';
 import { CaseInsightsService } from './case-insights.service';
+import { MeController } from './me.controller';
 
 @Module({
   controllers: [
@@ -23,6 +24,7 @@ import { CaseInsightsService } from './case-insights.service';
     PortalAnalyticsController,
     AiBriefSubscriptionsController,
     CaseInsightsController,
+    MeController,
   ],
   providers: [
     PersistenceService,

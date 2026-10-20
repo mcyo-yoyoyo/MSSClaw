@@ -1,18 +1,13 @@
 import { create } from 'zustand';
 import type { MarketShelfKind } from '@/domain/marketShelf';
 import { getCurrentUserId } from '@/domain/currentUser';
-import {
-  canUsePlatformDocsApi,
-  fetchPlatformDoc,
-  peekPlatformDocMemory,
-  scheduleSavePlatformDoc,
-  setPlatformDocMemory,
-} from '@/api/platformDocsApi';
+import { canUsePlatformDocsApi } from '@/api/platformDocsApi';
+import { addFavorite, fetchFavorites, removeFavorite, updateFavoriteNote } from '@/api/personalDataApi';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
+import { useConversationStore } from '@/stores/conversationStore';
 import type { MarketAssetType } from '@/api/marketEngagementApi';
 
 const MAX = 40;
-const DOC_KIND = 'market-favorites' as const;
 
 export type MarketFavoriteItem = {
   id: string;
@@ -39,32 +34,32 @@ function sameFavoriteAsset(
   return !a.assetType || !b.assetType || a.assetType === b.assetType;
 }
 
-type FavoritesDoc = {
-  byUserId?: Record<string, MarketFavoriteItem[]>;
-  /** @deprecated 旧版工作区共享列表 */
-  items?: MarketFavoriteItem[];
-};
-
-function userBucket(): string | null {
-  return getCurrentUserId() || null;
+function signedIn(): boolean {
+  return Boolean(getCurrentUserId()) && canUsePlatformDocsApi();
 }
 
-function readUserItems(doc: FavoritesDoc | null | undefined, uid: string): MarketFavoriteItem[] {
-  const fromUser = doc?.byUserId?.[uid];
-  if (Array.isArray(fromUser)) return fromUser.slice(0, MAX);
-  if (Array.isArray(doc?.items)) return doc.items.slice(0, MAX);
-  return [];
-}
+/** 收藏写入串行：快速连点收藏 / 取消时按点击顺序落库，最后一次响应即服务端最新清单。 */
+let writeQueue: Promise<void> = Promise.resolve();
 
-function persistForUser(items: MarketFavoriteItem[]) {
-  const uid = userBucket();
-  if (!uid || !canUsePlatformDocsApi()) return;
-  const mem = peekPlatformDocMemory<FavoritesDoc>(DOC_KIND) ?? {};
-  const byUserId: Record<string, MarketFavoriteItem[]> = { ...(mem.byUserId ?? {}) };
-  byUserId[uid] = items.slice(0, MAX);
-  const payload: FavoritesDoc = { byUserId };
-  setPlatformDocMemory(DOC_KIND, payload);
-  void scheduleSavePlatformDoc(DOC_KIND, payload);
+function enqueue(
+  set: (partial: Partial<MarketFavoriteState>) => void,
+  previous: MarketFavoriteItem[],
+  write: () => Promise<{ items: MarketFavoriteItem[]; engagement?: unknown }>,
+  contentId?: string,
+) {
+  writeQueue = writeQueue.then(async () => {
+    try {
+      const result = await write();
+      set({ items: result.items.slice(0, MAX) });
+      // 收藏数由服务端在同一事务里更新，直接用返回的计数
+      if (contentId && result.engagement) {
+        useContentEngagementStore.getState().applyEngagement(contentId, result.engagement);
+      }
+    } catch {
+      set({ items: previous });
+      useConversationStore.setState({ pushToast: '收藏没保存成功，已恢复，请稍后重试' });
+    }
+  });
 }
 
 interface MarketFavoriteState {
@@ -79,16 +74,13 @@ export const useMarketFavoriteStore = create<MarketFavoriteState>((set, get) => 
   items: [],
 
   hydrate: async () => {
-    const uid = userBucket();
-    if (!uid || !canUsePlatformDocsApi()) {
+    if (!signedIn()) {
       set({ items: [] });
       return;
     }
     try {
-      const remote = await fetchPlatformDoc<FavoritesDoc>(DOC_KIND);
-      const list = readUserItems(remote, uid);
-      if (remote) setPlatformDocMemory(DOC_KIND, remote);
-      set({ items: list });
+      const remote = await fetchFavorites<MarketFavoriteItem>();
+      set({ items: remote.items.slice(0, MAX) });
     } catch {
       set({ items: [] });
     }
@@ -98,45 +90,33 @@ export const useMarketFavoriteStore = create<MarketFavoriteState>((set, get) => 
     get().items.some((x) => sameFavoriteAsset(x, { id, kind, assetType })),
 
   toggle: (item) => {
-    if (!userBucket() || !canUsePlatformDocsApi()) return false;
+    if (!signedIn()) return false;
     const previous = get().items;
     const exists = previous.some((x) => sameFavoriteAsset(x, item));
     const next = exists
       ? previous.filter((x) => !sameFavoriteAsset(x, item))
       : [{ ...item, at: Date.now() }, ...previous].slice(0, MAX);
-    persistForUser(next);
     set({ items: next });
-    const favorited = !exists;
-    // 个人收藏清单与门户互动计数是两份持久化数据。统一在 Store 内同步，
-    // 避免详情弹窗、个人中心等入口只更新星标而漏记外层卡片计数。
-    // 以资产类型 + ID 做差分，避免同一 ID 在 Skill/Agent/Tool 间互相吞掉事件；
-    // 超过 MAX 时被淘汰的旧收藏也会得到对应的取消事件。
-    const keyOf = (entry: MarketFavoriteItem) =>
-      `${entry.assetType ?? entry.kind}:${entry.id}`;
-    const previousIds = new Set(previous.map(keyOf));
-    const nextIds = new Set(next.map(keyOf));
-    const engagement = useContentEngagementStore.getState();
-    new Set([...previousIds, ...nextIds]).forEach((key) => {
-      if (previousIds.has(key) !== nextIds.has(key)) {
-        const favorite = next.find((entry) => keyOf(entry) === key) ?? previous.find((entry) => keyOf(entry) === key);
-        if (!favorite) return;
-        const assetType =
-          favorite?.assetType ??
-          (favorite?.kind === 'external' || favorite?.kind === 'internal' ? 'tool' : undefined);
-        engagement.bumpFavorite(favorite.id, nextIds.has(key) ? 1 : -1, assetType);
-      }
-    });
-    return favorited;
+    const ref = { id: item.id, kind: item.kind, ...(item.assetType ? { assetType: item.assetType } : {}) };
+    enqueue(
+      set,
+      previous,
+      () => (exists ? removeFavorite<MarketFavoriteItem>(ref) : addFavorite<MarketFavoriteItem>(item)),
+      item.id,
+    );
+    return !exists;
   },
 
   setNote: (id, kind, note, assetType) => {
-    if (!userBucket() || !canUsePlatformDocsApi()) return;
-    const next = get().items.map((x) =>
-      sameFavoriteAsset(x, { id, kind, assetType })
-        ? { ...x, note: note.trim() || undefined }
-        : x,
+    if (!signedIn()) return;
+    const previous = get().items;
+    set({
+      items: previous.map((x) =>
+        sameFavoriteAsset(x, { id, kind, assetType }) ? { ...x, note: note.trim() || undefined } : x,
+      ),
+    });
+    enqueue(set, previous, () =>
+      updateFavoriteNote<MarketFavoriteItem>({ id, kind, ...(assetType ? { assetType } : {}) }, note.trim()),
     );
-    persistForUser(next);
-    set({ items: next });
   },
 }));

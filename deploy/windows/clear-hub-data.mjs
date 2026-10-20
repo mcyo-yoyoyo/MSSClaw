@@ -151,16 +151,14 @@ const prisma = new PrismaClient({
 
 async function main() {
   /** 统计将要影响的行数 */
-  const [marketEngagementCount, marketUserInteractionCount] = await Promise.all([
+  const [engagementCount, voteCount, favoriteCount, recentCount] = await Promise.all([
     prisma.marketEngagement.count(),
-    prisma.marketUserInteraction.count(),
+    prisma.marketUserVote.count(),
+    prisma.marketFavorite.count(),
+    prisma.marketRecentView.count(),
   ]);
-  const counts = {
-    MarketEngagement: marketEngagementCount,
-    MarketUserInteraction: marketUserInteractionCount,
-  };
 
-  const docKinds = ['doc:content-engagement', 'doc:market-recent', 'doc:market-favorites'];
+  const docKinds = ['doc:content-engagement'];
 
   const docRows = await prisma.centerRecord.findMany({
     where: { kind: { in: docKinds } },
@@ -174,9 +172,11 @@ async function main() {
   ]);
 
   console.log('将要清理：');
-  console.log(`  MarketEngagement       ${counts.MarketEngagement} 行（点赞/点踩/查看/收藏/下载/使用 计数）`);
-  console.log(`  MarketUserInteraction  ${counts.MarketUserInteraction} 行（每个用户的投票与收藏状态）`);
-  console.log(`  互动相关 doc 记录       ${docRows.length} 条（content-engagement / market-recent / market-favorites）`);
+  console.log(`  互动计数               ${engagementCount} 行（点赞/点踩/查看/收藏/下载/使用）`);
+  console.log(`  点赞点踩               ${voteCount} 行（每个用户的投票状态）`);
+  console.log(`  收藏                   ${favoriteCount} 行`);
+  console.log(`  最近浏览               ${recentCount} 行`);
+  console.log(`  旧互动 doc 记录         ${docRows.length} 条（content-engagement）`);
   if (!keepContent) {
     console.log(`  Skill                  ${skillCount} 条（连同版本记录）`);
     console.log(`  Agent                  ${agentCount} 条（连同编排的 Skill 列表）`);
@@ -203,21 +203,15 @@ async function main() {
 
   await prisma.$transaction(async (tx) => {
     await tx.marketEngagement.deleteMany();
-    await tx.marketUserInteraction.deleteMany();
+    await tx.marketUserVote.deleteMany();
+    await tx.marketFavorite.deleteMany();
+    await tx.marketRecentView.deleteMany();
 
-    // 互动类 doc 记录清成空对象，而不是删行——前端 hydrate 读不到会走兜底逻辑
-    const contentEngagementIds = docRows.filter((row) => row.kind === 'doc:content-engagement').map((row) => row.id);
-    const listDocIds = docRows.filter((row) => row.kind !== 'doc:content-engagement').map((row) => row.id);
-    if (contentEngagementIds.length > 0) {
+    // 旧互动文档清成空对象而不是删行：读取时缺行会走首次迁移逻辑
+    if (docRows.length > 0) {
       await tx.centerRecord.updateMany({
-        where: { id: { in: contentEngagementIds } },
+        where: { id: { in: docRows.map((row) => row.id) } },
         data: { payload: {} },
-      });
-    }
-    if (listDocIds.length > 0) {
-      await tx.centerRecord.updateMany({
-        where: { id: { in: listDocIds } },
-        data: { payload: [] },
       });
     }
 

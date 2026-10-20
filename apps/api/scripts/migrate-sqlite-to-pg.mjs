@@ -4,7 +4,7 @@
  *
  * 迁移范围（2026-10-20 确认）：
  *   - 文档与个人数据只迁平台空间 ws-cn-marketing 与全局记录（__global__ 工具目录、global 快讯归档）；
- *     其他工作区的文档、收藏/投票、订阅、案例、站内信都不迁。
+ *     其他工作区的文档、收藏/投票、订阅、案例、站内信都不迁。点赞 / 点踩直接写进 market_user_vote。
  *   - 统计各工作区合并：行为事件、页面访问、每日登录、转化事件全迁（按 eventId / 主键去重），
  *     互动累计值按内容 id 求和。visitor_hash 含原工作区 id，同一人同一天在两个空间登录过会多算一个 UV。
  *   - 原 Workspace 表只取 ws-cn-marketing 那一行，存为 app_setting('workspace')。
@@ -114,11 +114,11 @@ function collect() {
         favorites: row.favorites,
         updatedAt: date(row.updatedAt, 'MarketEngagement.updatedAt'),
       })),
-      marketUserInteraction: all('SELECT * FROM "MarketUserInteraction" WHERE "workspaceId" = ?', PLATFORM).map((row) => ({
+      // 点赞 / 点踩写进 market_user_vote（第 5 期起旧互动表已删除）；收藏状态由 migrate:personal-data 从收藏文档迁入
+      marketUserVote: all('SELECT * FROM "MarketUserInteraction" WHERE "workspaceId" = ? AND "vote" IS NOT NULL', PLATFORM).map((row) => ({
         userId: row.userId,
         contentId: row.contentId,
         vote: row.vote,
-        favorited: Boolean(row.favorited),
         updatedAt: date(row.updatedAt, 'MarketUserInteraction.updatedAt'),
       })),
       marketEngagementEvent: all('SELECT * FROM "MarketEngagementEvent" ORDER BY "occurredAt"').map((row) => ({

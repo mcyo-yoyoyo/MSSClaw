@@ -31,7 +31,7 @@ const ADMIN_WRITABLE_DOC_KINDS = new Set([
 const MEMBER_REQUIRED_DOC_KINDS = new Set(['llm-config']);
 
 /** 已迁移为关系表的旧文档只保留读取兼容，任何客户端都不得再覆盖。 */
-const LEGACY_READ_ONLY_DOC_KINDS = new Set(['content-engagement']);
+const LEGACY_READ_ONLY_DOC_KINDS = new Set(['content-engagement', 'skill-reviews']);
 
 @Controller('docs')
 export class PlatformDocsController {
