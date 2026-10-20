@@ -30,6 +30,7 @@ import {
   type PortalContentPayload,
 } from './persistence.service';
 import { BlobStoreService, packageArchiveMimeType } from './blob-store.service';
+import { hasValidApiKey } from '../common/optional-api-key.guard';
 import { PlatformDocsService } from './platform-docs.service';
 
 const MARKET_ENGAGEMENT_ACTIONS = new Set([
@@ -85,6 +86,8 @@ const UNSAFE_INLINE_MIME_TYPES = new Set([
   'text/javascript',
   'text/xml',
 ]);
+
+const PUBLIC_IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif']);
 
 function isUnsafeInlineMimeType(value: string): boolean {
   const mimeType = value.split(';', 1)[0]?.trim().toLowerCase() ?? '';
@@ -499,10 +502,16 @@ export class PersistenceController {
   async getBlob(
     @Param('workspaceId') workspaceId: string,
     @Param('blobId') blobId: string,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
     const { meta, size, stream } = await this.blobs.get(workspaceId, blobId);
     const storedMimeType = meta.mimeType || 'application/octet-stream';
+    // 守卫对本路由放行：栅格图片凭不可猜的随机 ID 公开读取（供 <img> 使用），其余类型仍要 API Key。
+    if (!PUBLIC_IMAGE_MIME_TYPES.has(storedMimeType.split(';', 1)[0].trim().toLowerCase()) && !hasValidApiKey(req)) {
+      stream.destroy();
+      throw new UnauthorizedException('Invalid or missing X-API-Key');
+    }
     const archiveMimeType = packageArchiveMimeType(meta.name);
     const unsafeInline = isUnsafeInlineMimeType(storedMimeType);
     const forceDownload = Boolean(archiveMimeType) || unsafeInline;

@@ -38,6 +38,8 @@ import { ToolLogo } from '@/components/brand/ToolLogo';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 import { cn } from '@/lib/utils';
+import { storeImageDataUrl } from '@/api/blobApi';
+import { currentWorkspaceId } from '@/api/platformDocsApi';
 
 const LOGO_MAX_BYTES = 512 * 1024;
 
@@ -79,7 +81,7 @@ function lobeIconLogoUrl(icon: IconToc): string {
 }
 
 function readLogoFile(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
+  return new Promise<string>((resolve, reject) => {
     if (file.size > LOGO_MAX_BYTES) {
       reject(new Error('Logo 请小于 512KB'));
       return;
@@ -92,7 +94,7 @@ function readLogoFile(file: File): Promise<string> {
     reader.onload = () => resolve(String(reader.result || ''));
     reader.onerror = () => reject(new Error('读取失败'));
     reader.readAsDataURL(file);
-  });
+  }).then((dataUrl) => storeImageDataUrl(currentWorkspaceId(), file, dataUrl));
 }
 
 type EditorTarget = string | 'new' | 'new-external' | null;

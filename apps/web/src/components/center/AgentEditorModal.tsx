@@ -26,6 +26,7 @@ import type { AgentCaseItem, PrototypeAgentSeed } from '@/domain/prototype/types
 import {
   deleteUploadedWorkspaceBlob,
   isWorkspaceBlobUploadContextCurrent,
+  storeImageDataUrl,
   type UploadedWorkspaceBlob,
   uploadWorkspaceBlob,
   uploadWorkspacePackage,
@@ -76,7 +77,7 @@ const PPTX_MIME_TYPE =
   'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
 function readAvatarFile(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
+  return new Promise<string>((resolve, reject) => {
     if (file.size > AVATAR_MAX_BYTES) {
       reject(new Error('头像请小于 512KB'));
       return;
@@ -89,7 +90,7 @@ function readAvatarFile(file: File): Promise<string> {
     reader.onload = () => resolve(String(reader.result || ''));
     reader.onerror = () => reject(new Error('读取失败'));
     reader.readAsDataURL(file);
-  });
+  }).then((dataUrl) => storeImageDataUrl(currentWorkspaceId(), file, dataUrl));
 }
 
 function emptyAgent(): PrototypeAgentSeed {

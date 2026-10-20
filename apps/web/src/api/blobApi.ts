@@ -214,6 +214,23 @@ export async function uploadWorkspaceBlob(
   return result as UploadedWorkspaceBlob;
 }
 
+/**
+ * 头像、Logo、封面等图片存到对象存储，返回可直接放进 <img src> 的地址。
+ * 离线模式和 SVG 仍内嵌为 data URL：SVG 由 API 按附件下载返回（防 XSS），<img> 显示不了。
+ */
+export async function storeImageDataUrl(
+  workspaceId: string,
+  file: File,
+  dataUrl: string,
+): Promise<string> {
+  if (!isApiEnabled() || file.type === 'image/svg+xml') return dataUrl;
+  try {
+    return (await uploadWorkspaceBlob(workspaceId, { name: file.name, mimeType: file.type, dataUrl })).url;
+  } catch {
+    throw new Error('图片上传失败，请检查后端连接后重试');
+  }
+}
+
 /** package blob 为受保护资源，读取时统一携带 API key / 会话鉴权。 */
 export async function fetchPackageBlob(url: string, signal?: AbortSignal): Promise<Response> {
   const res = await fetch(resolveWorkspaceBlobUrl(url), {

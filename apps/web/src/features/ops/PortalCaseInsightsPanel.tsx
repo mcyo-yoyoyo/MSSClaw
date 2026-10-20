@@ -15,6 +15,7 @@ import { CaseMarkdown } from '@/features/ai-brief/CaseMarkdown';
 import { emptyCaseDraft, parseCaseHtml, type ParsedCaseHtmlArticle } from '@/domain/caseInsightImport';
 import { HQ_DEPTS } from '@/domain/orgTaxonomy';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { storeImageDataUrl } from '@/api/blobApi';
 
 type StatusTab = 'all' | 'draft' | 'published' | 'archived' | 'trash';
 type StagedCase = {
@@ -239,9 +240,9 @@ export function PortalCaseInsightsPanel() {
         reader.onerror = () => reject(new Error('cover_read_failed'));
         reader.readAsDataURL(file);
       });
-      updateDraft({ coverImage: image });
+      updateDraft({ coverImage: await storeImageDataUrl(workspaceId, file, image) });
     } catch {
-      setCoverError('封面读取失败，请重新选择图片。');
+      setCoverError('封面上传失败，请检查后端连接后重新选择图片。');
     } finally {
       setBusy(false);
     }

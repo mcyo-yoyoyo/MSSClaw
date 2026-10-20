@@ -23,6 +23,7 @@
     "test:portal-analytics": "npm run build --silent && node --test tests/portalAnalyticsGuest.test.mjs tests/trustProxy.test.mjs tests/portalAnalyticsSqlite.test.mjs",
     "test:ai-knowledge": "npm run build --silent && node --test tests/aiKnowledge.test.mjs",
     "migrate:blobs": "node --env-file-if-exists=.env scripts/migrate-blobs-to-s3.mjs",
+    "migrate:inline-images": "npm run build --silent && node --env-file-if-exists=.env scripts/migrate-inline-images.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",

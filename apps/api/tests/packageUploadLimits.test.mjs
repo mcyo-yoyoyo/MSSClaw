@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { Readable } from 'node:stream';
+import { PassThrough, Readable } from 'node:stream';
 import test from 'node:test';
 
 import { BlobStoreService } from '../dist/persistence/blob-store.service.js';
 import { PersistenceController } from '../dist/persistence/persistence.controller.js';
+import { OptionalApiKeyGuard } from '../dist/common/optional-api-key.guard.js';
 
 function request() {
   const headers = { 'x-file-name': 'demo.zip', 'content-length': '3' };
@@ -139,5 +140,43 @@ test('BlobStore 缺少对象存储配置时直接报错', () => {
     assert.throws(() => new BlobStoreService(), /S3_BUCKET 未配置/);
   } finally {
     process.env.S3_BUCKET = previous;
+  }
+});
+
+test('开启 API Key 时，单个 blob 只有栅格图片免校验，其他类型和接口仍需 Key', async () => {
+  const previous = process.env.API_KEY;
+  process.env.API_KEY = 'secret-key';
+  const blobPath = `/api/v1/workspaces/ws-test/blobs/${'a'.repeat(32)}`;
+  const req = (method, path, key) => ({
+    method,
+    path,
+    header: (name) => (name.toLowerCase() === 'x-api-key' ? key : undefined),
+  });
+  const context = (r) => ({ switchToHttp: () => ({ getRequest: () => r }) });
+  const serve = (mimeType, key) => {
+    const stream = Readable.from([Buffer.from('x')]);
+    const blobs = { get: async () => ({ meta: { name: 'f', mimeType }, size: 1, stream }) };
+    const res = Object.assign(new PassThrough(), { setHeader() {} });
+    const done = new PersistenceController({}, blobs, {})
+      .getBlob('ws-test', 'a'.repeat(32), req('GET', blobPath, key), res);
+    return { done, stream };
+  };
+  const is401 = (e) => e?.getStatus?.() === 401;
+  try {
+    const guard = new OptionalApiKeyGuard();
+    assert.equal(guard.canActivate(context(req('GET', blobPath))), true);
+    assert.throws(() => guard.canActivate(context(req('DELETE', blobPath))), is401);
+    assert.throws(() => guard.canActivate(context(req('GET', '/api/v1/tools'))), is401);
+    assert.equal(guard.canActivate(context(req('GET', '/api/v1/tools', 'secret-key'))), true);
+
+    await serve('image/png').done;
+    await serve('application/zip', 'secret-key').done;
+    const denied = serve('application/zip');
+    await assert.rejects(denied.done, is401);
+    assert.equal(denied.stream.destroyed, true, '拒绝时要关闭对象存储响应流');
+    await assert.rejects(serve('image/svg+xml').done, is401);
+  } finally {
+    if (previous === undefined) delete process.env.API_KEY;
+    else process.env.API_KEY = previous;
   }
 });

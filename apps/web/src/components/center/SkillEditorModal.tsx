@@ -24,6 +24,7 @@ import {
 import {
   deleteUploadedWorkspaceBlob,
   isWorkspaceBlobUploadContextCurrent,
+  storeImageDataUrl,
   type UploadedWorkspaceBlob,
   uploadWorkspaceBlob,
   uploadWorkspaceOpsPackage,
@@ -69,7 +70,7 @@ const PPTX_MIME_TYPE =
   'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
 function readSkillIconFile(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
+  return new Promise<string>((resolve, reject) => {
     if (file.size > ICON_MAX_BYTES) {
       reject(new Error('头像请小于 512KB'));
       return;
@@ -82,7 +83,7 @@ function readSkillIconFile(file: File): Promise<string> {
     reader.onload = () => resolve(String(reader.result || ''));
     reader.onerror = () => reject(new Error('读取图片失败'));
     reader.readAsDataURL(file);
-  });
+  }).then((dataUrl) => storeImageDataUrl(currentWorkspaceId(), file, dataUrl));
 }
 
 type EditorTarget = string | 'new' | null;

@@ -112,8 +112,11 @@ docker compose -f deploy/docker-compose.infra.yml up -d minio
 1. 停止 API；备份 `BLOB_ROOT` 目录和数据库文件
 2. 在 `apps/api/.env` 配好 `S3_*`，并把 `BLOB_ROOT` 指向旧目录
 3. `npm run migrate:blobs --workspace @mss-claw/api`：输出「失败 0」才算完成，可重复执行，已复制的会跳过
-4. 启动 API，抽查一个附件和一个能力包能正常下载
-5. 旧目录保留到下个版本，确认无误后再删除
+4. `npm run migrate:inline-images --workspace @mss-claw/api`：把数据库里内嵌的图片（工具 Logo、Skill 图标、Agent 头像、案例封面等 data URL）上传到对象存储并替换成地址；输出「失败 0」才算完成，可重复执行。SVG 和 HTML 正文里嵌着的图片保持原样
+5. 启动 API，抽查一个附件、一个能力包、一个工具 Logo 能正常显示或下载
+6. 旧目录保留到下个版本，确认无误后再删除
+
+开启 `API_KEY` 时，单个 blob 中的 PNG / JPEG / GIF / WebP / AVIF 图片不校验 API Key（供 `<img>` 直接显示，地址含不可猜的随机 ID），其他类型照常校验。
 
 ### 3. 配置 Nginx
 

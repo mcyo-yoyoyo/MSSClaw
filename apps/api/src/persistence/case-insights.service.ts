@@ -30,9 +30,13 @@ function stringList(value: unknown, name: string, limit: number): string[] {
   return [...new Set(value.map((item: string) => item.trim()).filter(Boolean))];
 }
 
+/** 对象存储中的图片地址：同源相对路径，或跨域 API 基址下的绝对地址。 */
+const BLOB_IMAGE_URL = /^(?:https?:\/\/[^/\s]+)?\/api\/v1\/workspaces\/[A-Za-z0-9_-]+\/blobs\/[0-9a-f]{32}$/;
+
 function coverImageField(value: unknown): string | null {
   if (value === null || value === '') return null;
   if (typeof value !== 'string') throw new BadRequestException('invalid_case_cover_image');
+  if (BLOB_IMAGE_URL.test(value)) return value;
   const match = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(value);
   if (!match || match[2].length > 1_400_000) throw new BadRequestException('invalid_case_cover_image');
   const bytes = Buffer.from(match[2], 'base64');
