@@ -437,3 +437,68 @@ model KbDocument {
 
   @@map("kb_document")
 }
+
+// ---------------------------------------------------------------------------
+// 第 4 期身份表（docs/database-design.sql A1–A3、C5）。接口仍是 /docs/members、/docs/auth-credentials 整份收发。
+
+/// 成员：原 doc:members.members[]；position 保持成员表顺序
+model Member {
+  id          String            @id
+  email       String?           @unique
+  externalId  String?           @unique @map("external_id")
+  name        String            @map("display_name")
+  avatar      String            @default("bg-zinc-600")
+  postName    String?           @map("post_name")
+  orgPath     String?           @map("org_path")
+  role        String            @default("business_user")
+  status      String            @default("active")
+  deptIds     Json              @default("[]") @map("dept_ids")
+  regionId    String?           @map("region_id")
+  position    Int               @default(0)
+  lastLoginAt DateTime?         @map("last_login_at") @db.Timestamptz(3)
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  credential  MemberCredential?
+  sessions    AuthSession[]
+
+  @@map("member")
+}
+
+/// 成员密码：原 doc:auth-credentials.credentials[email]；sha256(salt + ":" + password)
+model MemberCredential {
+  memberId          String   @id @map("member_id")
+  algorithm         String   @default("sha256-salt")
+  salt              String
+  passwordHash      String   @map("password_hash")
+  passwordUpdatedAt DateTime @map("password_updated_at") @db.Timestamptz(3)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  member            Member   @relation(fields: [memberId], references: [id], onDelete: Cascade, map: "member_credential_member_id_fkey")
+
+  @@map("member_credential")
+}
+
+/// 登录会话：库里只存令牌的 SHA-256
+model AuthSession {
+  tokenHash  String    @id @map("token_hash")
+  memberId   String    @map("member_id")
+  authMethod String    @map("auth_method")
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+  lastSeenAt DateTime? @map("last_seen_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  member     Member    @relation(fields: [memberId], references: [id], onDelete: Cascade, map: "auth_session_member_id_fkey")
+
+  @@index([memberId], map: "auth_session_member_idx")
+  @@index([expiresAt], map: "auth_session_expires_idx")
+  @@map("auth_session")
+}
+
+/// 整表替换集合的版本号（members / auth-credentials），乐观锁用
+model CollectionRevision {
+  collection        String   @id
+  revision          Int      @default(0)
+  updatedByMemberId String?  @map("updated_by_member_id")
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("collection_revision")
+}

@@ -125,6 +125,17 @@ docker compose -f deploy/docker-compose.infra.yml up -d postgres
 
 注意：API 启动后如果资产表是空的，第一次读取工具目录会用内置清单自动播种。所以第 4 步之前不要启动 API。
 
+**身份表（第 4 期，停机进行）**：成员、密码、登录会话从 JSON 文档拆进 member / member_credential / auth_session。
+
+1. 停止 API；`pg_dump` 备份
+2. `npx prisma migrate deploy`（在 `apps/api` 下）建身份表
+3. 预览：`npm run migrate:identity --workspace @mss-claw/api`，核对成员数、密码数；「找不到成员丢弃」的密码属于已经不在成员表里的邮箱，迁过去也用不上
+4. 执行：同一命令末尾加 `-- --apply`。身份表必须为空，读回核对成员、密码、会话都输出「一致」才算成功
+5. 启动 API。未过期的登录会话照常有效，大家不用重新登录；抽查一次登录、退出、成员管理里改一个人的部门
+6. 回滚 = 停 API、`pg_restore` 第 1 步的备份、部署上一个版本
+
+注意：成员表为空时 API 会播种演示成员，所以第 4 步之前同样不要启动 API。
+
 ### 文件存储（MinIO）
 
 附件与 Skill / Agent 能力包存于 S3 兼容对象存储，API 启动时校验连通性和桶，连不上直接退出。
@@ -193,7 +204,7 @@ docker compose -f deploy/docker-compose.infra.yml up -d minio
 
 | 场景 | 建议 |
 |------|------|
-| 数据库 | PostgreSQL；货架资产已是正式表但仍按整份快照保存（后保存的覆盖先保存的），成员、配置等仍是过渡表里的整份 JSON，靠 revision 冲突提示，后续各期拆成正式表 |
+| 数据库 | PostgreSQL；货架资产已是正式表但仍按整份快照保存（后保存的覆盖先保存的），成员与密码已是正式表并有版本号冲突提示，配置、门户内容等仍是过渡表里的整份 JSON，靠 revision 冲突提示，后续各期拆成正式表 |
 | 附件与能力包 | 普通附件仍默认 ≤12MB；用户侧 Skill / Agent 原始包默认 ≤200MiB；已鉴权的运营后台 Skill 原包流式上传不设体积上限；JSON 只存 `url`/`blobId` |
 | 限流 | 默认 6000/IP/分钟（应对公司 NAT）；过严会出现集体 429 |
 | How to | 部分仍偏本机 localStorage；核心案例 / 货架走共享 API |

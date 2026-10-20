@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, { after, before, beforeEach } from 'node:test';
 import { createHash, randomBytes } from 'node:crypto';
+import { PrismaClient } from '@prisma/client';
 import { PlatformDocsService } from '../dist/persistence/platform-docs.service.js';
 import { PlatformDocsController } from '../dist/persistence/platform-docs.controller.js';
+import { createTestDatabase } from './helpers/pgTestDatabase.mjs';
 
 function hashPassword(password, salt) {
   return createHash('sha256').update(`${salt}:${password}`, 'utf8').digest('hex');
@@ -13,135 +15,96 @@ function credentialFor(password) {
   return { salt, hash: hashPassword(password, salt), updatedAt: '2026-01-01T00:00:00.000Z' };
 }
 
-/** 按 id 存多份文档的假 prisma，$executeRaw 走 revision CAS 语义 */
-function fakePrisma(rows = {}) {
-  const store = new Map(Object.entries(rows));
-  return {
-    appSetting: { findUnique: async () => ({ value: { catalog: {} } }) },
-    centerRecord: {
-      findUnique: async ({ where }) => store.get(where.id) ?? null,
-      findFirst: async () => null,
-      findMany: async () => [...store.values()],
-      create: async ({ data }) => {
-        store.set(data.id, { ...data });
-        return store.get(data.id);
-      },
-      upsert: async ({ where, create }) => {
-        if (!store.has(where.id)) store.set(where.id, { ...create });
-        return store.get(where.id);
-      },
-      update: async ({ where, data }) => {
-        store.set(where.id, { ...store.get(where.id), ...data });
-        return store.get(where.id);
-      },
-    },
-    // $executeRaw`UPDATE ... SET payload = ${payload} WHERE id = ${id} AND revision = ${expected}`
-    $executeRaw: async (_strings, payloadJson, id, expectedRevision) => {
-      const row = store.get(id);
-      const current = typeof row?.payload?.revision === 'number' ? row.payload.revision : 0;
-      if (!row || current !== expectedRevision) return 0;
-      store.set(id, { ...row, payload: JSON.parse(payloadJson) });
-      return 1;
-    },
-    state: () => Object.fromEntries(store),
-  };
-}
-
 const WS = 'ws-cn-marketing';
+let database;
+let prisma;
 
-const docRow = (kind, payload) => ({
-  id: `doc-${kind}-${WS}`,
-  kind: `doc:${kind}`,
-  payload,
+before(async () => {
+  database = await createTestDatabase('account_credentials');
+  prisma = new PrismaClient({ datasourceUrl: database.url });
 });
 
-test('内置工作区首次 GET 不再把默认口令物化成真实凭证', async () => {
-  const prisma = fakePrisma();
-  const service = new PlatformDocsService(prisma, {});
+after(async () => {
+  await prisma?.$disconnect();
+  await database?.drop();
+});
 
-  // 内置工作区仍放行演示口令，但不落库任何真实凭证
-  const builtin = await service.getDoc(WS, 'auth-credentials');
+beforeEach(async () => {
+  for (const table of ['auth_session', 'member_credential', 'member', 'collection_revision', 'app_setting', 'center_record']) {
+    await prisma.$executeRawUnsafe(`DELETE FROM "${table}"`);
+  }
+});
+
+const service = () => new PlatformDocsService(prisma, { recordDailyLogin: async () => {} });
+
+async function seedMembers(members, revision = 0) {
+  await prisma.member.createMany({
+    data: members.map((member, position) => ({
+      id: member.id,
+      name: member.name,
+      email: member.email.trim().toLowerCase().replace(/@company\.com$/, '@huawei.com'),
+      role: member.role ?? 'business_user',
+      status: member.status ?? 'active',
+      position,
+    })),
+  });
+  if (revision) await prisma.collectionRevision.create({ data: { collection: 'members', revision } });
+}
+
+async function seedCredentials(credentials, revision = 0, allowDemoPassword = true) {
+  for (const [email, cred] of Object.entries(credentials)) {
+    const member = await prisma.member.findUniqueOrThrow({ where: { email } });
+    await prisma.memberCredential.create({
+      data: { memberId: member.id, salt: cred.salt, passwordHash: cred.hash, passwordUpdatedAt: new Date(cred.updatedAt) },
+    });
+  }
+  if (revision) await prisma.collectionRevision.create({ data: { collection: 'auth-credentials', revision } });
+  await prisma.appSetting.create({ data: { settingKey: 'auth-policy', value: { allowDemoPassword } } });
+}
+
+test('全新库首次 GET 不把默认口令物化成真实凭证', async () => {
+  const builtin = await service().getDoc(WS, 'auth-credentials');
   assert.deepEqual(builtin.payload, {
     policy: { allowDemoPassword: true },
     credentials: {},
     revision: 0,
   });
-
-  // 非平台空间（旧数据里残留的其他工作区）连演示口令都不放行
-  const adhoc = await service.getDoc('ws-test', 'auth-credentials');
-  assert.deepEqual(adhoc.payload, {
-    policy: { allowDemoPassword: false },
-    credentials: {},
-    revision: 0,
-  });
+  assert.equal(await prisma.memberCredential.count(), 0);
 });
 
-test('GET 归一化历史 key（大小写 / @company.com），登录才能命中已设密码', async () => {
-  const cred = credentialFor('super-secret');
-  const prisma = fakePrisma({
-    [`doc-auth-credentials-${WS}`]: docRow('auth-credentials', {
-      policy: { allowDemoPassword: true },
-      credentials: { 'Jacky@Company.com': cred },
-      revision: 3,
-    }),
+test('PUT 的历史 key（大小写 / @company.com）归一化后挂到成员上，登录能命中', async () => {
+  await seedMembers([{ id: 'm-1', name: 'Jacky', email: 'jacky@huawei.com' }]);
+  const saved = await service().putDoc(WS, 'auth-credentials', {
+    policy: { allowDemoPassword: true },
+    credentials: { 'Jacky@Company.com': credentialFor('super-secret') },
+    revision: 0,
   });
-  const service = new PlatformDocsService(prisma, {});
-
-  const result = await service.getDoc(WS, 'auth-credentials');
-
-  assert.deepEqual(Object.keys(result.payload.credentials), ['jacky@huawei.com']);
-  assert.equal(result.payload.revision, 3);
+  assert.deepEqual(Object.keys(saved.payload.credentials), ['jacky@huawei.com']);
+  assert.equal((await service().login({ email: 'JACKY@company.com', password: 'super-secret' })).ok, true);
 });
 
 test('已设密账号不会被默认口令 mssclaw 登进去', async () => {
-  const prisma = fakePrisma({
-    [`doc-members-${WS}`]: docRow('members', {
-      members: [
-        {
-          id: 'm-1',
-          name: 'Jacky',
-          email: 'Jacky@Company.com',
-          role: 'business_user',
-          status: 'active',
-        },
-      ],
-    }),
-    [`doc-auth-credentials-${WS}`]: docRow('auth-credentials', {
-      policy: { allowDemoPassword: true },
-      credentials: { 'Jacky@Company.com': credentialFor('super-secret') },
-      revision: 1,
-    }),
-  });
-  const service = new PlatformDocsService(prisma, { recordDailyLogin: async () => {} });
+  await seedMembers([{ id: 'm-1', name: 'Jacky', email: 'Jacky@Company.com' }]);
+  await seedCredentials({ 'jacky@huawei.com': credentialFor('super-secret') }, 1);
 
-  const demo = await service.login({
-    email: 'jacky@huawei.com',
-    password: 'mssclaw'
-  });
+  const demo = await service().login({ email: 'jacky@huawei.com', password: 'mssclaw' });
   assert.equal(demo.ok, false);
   assert.equal(demo.error, '密码错误');
 
-  const real = await service.login({
-    email: 'JACKY@huawei.com',
-    password: 'super-secret'
-  });
+  const real = await service().login({ email: 'JACKY@huawei.com', password: 'super-secret' });
   assert.equal(real.ok, true);
 });
 
 test('PUT 拒绝陈旧 revision，避免整份覆盖抹掉他人刚设的密码', async () => {
-  const kept = credentialFor('set-by-admin-b');
-  const prisma = fakePrisma({
-    [`doc-auth-credentials-${WS}`]: docRow('auth-credentials', {
-      policy: { allowDemoPassword: true },
-      credentials: { 'b@huawei.com': kept },
-      revision: 5,
-    }),
-  });
-  const service = new PlatformDocsService(prisma, {});
+  await seedMembers([
+    { id: 'm-a', name: 'A', email: 'a@huawei.com' },
+    { id: 'm-b', name: 'B', email: 'b@huawei.com' },
+  ]);
+  await seedCredentials({ 'b@huawei.com': credentialFor('set-by-admin-b') }, 5);
 
   await assert.rejects(
     // 管理员 A 手里是 revision 4 的旧快照
-    service.putDoc(WS, 'auth-credentials', {
+    service().putDoc(WS, 'auth-credentials', {
       policy: { allowDemoPassword: true },
       credentials: { 'a@huawei.com': credentialFor('set-by-admin-a') },
       revision: 4,
@@ -149,21 +112,15 @@ test('PUT 拒绝陈旧 revision，避免整份覆盖抹掉他人刚设的密码'
     (error) => error.getResponse().error === 'auth_credentials_revision_conflict',
   );
 
-  const after = await service.getDoc(WS, 'auth-credentials');
+  const after = await service().getDoc(WS, 'auth-credentials');
   assert.deepEqual(Object.keys(after.payload.credentials), ['b@huawei.com']);
 });
 
-test('PUT 命中 revision 时写入成功并递增版本，key 落库即归一化', async () => {
-  const prisma = fakePrisma({
-    [`doc-auth-credentials-${WS}`]: docRow('auth-credentials', {
-      policy: { allowDemoPassword: true },
-      credentials: {},
-      revision: 5,
-    }),
-  });
-  const service = new PlatformDocsService(prisma, {});
+test('PUT 命中 revision 时写入成功并递增版本，口令策略一起保存', async () => {
+  await seedMembers([{ id: 'm-d', name: 'Dickson', email: 'dickson@huawei.com' }]);
+  await seedCredentials({}, 5);
 
-  const saved = await service.putDoc(WS, 'auth-credentials', {
+  const saved = await service().putDoc(WS, 'auth-credentials', {
     policy: { allowDemoPassword: false },
     credentials: { ' Dickson@Company.com ': credentialFor('pw-123456') },
     revision: 5,
@@ -174,22 +131,58 @@ test('PUT 命中 revision 时写入成功并递增版本，key 落库即归一�
   assert.equal(saved.payload.policy.allowDemoPassword, false);
 });
 
-test('成员表同样受 revision 保护', async () => {
-  const prisma = fakePrisma({
-    [`doc-members-${WS}`]: docRow('members', {
-      members: [{ id: 'm-1', name: 'A', email: 'a@huawei.com', role: 'viewer' }],
-      revision: 2,
-    }),
+test('密码挂在成员上：找不到成员的邮箱不落库', async () => {
+  await seedMembers([{ id: 'm-1', name: 'A', email: 'a@huawei.com' }]);
+  const saved = await service().putDoc(WS, 'auth-credentials', {
+    policy: { allowDemoPassword: true },
+    credentials: { 'a@huawei.com': credentialFor('pw-a'), 'ghost@huawei.com': credentialFor('pw-ghost') },
+    revision: 0,
   });
-  const service = new PlatformDocsService(prisma, {});
+  assert.deepEqual(Object.keys(saved.payload.credentials), ['a@huawei.com']);
+});
+
+test('成员表同样受 revision 保护', async () => {
+  await seedMembers([{ id: 'm-1', name: 'A', email: 'a@huawei.com', role: 'viewer' }], 2);
 
   await assert.rejects(
-    service.putDoc(WS, 'members', { members: [], revision: 1 }),
+    service().putDoc(WS, 'members', { members: [], revision: 1 }),
     (error) => error.getResponse().error === 'members_revision_conflict',
   );
 
-  const ok = await service.putDoc(WS, 'members', { members: [], revision: 2 });
+  const ok = await service().putDoc(WS, 'members', { members: [], revision: 2 });
   assert.equal(ok.payload.revision, 3);
+});
+
+test('会话只存令牌的 SHA-256；移除成员连同密码和会话一起删除', async () => {
+  await seedMembers([
+    { id: 'm-1', name: 'A', email: 'a@huawei.com' },
+    { id: 'm-2', name: 'B', email: 'b@huawei.com' },
+  ]);
+  await seedCredentials({ 'a@huawei.com': credentialFor('pw-a') });
+  const login = await service().login({ email: 'a@huawei.com', password: 'pw-a' });
+  assert.equal(login.ok, true);
+  const [stored] = await prisma.authSession.findMany();
+  assert.notEqual(stored.tokenHash, login.token);
+  assert.equal(stored.tokenHash, createHash('sha256').update(login.token).digest('hex'));
+  assert.equal((await service().me(login.token)).ok, true);
+
+  const members = (await service().getDoc(WS, 'members')).payload;
+  await service().putDoc(WS, 'members', {
+    members: members.members.filter((member) => member.id !== 'm-1'),
+    revision: members.revision,
+  });
+  assert.equal(await prisma.memberCredential.count(), 0);
+  assert.equal((await service().me(login.token)).ok, false);
+});
+
+test('运营关掉演示口令后，演示口令登录的会话一并失效', async () => {
+  await seedMembers([{ id: 'm-1', name: 'A', email: 'a@huawei.com' }]);
+  const demo = await service().login({ email: 'a@huawei.com', password: 'mssclaw' });
+  assert.equal(demo.ok, true);
+  assert.equal((await service().me(demo.token)).ok, true);
+
+  await service().putDoc(WS, 'auth-credentials', { policy: { allowDemoPassword: false }, credentials: {}, revision: 0 });
+  assert.equal((await service().me(demo.token)).ok, false);
 });
 
 test('密码表只有 super_admin 能读，写入同样要求 super_admin', async () => {

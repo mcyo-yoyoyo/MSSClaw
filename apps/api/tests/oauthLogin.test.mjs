@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, { after, before } from 'node:test';
+import { PrismaClient } from '@prisma/client';
 import { createServer } from 'node:http';
 import { PlatformDocsService } from '../dist/persistence/platform-docs.service.js';
 import { AuthOAuthService } from '../dist/auth/auth-oauth.service.js';
 import { OAuthStateStore } from '../dist/auth/oauth-state.store.js';
 import { UniPortalClient } from '../dist/auth/uniportal.client.js';
 import { resetOAuthConfigCache } from '../dist/auth/oauth.config.js';
+import { createTestDatabase } from './helpers/pgTestDatabase.mjs';
 
 /**
  * 真实 IDaaS 跑不到（需要注册凭据 + 真人在登录页输密码），
@@ -26,42 +28,29 @@ const member = (over = {}) => ({
   ...over,
 });
 
-function buildDocs({ members = [member()] } = {}) {
-  const rows = new Map();
-  rows.set('doc-members-ws-cn-marketing', {
-    id: 'doc-members-ws-cn-marketing',
-    kind: 'doc:members',
-    payload: { members, revision: 1 },
-  });
+let database;
+let prisma;
 
-  const prisma = {
-    appSetting: { findUnique: async () => ({ value: { catalog: {} } }) },
-    centerRecord: {
-      findUnique: async ({ where }) => rows.get(where.id) ?? null,
-      findFirst: async () => null,
-      findMany: async () => [...rows.values()],
-      create: async ({ data }) => (rows.set(data.id, { ...data }), data),
-      upsert: async ({ where, create }) => {
-        if (!rows.has(where.id)) rows.set(where.id, { ...create });
-        return rows.get(where.id);
-      },
-      update: async ({ where, data }) => {
-        rows.set(where.id, { ...rows.get(where.id), ...data });
-        return rows.get(where.id);
-      },
-    },
-    $executeRaw: async (_s, json, id, expected) => {
-      const row = rows.get(id);
-      const current = typeof row?.payload?.revision === 'number' ? row.payload.revision : 0;
-      if (!row || current !== expected) return 0;
-      rows.set(id, { ...row, payload: JSON.parse(json) });
-      return 1;
-    },
-  };
-  return {
-    docs: new PlatformDocsService(prisma, { recordDailyLogin: async () => {} }),
-    rows,
-  };
+before(async () => {
+  database = await createTestDatabase('oauth_login');
+  prisma = new PrismaClient({ datasourceUrl: database.url });
+});
+
+after(async () => {
+  await prisma?.$disconnect();
+  await database?.drop();
+});
+
+/** 每个用例一份干净的成员表（真实 PG 临时 schema） */
+async function buildDocs({ members = [member()] } = {}) {
+  for (const table of ['auth_session', 'member_credential', 'member', 'collection_revision', 'app_setting']) {
+    await prisma.$executeRawUnsafe(`DELETE FROM "${table}"`);
+  }
+  await prisma.collectionRevision.create({ data: { collection: 'members', revision: 1 } });
+  await prisma.member.createMany({
+    data: members.map(({ lastActive: _lastActive, ...item }, position) => ({ ...item, position })),
+  });
+  return { docs: new PlatformDocsService(prisma, { recordDailyLogin: async () => {} }) };
 }
 
 /** 假 IDaaS：profile / tokenError 由用例决定 */
@@ -103,7 +92,7 @@ function configure(base, over = {}) {
 async function harness(opts = {}) {
   const stub = await startStub(opts);
   configure(stub.base, opts.env);
-  const { docs, rows } = buildDocs(opts);
+  const { docs } = await buildDocs(opts);
   const states = new OAuthStateStore();
   const service = new AuthOAuthService(docs, states, new UniPortalClient());
   const login = async (over = {}) => {
@@ -114,7 +103,6 @@ async function harness(opts = {}) {
     service,
     states,
     docs,
-    rows,
     login,
     close: () => new Promise((r) => stub.server.close(r)),
   };
@@ -247,7 +235,7 @@ test('JIT 建号固定为 business_user，环境变量不能提权', async () =>
     assert.equal(result.provisioned, true);
     assert.equal(result.user.platformRole, 'business_user');
 
-    const saved = h.rows.get('doc-members-ws-cn-marketing').payload.members;
+    const saved = await prisma.member.findMany();
     assert.equal(saved.length, 1);
     assert.equal(saved[0].email, 'newbie@huawei.com');
     assert.notEqual(saved[0].role, 'super_admin');
@@ -304,7 +292,7 @@ test('配置不完整时，发起登录就被拦住并点名缺哪一项', async
   const stub = await startStub();
   try {
     configure(stub.base, { OAUTH_CLIENT_SECRET: '' });
-    const { docs } = buildDocs();
+    const { docs } = await buildDocs();
     const service = new AuthOAuthService(docs, new OAuthStateStore(), new UniPortalClient());
     const result = service.buildAuthorizeUrl('ws-cn-marketing', '');
     assert.equal(result.ok, false);
@@ -319,7 +307,7 @@ test('诊断接口点名缺失项，且不回显 client_secret', async () => {
   const stub = await startStub();
   try {
     configure(stub.base, { OAUTH_CLIENT_SECRET: 'super-secret-value', OAUTH_REDIRECT_URI: 'not-a-url' });
-    const { docs } = buildDocs();
+    const { docs } = await buildDocs();
     const service = new AuthOAuthService(docs, new OAuthStateStore(), new UniPortalClient());
     const report = await service.diagnostics(false);
 
@@ -338,7 +326,7 @@ test('上游连不上时给出网络层原因与处置建议', async () => {
   const port = stub.server.address().port;
   await new Promise((r) => stub.server.close(r)); // 先关掉，制造连不上
   configure(`http://127.0.0.1:${port}`, { OAUTH_HTTP_TIMEOUT_MS: '1500' });
-  const { docs } = buildDocs();
+  const { docs } = await buildDocs();
   const states = new OAuthStateStore();
   const service = new AuthOAuthService(docs, states, new UniPortalClient());
   const issued = service.buildAuthorizeUrl('ws-cn-marketing', '');

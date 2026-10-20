@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Optional } from '@nestjs/common';
 import { createHash, randomUUID } from 'crypto';
 import { readAssets } from './asset-catalog';
+import { memberToJson, readMembers } from './identity-store';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   GLOBAL_TOOLS_RECORD_ID,
@@ -1697,7 +1698,7 @@ export class PortalAnalyticsService {
     const rows = await client.findMany({
       where: {
         kind: {
-          in: ['portal-content', 'doc:internal-office-scenes', 'doc:members', 'workflow', 'knowledge'],
+          in: ['portal-content', 'doc:internal-office-scenes', 'workflow', 'knowledge'],
         },
       },
       select: { id: true, kind: true, payload: true },
@@ -1885,17 +1886,10 @@ export class PortalAnalyticsService {
     return [...byId.values()];
   }
 
-  private async readMembers(workspaceId: string): Promise<Array<Record<string, unknown>>> {
-    const rows = await this.readCenterRows(workspaceId);
-    const memberRow = rows.find((row) => row.kind === 'doc:members' || row.id === `doc-members-${workspaceId}`);
-    if (!memberRow || !memberRow.payload || typeof memberRow.payload !== 'object') return [];
-    const payload = memberRow.payload as Record<string, unknown>;
-    return Array.isArray(payload.members)
-      ? payload.members.filter(
-          (member): member is Record<string, unknown> =>
-            Boolean(member && typeof member === 'object' && !Array.isArray(member)),
-        )
-      : [];
+  private async readMembers(_workspaceId: string): Promise<Array<Record<string, unknown>>> {
+    // 测试替身可能没有成员表
+    if (!(this.prisma as unknown as { member?: unknown }).member) return [];
+    return (await readMembers(this.prisma)).map(memberToJson);
   }
 
   private accountVisitorHash(workspaceId: string, userId: string): string {

@@ -25,6 +25,7 @@
     "migrate:blobs": "node --env-file-if-exists=.env scripts/migrate-blobs-to-s3.mjs",
     "migrate:sqlite-to-pg": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/migrate-sqlite-to-pg.mjs",
     "migrate:assets": "npm run build --silent && node --env-file-if-exists=.env scripts/migrate-assets-to-tables.mjs",
+    "migrate:identity": "npm run build --silent && node --env-file-if-exists=.env scripts/migrate-identity-to-tables.mjs",
     "migrate:blob-refs": "npm run build --silent && node --env-file-if-exists=.env scripts/migrate-blob-refs.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

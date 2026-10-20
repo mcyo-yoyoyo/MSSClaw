@@ -1,7 +1,21 @@
 import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
+import {
+  createSession,
+  deleteSession,
+  ensureMembersSeeded,
+  findSession,
+  memberToJson,
+  normalizedAccountEmail,
+  readAuthPolicy,
+  readCredentialsDoc,
+  readMembersDoc,
+  saveOAuthMember,
+  writeCredentialsDoc,
+  writeMembersDoc,
+} from './identity-store';
 import { Prisma } from '@prisma/client';
-import { ensureWorkspace, findWorkspace } from '../workspaces/workspace-setting';
+import { ensureWorkspace } from '../workspaces/workspace-setting';
 import { readAssets } from './asset-catalog';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -717,61 +731,12 @@ function externalToolLayoutPayloadForRead(payload: unknown): unknown {
   };
 }
 
-const SEED_MEMBERS = [
-  {
-    id: 'u-mcyo',
-    name: 'Mcyo',
-    email: 'mcyo@huawei.com',
-    role: 'super_admin',
-    avatar: 'bg-indigo-600',
-    lastActive: '刚刚',
-    status: 'active',
-    deptIds: ['quality'],
-    regionId: null,
-  },
-  {
-    id: 'u-jacky',
-    name: 'Jacky',
-    email: 'jacky@huawei.com',
-    role: 'capability_ops',
-    avatar: 'bg-teal-600',
-    lastActive: '1 小时前',
-    status: 'active',
-    deptIds: ['quality'],
-    regionId: null,
-  },
-  {
-    id: 'u-dickson',
-    name: 'Dickson',
-    email: 'dickson@huawei.com',
-    role: 'business_user',
-    avatar: 'bg-amber-500',
-    lastActive: '今天',
-    status: 'active',
-    deptIds: ['mkt'],
-    regionId: null,
-  },
-];
-
 function isDocKind(kind: string): kind is PlatformDocKind {
   return (PLATFORM_DOC_KINDS as readonly string[]).includes(kind);
 }
 
 function docId(workspaceId: string, kind: string) {
   return `doc-${kind}-${workspaceId}`;
-}
-
-function normalizedAccountEmail(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/@company\.com$/i, '@huawei.com');
-}
-
-interface StoredCredential {
-  salt: string;
-  hash: string;
-  updatedAt: string;
 }
 
 function docRevision(payload: unknown): number {
@@ -782,105 +747,7 @@ function docRevision(payload: unknown): number {
     : 0;
 }
 
-/**
- * 凭证 key 统一归一化后再落库/读取。历史数据里存在大小写与 @company.com 的旧 key，
- * 而登录按归一化邮箱查找——不统一就会出现「设了密码却查不到、默认口令仍可登录」。
- */
-function normalizeCredentialMap(raw: unknown): Record<string, StoredCredential> {
-  if (!isJsonObject(raw)) return {};
-  const out: Record<string, StoredCredential> = {};
-  for (const [key, value] of Object.entries(raw)) {
-    if (!isJsonObject(value)) continue;
-    const salt = value.salt;
-    const hash = value.hash;
-    if (typeof salt !== 'string' || typeof hash !== 'string') continue;
-    const email = normalizedAccountEmail(key);
-    if (!email) continue;
-    const updatedAt = typeof value.updatedAt === 'string' ? value.updatedAt : '';
-    const prev = out[email];
-    if (prev && prev.updatedAt >= updatedAt) continue;
-    out[email] = { salt, hash, updatedAt };
-  }
-  return out;
-}
-
-function credentialsPayloadForRead(payload: unknown): {
-  policy: { allowDemoPassword: boolean };
-  credentials: Record<string, StoredCredential>;
-  revision: number;
-} {
-  const p = isJsonObject(payload) ? payload : {};
-  const policy = isJsonObject(p.policy) ? p.policy : {};
-  return {
-    policy: { allowDemoPassword: policy.allowDemoPassword !== false },
-    credentials: normalizeCredentialMap(p.credentials),
-    revision: docRevision(p),
-  };
-}
-
-function membersPayloadForRead(payload: unknown): {
-  members: Array<Record<string, unknown>>;
-  revision: number;
-} {
-  return { members: membersFromPayload(payload), revision: docRevision(payload) };
-}
-
-function membersFromPayload(payload: unknown): Array<Record<string, unknown>> {
-  if (Array.isArray((payload as { members?: unknown } | null)?.members)) {
-    return (payload as { members: unknown[] }).members.filter(isJsonObject);
-  }
-  return Array.isArray(payload) ? payload.filter(isJsonObject) : [];
-}
-
-/**
- * 只有这些工作区允许「按需播种默认成员 / 默认口令策略」。
- *
- * 任何请求都能让 ensureWorkspace 凭空建出一个工作区；如果它还能顺带播种出一份
- * 含 super_admin 的默认成员表 + 允许演示口令的凭证表，攻击者就能在自造的空间里
- * 用默认口令登录拿到令牌，再凭邮箱把身份带进真实空间——绕过真实空间设置的强密码。
- */
-const SEEDABLE_ACCOUNT_WORKSPACE_IDS = new Set<string>([PLATFORM_WORKSPACE_ID]);
-
-/** 登录时通过的口令来源。跨工作区复用会话时据此判断目标空间的要求是否更严 */
-interface SessionAuthProvenance {
-  workspaceId: string;
-  method: 'password' | 'demo' | 'oauth';
-  /** 通过的凭证指纹（salt+hash 的摘要），不含口令本身 */
-  credFingerprint: string | null;
-  /** oauth 登录时 IDaaS 侧的稳定用户标识（uuid），用于跨工作区重新解析身份 */
-  externalId?: string | null;
-}
-
-interface StoredSessionEntry {
-  user: Record<string, unknown>;
-  expiresAt: string;
-  auth?: SessionAuthProvenance;
-}
-
-function authSessionsFromPayload(payload: unknown): Record<string, StoredSessionEntry> {
-  if (!isJsonObject(payload) || !isJsonObject(payload.sessions)) return {};
-  return Object.fromEntries(
-    Object.entries(payload.sessions).filter((entry): entry is [string, StoredSessionEntry] => {
-      const value = entry[1];
-      return (
-        isJsonObject(value) &&
-        isJsonObject(value.user) &&
-        typeof value.expiresAt === 'string' &&
-        Number.isFinite(Date.parse(value.expiresAt))
-      );
-    }),
-  );
-}
-
-function authSessionsRevision(payload: unknown): number {
-  if (!isJsonObject(payload)) return 0;
-  const revision = payload.revision;
-  return typeof revision === 'number' && Number.isSafeInteger(revision) && revision >= 0
-    ? revision
-    : 0;
-}
-
-function sessionUserForMember(member: Record<string, unknown>, workspaceId: string) {
+function sessionUserForMember(member: Record<string, unknown>, workspaceId: string = PLATFORM_WORKSPACE_ID) {
   return {
     id: String(member.id),
     name: String(member.name),
@@ -903,11 +770,6 @@ function sha256Hex(text: string): string {
 
 function hashPassword(password: string, salt: string): string {
   return sha256Hex(`${salt}:${password}`);
-}
-
-/** 凭证指纹：相同的持久化凭证记录必然一致，用于判断两个空间是否共享同一份凭证 */
-function credentialFingerprint(cred: { salt: string; hash: string }): string {
-  return sha256Hex(`${cred.salt}:${cred.hash}`);
 }
 
 function initialMarketDoc(kind: PlatformDocKind): unknown | undefined {
@@ -950,6 +812,11 @@ export class PlatformDocsService {
   async getDoc(workspaceId: string, kind: string): Promise<{ kind: string; payload: unknown }> {
     if (!isDocKind(kind)) throw new BadRequestException(`unsupported_doc_kind:${kind}`);
     await this.ensureWorkspace(workspaceId);
+    if (kind === 'members') {
+      await ensureMembersSeeded(this.prisma);
+      return { kind, payload: await readMembersDoc(this.prisma) };
+    }
+    if (kind === 'auth-credentials') return { kind, payload: await readCredentialsDoc(this.prisma) };
 
     const row = await this.prisma.centerRecord.findUnique({
       where: { id: docId(workspaceId, kind) },
@@ -963,12 +830,6 @@ export class PlatformDocsService {
       }
       if (kind === 'home-featured') {
         return { kind, payload: homeFeaturedPayloadForRead(row.payload) };
-      }
-      if (kind === 'auth-credentials') {
-        return { kind, payload: credentialsPayloadForRead(row.payload) };
-      }
-      if (kind === 'members') {
-        return { kind, payload: membersPayloadForRead(row.payload) };
       }
       if (shouldUpgradeMarketDoc(kind, row.payload)) {
         const payload = initialMarketDoc(kind)!;
@@ -999,15 +860,14 @@ export class PlatformDocsService {
       return this.putInternalOfficeScenesDoc(workspaceId, payload);
     }
     if (kind === 'auth-credentials') {
-      return this.putRevisionedDoc(workspaceId, 'auth-credentials', payload, (input) => {
-        const canonical = credentialsPayloadForRead(input);
-        return { policy: canonical.policy, credentials: canonical.credentials };
-      });
+      const { doc, skipped } = await writeCredentialsDoc(this.prisma, payload);
+      if (skipped.length) {
+        this.logger.warn(`密码表里有找不到成员的邮箱，已跳过：${skipped.join(', ')}`);
+      }
+      return { kind, payload: doc };
     }
     if (kind === 'members') {
-      return this.putRevisionedDoc(workspaceId, 'members', payload, (input) => ({
-        members: membersFromPayload(input),
-      }));
+      return { kind, payload: await writeMembersDoc(this.prisma, payload) };
     }
     if (kind === 'home-featured') {
       return this.putRevisionedDoc(workspaceId, 'home-featured', payload, (input) => ({
@@ -1073,7 +933,11 @@ export class PlatformDocsService {
       where: { kind: { startsWith: 'doc:' } },
     });
     const byKind: Record<string, unknown> = {};
+    await ensureMembersSeeded(this.prisma);
+    byKind.members = await readMembersDoc(this.prisma);
+    byKind['auth-credentials'] = await readCredentialsDoc(this.prisma);
     for (const kind of PLATFORM_DOC_KINDS) {
+      if (kind === 'members' || kind === 'auth-credentials') continue;
       const row = rows.find((r) => r.id === docId(workspaceId, kind));
       if (row && kind === 'external-tool-layout') {
         byKind[kind] = externalToolLayoutPayloadForRead(row.payload);
@@ -1081,10 +945,6 @@ export class PlatformDocsService {
         byKind[kind] = officeScenePayloadForRead(row.payload);
       } else if (row && kind === 'home-featured') {
         byKind[kind] = homeFeaturedPayloadForRead(row.payload);
-      } else if (row && kind === 'auth-credentials') {
-        byKind[kind] = credentialsPayloadForRead(row.payload);
-      } else if (row && kind === 'members') {
-        byKind[kind] = membersPayloadForRead(row.payload);
       } else if (row && shouldUpgradeMarketDoc(kind, row.payload)) {
         const payload = initialMarketDoc(kind)!;
         await this.prisma.centerRecord.update({
@@ -1100,12 +960,12 @@ export class PlatformDocsService {
   }
 
   /**
-   * 带 revision 的 compare-and-swap 写入。成员表 / 密码表都是「整份覆盖」的文档，
+   * 带 revision 的 compare-and-swap 写入。首页精选 / 站内公告都是「整份覆盖」的文档，
    * 没有版本校验时，两个管理员各自基于陈旧快照提交就会互相抹掉对方的改动。
    */
   private async putRevisionedDoc(
     workspaceId: string,
-    kind: 'auth-credentials' | 'members' | 'home-featured' | 'station-announcements',
+    kind: 'home-featured' | 'station-announcements',
     payload: unknown,
     canonicalize: (input: unknown) => Record<string, unknown>,
   ) {
@@ -1333,83 +1193,51 @@ export class PlatformDocsService {
   }) {
     const email = normalizedAccountEmail(body.email);
     const password = body.password ?? '';
-    const workspaceId = PLATFORM_WORKSPACE_ID;
     if (!email || !password) throw new BadRequestException('email_and_password_required');
 
-    // 登录不得触发「工作区缺失即自动创建」：否则任意编造的 workspaceId 都会被建出来，
-    // 并连带播种默认管理员，成为绕过真实空间口令的登录入口。
-    if (!SEEDABLE_ACCOUNT_WORKSPACE_IDS.has(workspaceId)) {
-      const workspace = await findWorkspace(this.prisma);
-      const membersRow = await this.prisma.centerRecord.findUnique({
-        where: { id: docId(workspaceId, 'members') },
-        select: { id: true },
-      });
-      if (!workspace || !membersRow) {
-        return { ok: false, error: '工作区不存在或尚未开通' };
-      }
-    }
-
-    const membersDoc = await this.getDoc(workspaceId, 'members');
-    const members = membersFromPayload(membersDoc.payload);
-
-    const member = members.find((m) => normalizedAccountEmail(m.email) === email);
+    await ensureMembersSeeded(this.prisma);
+    const member = await this.prisma.member.findUnique({ where: { email }, include: { credential: true } });
     if (!member || member.status === 'suspended') {
       return { ok: false, error: '账号不存在或已停用' };
     }
 
-    const credsDoc = await this.getDoc(workspaceId, 'auth-credentials');
-    // getDoc 已按归一化邮箱重建 key，这里直接查即可。
-    const credPayload = credentialsPayloadForRead(credsDoc.payload);
-    const allowDemo = credPayload.policy.allowDemoPassword !== false;
-    const cred = credPayload.credentials[email];
-
+    // 没设密码的成员只在口令策略放行时可以用演示口令登录
+    const cred = member.credential;
     let valid = false;
-    if (cred?.salt && cred?.hash) {
-      valid = hashPassword(password, cred.salt) === cred.hash;
-    } else if (allowDemo && password === 'mssclaw') {
+    if (cred) {
+      valid = hashPassword(password, cred.salt) === cred.passwordHash;
+    } else if ((await readAuthPolicy(this.prisma)).allowDemoPassword && password === 'mssclaw') {
       valid = true;
     }
-
     if (!valid) {
       return { ok: false, error: cred ? '密码错误' : '该账号尚未设置密码，请联系平台运营' };
     }
 
-    const user = sessionUserForMember(member, workspaceId);
-
+    const user = sessionUserForMember(memberToJson(member));
     const token = randomBytes(24).toString('hex');
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    // 记录这张令牌到底通过了什么口令校验：跨工作区复用时要据此判断目标空间是否更严。
-    await this.putSession(workspaceId, token, {
-      user,
-      expiresAt,
-      auth: {
-        workspaceId,
-        method: cred ? 'password' : 'demo',
-        credFingerprint: cred ? credentialFingerprint(cred) : null,
-      },
-    });
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await createSession(this.prisma, { token, memberId: member.id, authMethod: cred ? 'password' : 'demo', expiresAt });
+    await this.recordLogin(user, body.visitorId);
+    return { ok: true, user, token, expiresAt: expiresAt.toISOString() };
+  }
 
-    // 登录统计不可反向阻断认证；数据库暂时不可写时保留服务端日志，登录仍正常返回。
+  /** 登录统计不可反向阻断认证；数据库暂时不可写时保留服务端日志，登录仍正常返回。 */
+  private async recordLogin(user: Record<string, unknown>, visitorId?: string) {
     try {
       await this.portalAnalytics.recordDailyLogin({
-        workspaceId,
+        workspaceId: PLATFORM_WORKSPACE_ID,
         userId: String(user.id ?? ''),
-        visitorId: body.visitorId,
+        visitorId,
       });
     } catch (error) {
       this.logger.warn(
         `Daily login analytics failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-
-    return { ok: true, user, token, expiresAt };
   }
 
   /**
    * OAuth(IDaaS) 登录落地：身份已由上游证明，这里只负责「找到/建好平台成员」并签发平台令牌。
-   *
-   * 与 login() 共用 putSession / sessionUserForMember / recordDailyLogin，
-   * 因此 me()、跨工作区复用、RBAC 全部沿用既有逻辑，不需要第二套会话体系。
    *
    * 返回的 code 会一路透传到前端错误面板，每个 code 在
    * docs/auth-oauth-troubleshooting.md 里都有对应的处置办法。
@@ -1442,15 +1270,11 @@ export class PlatformDocsService {
       };
     }
 
-    const membersDoc = await this.getDoc(workspaceId, 'members');
-    const members = membersFromPayload(membersDoc.payload);
-
+    await ensureMembersSeeded(this.prisma);
     // externalId 优先：账号或邮箱变更后仍能认出同一个人
     let member =
-      (externalId
-        ? members.find((m) => String(m.externalId ?? '').trim() === externalId)
-        : undefined) ??
-      (email ? members.find((m) => normalizedAccountEmail(m.email) === email) : undefined);
+      (externalId ? await this.prisma.member.findUnique({ where: { externalId } }) : null) ??
+      (email ? await this.prisma.member.findUnique({ where: { email } }) : null);
 
     let provisioned = false;
     if (!member) {
@@ -1479,279 +1303,73 @@ export class PlatformDocsService {
           detail: `邮箱域 ${domain} 不在 OAUTH_ALLOWED_EMAIL_DOMAINS(${input.allowedEmailDomains.join(',')}) 内`,
         };
       }
-      member = {
-        id: `u-oauth-${randomBytes(4).toString('hex')}`,
-        name: input.name || email.split('@')[0],
-        email,
-        role: 'business_user',
-        avatar: 'bg-zinc-600',
-        lastActive: '刚刚',
-        status: 'active',
-        deptIds: [],
-        regionId: null,
-        externalId: externalId || null,
-        postName: input.postName || null,
-        orgPath: input.orgPath || null,
-      };
       provisioned = true;
-    }
-
-    if (member.status === 'suspended') {
+    } else if (member.status === 'suspended') {
       return {
         ok: false,
         code: 'oauth_member_suspended',
         error: '账号已停用，请联系平台运营',
-        detail: `成员 ${String(member.id)} status=suspended`,
+        detail: `成员 ${member.id} status=suspended`,
       };
     }
 
     // 上游属性以 IDaaS 为准，每次登录刷新；平台侧不提供编辑入口，避免两份数据打架。
-    const refreshed: Record<string, unknown> = {
-      ...member,
-      externalId: externalId || member.externalId || null,
-      postName: input.postName || member.postName || null,
-      orgPath: input.orgPath || member.orgPath || null,
-      name: input.name || member.name,
-      lastActive: '刚刚',
+    const refreshed = {
+      id: member?.id ?? `u-oauth-${randomBytes(4).toString('hex')}`,
+      name: input.name || member?.name || email.split('@')[0],
+      email: member ? member.email : email,
+      externalId: externalId || member?.externalId || null,
+      postName: input.postName || member?.postName || null,
+      orgPath: input.orgPath || member?.orgPath || null,
     };
     const changed =
-      provisioned ||
-      JSON.stringify(refreshed) !== JSON.stringify(member);
+      !member ||
+      (['name', 'externalId', 'postName', 'orgPath'] as const).some((key) => refreshed[key] !== member![key]);
     if (changed) {
-      // 写成员表失败不能阻断登录：身份已经证明过了，属性回写是尽力而为。
       try {
-        const nextMembers = provisioned
-          ? [...members, refreshed]
-          : members.map((m) => (String(m.id) === String(member!.id) ? refreshed : m));
-        await this.putRevisionedDoc(
-          workspaceId,
-          'members',
-          { ...(membersDoc.payload as Record<string, unknown>), members: nextMembers },
-          (raw) => ({ members: membersFromPayload(raw) }),
-        );
+        member = await saveOAuthMember(this.prisma, refreshed, provisioned);
       } catch (error) {
+        // 新成员建不出来就没法签发会话；已有成员回写属性失败不阻断登录（身份已经证明过了）。
+        if (provisioned) throw error;
         this.logger.warn(
           `[oauth] 回写成员属性失败（登录继续）：${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
 
-    const user = sessionUserForMember(refreshed, workspaceId);
+    const user = sessionUserForMember({ ...memberToJson(member!), ...(changed ? refreshed : {}) });
     const token = randomBytes(24).toString('hex');
     const ttlMs = Math.max(1, input.sessionTtlHours) * 60 * 60 * 1000;
-    const expiresAt = new Date(Date.now() + ttlMs).toISOString();
-    await this.putSession(workspaceId, token, {
-      user,
-      expiresAt,
-      auth: {
-        workspaceId,
-        method: 'oauth',
-        credFingerprint: null,
-        externalId: externalId || null,
-      },
-    });
-
-    try {
-      await this.portalAnalytics.recordDailyLogin({
-        workspaceId,
-        userId: String(user.id ?? ''),
-        visitorId: input.visitorId,
-      });
-    } catch (error) {
-      this.logger.warn(
-        `Daily login analytics failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-
-    return { ok: true, user, token, expiresAt, provisioned };
+    const expiresAt = new Date(Date.now() + ttlMs);
+    await createSession(this.prisma, { token, memberId: member!.id, authMethod: 'oauth', expiresAt });
+    await this.recordLogin(user, input.visitorId);
+    return { ok: true, user, token, expiresAt: expiresAt.toISOString(), provisioned };
   }
 
-  async me(token: string | undefined, workspaceId = PLATFORM_WORKSPACE_ID) {
+  async me(token: string | undefined, _workspaceId = PLATFORM_WORKSPACE_ID) {
     if (!token) return { ok: false as const, error: '未登录' };
-    const resolved = await this.findSession(workspaceId, token);
-    if (!resolved) return { ok: false as const, error: '会话已失效，请重新登录' };
-    if (new Date(resolved.session.expiresAt).getTime() < Date.now()) {
-      await this.deleteSession(resolved.workspaceId, token);
+    const session = await findSession(this.prisma, token);
+    if (!session) return { ok: false as const, error: '会话已失效，请重新登录' };
+    if (session.expiresAt.getTime() < Date.now()) {
+      await deleteSession(this.prisma, token);
       return { ok: false as const, error: '会话已过期，请重新登录' };
     }
-    if (
-      resolved.workspaceId !== workspaceId &&
-      !(await this.sessionMayCrossWorkspace(workspaceId, resolved.session))
-    ) {
-      return { ok: false as const, error: '请在该工作区重新登录' };
+    if (session.member.status === 'suspended') return { ok: false as const, error: '无权访问该工作区' };
+    // 运营关掉演示口令后，之前用演示口令登录的会话一并作废
+    if (session.authMethod === 'demo' && !(await readAuthPolicy(this.prisma)).allowDemoPassword) {
+      return { ok: false as const, error: '会话已失效，请重新登录' };
     }
-    const user = await this.authorizeSessionForWorkspace(workspaceId, resolved.session.user);
-    if (!user) return { ok: false as const, error: '无权访问该工作区' };
     return {
       ok: true as const,
-      user,
+      user: sessionUserForMember(memberToJson(session.member)),
       token,
-      expiresAt: resolved.session.expiresAt,
+      expiresAt: session.expiresAt.toISOString(),
     };
   }
 
-  async logout(token: string | undefined, workspaceId = PLATFORM_WORKSPACE_ID) {
-    if (token) {
-      const resolved = await this.findSession(workspaceId, token);
-      if (resolved) await this.deleteSession(resolved.workspaceId, token);
-    }
+  async logout(token: string | undefined, _workspaceId = PLATFORM_WORKSPACE_ID) {
+    if (token) await deleteSession(this.prisma, token);
     return { ok: true as const };
-  }
-
-  /** 单租户：令牌只存在平台空间的 doc:auth-sessions 里。 */
-  private async findSession(
-    preferredWorkspaceId: string,
-    token: string,
-  ): Promise<{
-    workspaceId: string;
-    session: { user: Record<string, unknown>; expiresAt: string };
-  } | null> {
-    const session = await this.getSession(preferredWorkspaceId, token);
-    return session ? { workspaceId: preferredWorkspaceId, session } : null;
-  }
-
-  private async getSession(
-    workspaceId: string,
-    token: string,
-  ): Promise<StoredSessionEntry | null> {
-    const doc = await this.prisma.centerRecord.findUnique({
-      where: { id: docId(workspaceId, 'auth-sessions') },
-      select: { payload: true },
-    });
-    if (!doc) return null;
-    const sessions = authSessionsFromPayload(doc.payload);
-    return sessions[token] ?? null;
-  }
-
-  /**
-   * 令牌跨工作区复用的准入判断：**目标空间对该账号的口令要求不得严于签发时已通过的校验**。
-   *
-   * - 目标空间给这个账号配了密码：必须是同一份凭证（指纹一致）才放行；
-   *   否则等于用 A 空间的弱口令冒领 B 空间的强密码账号。
-   * - 目标空间没配密码：只有该空间本身就放行演示口令时才允许携带进来。
-   * 旧令牌没有来源信息，按最弱情况处理（等价于演示口令）。
-   */
-  private async sessionMayCrossWorkspace(
-    targetWorkspaceId: string,
-    session: StoredSessionEntry,
-  ): Promise<boolean> {
-    const email = normalizedAccountEmail(session.user?.email);
-    if (!email) return false;
-
-    const row = await this.prisma.centerRecord.findUnique({
-      where: { id: docId(targetWorkspaceId, 'auth-credentials') },
-      select: { payload: true },
-    });
-    const payload = credentialsPayloadForRead(
-      row?.payload ?? {
-        policy: { allowDemoPassword: SEEDABLE_ACCOUNT_WORKSPACE_IDS.has(targetWorkspaceId) },
-      },
-    );
-
-    const auth = session.auth;
-    // OAuth 会话的身份由 IDaaS 统一证明，目标空间也在 oauth 模式下运行时即可携带；
-    // 拿密码指纹去比对它永远不成立，会让切换工作区必然失败。
-    if (auth?.method === 'oauth') return process.env.AUTH_MODE?.trim().toLowerCase() === 'oauth';
-
-    const targetCred = payload.credentials[email];
-    if (!targetCred) return payload.policy.allowDemoPassword === true;
-
-    if (!auth || auth.method !== 'password' || !auth.credFingerprint) return false;
-    return auth.credFingerprint === credentialFingerprint(targetCred);
-  }
-
-  private async authorizeSessionForWorkspace(
-    workspaceId: string,
-    sourceUser: Record<string, unknown>,
-  ): Promise<Record<string, unknown> | null> {
-    // 鉴权读取不能沿用 getDoc() 的“缺失即自动创建工作区”行为，否则任意 workspaceId
-    // 都可能被请求侧创建。只有已存在工作区才能承接一个跨工作区会话。
-    const workspace = await findWorkspace(this.prisma);
-    if (!workspace) return null;
-
-    const membersRow = await this.prisma.centerRecord.findUnique({
-      where: { id: docId(workspaceId, 'members') },
-      select: { payload: true },
-    });
-    // 必须已有明确成员表，不能在一次鉴权请求里凭空获得默认成员。
-    const membersPayload: unknown = membersRow?.payload;
-    if (!membersPayload) return null;
-    const members = membersFromPayload(membersPayload);
-    const sourceEmail = normalizedAccountEmail(sourceUser.email);
-    const sourceId = String(sourceUser.id ?? '').trim();
-    const sourceExternalId = String(sourceUser.externalId ?? '').trim();
-    // externalId 优先：OAuth 身份在上游改了邮箱后仍要能在目标空间认出同一个人
-    const member =
-      (sourceExternalId
-        ? members.find((candidate) => String(candidate.externalId ?? '').trim() === sourceExternalId)
-        : undefined) ??
-      members.find((candidate) => {
-        const candidateEmail = normalizedAccountEmail(candidate.email);
-        if (sourceEmail && candidateEmail) return candidateEmail === sourceEmail;
-        return Boolean(sourceId) && String(candidate.id ?? '').trim() === sourceId;
-      });
-    if (!member || member.status === 'suspended') return null;
-    return sessionUserForMember(member, workspaceId);
-  }
-
-  private async putSession(
-    workspaceId: string,
-    token: string,
-    entry: StoredSessionEntry,
-  ) {
-    await this.mutateSessions(workspaceId, (sessions) => {
-      const now = Date.now();
-      for (const [key, value] of Object.entries(sessions)) {
-        if (new Date(value.expiresAt).getTime() < now) delete sessions[key];
-      }
-      sessions[token] = entry;
-    });
-  }
-
-  private async deleteSession(workspaceId: string, token: string) {
-    await this.mutateSessions(workspaceId, (sessions) => {
-      delete sessions[token];
-    });
-  }
-
-  private async mutateSessions(
-    workspaceId: string,
-    mutate: (sessions: Record<string, StoredSessionEntry>) => void,
-  ): Promise<void> {
-    await this.ensureWorkspace(workspaceId);
-    const id = docId(workspaceId, 'auth-sessions');
-
-    for (let attempt = 0; attempt < 8; attempt += 1) {
-      const row = await this.prisma.centerRecord.findUnique({ where: { id } });
-      if (!row) {
-        const sessions: Record<string, StoredSessionEntry> = {};
-        mutate(sessions);
-        try {
-          await this.prisma.centerRecord.create({
-            data: {
-              id,
-              kind: 'doc:auth-sessions',
-              payload: { revision: 1, sessions } as unknown as Prisma.InputJsonValue,
-            },
-          });
-          return;
-        } catch (error) {
-          if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-            continue;
-          }
-          throw error;
-        }
-      }
-
-      const expectedRevision = authSessionsRevision(row.payload);
-      const sessions = { ...authSessionsFromPayload(row.payload) };
-      mutate(sessions);
-      const nextPayload = JSON.stringify({ revision: expectedRevision + 1, sessions });
-      const changed = await this.compareAndSwapPayload(id, nextPayload, expectedRevision);
-      if (changed === 1) return;
-    }
-
-    throw new ConflictException('auth_sessions_revision_conflict');
   }
 
   /**
@@ -1794,24 +1412,6 @@ export class PlatformDocsService {
     let payload: unknown = {};
     if (marketSeed !== undefined) {
       payload = marketSeed;
-    } else if (kind === 'members') {
-      // 请求侧自动创建出来的工作区不得凭空获得一份含 super_admin 的默认成员表。
-      if (!SEEDABLE_ACCOUNT_WORKSPACE_IDS.has(workspaceId)) return { members: [] };
-      payload = { members: SEED_MEMBERS };
-    } else if (kind === 'auth-credentials') {
-      // 不预先物化默认口令哈希：种子账号靠 allowDemoPassword 兜底即可登录，
-      // 而一旦落库成真实凭证，换库/迁移后就会静默「恢复」出一批默认密码，
-      // 也会让前端误判这些账号「已设密」。
-      // 同理：只有内置工作区默认放行演示口令，临时/自建空间一律不放行。
-      const allowDemoPassword = SEEDABLE_ACCOUNT_WORKSPACE_IDS.has(workspaceId);
-      if (!allowDemoPassword) {
-        return { policy: { allowDemoPassword: false }, credentials: {}, revision: 0 };
-      }
-      payload = {
-        policy: { allowDemoPassword: true },
-        credentials: {},
-        revision: 0,
-      };
     } else if (kind === 'ai-news') {
       payload = { items: [] };
     } else if (kind === 'station-announcements') {

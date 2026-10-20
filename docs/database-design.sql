@@ -14,7 +14,7 @@
 --   数据迁移规则（2026-10-20 确认）：文档与个人数据只迁 ws-cn-marketing 和全局数据，其他工作区不迁，原 SQLite 文件留作备份；
 --     统计（行为事件、页面访问、每日登录、转化事件）各工作区合并，互动累计值按内容求和。
 --     迁移脚本 apps/api/scripts/migrate-sqlite-to-pg.mjs 先只读输出各工作区数据量，确认后加 --apply 执行。
---     只在其他工作区出现的成员以 business_user 加入，不继承其他工作区的管理员角色（第 4 期再确认一次）。
+--     只在其他工作区出现的成员不补进来（第 4 期确认），他们走统一身份登录时按自动建号规则以 business_user 新建。
 --
 -- 分期（每期单独上线可用）
 --   第 1 期  去租户（代码层，库仍是 SQLite、表不动）：接口路径去掉 /workspaces/:workspaceId，前端去掉工作区和切换，
@@ -25,7 +25,9 @@
 --   第 3 期  资产：tool / skill / skill_version / agent / agent_skill / automation / kb_document（2026-10-21 完成）。
 --            接口仍是整份快照收发（GET/PUT /marketplace、/tools），后端拆成逐行写入；快照里出现没有列的字段直接拒绝保存。
 --            迁移脚本 apps/api/scripts/migrate-assets-to-tables.mjs 写完资产表后删除 global-tools、marketplace 行和 agent/skill/tool 投影行。
---   第 4 期  身份：member / member_credential / auth_session
+--   第 4 期  身份：member / member_credential / auth_session（2026-10-21 完成）。
+--            接口不变（/docs/members、/docs/auth-credentials 整份收发，版本号改用 collection_revision）；
+--            迁移脚本 apps/api/scripts/migrate-identity-to-tables.mjs。密码挂在成员上，前端改为先保存成员再设密码。
 --   第 5 期  个人数据：market_favorite / market_user_vote / market_recent_view / market_hidden_item / skill_review
 --   第 6 期  其余：配置、审批、审计、门户内容、办公场景、对话、消息、资讯、执行、AI 智库、模型配置；之后删除 center_record
 --
@@ -68,8 +70,10 @@
 -- A. 成员与身份
 -- ============================================================================
 
--- A1 成员【第 4 期】来源：ws-cn-marketing 的 doc:members.members[]，其他工作区独有的成员以 business_user 加入；
+-- A1 成员【第 4 期】来源：ws-cn-marketing 的 doc:members.members[]（其他工作区独有的成员不迁）；
 --   同一人先按 external_id、再按归一化邮箱识别。整表 PUT 用 collection_revision('members') 做并发控制。
+--   接口里的 lastActive 由 last_login_at 生成（旧的「刚刚 / 今天」文案不迁）；external_id / post_name / org_path
+--   只由统一身份登录回写，管理员保存成员表时沿用库里的值。从成员表删掉的人连同密码、会话一起删除。
 create table member (
   id            text primary key,                               -- 沿用旧成员 id（如 u-mcyo）：收藏、统计 visitor_hash 都引用它；新成员由应用生成
   email         text unique,                                    -- 归一化：去空格、小写、@company.com → @huawei.com；与 external_id 至少有一个
@@ -88,7 +92,8 @@ create table member (
   updated_at    timestamptz(3) not null
 );
 
--- A2 成员密码【第 4 期】来源：doc:auth-credentials.credentials[email]
+-- A2 成员密码【第 4 期】来源：doc:auth-credentials.credentials[email]；找不到成员的旧密码迁移时丢弃，
+--   接口写入时同样跳过（所以前端批量导入、邀请并激活都改成先保存成员、确认成功后再设密码）。
 create table member_credential (
   member_id           text primary key references member (id) on delete cascade,
   algorithm           text not null default 'sha256-salt',      -- 现为 sha256(salt + ":" + password)；预留 scrypt / argon2id，登录成功时平滑升级
@@ -105,7 +110,7 @@ create table auth_session (
   member_id    text not null references member (id) on delete cascade,
   auth_method  text not null,                                   -- password / demo / oauth；app_setting('auth-policy') 不允许演示口令时拒绝 demo 会话
   expires_at   timestamptz(3) not null,
-  last_seen_at timestamptz(3),
+  last_seen_at timestamptz(3),                                  -- 预留；每次请求都写太频繁，暂不维护
   created_at   timestamptz(3) not null default now()
 );
 create index auth_session_member_idx on auth_session (member_id);

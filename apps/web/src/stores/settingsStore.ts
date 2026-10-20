@@ -141,10 +141,19 @@ function isRevisionConflict(error: unknown): boolean {
 }
 
 function persistMembers(members: WorkspaceMember[]): boolean {
-  if (!ensureMembersWritable()) return false;
+  return queueMembersWrite(members) !== null;
+}
+
+/**
+ * 排队写成员表。当前不能写时返回 null；否则返回「这次写入是否被服务端确认」。
+ * 密码挂在成员上，新成员必须等这里确认保存后才能设密码。
+ */
+function queueMembersWrite(members: WorkspaceMember[]): Promise<boolean> | null {
+  if (!ensureMembersWritable()) return null;
 
   const generation = membersWriteGeneration;
   const previous = membersWriteQueue ?? Promise.resolve();
+  let saved = false;
   let queued: Promise<void>;
   queued = previous
     .catch(() => undefined)
@@ -161,6 +170,7 @@ function persistMembers(members: WorkspaceMember[]): boolean {
         const canonical = peekPlatformDocMemory<unknown>('members');
         knownMembersRevision = revisionFromPayload(canonical);
         confirmedMembers = cloneMembers(membersFromPayload(canonical ?? { members }));
+        saved = true;
       } catch (error) {
         invalidateMembersAuthority();
         if (!isRevisionConflict(error)) {
@@ -186,7 +196,7 @@ function persistMembers(members: WorkspaceMember[]): boolean {
       if (membersWriteQueue === queued) membersWriteQueue = undefined;
     });
   membersWriteQueue = queued;
-  return true;
+  return queued.then(() => saved);
 }
 
 export async function hydrateMembersFromServer(): Promise<WorkspaceMember[]> {
@@ -365,9 +375,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           regionId: payload.regionId ?? null,
         },
       ];
-      if (!persistMembers(members)) return;
+      const write = queueMembersWrite(members);
+      if (!write) return;
 
       if (payload.activateNow) {
+        // 先等成员保存成功再设密码；失败时写入队列已恢复成员列表并提示
+        if (!(await write)) return;
         const temp = payload.password?.trim() || generateTempPassword();
         const pwdResult = await setAccountPassword(trimmed, temp);
         if (!pwdResult.ok) {
@@ -433,6 +446,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     let updated = 0;
     const fail: { line: string; error: string }[] = [];
     let members = [...get().members];
+    const passwords: { line: string; email: string; password: string; isNew: boolean }[] = [];
 
     for (const line of lines) {
       const parts = line.includes(',')
@@ -473,19 +487,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           deptIds: deptId ? [deptId] : prev.deptIds,
           regionId: parts[5] !== undefined && parts[5] !== '' ? regionId : prev.regionId,
         };
-        const pwd = await setAccountPassword(email, password);
-        if (!pwd.ok) {
-          fail.push({ line, error: pwd.error });
-          continue;
-        }
-        updated += 1;
+        passwords.push({ line, email, password, isNew: false });
         continue;
       }
 
       members = [
         ...members,
         {
-          id: `imp_${Date.now()}_${ok}`,
+          id: `imp_${Date.now()}_${passwords.length}`,
           name: name || email.split('@')[0] || '新成员',
           email,
           role,
@@ -496,17 +505,25 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           regionId,
         },
       ];
-      const pwd = await setAccountPassword(email, password);
-      if (!pwd.ok) {
-        fail.push({ line, error: pwd.error });
-        members = members.filter((m) => m.email.toLowerCase() !== email.toLowerCase());
-        continue;
-      }
-      ok += 1;
+      passwords.push({ line, email, password, isNew: true });
     }
 
-    if (!persistMembers(members)) {
+    // 密码挂在成员上：先把成员表保存成功，再逐个设密码
+    const write = queueMembersWrite(members);
+    if (!write) {
       return { ok: 0, updated: 0, fail: [{ line: '', error: MEMBERS_NOT_READY_ERROR }] };
+    }
+    if (!(await write)) {
+      return { ok: 0, updated: 0, fail: [{ line: '', error: '成员保存失败，未设置任何密码，请刷新后重试' }] };
+    }
+    for (const job of passwords) {
+      const pwd = await setAccountPassword(job.email, job.password);
+      if (!pwd.ok) {
+        fail.push({ line: job.line, error: job.isNew ? `成员已添加，但设密失败：${pwd.error}` : pwd.error });
+        continue;
+      }
+      if (job.isNew) ok += 1;
+      else updated += 1;
     }
     set({
       members,
