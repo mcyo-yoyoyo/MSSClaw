@@ -1,8 +1,14 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, type OnModuleInit } from '@nestjs/common';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadBucketCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
-import { createReadStream, promises as fs, type ReadStream } from 'fs';
-import * as path from 'path';
-import type { Readable } from 'stream';
+import { Readable } from 'stream';
 
 export type BlobMeta = {
   id: string;
@@ -26,8 +32,17 @@ const GENERATED_DELETE_TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const STORED_CAPABILITY_HASH = /^[0-9a-f]{64}$/;
 const INVALID_CAPABILITY_HASH = Buffer.alloc(32);
 
-function isFileSystemError(err: unknown, code: string): boolean {
-  return typeof err === 'object' && err !== null && 'code' in err && err.code === code;
+function isMissingObject(err: unknown): boolean {
+  const e = err as { name?: string; $metadata?: { httpStatusCode?: number } } | null;
+  return e?.name === 'NoSuchKey' || e?.name === 'NotFound' || e?.$metadata?.httpStatusCode === 404;
+}
+
+function requiredEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`${name} 未配置：文件存储使用 S3 兼容对象存储，配置见 deploy/api.env.example`);
+  }
+  return value;
 }
 
 function uploadedBlob(meta: BlobMeta): UploadedBlob {
@@ -53,23 +68,68 @@ function configuredPositiveBytes(name: string, fallback: number): number {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+/**
+ * 文件存于 S3 兼容对象存储（本地 / 内网为 MinIO）。每个文件两个对象：
+ * `<工作区>/<id>.bin` 为内容，`<工作区>/<id>.json` 为元数据；meta 最后写入，读取以 meta 为准。
+ */
 @Injectable()
-export class BlobStoreService {
+export class BlobStoreService implements OnModuleInit {
   private readonly logger = new Logger(BlobStoreService.name);
-  private readonly root = path.resolve(
-    process.env.BLOB_ROOT ?? path.join(process.cwd(), 'data', 'blobs'),
-  );
+  private readonly endpoint = requiredEnv('S3_ENDPOINT');
+  private readonly bucket = requiredEnv('S3_BUCKET');
+  private readonly s3 = new S3Client({
+    endpoint: this.endpoint,
+    region: process.env.S3_REGION?.trim() || 'us-east-1',
+    // 自建 S3（MinIO 等）按 endpoint/bucket/key 寻址，不依赖桶名 DNS。
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: requiredEnv('S3_ACCESS_KEY'),
+      secretAccessKey: requiredEnv('S3_SECRET_KEY'),
+    },
+  });
 
-  private workspaceDir(workspaceId: string) {
-    return path.join(this.root, workspaceId.replace(/[^a-zA-Z0-9_-]/g, '_'));
+  /** 启动即校验连通性与桶，避免首次上传时才暴露配置错误。 */
+  async onModuleInit() {
+    try {
+      await this.s3.send(new HeadBucketCommand({ Bucket: this.bucket }));
+    } catch (err) {
+      const reason = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      throw new Error(`对象存储不可用（${this.endpoint}，桶 ${this.bucket}）：${reason}`);
+    }
+    this.logger.log(`object storage ready: ${this.endpoint}/${this.bucket}`);
   }
 
-  private metaPath(workspaceId: string, id: string) {
-    return path.join(this.workspaceDir(workspaceId), `${id}.json`);
+  /** 前缀与旧版磁盘目录名一致，迁移脚本按目录名直接映射。 */
+  private key(workspaceId: string, id: string, ext: 'bin' | 'json') {
+    return `${workspaceId.replace(/[^a-zA-Z0-9_-]/g, '_')}/${id}.${ext}`;
   }
 
-  private binPath(workspaceId: string, id: string) {
-    return path.join(this.workspaceDir(workspaceId), `${id}.bin`);
+  private async readMeta(workspaceId: string, id: string): Promise<BlobMeta> {
+    const res = await this.s3.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: this.key(workspaceId, id, 'json') }),
+    );
+    return JSON.parse(await res.Body!.transformToString('utf8')) as BlobMeta;
+  }
+
+  private async removeObject(key: string) {
+    await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+  }
+
+  /** 内容已写入后提交 meta；meta 写失败则清掉内容，不留不可达的孤儿对象。 */
+  private async commitMeta(meta: BlobMeta) {
+    try {
+      await this.s3.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: this.key(meta.workspaceId, meta.id, 'json'),
+          Body: JSON.stringify(meta, null, 2),
+          ContentType: 'application/json',
+        }),
+      );
+    } catch (err) {
+      await this.removeObject(this.key(meta.workspaceId, meta.id, 'bin')).catch(() => undefined);
+      throw err;
+    }
   }
 
   packageBlobMaxBytes(): number {
@@ -89,21 +149,25 @@ export class BlobStoreService {
     const id = randomUUID().replace(/-/g, '');
     const deleteToken = randomBytes(32).toString('base64url');
     const deleteCapabilityHash = createHash('sha256').update(deleteToken).digest('hex');
-    const dir = this.workspaceDir(workspaceId);
-    await fs.mkdir(dir, { recursive: true });
-    const sha256 = createHash('sha256').update(raw).digest('hex');
     const meta: BlobMeta = {
       id,
       workspaceId,
       name: input.name || 'file.bin',
       mimeType: input.mimeType || 'application/octet-stream',
       size: raw.length,
-      sha256,
+      sha256: createHash('sha256').update(raw).digest('hex'),
       createdAt: new Date().toISOString(),
       deleteCapabilityHash,
     };
-    await fs.writeFile(this.binPath(workspaceId, id), raw);
-    await fs.writeFile(this.metaPath(workspaceId, id), JSON.stringify(meta, null, 2), 'utf8');
+    await this.s3.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: this.key(workspaceId, id, 'bin'),
+        Body: raw,
+        ContentType: meta.mimeType,
+      }),
+    );
+    await this.commitMeta(meta);
     this.logger.log(`blob stored ${workspaceId}/${id} (${meta.size}B)`);
     return { ...uploadedBlob(meta), deleteToken };
   }
@@ -131,115 +195,82 @@ export class BlobStoreService {
     const id = randomUUID().replace(/-/g, '');
     const deleteToken = randomBytes(32).toString('base64url');
     const deleteCapabilityHash = createHash('sha256').update(deleteToken).digest('hex');
-    const dir = this.workspaceDir(workspaceId);
-    const binPath = this.binPath(workspaceId, id);
-    const metaPath = this.metaPath(workspaceId, id);
-    const tempSuffix = `${id}.${randomUUID().replace(/-/g, '')}.upload`;
-    const tempBinPath = path.join(dir, `${tempSuffix}.bin.tmp`);
-    const tempMetaPath = path.join(dir, `${tempSuffix}.json.tmp`);
-    let committedBin = false;
-    let committedMeta = false;
+    const hash = createHash('sha256');
+    let size = 0;
+    let limitError: Error | undefined;
 
-    await fs.mkdir(dir, { recursive: true });
-    try {
-      const hash = createHash('sha256');
-      let size = 0;
-      const handle = await fs.open(tempBinPath, 'wx');
-      try {
-        for await (const chunk of input.stream) {
-          const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-          size += bytes.length;
-          if (maxBytes !== null && size > maxBytes) {
-            throw new Error(`package_blob_too_large:${maxBytes}`);
-          }
-          hash.update(bytes);
-
-          let offset = 0;
-          while (offset < bytes.length) {
-            const { bytesWritten } = await handle.write(
-              bytes,
-              offset,
-              bytes.length - offset,
-              null,
-            );
-            if (!bytesWritten) throw new Error('blob_write_failed');
-            offset += bytesWritten;
-          }
+    // 边读边计数：超限时中断流，分片上传由 lib-storage 自动 abort，不留半成品。
+    async function* counted(source: Readable) {
+      for await (const chunk of source) {
+        const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        size += bytes.length;
+        if (maxBytes !== null && size > maxBytes) {
+          throw (limitError = new Error(`package_blob_too_large:${maxBytes}`));
         }
-        if (!size) throw new Error('empty_blob');
-        await handle.sync();
-      } finally {
-        await handle.close();
+        hash.update(bytes);
+        yield bytes;
       }
-
-      const meta: BlobMeta = {
-        id,
-        workspaceId,
-        name: input.name || 'package.bin',
-        mimeType,
-        size,
-        sha256: hash.digest('hex'),
-        createdAt: new Date().toISOString(),
-        deleteCapabilityHash,
-      };
-      await fs.writeFile(tempMetaPath, JSON.stringify(meta, null, 2), {
-        encoding: 'utf8',
-        flag: 'wx',
-      });
-
-      // 两个临时文件均写完后才提交；meta 最后落位，使半成品不会被 GET 看见。
-      await fs.rename(tempBinPath, binPath);
-      committedBin = true;
-      await fs.rename(tempMetaPath, metaPath);
-      committedMeta = true;
-
-      this.logger.log(`package blob stored ${workspaceId}/${id} (${meta.size}B)`);
-      return { ...uploadedBlob(meta), deleteToken };
-    } catch (err) {
-      await Promise.allSettled([
-        fs.unlink(tempBinPath),
-        fs.unlink(tempMetaPath),
-        ...(committedBin && !committedMeta ? [fs.unlink(binPath)] : []),
-      ]);
-      throw err;
     }
+
+    const binKey = this.key(workspaceId, id, 'bin');
+    try {
+      await new Upload({
+        client: this.s3,
+        params: {
+          Bucket: this.bucket,
+          Key: binKey,
+          Body: Readable.from(counted(input.stream)),
+          ContentType: mimeType,
+        },
+      }).done();
+    } catch (err) {
+      throw limitError ?? err;
+    }
+    if (!size) {
+      await this.removeObject(binKey).catch(() => undefined);
+      throw new Error('empty_blob');
+    }
+
+    const meta: BlobMeta = {
+      id,
+      workspaceId,
+      name: input.name || 'package.bin',
+      mimeType,
+      size,
+      sha256: hash.digest('hex'),
+      createdAt: new Date().toISOString(),
+      deleteCapabilityHash,
+    };
+    await this.commitMeta(meta);
+    this.logger.log(`package blob stored ${workspaceId}/${id} (${meta.size}B)`);
+    return { ...uploadedBlob(meta), deleteToken };
   }
 
   async get(
     workspaceId: string,
     id: string,
-  ): Promise<{ meta: BlobMeta; size: number; stream: ReadStream }> {
+  ): Promise<{ meta: BlobMeta; size: number; stream: Readable }> {
     if (!GENERATED_BLOB_ID.test(id)) throw new NotFoundException('blob_not_found');
     try {
-      const metaRaw = await fs.readFile(this.metaPath(workspaceId, id), 'utf8');
-      const meta = JSON.parse(metaRaw) as BlobMeta;
-      const binPath = this.binPath(workspaceId, id);
-      const stat = await fs.stat(binPath);
-      if (!stat.isFile()) throw new Error('blob_not_file');
-      return { meta, size: stat.size, stream: createReadStream(binPath) };
-    } catch {
-      throw new NotFoundException('blob_not_found');
+      const meta = await this.readMeta(workspaceId, id);
+      const res = await this.s3.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: this.key(workspaceId, id, 'bin') }),
+      );
+      return { meta, size: res.ContentLength ?? meta.size, stream: res.Body as Readable };
+    } catch (err) {
+      if (isMissingObject(err)) throw new NotFoundException('blob_not_found');
+      throw err;
     }
   }
 
   async delete(workspaceId: string, id: string, deleteToken?: string): Promise<void> {
     if (!GENERATED_BLOB_ID.test(id)) throw new Error('invalid_blob_id');
 
-    const dir = this.workspaceDir(workspaceId);
-    const binPath = this.binPath(workspaceId, id);
-    const metaPath = this.metaPath(workspaceId, id);
     let meta: BlobMeta;
     try {
-      const [binStat, metaStat, metaRaw] = await Promise.all([
-        fs.lstat(binPath),
-        fs.lstat(metaPath),
-        fs.readFile(metaPath, 'utf8'),
-      ]);
-      if (!binStat.isFile() || !metaStat.isFile()) throw new Error('blob_not_found');
-      meta = JSON.parse(metaRaw) as BlobMeta;
+      meta = await this.readMeta(workspaceId, id);
     } catch (err) {
-      if (err instanceof Error && err.message === 'blob_not_found') throw err;
-      if (isFileSystemError(err, 'ENOENT')) throw new Error('blob_not_found');
+      if (isMissingObject(err)) throw new Error('blob_not_found');
       throw err;
     }
 
@@ -261,37 +292,9 @@ export class BlobStoreService {
       throw new Error('blob_delete_denied');
     }
 
-    const stagingToken = randomUUID().replace(/-/g, '');
-    const stagedBinPath = path.join(dir, `.${id}.${stagingToken}.delete.bin.tmp`);
-    const stagedMetaPath = path.join(dir, `.${id}.${stagingToken}.delete.json.tmp`);
-    let binStaged = false;
-    let metaStaged = false;
-
-    try {
-      await fs.rename(binPath, stagedBinPath);
-      binStaged = true;
-      await fs.rename(metaPath, stagedMetaPath);
-      metaStaged = true;
-    } catch (err) {
-      // 若第二次 rename 失败，尽力把已暂存文件恢复，避免留下可见的半删除状态。
-      await Promise.allSettled([
-        ...(metaStaged ? [fs.rename(stagedMetaPath, metaPath)] : []),
-        ...(binStaged ? [fs.rename(stagedBinPath, binPath)] : []),
-      ]);
-      if (isFileSystemError(err, 'ENOENT') && !binStaged) {
-        throw new Error('blob_not_found');
-      }
-      throw err;
-    }
-
-    const results = await Promise.allSettled([
-      fs.unlink(stagedBinPath),
-      fs.unlink(stagedMetaPath),
-    ]);
-    const failed = results.find(
-      (result): result is PromiseRejectedResult => result.status === 'rejected',
-    );
-    if (failed) throw failed.reason;
+    // 先删 meta：读取以 meta 为准，删完立即不可见；内容删除失败只会留下不可达对象。
+    await this.removeObject(this.key(workspaceId, id, 'json'));
+    await this.removeObject(this.key(workspaceId, id, 'bin'));
     this.logger.log(`blob deleted ${workspaceId}/${id}`);
   }
 }

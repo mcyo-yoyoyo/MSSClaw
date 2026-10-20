@@ -1,0 +1,51 @@
+# MSS Claw 基础设施：PostgreSQL + MinIO（S3 兼容对象存储）
+#
+# 本地：  docker compose -f deploy/docker-compose.infra.yml up -d
+# 内网：  同一文件，用环境变量（或同目录 .env）覆盖下面的默认口令和绑定地址。
+#         默认口令只适合本机开发，内网部署前必须改掉。
+#
+# 连接信息（默认值）：
+#   Postgres  postgresql://mssclaw:mssclaw_dev@127.0.0.1:5432/mssclaw
+#   MinIO API http://127.0.0.1:9000   账号 mssclaw / mssclaw_dev_secret   桶 mssclaw
+#   该镜像不带网页控制台，管理用容器内的 mc：
+#     docker compose -f deploy/docker-compose.infra.yml exec minio sh -c \
+#       'mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" && mc ls local/mssclaw'
+
+name: mssclaw-infra
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PG_USER:-mssclaw}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-mssclaw_dev}
+      POSTGRES_DB: ${PG_DB:-mssclaw}
+      TZ: UTC
+    ports:
+      - "${INFRA_BIND:-127.0.0.1}:${PG_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    # MinIO 官方已停止发布社区版镜像（Docker Hub / quay.io 均拉取失败），这里用 Bitnami 冻结归档版。
+    # shortcut: 该镜像不再更新安全补丁，只适合本机开发；内网部署前要换成仍在维护的 S3 兼容存储或自建镜像。
+    image: bitnamilegacy/minio:2025.5.24-debian-12-r7
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-mssclaw}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-mssclaw_dev_secret}
+      MINIO_DEFAULT_BUCKETS: ${MINIO_BUCKET:-mssclaw}
+    ports:
+      - "${INFRA_BIND:-127.0.0.1}:${MINIO_API_PORT:-9000}:9000"
+    volumes:
+      - miniodata:/bitnami/minio/data
+
+volumes:
+  pgdata:
+  miniodata:

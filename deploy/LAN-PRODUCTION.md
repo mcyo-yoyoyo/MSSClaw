@@ -80,7 +80,7 @@ cp ../../deploy/api.env.example .env
 #   HTTP_REQUEST_TIMEOUT_MS=600000       （接收完整请求最多 10 分钟）
 #   THROTTLE_LIMIT=6000                 （内网 NAT 共享出口 IP，勿用过小默认）
 #   MAX_CONCURRENT_SSE=200
-#   BLOB_ROOT=/var/lib/mssclaw/blobs    （建议放到大磁盘）
+#   S3_ENDPOINT / S3_BUCKET / S3_ACCESS_KEY / S3_SECRET_KEY   （文件存储 MinIO，见下方「文件存储」）
 #   DATABASE_URL="file:./prod.db"       （试点 / 小团队可用 SQLite）
 #   AIHOT_PROXY_ENABLED=1                （生产启用 AIHOT 显式代理）
 #   HTTPS_PROXY=http://proxyjp.huawei.com:8080
@@ -94,6 +94,26 @@ node scripts/start-api.mjs production
 # systemd / pm2 也应托管上面的 launcher，不要绕过它直接执行 npm run start:prod
 # 建议用 systemd / pm2 守护进程
 ```
+
+### 文件存储（MinIO）
+
+附件与 Skill / Agent 能力包存于 S3 兼容对象存储，API 启动时校验连通性和桶，连不上直接退出。
+
+```bash
+# 在存储服务器上，先用环境变量或同目录 .env 覆盖默认口令（MINIO_ROOT_USER / MINIO_ROOT_PASSWORD / MINIO_BUCKET），
+# API 与 MinIO 不在同一台机器时再设 INFRA_BIND=0.0.0.0，并用防火墙只放行 API 服务器
+docker compose -f deploy/docker-compose.infra.yml up -d minio
+```
+
+注意：MinIO 官方已停止发布社区版镜像，compose 里的 Bitnami 冻结版不再有安全更新，内网上线前需换成自行从源码构建的镜像。
+
+**从旧版本地磁盘一次性迁移（停机进行）**：
+
+1. 停止 API；备份 `BLOB_ROOT` 目录和数据库文件
+2. 在 `apps/api/.env` 配好 `S3_*`，并把 `BLOB_ROOT` 指向旧目录
+3. `npm run migrate:blobs --workspace @mss-claw/api`：输出「失败 0」才算完成，可重复执行，已复制的会跳过
+4. 启动 API，抽查一个附件和一个能力包能正常下载
+5. 旧目录保留到下个版本，确认无误后再删除
 
 ### 3. 配置 Nginx
 
@@ -140,7 +160,7 @@ node scripts/start-api.mjs production
 
 | 场景 | 建议 |
 |------|------|
-| 试点 / 部门内少人编辑 | SQLite + 本机 `BLOB_ROOT` 可先上 |
+| 试点 / 部门内少人编辑 | SQLite + MinIO 文件存储可先上 |
 | 百人以上、多人同时改门户/货架 | **换 Postgres**；SQLite 单写者会锁等待 |
 | 附件与能力包 | 普通附件仍默认 ≤12MB；用户侧 Skill / Agent 原始包默认 ≤200MiB；已鉴权的运营后台 Skill 原包流式上传不设体积上限；JSON 只存 `url`/`blobId` |
 | 限流 | 默认 6000/IP/分钟（应对公司 NAT）；过严会出现集体 429 |

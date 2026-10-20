@@ -22,12 +22,15 @@
     "test:station-announcements": "npm run build --silent && node --test tests/stationAnnouncementBroadcast.test.mjs",
     "test:portal-analytics": "npm run build --silent && node --test tests/portalAnalyticsGuest.test.mjs tests/trustProxy.test.mjs tests/portalAnalyticsSqlite.test.mjs",
     "test:ai-knowledge": "npm run build --silent && node --test tests/aiKnowledge.test.mjs",
+    "migrate:blobs": "node --env-file-if-exists=.env scripts/migrate-blobs-to-s3.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",
     "import:marketplace": "ts-node --project tsconfig.json scripts/import-marketplace-catalog.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1153.0",
+    "@aws-sdk/lib-storage": "^3.1153.0",
     "@nestjs/common": "^11.0.12",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.12",

@@ -26,12 +26,14 @@ MSSClaw 按“React 前端 + Nest API”运行。共享业务数据写入 SQLite
 
 - Node.js 20（CI 使用版本）
 - npm 10 或兼容版本
+- Docker（本机运行文件存储 MinIO）
 
 ### 启动前端与 API
 
 首次运行 API：
 
 ```bash
+docker compose -f deploy/docker-compose.infra.yml up -d
 npm install
 cp deploy/api.env.example apps/api/.env
 npm run prisma:generate --workspace @mss-claw/api
@@ -42,6 +44,7 @@ npm run prisma:seed --workspace @mss-claw/api
 Windows PowerShell 使用下面的复制命令：
 
 ```powershell
+docker compose -f deploy/docker-compose.infra.yml up -d
 npm install
 Copy-Item deploy\api.env.example apps\api\.env
 npm run prisma:generate --workspace @mss-claw/api
@@ -153,7 +156,10 @@ API 地址和密钥也可以在应用的运行时设置中覆盖。
 | `BLOB_MAX_BYTES` | `12582912` | 普通附件最大字节数（默认 12 MiB） |
 | `PACKAGE_BLOB_MAX_BYTES` | `209715200` | 用户侧 Skill / Agent 原始包最大字节数（默认 200 MiB；运营后台 Skill 专用端点不受此限） |
 | `HTTP_REQUEST_TIMEOUT_MS` | `600000` | Node 接收完整请求的超时；大包上传仍受该时间限制 |
-| `BLOB_ROOT` | 应用默认目录 | 上传文件存储目录 |
+| `S3_ENDPOINT` / `S3_BUCKET` | 无 | 文件存储（S3 兼容对象存储，本机为 MinIO），必须配置；启动时校验连通性和桶 |
+| `S3_ACCESS_KEY` / `S3_SECRET_KEY` | 无 | 对象存储账号口令，必须配置 |
+| `S3_REGION` | `us-east-1` | 对象存储区域，MinIO 无需修改 |
+| `BLOB_ROOT` | `apps/api/data/blobs` | 旧版本地文件目录，只在 `npm run migrate:blobs` 一次性迁移时读取 |
 | `MAX_CONCURRENT_SSE` | `200` | SSE 执行流并发上限 |
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | 空 | OpenAI 兼容模型配置 |
 | `AIHOT_PROXY_ENABLED` | 未设置（关闭） | 仅测试/生产设为 `1`；控制 AIHOT 是否允许显式 `ProxyAgent` |
@@ -202,7 +208,7 @@ DATABASE_URL="file:./dev.db"
 不存入 SQLite 的内容：
 
 - AI 快讯正文实时从上游读取，SQLite 不保存快讯副本。
-- 上传附件保存在后端 `data/blobs` 文件目录。
+- 上传附件和能力包保存在 S3 兼容对象存储（本机为 MinIO，见 `deploy/docker-compose.infra.yml`），对象键为 `<工作区>/<文件ID>.bin` 与 `.json` 元数据。
 - 登录令牌和部分本机偏好保存在浏览器 `localStorage`。
 - 模型本身及推理权重不保存在项目数据库中。
 

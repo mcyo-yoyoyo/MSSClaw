@@ -21,6 +21,7 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
+import { pipeline } from 'stream';
 import {
   PersistenceService,
   MARKET_ENGAGEMENT_EVENT_ACTIONS,
@@ -362,7 +363,7 @@ export class PersistenceController {
     return this.persistence.putPortalContent(workspaceId, body ?? { items: [] });
   }
 
-  /** 本地磁盘 blob：用 base64 JSON 上传，避免额外 multer 依赖 */
+  /** 对象存储 blob：用 base64 JSON 上传，避免额外 multer 依赖 */
   @Post('blobs')
   async putBlob(
     @Param('workspaceId') workspaceId: string,
@@ -384,7 +385,7 @@ export class PersistenceController {
     }
   }
 
-  /** 用户侧 Skill / Agent 原包：流式写盘，保留配置的体积上限。 */
+  /** 用户侧 Skill / Agent 原包：流式写入对象存储，保留配置的体积上限。 */
   @Post('blobs/packages')
   async putPackageBlob(
     @Param('workspaceId') workspaceId: string,
@@ -515,8 +516,8 @@ export class PersistenceController {
       `${forceDownload ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(meta.name)}`,
     );
     res.setHeader('Content-Length', String(size));
-    stream.on('error', (err) => res.destroy(err));
-    stream.pipe(res);
+    // 客户端中途断开时 pipeline 会销毁对象存储响应流，归还 S3 连接池里的连接。
+    pipeline(stream, res, () => undefined);
   }
 }
 

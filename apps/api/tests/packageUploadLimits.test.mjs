@@ -1,7 +1,4 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import test from 'node:test';
 
@@ -70,14 +67,27 @@ test('普通上传保留上限，运营端点只向后台角色传无限策略',
   );
 });
 
+// 需要本机 MinIO：docker compose -f deploy/docker-compose.infra.yml up -d
+const S3_DEFAULTS = {
+  S3_ENDPOINT: 'http://127.0.0.1:9000',
+  S3_BUCKET: 'mssclaw',
+  S3_ACCESS_KEY: 'mssclaw',
+  S3_SECRET_KEY: 'mssclaw_dev_secret',
+};
+for (const [name, value] of Object.entries(S3_DEFAULTS)) process.env[name] ??= value;
+
+async function readAll(stream) {
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 test('BlobStore 仍限制普通流，但允许已鉴权运营流显式不设上限', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'mssclaw-package-upload-'));
-  const previousRoot = process.env.BLOB_ROOT;
   const previousLimit = process.env.PACKAGE_BLOB_MAX_BYTES;
-  process.env.BLOB_ROOT = dir;
   process.env.PACKAGE_BLOB_MAX_BYTES = '2';
   try {
     const store = new BlobStoreService();
+    await store.onModuleInit();
     await assert.rejects(
       store.putPackageStream('ws-test', {
         name: 'limited.zip',
@@ -87,15 +97,47 @@ test('BlobStore 仍限制普通流，但允许已鉴权运营流显式不设上�
     );
     const uploaded = await store.putPackageStream('ws-test', {
       name: 'ops.zip',
-      stream: Readable.from([Buffer.from('abc')]),
+      stream: Readable.from([Buffer.from('a'), Buffer.from('bc')]),
       maxBytes: null,
     });
     assert.equal(uploaded.size, 3);
+    const fetched = await store.get('ws-test', uploaded.id);
+    assert.equal(fetched.meta.name, 'ops.zip');
+    assert.equal(await readAll(fetched.stream), 'abc');
+    await store.delete('ws-test', uploaded.id, uploaded.deleteToken);
   } finally {
-    if (previousRoot === undefined) delete process.env.BLOB_ROOT;
-    else process.env.BLOB_ROOT = previousRoot;
     if (previousLimit === undefined) delete process.env.PACKAGE_BLOB_MAX_BYTES;
     else process.env.PACKAGE_BLOB_MAX_BYTES = previousLimit;
-    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('BlobStore 对象存储往返：上传、读取、删除凭证校验', async () => {
+  const store = new BlobStoreService();
+  const uploaded = await store.putBase64('ws-test', {
+    name: '说明.txt',
+    mimeType: 'text/plain',
+    dataBase64: Buffer.from('hello').toString('base64'),
+  });
+  const fetched = await store.get('ws-test', uploaded.id);
+  assert.equal(fetched.meta.name, '说明.txt');
+  assert.equal(fetched.size, 5);
+  assert.equal(await readAll(fetched.stream), 'hello');
+
+  await assert.rejects(
+    store.delete('ws-test', uploaded.id, 'x'.repeat(43)),
+    /blob_delete_denied/,
+  );
+  await store.delete('ws-test', uploaded.id, uploaded.deleteToken);
+  await assert.rejects(store.get('ws-test', uploaded.id), (error) => error?.getStatus?.() === 404);
+  await assert.rejects(store.delete('ws-test', uploaded.id, uploaded.deleteToken), /blob_not_found/);
+});
+
+test('BlobStore 缺少对象存储配置时直接报错', () => {
+  const previous = process.env.S3_BUCKET;
+  delete process.env.S3_BUCKET;
+  try {
+    assert.throws(() => new BlobStoreService(), /S3_BUCKET 未配置/);
+  } finally {
+    process.env.S3_BUCKET = previous;
   }
 });
