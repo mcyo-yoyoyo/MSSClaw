@@ -320,6 +320,7 @@ export function CatalogAgentDetailModal({
   onRun,
   onToast,
   adminActions,
+  asPage = false,
 }: {
   agent: PrototypeAgentSeed;
   submittedCases?: PortalContentItem[];
@@ -330,6 +331,8 @@ export function CatalogAgentDetailModal({
   adminActions?: {
     onEdit: () => void;
   };
+  /** 资产详情页整页呈现：去掉遮罩和关闭按钮，返回由页面顶栏负责 */
+  asPage?: boolean;
 }) {
   const [tab, setTab] = useState<DetailTab>('overview');
   const skills = useMarketplaceStore((state) => state.skills);
@@ -526,6 +529,7 @@ export function CatalogAgentDetailModal({
       open
       title={agent.name}
       onClose={onClose}
+      inline={asPage}
       size="2xl"
       header={
         <div className="shrink-0 border-b border-zinc-100 bg-white px-5 py-4 md:px-6">
@@ -574,14 +578,16 @@ export function CatalogAgentDetailModal({
                     {valueProposition || agent.desc || '暂无功能简介'}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="shrink-0 rounded-lg p-1.5 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700"
-                  aria-label="关闭"
-                >
-                  <i className="fa-solid fa-xmark text-[14px]" />
-                </button>
+                {asPage ? null : (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="shrink-0 rounded-lg p-1.5 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700"
+                    aria-label="关闭"
+                  >
+                    <i className="fa-solid fa-xmark text-[14px]" />
+                  </button>
+                )}
               </div>
 
               <div className="mt-2.5 flex flex-wrap items-center gap-1.5">

@@ -121,8 +121,8 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   },
   {
     id: 'market-tool',
-    label: '工具详情',
-    subtitle: '货架工具详情 · 深链入口',
+    label: '资产详情',
+    subtitle: '工具 / Skill / Agent / 案例详情 · 分享链接落地页',
     icon: 'fa-circle-info',
     section: 'workspace',
     hiddenFromSidebar: true,

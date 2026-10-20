@@ -37,9 +37,9 @@ export const LazyMarketShelfPage = lazy(() =>
   import('@/features/market/MarketShelfPage').then((m) => ({ default: m.MarketShelfPage })),
 );
 
-export const LazyMarketToolDetailPage = lazy(() =>
-  import('@/features/market/MarketToolDetailPage').then((m) => ({
-    default: m.MarketToolDetailPage,
+export const LazyAssetDetailPage = lazy(() =>
+  import('@/features/detail/AssetDetailPage').then((m) => ({
+    default: m.AssetDetailPage,
   })),
 );
 
@@ -132,7 +132,7 @@ export const ROUTE_PREFETCH: Partial<Record<AppView, () => void>> = {
   'market-external': () => void import('@/features/market/MarketShelfPage'),
   'market-internal': () => void import('@/features/market/MarketShelfPage'),
   'market-projects': () => void import('@/features/market/MarketShelfPage'),
-  'market-tool': () => void import('@/features/market/MarketToolDetailPage'),
+  'market-tool': () => void import('@/features/detail/AssetDetailPage'),
   kb: () => void import('@/features/knowledge/KnowledgeCenterPage'),
   cases: () => void import('@/features/cases/CaseLibraryPage'),
   automation: () => void import('@/features/automation/AutomationCenterPage'),

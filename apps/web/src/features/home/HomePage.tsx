@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { canExecuteChat } from '@/domain/permissions';
 import { PageStageHero } from '@/components/layout/PageStageHero';
 import { useHomeStore } from '@/stores/homeStore';
@@ -17,6 +17,7 @@ import {
   takeLegacyProjectQuota,
   type HomeChannelCardContext,
 } from '@/domain/homeFeatured';
+import { openAssetDetail } from '@/domain/appRoute';
 import { openMarketShelf, openMarketToolDetail } from '@/domain/openHomeJourney';
 import { HomeMarketChannels } from '@/components/home/HomeMarketChannels';
 import { StationAnnounceBanner } from '@/components/home/StationAnnounceBanner';
@@ -44,8 +45,6 @@ import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { greetingForNow } from '@/domain/timeGreeting';
 import type { PrototypeAgentSeed, PrototypeSkillSeed } from '@/domain/prototype/types';
 import { resolveHomeProjectDetailTarget } from '@/domain/homeProjectDetail';
-import { MarketSkillDetailModal } from '@/features/market/MarketSkillDetailModal';
-import { CatalogAgentDetailModal } from '@/features/market/CatalogAgentDetailModal';
 import { allowsMarketScenarioRun } from '@/domain/marketRunCapability';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 
@@ -59,7 +58,6 @@ export function HomePage({
   const { applyUserOrgDefaults } = useHomeStore();
   const agents = useMarketplaceStore((s) => s.agents);
   const skills = useMarketplaceStore((s) => s.skills);
-  const showToast = useMarketplaceStore((s) => s.showToast);
   const user = useSessionStore((s) => s.user);
   const isGuest = useSessionStore((s) => s.isGuest);
   const executeAllowed = canExecuteChat(user?.platformRole);
@@ -90,11 +88,6 @@ export function HomePage({
   const guideRecords = usePlazaToolGuideStore((s) => s.records);
   const pendingBusinessScenario = useNavigationIntentStore((s) => s.pendingBusinessScenario);
   const consumeBusinessScenario = useNavigationIntentStore((s) => s.consumeBusinessScenario);
-  const [skillDetail, setSkillDetail] = useState<PrototypeSkillSeed | null>(null);
-  const [agentDetail, setAgentDetail] = useState<PrototypeAgentSeed | null>(null);
-  const currentSkillDetail = skillDetail
-    ? skills.find((item) => item.id === skillDetail.id) ?? skillDetail
-    : null;
 
   useEffect(() => {
     hydrateRecent();
@@ -238,12 +231,12 @@ export function HomePage({
       const target = resolveHomeProjectDetailTarget(card.id, skills, agents);
       if (target?.kind === 'skill') {
         rememberCard(card);
-        setSkillDetail(target.item);
+        openAssetDetail('skill', target.item.id);
         return;
       }
       if (target?.kind === 'agent') {
         rememberCard(card);
-        setAgentDetail(target.item);
+        openAssetDetail('agent', target.item.id);
         return;
       }
       // 兼容已从当前市场快照移除的历史卡片。
@@ -251,7 +244,7 @@ export function HomePage({
       return;
     }
     rememberCard(card);
-    openMarketToolDetail(card.id, card.kind);
+    openMarketToolDetail(card.id);
   };
 
   return (
@@ -311,30 +304,6 @@ export function HomePage({
       </div>
       <MarketCompareDock />
       <MarketCompareDrawer onOpenCard={openPortalCard} />
-      {currentSkillDetail ? (
-        <MarketSkillDetailModal
-          skill={currentSkillDetail}
-          canRun={canRunSkills}
-          onClose={() => setSkillDetail(null)}
-          onRun={(skill) => {
-            setSkillDetail(null);
-            onInvokeSkill?.(skill);
-          }}
-          onToast={showToast}
-        />
-      ) : null}
-      {agentDetail ? (
-        <CatalogAgentDetailModal
-          agent={agentDetail}
-          canRun={canRunAgents}
-          onClose={() => setAgentDetail(null)}
-          onRun={(agent) => {
-            setAgentDetail(null);
-            onInvokeAgent?.(agent);
-          }}
-          onToast={showToast}
-        />
-      ) : null}
     </div>
   );
 }

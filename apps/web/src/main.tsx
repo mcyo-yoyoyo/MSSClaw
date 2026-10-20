@@ -5,7 +5,6 @@ import '@/stores/orgTaxonomyStore';
 import { App } from './App';
 import { OAuthCallbackView } from '@/features/auth/OAuthCallbackView';
 import { isOAuthCallbackPath } from '@/domain/authMode';
-import { CaseInsightArticlePage } from './features/ai-brief/CaseInsightArticlePage';
 import './index.css';
 
 /**
@@ -16,8 +15,6 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {isOAuthCallbackPath() ? (
       <OAuthCallbackView />
-    ) : window.location.hash.startsWith('#/case-insight?') ? (
-      <CaseInsightArticlePage />
     ) : (
       <App />
     )}

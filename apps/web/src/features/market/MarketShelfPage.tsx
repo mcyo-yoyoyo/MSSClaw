@@ -52,10 +52,8 @@ import {
   getDeptLabel,
   getRegionLabel,
 } from '@/domain/orgTaxonomy';
+import { openAssetDetail } from '@/domain/appRoute';
 import { canViewAsset } from '@/domain/assetVisibility';
-import { downloadSkillFile } from '@/domain/skillExport';
-import { MarketSkillDetailModal } from '@/features/market/MarketSkillDetailModal';
-import { CatalogAgentDetailModal } from '@/features/market/CatalogAgentDetailModal';
 import { MarketAgentDetailModal } from '@/features/market/MarketAgentDetailModal';
 import { useMssBuildStatsCopyStore } from '@/stores/mssBuildStatsCopyStore';
 import {
@@ -201,13 +199,6 @@ export function MarketShelfPage({
   /** Agent Hub 单独一套排序项，默认采用 marketplace 快照数组顺序。 */
   const [agentRankMode, setAgentRankMode] = useState<RankMode>('excel_order');
   const [agentRankDirection, setAgentRankDirection] = useState<RankDirection>('asc');
-  const [skillDetail, setSkillDetail] = useState<PrototypeSkillSeed | null>(null);
-  const [agentDetail, setAgentDetail] = useState<PrototypeAgentSeed | null>(null);
-  // 评测完成后 marketplaceStore 会替换 Skill 对象；详情弹窗始终读取最新版本，
-  // 避免仍然引用打开弹窗时的旧快照。
-  const currentSkillDetail = skillDetail
-    ? skills.find((item) => item.id === skillDetail.id) ?? skillDetail
-    : null;
 
   const caseSubmitDefaultBusinessId =
     kind === 'projects' && businessFilter !== 'all' ? businessFilter : undefined;
@@ -559,19 +550,6 @@ export function MarketShelfPage({
     [agents, viewer],
   );
 
-  const submittedAgentCases = useMemo(
-    () =>
-      agentDetail
-        ? portalContent.filter(
-            (item) =>
-              item.type === 'case' &&
-              item.published !== false &&
-              item.agentId === agentDetail.id &&
-              canViewAsset(item, viewer),
-          )
-        : [],
-    [agentDetail, portalContent, viewer],
-  );
 
   const sceneCategories = useMemo(() => {
     if (kind !== 'projects') return [];
@@ -1031,7 +1009,7 @@ export function MarketShelfPage({
       const agent = agents.find((item) => item.id === card.id);
       if (agent) {
         rememberCard(card);
-        setAgentDetail(agent);
+        openAssetDetail('agent', agent.id);
         return;
       }
     }
@@ -1041,20 +1019,17 @@ export function MarketShelfPage({
       return;
     }
     rememberCard(card);
-    openMarketToolDetail(card.id, kind === 'projects' ? 'external' : kind);
+    openMarketToolDetail(card.id);
   };
 
   const openAgentDetail = (card: MarketShelfCardModel) => {
     const agent = agents.find((item) => item.id === card.id);
     if (!agent) return;
     rememberCard(card);
-    setAgentDetail(agent);
+    openAssetDetail('agent', agent.id);
   };
 
-  const openInternalToolDetail = (
-    tool: { id: string; name: string; logoUrl?: string },
-    tab?: 'overview' | 'howto',
-  ) => {
+  const openInternalToolDetail = (tool: { id: string; name: string; logoUrl?: string }) => {
     const catalog = tools.find((t) => t.id === tool.id);
     if (!catalog || catalog.published !== true) {
       showToast('该工具主数据不存在或已下架');
@@ -1068,7 +1043,7 @@ export function MarketShelfPage({
       logoUrl: tool.logoUrl || catalog?.logoUrl,
       assetType: 'tool',
     });
-    openMarketToolDetail(tool.id, 'internal', tab ? { tab } : undefined);
+    openMarketToolDetail(tool.id);
   };
 
   const downloadUseProject = (card: MarketShelfCardModel) => {
@@ -1134,60 +1109,6 @@ export function MarketShelfPage({
     }
     try {
       executeProject(bundle);
-    } catch {
-      showToast(executionTrustFailMessage(trust));
-    }
-  };
-
-  const runSkill = (skill: PrototypeSkillSeed) => {
-    const currentSkill = useMarketplaceStore
-      .getState()
-      .skills.find((item) => item.id === skill.id);
-    if (!currentSkill) {
-      showToast('该 Skill 已不在当前工作区，请刷新后重试');
-      return;
-    }
-    const can = Boolean(onInvokeSkill && canRunSkills && isSkillRunnable(currentSkill));
-    const trust = resolveSkillExecutionTrust(can);
-    if (!can) {
-      const skillId = currentSkill.id;
-      const downloadFallback = () => {
-        const latestSkill = useMarketplaceStore
-          .getState()
-          .skills.find((item) => item.id === skillId);
-        if (!latestSkill) {
-          showToast('该 Skill 已不在当前工作区，请刷新后重试');
-          return;
-        }
-        bumpDownload(latestSkill.id, 'skill');
-        downloadSkillFile(latestSkill);
-        const reason = !isSkillCallable(latestSkill)
-          ? '该 Skill 已发布展示，但尚未启用在线调用'
-          : !hasSkillExecutionBody(latestSkill)
-            ? '该 Skill 缺少执行正文，暂不可在线调用'
-            : `已下载技能包：${latestSkill.name}`;
-        showToast(executionTrustBlockedMessage(trust, reason));
-      };
-      if (requireLogin('download', downloadFallback)) downloadFallback();
-      return;
-    }
-    try {
-      onInvokeSkill!(currentSkill);
-      rememberCard({
-        id: currentSkill.id,
-        kind: 'projects',
-        title: currentSkill.name,
-        description: currentSkill.desc,
-        icon: currentSkill.icon || 'fa-cube',
-        assetType: 'skill',
-        badges: [],
-        featured: resolveSkillFeaturedInMssMarket(currentSkill),
-        heat: currentSkill.invokes ?? 0,
-        hasHowto: true,
-        runnable: true,
-        executionTrust: trust,
-        primaryAction: 'detail',
-      });
     } catch {
       showToast(executionTrustFailMessage(trust));
     }
@@ -1499,14 +1420,14 @@ export function MarketShelfPage({
               rankDirection={rankDirection}
               onRankDirectionChange={setRankDirection}
               onOpenDetail={(tool) => openInternalToolDetail(tool)}
-              onHowTo={(tool) => openInternalToolDetail(tool, 'howto')}
+              onHowTo={(tool) => openInternalToolDetail(tool)}
               onEmptyAction={(scene) =>
                 showToast(`「${scene.label}」暂无已上架工具，请运营完成绑定`)
               }
               onExperience={(tool) => {
                 if (!tool.homepageUrl || tool.homepageUrl === '#') {
                   showToast('暂无可用链接，请查看快速上手');
-                  openInternalToolDetail(tool, 'howto');
+                  openInternalToolDetail(tool);
                   return;
                 }
                 pushRecent({
@@ -1629,8 +1550,8 @@ export function MarketShelfPage({
                           key={`hot-${c.id}`}
                           card={c}
                           showHot
-                          onOpen={() => skill && setSkillDetail(skill)}
-                          onPrimary={() => skill && setSkillDetail(skill)}
+                          onOpen={() => skill && openAssetDetail('skill', skill.id)}
+                          onPrimary={() => skill && openAssetDetail('skill', skill.id)}
                           inlineAction={renderSkillInvokeAction(skill)}
                         />
                       );
@@ -1746,8 +1667,8 @@ export function MarketShelfPage({
                     <MarketShelfCard
                       key={c.id}
                       card={c}
-                      onOpen={() => skill && setSkillDetail(skill)}
-                      onPrimary={() => skill && setSkillDetail(skill)}
+                      onOpen={() => skill && openAssetDetail('skill', skill.id)}
+                      onPrimary={() => skill && openAssetDetail('skill', skill.id)}
                       inlineAction={renderSkillInvokeAction(skill)}
                     />
                   );
@@ -1796,33 +1717,6 @@ export function MarketShelfPage({
         onClose={() => setSubmitOpen(false)}
         onLoginReplay={() => setSubmitOpen(true)}
       />
-
-      {currentSkillDetail ? (
-        <MarketSkillDetailModal
-          skill={currentSkillDetail}
-          canRun={canRunSkills}
-          onClose={() => setSkillDetail(null)}
-          onRun={(s) => {
-            setSkillDetail(null);
-            runSkill(s);
-          }}
-          onToast={showToast}
-        />
-      ) : null}
-
-      {agentDetail ? (
-        <CatalogAgentDetailModal
-          agent={agentDetail}
-          submittedCases={submittedAgentCases}
-          canRun={canRunProjects}
-          onClose={() => setAgentDetail(null)}
-          onRun={(agent) => {
-            setAgentDetail(null);
-            onInvokeAgent?.(agent);
-          }}
-          onToast={showToast}
-        />
-      ) : null}
 
       {howTo ? (
         <HowToDrawer

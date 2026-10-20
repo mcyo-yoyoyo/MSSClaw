@@ -7,14 +7,13 @@ import type { ScenarioDemoPlan } from '@/domain/scenarioPipeline';
 import { HomePage } from '@/features/home/HomePage';
 import { AppViewPlaceholder } from '@/components/shell/AppViewPlaceholder';
 import { ViewLoadingFallback } from '@/components/common/ViewLoadingFallback';
-import { MarketToolDetailHost } from '@/features/market/MarketToolDetailModal';
 import {
   LazyAgentCenterPage,
   LazyAiMapPage,
   LazyAutomationCenterPage,
   LazyKnowledgeCenterPage,
   LazyMarketShelfPage,
-  LazyMarketToolDetailPage,
+  LazyAssetDetailPage,
   LazyMemoryCenterPage,
   LazyPresentationConfigPage,
   LazyPortalContentOpsPage,
@@ -86,12 +85,7 @@ function LazyView({ label, children }: { label: string; children: ReactNode }) {
 }
 
 export function AppViewRouter({ appView, handlers }: AppViewRouterProps) {
-  return (
-    <>
-      <AppViewRouterContent appView={appView} handlers={handlers} />
-      <MarketToolDetailHost />
-    </>
-  );
+  return <AppViewRouterContent appView={appView} handlers={handlers} />;
 }
 
 function AppViewRouterContent({ appView, handlers }: AppViewRouterProps) {
@@ -155,8 +149,8 @@ function AppViewRouterContent({ appView, handlers }: AppViewRouterProps) {
       );
     case 'market-tool':
       return (
-        <LazyView label="工具详情">
-          <LazyMarketToolDetailPage />
+        <LazyView label="详情">
+          <LazyAssetDetailPage handlers={handlers} />
         </LazyView>
       );
     case 'task':

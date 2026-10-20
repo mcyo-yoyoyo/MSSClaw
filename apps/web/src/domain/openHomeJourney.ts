@@ -7,6 +7,7 @@ import { isMvpCapabilityPreset } from '@/domain/marketRunCapability';
 import { emptyOrgPerspectiveSelection } from '@/domain/orgAxisTags';
 import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
 import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
+import { openAssetDetail } from '@/domain/appRoute';
 import { openResourceWithReturn } from '@/domain/openResourceNav';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useConversationStore } from '@/stores/conversationStore';
@@ -109,20 +110,7 @@ export function openCaseMap() {
   openResourceWithReturn('ai-map');
 }
 
-/** 打开货架工具详情弹窗（停留当前页；深链 #/market-tool?id= 仍兼容） */
-export function openMarketToolDetail(
-  toolId: string,
-  returnShelf?: MarketShelfKind,
-  opts?: { tab?: 'overview' | 'howto' | 'resources' },
-) {
-  const intent = useNavigationIntentStore.getState();
-  intent.focusTool(toolId, opts?.tab ? { tab: opts.tab } : undefined);
-  if (returnShelf) {
-    intent.setReturnTarget({ view: MARKET_SHELF_META[returnShelf].view });
-  }
-}
-
-/** 关闭工具详情弹窗 */
-export function closeMarketToolDetail() {
-  useNavigationIntentStore.getState().clearTool();
+/** 打开工具详情页（当前标签页跳转） */
+export function openMarketToolDetail(toolId: string) {
+  openAssetDetail('tool', toolId);
 }

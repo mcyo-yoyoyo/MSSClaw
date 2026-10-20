@@ -8,7 +8,6 @@ import type { MarketShelfKind } from '@/domain/marketShelf';
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
-import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { TOOL_EXTERNAL_WARNING_RULES } from '@/domain/externalToolDelivery';
 import { useRecentMarketStore } from '@/stores/recentMarketStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
@@ -45,9 +44,12 @@ export function MarketToolDetailModal({
   toolId,
   onClose,
   interactionMode = 'user',
+  asPage = false,
 }: {
   toolId: string;
   onClose: () => void;
+  /** 资产详情页整页呈现：去掉遮罩和关闭按钮，返回由页面顶栏负责 */
+  asPage?: boolean;
   /** 运营侧只读详情：保留内容与文档链接，不写入收藏、使用或最近访问。 */
   interactionMode?: 'user' | 'preview';
 }) {
@@ -126,7 +128,7 @@ export function MarketToolDetailModal({
 
   if (!tool) {
     return (
-      <CenterModal open title="工具详情" onClose={onClose} size="lg">
+      <CenterModal open title="工具详情" onClose={onClose} size="lg" inline={asPage}>
         <div className="flex flex-col items-center justify-center gap-3 px-6 py-12">
           <p className="text-[14px] text-zinc-500">未找到该工具，可能已下架或无权限</p>
           <button
@@ -160,6 +162,7 @@ export function MarketToolDetailModal({
         open
         title={tool.name}
         onClose={onClose}
+        inline={asPage}
         size="xl"
         fitContent
         header={
@@ -217,14 +220,16 @@ export function MarketToolDetailModal({
                           : '第三方工具'}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="shrink-0 rounded-lg p-1.5 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700"
-                    aria-label="关闭"
-                  >
-                    <i className="fa-solid fa-xmark text-[14px]" />
-                  </button>
+                  {asPage ? null : (
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="shrink-0 rounded-lg p-1.5 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700"
+                      aria-label="关闭"
+                    >
+                      <i className="fa-solid fa-xmark text-[14px]" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -254,13 +259,15 @@ export function MarketToolDetailModal({
               </button>
             )}
             <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium text-zinc-600 transition hover:bg-black/[0.03]"
-              >
-                关闭
-              </button>
+              {asPage ? null : (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium text-zinc-600 transition hover:bg-black/[0.03]"
+                >
+                  关闭
+                </button>
+              )}
               {hasDocs ? (
                 <a
                   href={tool.docsUrl}
@@ -381,12 +388,4 @@ export function MarketToolDetailModal({
       </CenterModal>
     </>
   );
-}
-
-/** 全局挂载：货架 / 首页 / 个人中心点击工具后停留当前页打开弹窗 */
-export function MarketToolDetailHost() {
-  const toolId = useNavigationIntentStore((s) => s.pendingToolId);
-  const clearTool = useNavigationIntentStore((s) => s.clearTool);
-  if (!toolId) return null;
-  return <MarketToolDetailModal toolId={toolId} onClose={clearTool} />;
 }

@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { buildAppRoute, DETAIL_VIEW, openAssetDetail } from '@/domain/appRoute';
 import { fetchPublishedCaseInsights, type CaseInsightArticle } from '@/api/caseInsightsApi';
 import { getDeptLabel } from '@/domain/orgTaxonomy';
 import { useMarketFilterStore } from '@/stores/marketFilterStore';
 
-const ARTICLE_URL = `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}#/case-insight`;
-
-function articleUrl(id: string) {
-  return `${ARTICLE_URL}?id=${encodeURIComponent(id)}`;
+/** 当前页打开案例详情；保留 href 让中键 / 右键新标签照常可用 */
+function openArticle(event: MouseEvent<HTMLAnchorElement>, id: string) {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  openAssetDetail('case', id);
 }
 
 type CasePresentation = {
@@ -98,9 +100,8 @@ export function CaseInsightsView() {
                     {date ? <time dateTime={item.publishedAt ?? undefined}>{date}</time> : null}
                   </div>
                   <a
-                    href={articleUrl(item.id)}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    href={buildAppRoute({ view: DETAIL_VIEW, type: 'case', id: item.id })}
+                    onClick={(event) => openArticle(event, item.id)}
                     className="block text-left text-[16px] font-semibold leading-snug text-zinc-900 transition hover:text-[#0071e3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]/30"
                   >
                     {item.title}
@@ -127,7 +128,7 @@ export function CaseInsightsView() {
                   </div>
                 </div>
                 {card?.cover ? (
-                  <a href={articleUrl(item.id)} target="_blank" rel="noopener noreferrer" aria-label={`查看案例：${item.title}`} className="order-first aspect-[16/9] w-full overflow-hidden rounded-lg bg-zinc-100 sm:order-none sm:aspect-[4/3]">
+                  <a href={buildAppRoute({ view: DETAIL_VIEW, type: 'case', id: item.id })} onClick={(event) => openArticle(event, item.id)} aria-label={`查看案例：${item.title}`} className="order-first aspect-[16/9] w-full overflow-hidden rounded-lg bg-zinc-100 sm:order-none sm:aspect-[4/3]">
                     <img src={card.cover} alt="" loading="lazy" className="h-full w-full object-cover transition duration-200 hover:scale-[1.02]" />
                   </a>
                 ) : null}

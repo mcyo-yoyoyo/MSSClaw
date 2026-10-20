@@ -15,6 +15,8 @@ interface CenterModalProps {
   header?: ReactNode;
   /** 内容较少时让弹窗高度随内容收缩，超过视口后再滚动 */
   fitContent?: boolean;
+  /** 整页呈现（资产详情页）：不加遮罩、不显示关闭按钮，面板撑满父容器，内部滚动方式与弹窗相同 */
+  inline?: boolean;
 }
 
 export function CenterModal({
@@ -27,11 +29,12 @@ export function CenterModal({
   elevate = false,
   header,
   fitContent = false,
+  inline = false,
 }: CenterModalProps) {
   if (!open) return null;
 
   const fullscreen = size === 'fullscreen';
-  const wide = size === 'xl' || size === '2xl';
+  const wide = inline || size === 'xl' || size === '2xl';
   const widthClass = fullscreen
     ? 'h-[min(96vh,calc(100%-1rem))] max-h-none max-w-none'
     : size === '2xl'
@@ -46,6 +49,53 @@ export function CenterModal({
           ? 'max-h-[85vh] max-w-2xl'
           : 'max-h-[85vh] max-w-lg';
 
+  const panel = (
+    <div
+      className={cn(
+        'flex w-full flex-col overflow-hidden rounded-2xl border border-black/5 bg-white shadow-apple-lg',
+        inline ? 'mx-auto h-full max-w-6xl' : widthClass,
+      )}
+    >
+      {header ?? (
+        <div
+          className={cn(
+            'flex shrink-0 items-center justify-between border-b border-black/[0.06]',
+            fullscreen || wide ? 'px-5 py-3' : 'px-5 py-4',
+          )}
+        >
+          <h3 className="truncate text-[15px] font-semibold text-[#1d1d1f]">{title}</h3>
+          {inline ? null : (
+            <button type="button" onClick={onClose} className="text-[#86868b] transition hover:text-[#1d1d1f]">
+              <i className="fa-solid fa-xmark" />
+            </button>
+          )}
+        </div>
+      )}
+      <div
+        className={cn(
+          fullscreen
+            ? 'min-h-0 flex-1 overflow-hidden p-3 md:p-4'
+            : wide
+              ? 'min-h-0 flex-1 overflow-y-auto p-0'
+              : 'max-h-[60vh] overflow-y-auto p-5',
+        )}
+      >
+        {children}
+      </div>
+      {actions && (
+        <div
+          className={cn(
+            'flex w-full shrink-0 items-center justify-end gap-2 border-t border-black/[0.06] bg-[#fafafa]/50',
+            fullscreen || wide ? 'px-5 py-3' : 'px-5 py-4',
+          )}
+        >
+          {actions}
+        </div>
+      )}
+    </div>
+  );
+  if (inline) return panel;
+
   return (
     <div
       className={cn(
@@ -54,47 +104,7 @@ export function CenterModal({
         elevate ? 'z-[120]' : 'z-[100]',
       )}
     >
-      <div
-        className={cn(
-          'flex w-full flex-col overflow-hidden rounded-2xl border border-black/5 bg-white shadow-apple-lg',
-          widthClass,
-        )}
-      >
-        {header ?? (
-          <div
-            className={cn(
-              'flex shrink-0 items-center justify-between border-b border-black/[0.06]',
-              fullscreen || wide ? 'px-5 py-3' : 'px-5 py-4',
-            )}
-          >
-            <h3 className="truncate text-[15px] font-semibold text-[#1d1d1f]">{title}</h3>
-            <button type="button" onClick={onClose} className="text-[#86868b] transition hover:text-[#1d1d1f]">
-              <i className="fa-solid fa-xmark" />
-            </button>
-          </div>
-        )}
-        <div
-          className={cn(
-            fullscreen
-              ? 'min-h-0 flex-1 overflow-hidden p-3 md:p-4'
-              : wide
-                ? 'min-h-0 flex-1 overflow-y-auto p-0'
-                : 'max-h-[60vh] overflow-y-auto p-5',
-          )}
-        >
-          {children}
-        </div>
-        {actions && (
-          <div
-            className={cn(
-              'flex w-full shrink-0 items-center justify-end gap-2 border-t border-black/[0.06] bg-[#fafafa]/50',
-              fullscreen || wide ? 'px-5 py-3' : 'px-5 py-4',
-            )}
-          >
-            {actions}
-          </div>
-        )}
-      </div>
+      {panel}
     </div>
   );
 }

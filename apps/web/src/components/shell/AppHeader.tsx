@@ -10,8 +10,6 @@ import { ROUTE_PREFETCH } from '@/features/lazyPages';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useCommandPaletteStore } from '@/stores/commandPaletteStore';
 import { useInboxStore } from '@/stores/inboxStore';
-import { useMarketplaceStore } from '@/stores/marketplaceStore';
-import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useAuthGateStore } from '@/stores/authGateStore';
@@ -41,28 +39,10 @@ export function AppHeader({ apiConnected: _apiConnected }: AppHeaderProps) {
   const openPalette = useCommandPaletteStore((s) => s.openPalette);
   const isViewEnabled = useNavPresentationStore((s) => s.isViewEnabled);
   const roleEnabled = useNavPresentationStore((s) => s.roleEnabled);
-  const pendingToolId = useNavigationIntentStore((s) => s.pendingToolId);
-  const returnTarget = useNavigationIntentStore((s) => s.returnTarget);
-  const tools = useMarketplaceStore((s) => s.tools);
-  const marketToolShelfHighlight = useMemo((): AppView | null => {
-    if (appView !== 'market-tool') return null;
-    if (
-      returnTarget?.view === 'market-external' ||
-      returnTarget?.view === 'market-internal' ||
-      returnTarget?.view === 'market-projects'
-    ) {
-      return returnTarget.view;
-    }
-    const tool = tools.find((t) => t.id === pendingToolId);
-    if (!tool) return 'market-external';
-    return tool.sourceType === 'internal' || tool.tags?.includes('hw-internal')
-      ? 'market-internal'
-      : 'market-external';
-  }, [appView, returnTarget, tools, pendingToolId]);
   const activeNavRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     activeNavRef.current?.scrollIntoView({ block: 'nearest', inline: 'center' });
-  }, [appView, marketToolShelfHighlight]);
+  }, [appView]);
   const user = useSessionStore((s) => s.user);
   const isGuest = useSessionStore((s) => s.isGuest);
   const requestLogin = useAuthGateStore((s) => s.requestLogin);
@@ -114,18 +94,12 @@ export function AppHeader({ apiConnected: _apiConnected }: AppHeaderProps) {
             {TOP_SHELF_NAV.filter((item) => isViewEnabled(item.view)).map((item) => (
               <button
                 key={item.view}
-                ref={
-                  appView === item.view || marketToolShelfHighlight === item.view
-                    ? activeNavRef
-                    : undefined
-                }
+                ref={appView === item.view ? activeNavRef : undefined}
                 type="button"
                 onClick={() => goView(item.view)}
                 onMouseEnter={() => ROUTE_PREFETCH[item.view]?.()}
                 className={navBtn(
-                  appView === item.view ||
-                    marketToolShelfHighlight === item.view ||
-                    (item.view === 'me' && appView === 'ai-tasks'),
+                  appView === item.view || (item.view === 'me' && appView === 'ai-tasks'),
                 )}
               >
                 {item.label}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { getAiBriefContentMode, setAiBriefContentMode, type AiBriefContentMode } from '@/domain/aiBriefContentMode';
 import { cn } from '@/lib/utils';
 import { flattenAiBotNews } from '@/domain/aiBotDailyNews';
 import {
@@ -316,7 +317,11 @@ export function AiBriefPage() {
   const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
   const [searchDraft, setSearchDraft] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [contentMode, setContentMode] = useState<'news' | 'cases'>('news');
+  const [contentMode, setContentModeState] = useState(getAiBriefContentMode);
+  const setContentMode = (mode: AiBriefContentMode) => {
+    setAiBriefContentMode(mode);
+    setContentModeState(mode);
+  };
 
   useEffect(() => {
     // 每次进入快讯页主动同步，避免开发热更新或上游短暂失败后长期停留在兜底内容。

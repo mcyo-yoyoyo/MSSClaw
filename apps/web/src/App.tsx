@@ -532,7 +532,8 @@ export function App() {
   return (
     <AppErrorBoundary>
     <div className="flex h-screen flex-col">
-      <AppHeader apiConnected={apiConnected} />
+      {/* 资产详情页（分享落地页）自带顶栏，不显示平台导航 */}
+      {appView === 'market-tool' ? null : <AppHeader apiConnected={apiConnected} />}
       <OfflineBanner onRetry={handleApiRetry} />
 
       <div
@@ -541,7 +542,7 @@ export function App() {
           shellPerspective === 'ops' ? 'shell-ops-stage' : 'shell-business-stage',
         )}
       >
-        {appView === 'ai-knowledge' ? null : <AppShellSidebar />}
+        {appView === 'ai-knowledge' || appView === 'market-tool' ? null : <AppShellSidebar />}
 
         <main className="main-stage relative flex min-w-0 flex-1 flex-col overflow-hidden">
           {blockedOpsView ? (

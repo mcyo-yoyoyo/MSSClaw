@@ -8,6 +8,7 @@ export function CaseHtml({ html, title, onNavigate, baseHref, simplifyCasebookNa
   onNavigate?: (tab: CasebookTab) => void;
   baseHref?: string;
   simplifyCasebookNavigation?: boolean;
+  /** 资产详情页：撑满父容器（父容器负责高度） */
   standalone?: boolean;
 }) {
   const srcDoc = baseHref && !/<base\b/i.test(html)
@@ -55,7 +56,7 @@ export function CaseHtml({ html, title, onNavigate, baseHref, simplifyCasebookNa
       referrerPolicy="no-referrer"
       className="block w-full border-0 bg-white"
       onLoad={handleFrameLoad}
-      style={{ height: standalone ? '100vh' : 'calc(100vh - 190px)', minHeight: standalone ? 0 : 640 }}
+      style={{ height: standalone ? '100%' : 'calc(100vh - 190px)', minHeight: standalone ? 0 : 640 }}
     />
   );
 }

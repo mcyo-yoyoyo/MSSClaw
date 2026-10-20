@@ -261,10 +261,13 @@ export function MarketSkillDetailModal({
   onRun,
   onToast,
   adminActions,
+  asPage = false,
 }: {
   skill: PrototypeSkillSeed;
   canRun: boolean;
   onClose: () => void;
+  /** 资产详情页整页呈现：去掉遮罩和关闭按钮，返回由页面顶栏负责 */
+  asPage?: boolean;
   onRun: (skill: PrototypeSkillSeed) => void;
   onToast: (msg: string) => void;
   /** 配置 Skill 后台：更新 / 下架申请入口 */
@@ -461,6 +464,7 @@ export function MarketSkillDetailModal({
       open
       title={name}
       onClose={onClose}
+      inline={asPage}
       size="2xl"
       header={
         <div className="shrink-0 border-b border-zinc-100 bg-white px-5 py-3.5 md:px-6">
@@ -509,14 +513,16 @@ export function MarketSkillDetailModal({
                     {nameEn ? <span className="truncate">{nameEn}</span> : null}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="shrink-0 rounded-lg p-1.5 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700"
-                  aria-label="关闭"
-                >
-                  <i className="fa-solid fa-xmark text-[14px]" />
-                </button>
+                {asPage ? null : (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="shrink-0 rounded-lg p-1.5 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700"
+                    aria-label="关闭"
+                  >
+                    <i className="fa-solid fa-xmark text-[14px]" />
+                  </button>
+                )}
               </div>
               <p className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-zinc-600">
                 {desc || '暂无描述'}
@@ -556,13 +562,15 @@ export function MarketSkillDetailModal({
         </div>
       }
       actions={
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium text-zinc-600 transition hover:bg-black/[0.03]"
-        >
-          关闭
-        </button>
+        asPage ? undefined : (
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium text-zinc-600 transition hover:bg-black/[0.03]"
+          >
+            关闭
+          </button>
+        )
       }
     >
       <div className="grid min-h-[480px] md:grid-cols-[minmax(0,1.85fr)_minmax(220px,0.7fr)]">

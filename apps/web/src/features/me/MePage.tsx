@@ -9,7 +9,7 @@ import {
   type AiKnowledgeSolution,
 } from '@/domain/aiKnowledge';
 import { consumeMeAiKnowledgeTab, stageAiKnowledgeSolution } from '@/domain/aiKnowledgeEntry';
-import { writeAppRouteToLocation } from '@/domain/appRoute';
+import { openAssetDetail, writeAppRouteToLocation } from '@/domain/appRoute';
 import { MARKET_SHELF_META, type MarketShelfKind } from '@/domain/marketShelf';
 import { openMarketShelf, openMarketToolDetail } from '@/domain/openHomeJourney';
 import { ROLE_DESCRIPTIONS, ROLE_LABELS } from '@/domain/rbac';
@@ -206,7 +206,8 @@ export function MePage() {
       return;
     }
     if (item.kind === 'projects') {
-      openMarketShelf('projects');
+      if (item.assetType === 'skill' || item.assetType === 'agent') openAssetDetail(item.assetType, item.id);
+      else openMarketShelf('projects');
       return;
     }
     pushRecent({
@@ -217,7 +218,7 @@ export function MePage() {
       logoUrl: item.logoUrl,
       ...(item.assetType ? { assetType: item.assetType } : {}),
     });
-    openMarketToolDetail(item.id, item.kind);
+    openMarketToolDetail(item.id);
   };
 
   const selectTab = (next: MeTab) => {

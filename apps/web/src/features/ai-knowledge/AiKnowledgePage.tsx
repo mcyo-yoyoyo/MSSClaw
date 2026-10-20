@@ -32,9 +32,9 @@ import {
   consumeAiKnowledgeSolution,
   stageMeAiKnowledgeTab,
 } from '@/domain/aiKnowledgeEntry';
-import { openMarketToolDetail } from '@/domain/openHomeJourney';
 import { CatalogAgentDetailModal } from '@/features/market/CatalogAgentDetailModal';
 import { MarketSkillDetailModal } from '@/features/market/MarketSkillDetailModal';
+import { MarketToolDetailModal } from '@/features/market/MarketToolDetailModal';
 import { downloadBlob } from '@/lib/download';
 import { cn } from '@/lib/utils';
 import { useAppViewStore } from '@/stores/appViewStore';
@@ -265,6 +265,8 @@ export function AiKnowledgePage() {
   const [notice, setNotice] = useState('');
   const [skillDetailId, setSkillDetailId] = useState<string | null>(null);
   const [agentDetailId, setAgentDetailId] = useState<string | null>(null);
+  // 智库对话只存在本页状态里：资源详情用弹窗打开，不跳详情页，免得回来时对话丢失
+  const [toolDetailId, setToolDetailId] = useState<string | null>(null);
   const setAppView = useAppViewStore((state) => state.setAppView);
   const setMarketSearch = useMarketFilterStore((state) => state.setSearch);
   const marketplaceTools = useMarketplaceStore((state) => state.tools);
@@ -409,6 +411,7 @@ export function AiKnowledgePage() {
     setMobileWorkspaceOpen(false);
     setSkillDetailId(null);
     setAgentDetailId(null);
+    setToolDetailId(null);
   };
 
   const openSavedSolution = (item: AiKnowledgeSolution) => {
@@ -448,7 +451,7 @@ export function AiKnowledgePage() {
       );
 
       if (tool) {
-        openMarketToolDetail(tool.id);
+        setToolDetailId(tool.id);
         return;
       }
 
@@ -677,6 +680,8 @@ export function AiKnowledgePage() {
           </section>
         </div>
       ) : null}
+
+      {toolDetailId ? <MarketToolDetailModal toolId={toolDetailId} onClose={() => setToolDetailId(null)} /> : null}
 
       {skillDetail ? (
         <MarketSkillDetailModal
