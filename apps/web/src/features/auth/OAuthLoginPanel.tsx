@@ -3,7 +3,6 @@ import { MssZhishuMark } from '@/components/brand/MssZhishuMark';
 import { fetchAuthorizeUrl } from '@/api/authOAuthApi';
 import { rememberGateIntent, rememberReturnTo } from '@/domain/authMode';
 import { useAuthModeStore } from '@/stores/authModeStore';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 interface OAuthLoginPanelProps {
   hint?: string;
@@ -29,7 +28,6 @@ export function OAuthLoginPanel({
 }: OAuthLoginPanelProps) {
   const providerLabel = useAuthModeStore((s) => s.providerLabel);
   const ready = useAuthModeStore((s) => s.ready);
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<{ code: string; error: string; detail: string; hint: string } | null>(null);
 
@@ -41,7 +39,7 @@ export function OAuthLoginPanel({
       rememberReturnTo(returnTo);
       if (intent) rememberGateIntent(intent);
 
-      const result = await fetchAuthorizeUrl({ workspaceId, returnTo });
+      const result = await fetchAuthorizeUrl({ returnTo });
       if (!result.ok) {
         setError(result);
         setSubmitting(false);

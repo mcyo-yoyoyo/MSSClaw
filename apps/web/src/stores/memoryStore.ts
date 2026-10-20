@@ -7,14 +7,13 @@ import {
 } from '@/api/centerApi';
 import {
   findMemoryStoreByName,
-  getMemoryStoresByWorkspace,
+  MEMORY_SEEDS,
   type MemoryLayer,
   type MemoryScope,
   type MemoryStore,
 } from '@/domain/memory';
 
 interface MemoryState {
-  workspaceId: string;
   stores: MemoryStore[];
   selectedStoreId: string | null;
   selectedLayer: MemoryLayer;
@@ -22,7 +21,7 @@ interface MemoryState {
   reflectionRunning: boolean;
   toast: string | null;
 
-  loadWorkspace: (workspaceId: string) => void;
+  load: () => void;
   selectStore: (id: string | null) => void;
   selectStoreByName: (name: string) => void;
   setSelectedLayer: (layer: MemoryLayer) => void;
@@ -39,19 +38,17 @@ interface MemoryState {
 }
 
 export const useMemoryStore = create<MemoryState>((set, get) => ({
-  workspaceId: 'ws-cn-marketing',
-  stores: getMemoryStoresByWorkspace('ws-cn-marketing'),
-  selectedStoreId: getMemoryStoresByWorkspace('ws-cn-marketing')[0]?.id ?? null,
+  stores: MEMORY_SEEDS,
+  selectedStoreId: MEMORY_SEEDS[0]?.id ?? null,
   selectedLayer: 'session',
   scopeFilter: 'all',
   reflectionRunning: false,
   toast: null,
 
-  loadWorkspace: (workspaceId) => {
+  load: () => {
     void (async () => {
-      const stores = await fetchMemoryStores(workspaceId);
+      const stores = await fetchMemoryStores();
       set({
-        workspaceId,
         stores,
         selectedStoreId: stores[0]?.id ?? null,
         selectedLayer: 'session',
@@ -63,7 +60,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
   selectStore: (id) => set({ selectedStoreId: id, selectedLayer: 'session' }),
 
   selectStoreByName: (name) => {
-    const store = findMemoryStoreByName(get().workspaceId, name);
+    const store = findMemoryStoreByName(name);
     if (store) set({ selectedStoreId: store.id, selectedLayer: 'session' });
   },
 
@@ -73,9 +70,9 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
 
   updateLayerPolicy: (storeId, layer, patch) => {
     void (async () => {
-      const { stores, workspaceId } = get();
+      const { stores } = get();
       try {
-        const updated = await patchMemoryLayerPolicyApi(workspaceId, storeId, layer, patch);
+        const updated = await patchMemoryLayerPolicyApi(storeId, layer, patch);
         set({
           stores: stores.map((s) => (s.id === storeId ? updated : s)),
           toast: `${layer} · Retention 策略已写入共享库`,
@@ -93,9 +90,9 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     if (!store || get().reflectionRunning) return;
 
     set({ reflectionRunning: true });
-    const { workspaceId, stores } = get();
+    const { stores } = get();
     try {
-      const updated = await runMemoryReflectionApi(workspaceId, storeId);
+      const updated = await runMemoryReflectionApi(storeId);
       const newLog = updated.reflectionLogs[0];
       set({
         stores: stores.map((s) => (s.id === storeId ? updated : s)),
@@ -129,10 +126,9 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
 
 export function resolveMemoryStoreIdFromResource(
   resourceId: string,
-  resourceName?: string | null,
-  workspaceId?: string,
+  resourceName?: string | null
 ) {
   if (resourceId.startsWith('mem-')) return resourceId;
-  if (resourceName && workspaceId) return findMemoryStoreByName(workspaceId, resourceName)?.id ?? null;
+  if (resourceName) return findMemoryStoreByName(resourceName)?.id ?? null;
   return null;
 }

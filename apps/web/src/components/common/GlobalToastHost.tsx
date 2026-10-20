@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { ToastHost } from '@/components/common/ToastHost';
 import { useConversationStore } from '@/stores/conversationStore';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useWorkflowStore } from '@/stores/workflowStore';
@@ -14,8 +13,6 @@ import { useStationAnnouncementStore } from '@/stores/stationAnnouncementStore';
 export function GlobalToastHost() {
   const pushToast = useConversationStore((s) => s.pushToast);
   const dismissToast = useConversationStore((s) => s.dismissToast);
-  const switchToast = useWorkspaceStore((s) => s.switchToast);
-  const dismissSwitchToast = useWorkspaceStore((s) => s.dismissSwitchToast);
   const settingsToast = useSettingsStore((s) => s.toast);
   const dismissSettingsToast = useSettingsStore((s) => s.dismissToast);
   const marketToast = useMarketplaceStore((s) => s.toast);
@@ -34,7 +31,6 @@ export function GlobalToastHost() {
   const sources = useMemo(
     () => [
       { key: 'conv', message: pushToast, dismiss: dismissToast },
-      { key: 'switch', message: switchToast, dismiss: dismissSwitchToast },
       { key: 'settings', message: settingsToast, dismiss: dismissSettingsToast },
       { key: 'market', message: marketToast, dismiss: dismissMarketToast },
       { key: 'workflow', message: workflowToast, dismiss: dismissWorkflowToast },
@@ -45,7 +41,6 @@ export function GlobalToastHost() {
     ],
     [
       pushToast,
-      switchToast,
       settingsToast,
       marketToast,
       workflowToast,
@@ -54,7 +49,6 @@ export function GlobalToastHost() {
       portalToast,
       announceToast,
       dismissToast,
-      dismissSwitchToast,
       dismissSettingsToast,
       dismissMarketToast,
       dismissWorkflowToast,

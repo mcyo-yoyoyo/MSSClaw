@@ -11,7 +11,6 @@ import { useSessionStore } from '@/stores/sessionStore';
 import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   scheduleSavePlatformDoc,
 } from '@/api/platformDocsApi';
@@ -41,7 +40,6 @@ export interface RecordAuditInput {
   action: string;
   module: string;
   detail: string;
-  workspaceId?: string;
   /** 覆盖当前会话用户（如登录前失败、或代操作） */
   userName?: string;
   userEmail?: string;
@@ -52,7 +50,7 @@ export interface RecordAuditInput {
 
 function persist(logs: AuditLogEntry[]) {
   if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc(currentWorkspaceId(), 'audit-log', {
+  void scheduleSavePlatformDoc('audit-log', {
     logs: logs.slice(0, MAX_LOGS),
   });
 }
@@ -77,9 +75,7 @@ export const useAuditStore = create<AuditState>((set, get) => ({
         return;
       }
       try {
-        const remote = await fetchPlatformDoc<{ logs?: AuditLogEntry[] }>(
-          currentWorkspaceId(),
-          'audit-log',
+        const remote = await fetchPlatformDoc<{ logs?: AuditLogEntry[] }>('audit-log',
         );
         const list = Array.isArray(remote?.logs) ? remote.logs : [];
         set({
@@ -107,7 +103,6 @@ export const useAuditStore = create<AuditState>((set, get) => ({
       userName: input.userName ?? session?.name ?? '系统',
       userEmail: input.userEmail ?? session?.email,
       role: input.role ?? session?.platformRole,
-      workspaceId: input.workspaceId,
       deptIds: input.deptIds ?? session?.deptIds ?? [],
       regionId:
         input.regionId !== undefined ? input.regionId : (session?.regionId ?? null),

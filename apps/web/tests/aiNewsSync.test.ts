@@ -93,7 +93,6 @@ before(async () => {
 
 beforeEach(() => {
   workspaceStore.setState({
-    workspaceId: 'ws-ai-news-sync',
     apiConnected: true,
     apiStatus: 'connected',
   });
@@ -126,7 +125,7 @@ test('运营拉取先 POST 同步归档，再 GET 最新 AI 快讯并更新 stor
   assert.deepEqual(calls.map((call) => call.method), ['POST', 'GET']);
   assert.match(
     calls[0]?.url ?? '',
-    /\/api\/v1\/ai-daily-news\/sync\?workspaceId=ws-ai-news-sync$/,
+    /\/api\/v1\/ai-daily-news\/sync$/,
   );
   assert.match(calls[1]?.url ?? '', /\/api\/v1\/ai-daily-news$/);
   assert.equal(result.ok, true);

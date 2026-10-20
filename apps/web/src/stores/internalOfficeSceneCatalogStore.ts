@@ -9,11 +9,9 @@ import {
 import { reorderVisibleOfficeSceneEntries } from '@/domain/internalOfficeSceneOrder';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   savePlatformDoc,
 } from '@/api/platformDocsApi';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 const DOC_KIND = 'internal-office-scenes' as const;
 const DOCUMENT_VERSION = 2;
@@ -190,10 +188,8 @@ function moveToPosition(
   return next;
 }
 
-async function fetchFreshDocument(workspaceId: string) {
-  const remote = await fetchPlatformDoc<RemoteInternalOfficeSceneDocument>(
-    workspaceId,
-    DOC_KIND,
+async function fetchFreshDocument() {
+  const remote = await fetchPlatformDoc<RemoteInternalOfficeSceneDocument>(DOC_KIND,
     { fresh: true },
   );
   return parseRemoteDocument(remote);
@@ -203,15 +199,14 @@ type StoreSet = (partial: Partial<InternalOfficeSceneCatalogState>) => void;
 type StoreGet = () => InternalOfficeSceneCatalogState;
 
 /**
- * 所有异步读写共用一个代次。切换工作区或发起新的 fresh hydrate 后，旧请求即使
- * 迟到也不能再发布到全局 catalog，避免 A 工作区数据覆盖 B 工作区。
+ * 所有异步读写共用一个代次。发起新的 fresh hydrate 后，旧请求即使迟到也不能再
+ * 发布到全局 catalog，避免旧快照覆盖新数据。
  */
 let operationGeneration = 0;
 
 function publishDatabaseSnapshot(
   set: StoreSet,
   snapshot: {
-    workspaceId: string;
     entries: InternalOfficeSceneCatalogEntry[];
     revision: number;
   },
@@ -219,7 +214,6 @@ function publishDatabaseSnapshot(
 ) {
   setInternalOfficeSceneCatalog(snapshot.entries);
   set({
-    workspaceId: snapshot.workspaceId,
     entries: snapshot.entries,
     revision: snapshot.revision,
     loaded: true,
@@ -242,19 +236,11 @@ async function persistDatabaseSnapshot(
   okMessage: string,
 ): Promise<boolean> {
   const state = get();
-  const workspaceId = state.workspaceId;
 
   if (state.loading || state.saving) return false;
-  if (!state.loaded || !workspaceId) {
+  if (!state.loaded) {
     set({
       toast: '场景数据尚未从服务器加载完成，请刷新后重试。',
-      toastTone: 'error',
-    });
-    return false;
-  }
-  if (currentWorkspaceId() !== workspaceId) {
-    set({
-      toast: '工作区已切换，本次改动未提交。请等待当前工作区数据加载完成。',
       toastTone: 'error',
     });
     return false;
@@ -273,7 +259,7 @@ async function persistDatabaseSnapshot(
 
   let writeSucceeded = false;
   try {
-    await savePlatformDoc(workspaceId, DOC_KIND, {
+    await savePlatformDoc(DOC_KIND, {
       version: DOCUMENT_VERSION,
       revision,
       expectedRevision: revision,
@@ -281,22 +267,18 @@ async function persistDatabaseSnapshot(
     });
     writeSucceeded = true;
     // PUT 成功仍不直接发布草稿；fresh GET 的 canonical 文档才是正式状态。
-    const fresh = await fetchFreshDocument(workspaceId);
-    if (
-      generation !== operationGeneration ||
-      get().workspaceId !== workspaceId ||
-      currentWorkspaceId() !== workspaceId
-    ) {
+    const fresh = await fetchFreshDocument();
+    if (generation !== operationGeneration) {
       return false;
     }
     publishDatabaseSnapshot(
       set,
-      { workspaceId, entries: fresh.entries, revision: fresh.revision },
+      { entries: fresh.entries, revision: fresh.revision },
       { saving: false, loading: false, toast: okMessage, toastTone: 'ok' },
     );
     return true;
   } catch (error) {
-    if (generation !== operationGeneration || get().workspaceId !== workspaceId) {
+    if (generation !== operationGeneration) {
       return false;
     }
     set({
@@ -314,14 +296,13 @@ export type SceneToastTone = 'ok' | 'error' | 'pending';
 
 export interface InternalOfficeSceneCatalogState {
   entries: InternalOfficeSceneCatalogEntry[];
-  workspaceId: string | null;
   revision: number;
   loading: boolean;
   saving: boolean;
   loaded: boolean;
   toast: string | null;
   toastTone: SceneToastTone;
-  hydrate: (workspaceId?: string) => Promise<boolean>;
+  hydrate: () => Promise<boolean>;
   updateEntry: (
     id: InternalOfficeSceneId,
     patch: Partial<Omit<InternalOfficeSceneCatalogEntry, 'id'>>,
@@ -349,7 +330,6 @@ setInternalOfficeSceneCatalog(initial);
 export const useInternalOfficeSceneCatalogStore =
   create<InternalOfficeSceneCatalogState>((set, get) => ({
     entries: initial,
-    workspaceId: null,
     revision: 0,
     loading: false,
     saving: false,
@@ -357,34 +337,20 @@ export const useInternalOfficeSceneCatalogStore =
     toast: null,
     toastTone: 'ok',
 
-    hydrate: async (requestedWorkspaceId) => {
-      const workspaceId = (requestedWorkspaceId || currentWorkspaceId()).trim();
-      if (!workspaceId || workspaceId !== currentWorkspaceId()) return false;
-
+    hydrate: async () => {
       const previous = get();
-      if (
-        previous.workspaceId === workspaceId &&
-        (previous.loading || previous.saving)
-      ) {
-        return false;
-      }
+      if (previous.loading || previous.saving) return false;
 
-      const switchedWorkspace = previous.workspaceId !== workspaceId;
       const generation = ++operationGeneration;
-      if (switchedWorkspace) setInternalOfficeSceneCatalog([]);
       set({
-        workspaceId,
-        entries: switchedWorkspace ? [] : previous.entries,
-        revision: switchedWorkspace ? 0 : previous.revision,
         loading: true,
         saving: false,
-        loaded: switchedWorkspace ? false : previous.loaded,
         toast: null,
         toastTone: 'ok',
       });
 
       if (!canUsePlatformDocsApi()) {
-        if (generation === operationGeneration && get().workspaceId === workspaceId) {
+        if (generation === operationGeneration) {
           set({
             loading: false,
             toast: '未连接后端，无法加载办公场景数据库。',
@@ -395,25 +361,21 @@ export const useInternalOfficeSceneCatalogStore =
       }
 
       try {
-        const fresh = await fetchFreshDocument(workspaceId);
-        if (
-          generation !== operationGeneration ||
-          get().workspaceId !== workspaceId ||
-          currentWorkspaceId() !== workspaceId
-        ) {
+        const fresh = await fetchFreshDocument();
+        if (generation !== operationGeneration) {
           return false;
         }
         publishDatabaseSnapshot(
           set,
-          { workspaceId, entries: fresh.entries, revision: fresh.revision },
+          { entries: fresh.entries, revision: fresh.revision },
           { loading: false, saving: false, toast: null, toastTone: 'ok' },
         );
         return true;
       } catch {
-        if (generation !== operationGeneration || get().workspaceId !== workspaceId) {
+        if (generation !== operationGeneration) {
           return false;
         }
-        // 同工作区刷新失败时保留此前已确认的 DB 快照；跨工作区则保持空数据。
+        // 刷新失败时保留此前已确认的 DB 快照。
         set({
           loading: false,
           toast: '办公场景数据库加载失败，未使用本地默认数据替代。请稍后重试。',
@@ -515,20 +477,3 @@ export const useInternalOfficeSceneCatalogStore =
     dismissToast: () => set({ toast: null, toastTone: 'ok' }),
   }));
 
-// 工作区切换是同步发生的，而各业务数据的重新 bootstrap 可能要等待网络。先立即清空
-// 上一个工作区的正式快照，保证等待 B 工作区 hydrate 时绝不会短暂展示 A 的场景。
-useWorkspaceStore.subscribe((state, previous) => {
-  if (state.workspaceId === previous.workspaceId) return;
-  operationGeneration += 1;
-  setInternalOfficeSceneCatalog([]);
-  useInternalOfficeSceneCatalogStore.setState({
-    entries: [],
-    workspaceId: state.workspaceId,
-    revision: 0,
-    loading: false,
-    saving: false,
-    loaded: false,
-    toast: null,
-    toastTone: 'ok',
-  });
-});

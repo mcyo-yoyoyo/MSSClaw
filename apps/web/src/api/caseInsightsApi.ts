@@ -30,8 +30,8 @@ export type CaseInsightDraft = Omit<Pick<CaseInsightArticle, 'title' | 'summary'
   version?: number;
 };
 
-function route(workspaceId: string, suffix = '') {
-  return apiUrl(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/case-insights${suffix}`);
+function route(suffix = '') {
+  return apiUrl(`/api/v1/case-insights${suffix}`);
 }
 
 async function request<T>(url: string, method = 'GET', body?: unknown): Promise<T> {
@@ -45,31 +45,31 @@ async function request<T>(url: string, method = 'GET', body?: unknown): Promise<
   return response.json() as Promise<T>;
 }
 
-export async function fetchPublishedCaseInsights(workspaceId: string) {
-  return (await request<{ items: CaseInsightArticle[] }>(route(workspaceId))).items;
+export async function fetchPublishedCaseInsights() {
+  return (await request<{ items: CaseInsightArticle[] }>(route())).items;
 }
 
-export async function fetchCaseInsightsForOps(workspaceId: string, view: 'active' | 'trash' = 'active') {
+export async function fetchCaseInsightsForOps(view: 'active' | 'trash' = 'active') {
   const suffix = view === 'trash' ? '/ops?view=trash' : '/ops';
-  return (await request<{ items: CaseInsightArticle[] }>(route(workspaceId, suffix))).items;
+  return (await request<{ items: CaseInsightArticle[] }>(route(suffix))).items;
 }
 
-export async function createCaseInsight(workspaceId: string, draft: CaseInsightDraft) {
-  return request<{ id: string; version: number }>(route(workspaceId), 'POST', draft);
+export async function createCaseInsight(draft: CaseInsightDraft) {
+  return request<{ id: string; version: number }>(route(), 'POST', draft);
 }
 
-export async function updateCaseInsight(workspaceId: string, id: string, draft: CaseInsightDraft) {
-  return request<{ id: string; version: number }>(route(workspaceId, `/${encodeURIComponent(id)}`), 'PUT', draft);
+export async function updateCaseInsight(id: string, draft: CaseInsightDraft) {
+  return request<{ id: string; version: number }>(route(`/${encodeURIComponent(id)}`), 'PUT', draft);
 }
 
-export async function changeCaseInsightStatus(workspaceId: string, id: string, version: number, action: 'publish' | 'unpublish') {
-  return request<{ id: string; version: number }>(route(workspaceId, `/${encodeURIComponent(id)}/${action}`), 'POST', { version });
+export async function changeCaseInsightStatus(id: string, version: number, action: 'publish' | 'unpublish') {
+  return request<{ id: string; version: number }>(route(`/${encodeURIComponent(id)}/${action}`), 'POST', { version });
 }
 
-export async function deleteCaseInsight(workspaceId: string, id: string, version: number) {
-  return request<{ id: string; version: number; deleted: boolean }>(route(workspaceId, `/${encodeURIComponent(id)}`), 'DELETE', { version });
+export async function deleteCaseInsight(id: string, version: number) {
+  return request<{ id: string; version: number; deleted: boolean }>(route(`/${encodeURIComponent(id)}`), 'DELETE', { version });
 }
 
-export async function restoreCaseInsight(workspaceId: string, id: string, version: number) {
-  return request<{ id: string; version: number; status: string }>(route(workspaceId, `/${encodeURIComponent(id)}/restore`), 'POST', { version });
+export async function restoreCaseInsight(id: string, version: number) {
+  return request<{ id: string; version: number; status: string }>(route(`/${encodeURIComponent(id)}/restore`), 'POST', { version });
 }

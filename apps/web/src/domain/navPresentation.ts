@@ -1,6 +1,5 @@
 import type { AppView, NavSection } from '@/domain/appView';
 import { APP_VIEWS } from '@/domain/appView';
-import { WORKSPACE_CONFIG_VIEW } from '@/domain/workspaceConfig';
 import { PlatformRoleSchema, ROLE_LABELS, type PlatformRole } from '@/domain/rbac';
 
 /** 展示配置页本身：仅平台运营 */
@@ -248,15 +247,6 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
     locked: true,
     adminOnly: true,
   },
-  {
-    id: WORKSPACE_CONFIG_VIEW,
-    label: '租户配置',
-    subtitle: '数据空间启停 · 顶栏租户列表（非资产可见性）',
-    icon: 'fa-building',
-    section: 'system',
-    locked: true,
-    adminOnly: true,
-  },
 ];
 
 export const NAV_SLOT_IDS: NavSlotId[] = NAV_PRESENTATION_META.map((m) => m.id);
@@ -363,8 +353,7 @@ function mvpForRole(role: PlatformRole): Record<NavSlotId, boolean> {
       }),
       role,
     );
-    // MVP：弱化租户配置入口（能力保留，标准/完整方案再默认打开）
-    return { ...locked, 'workspace-config': false };
+    return locked;
   }
   if (role === 'viewer') {
     return withAdminLocks(
@@ -426,10 +415,10 @@ export function clampBusinessMvpSlots(matrix: RoleNavMatrix): RoleNavMatrix {
 
 function standardForRole(role: PlatformRole): Record<NavSlotId, boolean> {
   const base = mvpForRole(role);
-  // 标准能力：仅超管加开知识/自动化/租户配置；能力开发仍维持「仅配置技能」
+  // 标准能力：仅超管加开知识/自动化；能力开发仍维持「仅配置技能」
   if (role === 'super_admin') {
     return withAdminLocks(
-      { ...base, tools: true, 'office-scenes': true, kb: true, automation: true, 'workspace-config': true, task: true },
+      { ...base, tools: true, 'office-scenes': true, kb: true, automation: true, task: true },
       role,
     );
   }
@@ -606,7 +595,6 @@ export const NAV_FALLBACK_ORDER: AppView[] = [
   'prompts',
   'admin',
   PRESENTATION_CONFIG_VIEW,
-  WORKSPACE_CONFIG_VIEW,
   'portal-ops',
   'portal-dashboard',
   'model-ops',

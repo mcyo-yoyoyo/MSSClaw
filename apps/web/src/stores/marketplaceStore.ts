@@ -17,7 +17,6 @@ import {
   isPackageUploadContextCurrent,
   uploadWorkspacePackage,
 } from '@/api/blobApi';
-import { currentWorkspaceId } from '@/api/platformDocsApi';
 import { packageUploadSizeError } from '@/domain/packageUpload';
 import { packageZipErrorMessage } from '@/domain/safeZip';
 import { rebuildKbVectorIndex } from '@/api/kbClient';
@@ -80,7 +79,7 @@ interface MarketplaceState {
   kbEfficiencyFilter: CategoryFilter;
   toast: string | null;
 
-  bootstrap: (workspaceId: string) => Promise<void>;
+  bootstrap: () => Promise<void>;
   persist: () => void;
   persistTools: () => void;
   upsertAgent: (agent: PrototypeAgentSeed, isNew?: boolean) => void;
@@ -140,11 +139,10 @@ interface MarketplaceState {
 async function retainImportedPackage(file: File) {
   if (!file.name.toLowerCase().endsWith('.zip')) return undefined;
   if (packageUploadSizeError(file)) return undefined;
-  const workspaceId = currentWorkspaceId();
   try {
-    const uploaded = await uploadWorkspacePackage(workspaceId, file);
-    if (!isPackageUploadContextCurrent(uploaded, currentWorkspaceId())) {
-      await deleteWorkspaceBlob(workspaceId, uploaded).catch(() => undefined);
+    const uploaded = await uploadWorkspacePackage(file);
+    if (!isPackageUploadContextCurrent(uploaded)) {
+      await deleteWorkspaceBlob(uploaded).catch(() => undefined);
       return undefined;
     }
     return {
@@ -257,7 +255,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   kbEfficiencyFilter: 'all',
   toast: null,
 
-  bootstrap: async (workspaceId) => {
+  bootstrap: async () => {
     const generation = ++marketplaceBootstrapGeneration;
     const preservedTools = get().tools;
     set({
@@ -271,7 +269,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
       kbDocs: [],
     });
     const [workspaceResult, toolsResult] = await Promise.allSettled([
-      loadMarketplace(workspaceId, { throwOnRemoteError: true }),
+      loadMarketplace({ throwOnRemoteError: true }),
       ensureGlobalToolsLoaded(),
     ]);
 
@@ -282,8 +280,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     }
 
     if (
-      generation !== marketplaceBootstrapGeneration ||
-      useWorkspaceStore.getState().workspaceId !== workspaceId
+      generation !== marketplaceBootstrapGeneration
     ) {
       return;
     }
@@ -318,12 +315,10 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   },
 
   persist: () => {
-    const workspaceId = useWorkspaceStore.getState().workspaceId;
     const persistLatest = () => {
-      if (useWorkspaceStore.getState().workspaceId !== workspaceId) return;
       const { agents, skills, automations, kbDocs } = get();
       // workspace marketplace 只保存 workspace 资产；tools 已迁移到全局 API。
-      scheduleSaveMarketplace(workspaceId, {
+      scheduleSaveMarketplace({
         agents,
         skills,
         automations,
@@ -412,7 +407,6 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
 
   deleteSkillNow: async (id) => {
     if (!useWorkspaceStore.getState().apiConnected) return { synced: false, reason: 'offline' };
-    const workspaceId = useWorkspaceStore.getState().workspaceId;
     const current = get();
     const skill = current.skills.find((item) => item.id === id);
     if (!skill) return { synced: false, reason: 'failed', detail: 'Skill 不存在，请刷新列表' };
@@ -424,10 +418,10 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     }));
     // 保存期间的其他编辑也必须使用删除后的快照，避免排队写入把 Skill 恢复。
     set({ skills, agents });
-    const result = await flushSaveMarketplace(workspaceId, {
+    const result = await flushSaveMarketplace({
       skills, agents, automations: current.automations, kbDocs: current.kbDocs,
     }, { reportFailure: false });
-    if (!result.synced && useWorkspaceStore.getState().workspaceId === workspaceId) {
+    if (!result.synced) {
       const boundAgentIds = new Set(current.agents.filter((agent) => agent.skillIds.includes(id)).map((agent) => agent.id));
       set((state) => ({
         skills: state.skills.some((item) => item.id === id) ? state.skills : [...state.skills, skill],
@@ -496,9 +490,8 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     get().showToast('文档已入库，正在解析…');
 
     try {
-      const workspaceId = useWorkspaceStore.getState().workspaceId;
       const content = await readKbFileAsText(file);
-      const parsed = await parseKbDocument(workspaceId, {
+      const parsed = await parseKbDocument({
         filename: file.name,
         content,
         sizeBytes: file.size,
@@ -634,8 +627,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     const pending = get().kbDocs.filter((d) => !d.indexed);
     if (!pending.length) {
       void (async () => {
-        const workspaceId = useWorkspaceStore.getState().workspaceId;
-        const result = await rebuildKbVectorIndex(workspaceId, get().kbDocs);
+        const result = await rebuildKbVectorIndex(get().kbDocs);
         get().showToast(result.message ?? '知识库索引已是最新');
       })();
       return;
@@ -647,8 +639,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
         clearInterval(timer);
         get().persist();
         void (async () => {
-          const workspaceId = useWorkspaceStore.getState().workspaceId;
-          const result = await rebuildKbVectorIndex(workspaceId, get().kbDocs);
+          const result = await rebuildKbVectorIndex(get().kbDocs);
           get().showToast(result.message ?? `同步完成 · ${pending.length} 篇文档已索引`);
         })();
         return;

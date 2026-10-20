@@ -1,14 +1,14 @@
-import { AgentSchema, getAgentsByWorkspace, type Agent } from '@/domain/agent';
+import { AgentSchema, AGENT_SEEDS, type Agent } from '@/domain/agent';
 import {
-  getKnowledgeBasesByWorkspace,
+  KNOWLEDGE_SEEDS,
   KnowledgeBaseSchema,
   type KnowledgeBase,
 } from '@/domain/knowledge';
-import { getMemoryStoresByWorkspace, MemoryStoreSchema, type MemoryLayer, type MemoryStore } from '@/domain/memory';
-import { PromptSchema, getPromptsByWorkspace, type Prompt } from '@/domain/prompt';
-import { getSkillsByWorkspace, SkillSchema, type Skill } from '@/domain/skill';
-import { getToolsByWorkspace, PlatformToolSchema, type PlatformTool } from '@/domain/tool';
-import { getWorkflowsByWorkspace, WorkflowSchema, type Workflow } from '@/domain/workflow';
+import { MEMORY_SEEDS, MemoryStoreSchema, type MemoryLayer, type MemoryStore } from '@/domain/memory';
+import { PromptSchema, PROMPT_SEEDS, type Prompt } from '@/domain/prompt';
+import { SKILL_SEEDS, SkillSchema, type Skill } from '@/domain/skill';
+import { TOOL_SEEDS, PlatformToolSchema, type PlatformTool } from '@/domain/tool';
+import { WORKFLOW_SEEDS, WorkflowSchema, type Workflow } from '@/domain/workflow';
 import { apiUrl } from '@/api/client';
 import { fetchToolsApi } from '@/api/persistenceApi';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -62,39 +62,38 @@ function parseList<T>(items: unknown[], schema: { parse: (v: unknown) => T }): T
     .filter((item): item is T => item !== null);
 }
 
-export async function fetchPrompts(workspaceId: string): Promise<Prompt[]> {
-  const fallback = getPromptsByWorkspace(workspaceId);
+export async function fetchPrompts(): Promise<Prompt[]> {
+  const fallback = PROMPT_SEEDS;
   const payload = await fetchJson<{ prompts: unknown[] }>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/prompts`),
+    apiUrl(`/api/v1/prompts`),
     { prompts: fallback },
   );
   return parseList(payload.prompts, PromptSchema);
 }
 
-export async function advancePromptLifecycle(workspaceId: string, promptId: string): Promise<Prompt> {
+export async function advancePromptLifecycle(promptId: string): Promise<Prompt> {
   const updated = await mutateJson<unknown>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/prompts/${promptId}/advance-lifecycle`),
+    apiUrl(`/api/v1/prompts/${promptId}/advance-lifecycle`),
     { method: 'POST', headers: { 'Content-Type': 'application/json' } },
   );
   return PromptSchema.parse(updated);
 }
 
-export async function fetchAgents(workspaceId: string): Promise<Agent[]> {
-  const fallback = getAgentsByWorkspace(workspaceId);
+export async function fetchAgents(): Promise<Agent[]> {
+  const fallback = AGENT_SEEDS;
   const payload = await fetchJson<{ agents: unknown[] }>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/agents`),
+    apiUrl(`/api/v1/agents`),
     { agents: fallback },
   );
   return parseList(payload.agents, AgentSchema);
 }
 
 export async function patchAgentPersona(
-  workspaceId: string,
   agentId: string,
   persona: string,
 ): Promise<Agent> {
   const updated = await mutateJson<unknown>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/agents/${agentId}`),
+    apiUrl(`/api/v1/agents/${agentId}`),
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -104,75 +103,73 @@ export async function patchAgentPersona(
   return AgentSchema.parse(updated);
 }
 
-export async function advanceAgentStatus(workspaceId: string, agentId: string): Promise<Agent> {
+export async function advanceAgentStatus(agentId: string): Promise<Agent> {
   const updated = await mutateJson<unknown>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/agents/${agentId}/advance-status`),
+    apiUrl(`/api/v1/agents/${agentId}/advance-status`),
     { method: 'POST', headers: { 'Content-Type': 'application/json' } },
   );
   return AgentSchema.parse(updated);
 }
 
-export async function fetchSkills(workspaceId: string): Promise<Skill[]> {
-  const fallback = getSkillsByWorkspace(workspaceId);
+export async function fetchSkills(): Promise<Skill[]> {
+  const fallback = SKILL_SEEDS;
   const payload = await fetchJson<{ skills: unknown[] }>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/skills`),
+    apiUrl(`/api/v1/skills`),
     { skills: fallback },
   );
   return parseList(payload.skills, SkillSchema);
 }
 
-export async function advanceSkillLifecycle(workspaceId: string, skillId: string): Promise<Skill> {
+export async function advanceSkillLifecycle(skillId: string): Promise<Skill> {
   const updated = await mutateJson<unknown>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/skills/${skillId}/advance-lifecycle`),
+    apiUrl(`/api/v1/skills/${skillId}/advance-lifecycle`),
     { method: 'POST', headers: { 'Content-Type': 'application/json' } },
   );
   return SkillSchema.parse(updated);
 }
 
-export async function fetchWorkflows(workspaceId: string): Promise<Workflow[]> {
-  const fallback = getWorkflowsByWorkspace(workspaceId);
+export async function fetchWorkflows(): Promise<Workflow[]> {
+  const fallback = WORKFLOW_SEEDS;
   const payload = await fetchJson<{ workflows: unknown[] }>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/workflows`),
+    apiUrl(`/api/v1/workflows`),
     { workflows: fallback },
   );
   return parseList(payload.workflows, WorkflowSchema);
 }
 
 export async function advanceWorkflowStatus(
-  workspaceId: string,
   workflowId: string,
 ): Promise<Workflow> {
   const updated = await mutateJson<unknown>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/workflows/${workflowId}/advance-status`),
+    apiUrl(`/api/v1/workflows/${workflowId}/advance-status`),
     { method: 'POST', headers: { 'Content-Type': 'application/json' } },
   );
   return WorkflowSchema.parse(updated);
 }
 
-export async function fetchKnowledgeBases(workspaceId: string): Promise<KnowledgeBase[]> {
-  const fallback = getKnowledgeBasesByWorkspace(workspaceId);
+export async function fetchKnowledgeBases(): Promise<KnowledgeBase[]> {
+  const fallback = KNOWLEDGE_SEEDS;
   const payload = await fetchJson<{ bases: unknown[] }>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/knowledge-bases`),
+    apiUrl(`/api/v1/knowledge-bases`),
     { bases: fallback },
   );
   return parseList(payload.bases, KnowledgeBaseSchema);
 }
 
 export async function runKnowledgePipelineApi(
-  workspaceId: string,
   baseId: string,
   docId: string,
 ): Promise<KnowledgeBase> {
   const updated = await mutateJson<unknown>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/knowledge-bases/${baseId}/documents/${docId}/run-pipeline`),
+    apiUrl(`/api/v1/knowledge-bases/${baseId}/documents/${docId}/run-pipeline`),
     { method: 'POST', headers: { 'Content-Type': 'application/json' } },
   );
   return KnowledgeBaseSchema.parse(updated);
 }
 
-export async function fetchTools(_workspaceId?: string): Promise<PlatformTool[]> {
+export async function fetchTools(): Promise<PlatformTool[]> {
   // Tool 目录已迁移到部署级单例；保留参数仅为兼容 legacy store 调用方。
-  const fallback = getToolsByWorkspace('ws-3c-latam');
+  const fallback = TOOL_SEEDS;
   if (!useWorkspaceStore.getState().apiConnected) return fallback;
   try {
     const payload = await fetchToolsApi();
@@ -241,23 +238,22 @@ function toLegacyPlatformTool(raw: unknown): PlatformTool | null {
   };
 }
 
-export async function fetchMemoryStores(workspaceId: string): Promise<MemoryStore[]> {
-  const fallback = getMemoryStoresByWorkspace(workspaceId);
+export async function fetchMemoryStores(): Promise<MemoryStore[]> {
+  const fallback = MEMORY_SEEDS;
   const payload = await fetchJson<{ stores: unknown[] }>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/memory-stores`),
+    apiUrl(`/api/v1/memory-stores`),
     { stores: fallback },
   );
   return parseList(payload.stores, MemoryStoreSchema);
 }
 
 export async function patchMemoryLayerPolicyApi(
-  workspaceId: string,
   storeId: string,
   layer: MemoryLayer,
   patch: Partial<{ retentionDays: number; maxTokens: number; reflectionEnabled: boolean; decayRate: number }>,
 ): Promise<MemoryStore> {
   const updated = await mutateJson<unknown>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/memory-stores/${storeId}/layers/${layer}/policy`),
+    apiUrl(`/api/v1/memory-stores/${storeId}/layers/${layer}/policy`),
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -268,18 +264,16 @@ export async function patchMemoryLayerPolicyApi(
 }
 
 export async function runMemoryReflectionApi(
-  workspaceId: string,
   storeId: string,
 ): Promise<MemoryStore> {
   const updated = await mutateJson<unknown>(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/memory-stores/${storeId}/run-reflection`),
+    apiUrl(`/api/v1/memory-stores/${storeId}/run-reflection`),
     { method: 'POST', headers: { 'Content-Type': 'application/json' } },
   );
   return MemoryStoreSchema.parse(updated);
 }
 
 export async function fetchExecutionHistory(
-  workspaceId: string,
   limit = 50,
 ): Promise<
   Array<{
@@ -295,7 +289,7 @@ export async function fetchExecutionHistory(
   if (!useWorkspaceStore.getState().apiConnected) return [];
   try {
     const res = await fetch(
-      apiUrl(`/api/v1/workspaces/${workspaceId}/executions?limit=${limit}`),
+      apiUrl(`/api/v1/executions?limit=${limit}`),
     );
     if (!res.ok) return [];
     const body = (await res.json()) as { executions?: Array<Record<string, unknown>> };

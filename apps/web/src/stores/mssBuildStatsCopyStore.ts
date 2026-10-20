@@ -5,7 +5,6 @@ import {
 } from '@/domain/mssBuildStatsCopy';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   scheduleSavePlatformDoc,
 } from '@/api/platformDocsApi';
@@ -22,7 +21,7 @@ function normalize(raw: Partial<MssBuildStatsCopy> | null | undefined): MssBuild
 
 function persist(copy: MssBuildStatsCopy) {
   if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc(currentWorkspaceId(), 'mss-build-stats', copy);
+  void scheduleSavePlatformDoc('mss-build-stats', copy);
 }
 
 interface MssBuildStatsCopyState {
@@ -45,9 +44,7 @@ export const useMssBuildStatsCopyStore = create<MssBuildStatsCopyState>((set, ge
         return;
       }
       try {
-        const remote = await fetchPlatformDoc<Partial<MssBuildStatsCopy>>(
-          currentWorkspaceId(),
-          'mss-build-stats',
+        const remote = await fetchPlatformDoc<Partial<MssBuildStatsCopy>>('mss-build-stats',
         );
         set({ copy: normalize(remote) });
       } catch {

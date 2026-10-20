@@ -7,23 +7,17 @@ import { KbCitationPreviewModal } from '@/components/knowledge/KbCitationPreview
 import { useConversationStore } from '@/stores/conversationStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useTaskStore } from '@/stores/taskStore';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { getAgentById } from '@/domain/plan';
 import { buildAppRoute } from '@/domain/appRoute';
 import { canUseWarRoomAi, isWarRoom } from '@/domain/chat';
 import { openUseSkills } from '@/domain/openHomeJourney';
 import { listVisibleBusinessScenarioCategories } from '@/domain/businessScenarios';
-import { getMembersByWorkspace } from '@/domain/rbac';
+import { getSeedMembers } from '@/domain/rbac';
 import { canExecuteChat } from '@/domain/permissions';
 import { useSessionStore } from '@/stores/sessionStore';
 import { requireLogin } from '@/stores/authGateStore';
 
-interface TaskCenterPageProps {
-  onWorkspaceSwitch?: (workspaceId: string) => void;
-}
-
-export function TaskCenterPage(_props: TaskCenterPageProps) {
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
+export function TaskCenterPage() {
   const platformRole = useSessionStore((s) => s.user?.platformRole);
   const executeAllowed = canExecuteChat(platformRole);
   const [pushOpen, setPushOpen] = useState(false);
@@ -94,11 +88,11 @@ export function TaskCenterPage(_props: TaskCenterPageProps) {
     pendingHandled.current = key;
 
     if (pending.autoSend) {
-      void sendMessage(pending.message, workspaceId, pending.assetType);
+      void sendMessage(pending.message, pending.assetType);
     } else {
       setDraft(pending.message);
     }
-  }, [currentChatId, pendingTaskSubmit, consumePendingTaskSubmit, sendMessage, workspaceId]);
+  }, [currentChatId, pendingTaskSubmit, consumePendingTaskSubmit, sendMessage]);
 
   useEffect(() => {
     if (sandboxReady && !prevReadyRef.current && artifactPanelCollapsed) {
@@ -152,8 +146,7 @@ export function TaskCenterPage(_props: TaskCenterPageProps) {
             onDraftChange={setDraft}
             onSend={(text) => {
               const send = () => {
-                const currentWorkspaceId = useWorkspaceStore.getState().workspaceId;
-                void useConversationStore.getState().sendMessage(text, currentWorkspaceId);
+                void useConversationStore.getState().sendMessage(text);
               };
               if (!requireLogin('chat', send)) {
                 setDraft('');
@@ -283,7 +276,6 @@ export function TaskCenterPage(_props: TaskCenterPageProps) {
         <WarRoomMembersModal
           open={membersOpen}
           chat={chat}
-          workspaceId={workspaceId}
           onClose={() => setMembersOpen(false)}
           onAddMember={(member) => addWarRoomMember(chat.id, member)}
           onRemoveMember={(memberId) => removeWarRoomMember(chat.id, memberId)}
@@ -295,7 +287,7 @@ export function TaskCenterPage(_props: TaskCenterPageProps) {
         open={pushOpen}
         onClose={() => setPushOpen(false)}
         warrooms={Object.values(chats).filter((c) => isWarRoom(c))}
-        members={getMembersByWorkspace(workspaceId)}
+        members={getSeedMembers()}
         onConfirm={(target) => {
           void pushToGroup(
             target.mode === 'warroom'

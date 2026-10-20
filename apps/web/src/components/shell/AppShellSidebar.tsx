@@ -27,7 +27,6 @@ import { useAuthGateStore } from '@/stores/authGateStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useShellPerspectiveStore } from '@/stores/shellPerspectiveStore';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 export function AppShellSidebar() {
   const {
@@ -41,7 +40,6 @@ export function AppShellSidebar() {
   } = useAppViewStore();
   const isViewEnabled = useNavPresentationStore((s) => s.isViewEnabled);
   const roleEnabled = useNavPresentationStore((s) => s.roleEnabled);
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const user = useSessionStore((s) => s.user);
   const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
   const logout = useSessionStore((s) => s.logout);
@@ -82,7 +80,7 @@ export function AppShellSidebar() {
     });
 
     return acc;
-  }, [isViewEnabled, roleEnabled, user?.platformRole, workspaceId]);
+  }, [isViewEnabled, roleEnabled, user?.platformRole]);
 
   const capabilityItems = useMemo(() => {
     return sortByAdminMenuOrder(

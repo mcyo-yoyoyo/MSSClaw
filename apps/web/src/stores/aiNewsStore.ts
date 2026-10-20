@@ -3,7 +3,6 @@ import { AI_NEWS_SEEDS, type AiNewsCadence, type AiNewsItem } from '@/domain/aiN
 import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   scheduleSavePlatformDoc,
 } from '@/api/platformDocsApi';
@@ -61,9 +60,8 @@ function seedItems(): AiNewsRecord[] {
 }
 
 function persist(items: AiNewsRecord[]) {
-  const ws = currentWorkspaceId();
   if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc(ws, 'ai-news', { items });
+  void scheduleSavePlatformDoc('ai-news', { items });
 }
 
 interface AiNewsState {
@@ -89,9 +87,7 @@ export const useAiNewsStore = create<AiNewsState>((set, get) => ({
         return;
       }
       try {
-        const remote = await fetchPlatformDoc<{ items?: AiNewsRecord[] }>(
-          currentWorkspaceId(),
-          'ai-news',
+        const remote = await fetchPlatformDoc<{ items?: AiNewsRecord[] }>('ai-news',
         );
         const list = Array.isArray(remote?.items) ? remote.items : [];
         set({

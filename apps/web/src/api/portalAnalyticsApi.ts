@@ -191,11 +191,10 @@ export interface RecordGuestGateHitInput {
 }
 
 export async function recordPortalPageViewApi(
-  workspaceId: string,
   input: RecordPortalPageViewInput,
 ): Promise<void> {
   const res = await fetch(
-    apiUrl(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/portal-analytics/views`),
+    apiUrl(`/api/v1/portal-analytics/views`),
     {
       method: 'POST',
       headers: {
@@ -211,11 +210,10 @@ export async function recordPortalPageViewApi(
 }
 
 export async function recordGuestGateHitApi(
-  workspaceId: string,
   input: RecordGuestGateHitInput,
 ): Promise<void> {
   const res = await fetch(
-    apiUrl(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/portal-analytics/gate-events`),
+    apiUrl(`/api/v1/portal-analytics/gate-events`),
     {
       method: 'POST',
       headers: {
@@ -231,7 +229,6 @@ export async function recordGuestGateHitApi(
 }
 
 export async function fetchPortalAnalyticsApi(
-  workspaceId: string,
   range: number | PortalAnalyticsRange,
 ): Promise<PortalAnalyticsReport> {
   const normalizedRange: PortalAnalyticsRange =
@@ -242,7 +239,7 @@ export async function fetchPortalAnalyticsApi(
       : new URLSearchParams({ from: normalizedRange.from, to: normalizedRange.to });
   const res = await fetch(
     apiUrl(
-      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/portal-analytics?${query.toString()}`,
+      `/api/v1/portal-analytics?${query.toString()}`,
     ),
     {
       headers: {

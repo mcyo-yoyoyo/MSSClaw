@@ -26,12 +26,12 @@ const member = (over = {}) => ({
   ...over,
 });
 
-function buildDocs({ members = [member()], workspaces = ['ws-mss-ai'] } = {}) {
+function buildDocs({ members = [member()], workspaces = ['ws-cn-marketing'] } = {}) {
   const rows = new Map();
   const wsRows = new Map(workspaces.map((id) => [id, { id }]));
-  rows.set('doc-members-ws-mss-ai', {
-    id: 'doc-members-ws-mss-ai',
-    workspaceId: 'ws-mss-ai',
+  rows.set('doc-members-ws-cn-marketing', {
+    id: 'doc-members-ws-cn-marketing',
+    workspaceId: 'ws-cn-marketing',
     kind: 'doc:members',
     payload: { members, revision: 1 },
   });
@@ -112,7 +112,7 @@ async function harness(opts = {}) {
   const states = new OAuthStateStore();
   const service = new AuthOAuthService(docs, states, new UniPortalClient());
   const login = async (over = {}) => {
-    const issued = service.buildAuthorizeUrl('ws-mss-ai', '#/home');
+    const issued = service.buildAuthorizeUrl('ws-cn-marketing', '#/home');
     return service.handleCallback({ code: 'GOODCODE', state: issued.state, ...over });
   };
   return {
@@ -139,7 +139,7 @@ test('完整流程：换码 → userinfo → 匹配成员 → 签发平台令牌
     assert.ok(result.traceId, '必须带 traceId，否则内网排障没法 grep 日志');
 
     // 令牌可被既有 me() 还原，说明复用的是同一套会话体系
-    const me = await h.docs.me(result.token, 'ws-mss-ai');
+    const me = await h.docs.me(result.token, 'ws-cn-marketing');
     assert.equal(me.ok, true);
     assert.equal(me.user.email, 'jianghong@huawei.com');
   } finally {
@@ -150,7 +150,7 @@ test('完整流程：换码 → userinfo → 匹配成员 → 签发平台令牌
 test('state 不可重放：同一个 state 第二次必失败', async () => {
   const h = await harness({ profile: { uuid: 'uuid~abc', email: 'jianghong@huawei.com' } });
   try {
-    const issued = h.service.buildAuthorizeUrl('ws-mss-ai', '');
+    const issued = h.service.buildAuthorizeUrl('ws-cn-marketing', '');
     const first = await h.service.handleCallback({ code: 'C1', state: issued.state });
     assert.equal(first.ok, true);
 
@@ -168,7 +168,7 @@ test('回调工作区只认 state 绑定值，不接受请求体改写', async (
   try {
     const result = await h.login({ workspaceId: 'ws-other' });
     assert.equal(result.ok, true, JSON.stringify(result));
-    assert.equal(result.user.workspaceId, 'ws-mss-ai');
+    assert.equal(result.user.workspaceId, 'ws-cn-marketing');
   } finally {
     await h.close();
   }
@@ -252,7 +252,7 @@ test('JIT 建号固定为 business_user，环境变量不能提权', async () =>
     assert.equal(result.provisioned, true);
     assert.equal(result.user.platformRole, 'business_user');
 
-    const saved = h.rows.get('doc-members-ws-mss-ai').payload.members;
+    const saved = h.rows.get('doc-members-ws-cn-marketing').payload.members;
     assert.equal(saved.length, 1);
     assert.equal(saved[0].email, 'newbie@huawei.com');
     assert.notEqual(saved[0].role, 'super_admin');
@@ -311,7 +311,7 @@ test('配置不完整时，发起登录就被拦住并点名缺哪一项', async
     configure(stub.base, { OAUTH_CLIENT_SECRET: '' });
     const { docs } = buildDocs();
     const service = new AuthOAuthService(docs, new OAuthStateStore(), new UniPortalClient());
-    const result = service.buildAuthorizeUrl('ws-mss-ai', '');
+    const result = service.buildAuthorizeUrl('ws-cn-marketing', '');
     assert.equal(result.ok, false);
     assert.equal(result.code, 'oauth_config_incomplete');
     assert.match(result.detail, /OAUTH_CLIENT_SECRET/);
@@ -346,7 +346,7 @@ test('上游连不上时给出网络层原因与处置建议', async () => {
   const { docs } = buildDocs();
   const states = new OAuthStateStore();
   const service = new AuthOAuthService(docs, states, new UniPortalClient());
-  const issued = service.buildAuthorizeUrl('ws-mss-ai', '');
+  const issued = service.buildAuthorizeUrl('ws-cn-marketing', '');
   const result = await service.handleCallback({ code: 'C', state: issued.state });
 
   assert.equal(result.ok, false);

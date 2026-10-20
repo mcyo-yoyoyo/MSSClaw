@@ -13,7 +13,6 @@ import {
 } from '@/domain/orgTaxonomy';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   scheduleSavePlatformDoc,
 } from '@/api/platformDocsApi';
@@ -82,7 +81,7 @@ function normalizeRemote(remote: {
 function persist(depts: OrgUnit[], regions: OrgUnit[]) {
   setOrgTaxonomy(depts, regions);
   if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc(currentWorkspaceId(), 'org-taxonomy', { depts, regions });
+  void scheduleSavePlatformDoc('org-taxonomy', { depts, regions });
 }
 
 interface OrgTaxonomyState {
@@ -117,9 +116,7 @@ export const useOrgTaxonomyStore = create<OrgTaxonomyState>((set, get) => ({
         return;
       }
       try {
-        const remote = await fetchPlatformDoc<{ depts?: OrgUnit[]; regions?: OrgUnit[] }>(
-          currentWorkspaceId(),
-          'org-taxonomy',
+        const remote = await fetchPlatformDoc<{ depts?: OrgUnit[]; regions?: OrgUnit[] }>('org-taxonomy',
         );
         const next = normalizeRemote(remote);
         setOrgTaxonomy(next.depts, next.regions);

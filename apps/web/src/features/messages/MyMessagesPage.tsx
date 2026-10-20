@@ -11,7 +11,6 @@ import { ensureStationAnnouncementInbox } from '@/domain/stationAnnouncements';
 import { useInboxStore } from '@/stores/inboxStore';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 /** 默认只展示近一个月的消息；更早的折叠起来，需要时再展开 */
 const RECENT_WINDOW_DAYS = 30;
@@ -24,7 +23,6 @@ export function MyMessagesPage() {
   const setAppView = useAppViewStore((s) => s.setAppView);
   const consumeMessageId = useNavigationIntentStore((s) => s.consumeMessageId);
   const consumeAiNewsOverview = useNavigationIntentStore((s) => s.consumeAiNewsOverview);
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
 
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -32,8 +30,8 @@ export function MyMessagesPage() {
 
   useEffect(() => {
     // 运营刚发布的公告是服务端落库的广播消息，进页面拉一次才能直接展开全文。
-    useInboxStore.getState().bootstrap(workspaceId);
-  }, [workspaceId]);
+    useInboxStore.getState().bootstrap();
+  }, []);
 
   useEffect(() => {
     ensureStationAnnouncementInbox();

@@ -35,7 +35,6 @@ cd "D:\Vibe Coding\MSSClaw\apps\api"
 copy .env.example .env
 npm run prisma:generate
 npx prisma migrate deploy
-npm run prisma:seed
 
 cd "D:\Vibe Coding\MSSClaw"
 npm run dev:api
@@ -119,9 +118,9 @@ npm run dev
 
 成员、KB 同步、Skill 导出、Runtime API 地址、LLM 配置等。LLM Key 存于浏览器 localStorage，不会提交到仓库。
 
-### 3.3 工作区与语言
+### 3.3 单一平台空间
 
-顶部可切换工作区（如「3C 拉美」「国内营销」等 Demo 租户）。每个工作区有独立 catalog、会话与市场数据；Header 会显示对应语言标签（中文 / English / Español）。
+平台只有一个空间，不再区分租户；catalog、会话与市场数据全站共享，接口路径不带工作区前缀。
 
 ### 3.4 离线 / 弱网
 
@@ -217,9 +216,9 @@ hooks/             # 路由、Focus Trap 等
 
 | 数据 | API | 离线回退 |
 |------|-----|----------|
-| Workspace catalog | `GET /workspaces/:id/catalog` | `domain/workspace.ts` 内置 |
-| 会话 | `GET/PUT .../sessions` | `localStorage` |
-| Marketplace | `GET/PUT .../marketplace` | `localStorage` |
+| 平台 catalog | `GET /catalog` | `domain/workspace.ts` 内置 |
+| 会话 | `GET/PUT /sessions` | `localStorage` |
+| Marketplace | `GET/PUT /marketplace` | `localStorage` |
 | 执行流 | SSE `/executions/stream` | `agentRuntime.ts` 本地 mock |
 | LLM | 用户配置的 Provider | 未配置时用 mock 流 |
 
@@ -228,14 +227,13 @@ hooks/             # 路由、Focus Trap 等
 ### 4.6 能力栈关系（产品模型）
 
 ```
-Portal
-  └── Workspace（租户）
-        ├── Prompt / Skill / Tool / Workflow  （能力资产）
-        ├── Agent（Persona + 绑定关系）
-        ├── Knowledge Base（RAG）
-        ├── Memory（长期记忆）
-        └── Runtime（执行 · Trace · 交付物）
-              └── LLM Gateway
+Portal（单一平台空间）
+  ├── Prompt / Skill / Tool / Workflow  （能力资产）
+  ├── Agent（Persona + 绑定关系）
+  ├── Knowledge Base（RAG）
+  ├── Memory（长期记忆）
+  └── Runtime（执行 · Trace · 交付物）
+        └── LLM Gateway
 ```
 
 任务中心是 **Runtime 的用户入口**；各 Center 是 **资产的配置与发布入口**。

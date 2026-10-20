@@ -186,7 +186,6 @@ export function MarketShelfPage({
   const hydrateExternalToolLayout = useExternalToolLayoutStore((s) => s.hydrate);
   const externalTaxonomy = useExternalTaxonomyCatalogStore((s) => s.catalog);
   const hydrateFeaturedPins = useMarketFeaturedStore((s) => s.hydrate);
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const apiConnected = useWorkspaceStore((s) => s.apiConnected);
 
   const [showcaseId, setShowcaseId] = useState<string | null>(null);
@@ -257,7 +256,6 @@ export function MarketShelfPage({
     hydrateFavorites,
     hydrateHidden,
     hydrateBuildStatsCopy,
-    workspaceId,
     kind,
   ]);
 
@@ -285,9 +283,9 @@ export function MarketShelfPage({
     if (kind !== 'external' || !apiConnected) return;
     const layoutState = useExternalToolLayoutStore.getState();
     if (layoutState.loading || layoutState.saving || layoutState.dirty) return;
-    if (layoutState.workspaceId === workspaceId && layoutState.document) return;
-    void hydrateExternalToolLayout(workspaceId);
-  }, [kind, workspaceId, apiConnected, hydrateExternalToolLayout]);
+    if (layoutState.document) return;
+    void hydrateExternalToolLayout();
+  }, [kind, apiConnected, hydrateExternalToolLayout]);
 
   /** 运营隐藏类型后，清除已失效的筛选态 */
   useEffect(() => {

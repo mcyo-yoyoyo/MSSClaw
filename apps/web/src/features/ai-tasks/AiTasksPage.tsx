@@ -18,7 +18,6 @@ import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useConversationStore } from '@/stores/conversationStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useSessionStore } from '@/stores/sessionStore';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { requireLogin } from '@/stores/authGateStore';
 
 /**
@@ -27,7 +26,6 @@ import { requireLogin } from '@/stores/authGateStore';
  * embedded：嵌在个人中心 Tab 内，收起独立页头。
  */
 export function AiTasksPage({ embedded = false }: { embedded?: boolean } = {}) {
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const platformRole = useSessionStore((s) => s.user?.platformRole);
   const isGuest = useSessionStore((s) => s.isGuest);
   const executeAllowed = canExecuteChat(platformRole);
@@ -126,7 +124,7 @@ export function AiTasksPage({ embedded = false }: { embedded?: boolean } = {}) {
     setComposeFocus(false);
 
     if (pending.autoSend) {
-      void sendMessage(pending.message, workspaceId, pending.assetType);
+      void sendMessage(pending.message, pending.assetType);
     } else {
       setDraft(pending.message);
     }
@@ -135,7 +133,6 @@ export function AiTasksPage({ embedded = false }: { embedded?: boolean } = {}) {
     pendingTaskSubmit,
     consumePendingTaskSubmit,
     sendMessage,
-    workspaceId,
   ]);
 
   const openSession = (id: string) => {
@@ -445,8 +442,7 @@ export function AiTasksPage({ embedded = false }: { embedded?: boolean } = {}) {
               onDraftChange={setDraft}
               onSend={(text) => {
                 const send = () => {
-                  const currentWorkspaceId = useWorkspaceStore.getState().workspaceId;
-                  void useConversationStore.getState().sendMessage(text, currentWorkspaceId);
+                  void useConversationStore.getState().sendMessage(text);
                 };
                 if (!requireLogin('chat', send)) {
                   setDraft('');

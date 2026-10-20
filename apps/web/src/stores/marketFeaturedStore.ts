@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import type { MarketShelfKind } from '@/domain/marketShelf';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   scheduleSavePlatformDoc,
 } from '@/api/platformDocsApi';
@@ -37,14 +36,14 @@ function normalizePins(parsed: Partial<MarketFeaturedPins> | null | undefined): 
 
 function persist(pins: MarketFeaturedPins) {
   if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc(currentWorkspaceId(), 'market-featured', {
+  void scheduleSavePlatformDoc('market-featured', {
     // 外部工具布局不再写入旧文档；保留 internal/projects 仅为兼容历史场景卡。
     pins: { ...pins, external: [] },
   });
 }
 
 function currentHydrationKey() {
-  return `${currentWorkspaceId()}::${canUsePlatformDocsApi() ? 'api' : 'offline'}`;
+  return canUsePlatformDocsApi() ? 'api' : 'offline';
 }
 
 function markLocalMutation() {
@@ -66,9 +65,8 @@ export const useMarketFeaturedStore = create<MarketFeaturedState>((set, get) => 
   pins: defaultPins(),
 
   hydrate: () => {
-    const workspaceId = currentWorkspaceId();
     const canUseApi = canUsePlatformDocsApi();
-    const key = `${workspaceId}::${canUseApi ? 'api' : 'offline'}`;
+    const key = canUseApi ? 'api' : 'offline';
     if (hydratedKey === key || hydrationInFlightKey === key) return;
 
     hydrationInFlightKey = key;
@@ -81,20 +79,16 @@ export const useMarketFeaturedStore = create<MarketFeaturedState>((set, get) => 
           return;
         }
         const remote = await fetchPlatformDoc<{ pins?: MarketFeaturedPins } | MarketFeaturedPins>(
-          workspaceId,
           'market-featured',
         );
         const pins =
           remote && typeof remote === 'object' && 'pins' in remote && remote.pins
             ? normalizePins(remote.pins)
             : normalizePins(remote as Partial<MarketFeaturedPins> | null);
-        if (currentWorkspaceId() === workspaceId) {
-          if (localMutationVersion === mutationVersionAtStart) set({ pins });
-          hydratedKey = key;
-        }
+        if (localMutationVersion === mutationVersionAtStart) set({ pins });
+        hydratedKey = key;
       } catch {
         if (
-          currentWorkspaceId() === workspaceId &&
           localMutationVersion === mutationVersionAtStart
         ) {
           set({ pins: defaultPins() });

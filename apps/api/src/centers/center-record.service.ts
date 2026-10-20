@@ -1,14 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import {
-  AGENT_CATALOG,
-  KNOWLEDGE_CATALOG,
-  MEMORY_CATALOG,
-  PROMPT_CATALOG,
-  SKILL_CATALOG,
-  TOOL_CATALOG,
-  WORKFLOW_CATALOG,
-} from '../data/center-catalogs';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   getNextAgentStatus,
@@ -19,16 +10,6 @@ import {
 } from './center-lifecycle';
 import { listMappedFromMarketplace } from '../persistence/marketplace-center-sync';
 import type { MarketplacePayload } from '../persistence/marketplace-center-sync';
-
-const LOCAL_CATALOGS: Record<CenterKind, Record<string, Record<string, unknown>[]>> = {
-  prompt: PROMPT_CATALOG,
-  agent: AGENT_CATALOG,
-  skill: SKILL_CATALOG,
-  workflow: WORKFLOW_CATALOG,
-  knowledge: KNOWLEDGE_CATALOG,
-  tool: TOOL_CATALOG,
-  memory: MEMORY_CATALOG,
-};
 
 function isExternalToolPayload(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -53,11 +34,7 @@ export class CenterRecordService {
       orderBy: { updatedAt: 'desc' },
     });
 
-    const local = LOCAL_CATALOGS[kind][workspaceId] ?? [];
     const byId = new Map<string, Record<string, unknown>>();
-    for (const item of local) {
-      byId.set(String(item.id), item);
-    }
     for (const row of rows) {
       const payload = row.payload as Record<string, unknown>;
       const id = String(payload.id ?? row.id);
@@ -68,7 +45,6 @@ export class CenterRecordService {
     // Skill 以 marketplace 为准，避免删除后被种子或旧投影补回。
     // 对 tool 而言，marketplace 已经存在就不再返回旧的外部 tool 投影，避免
     // 「配置工具」和「工具运营」看到两份同名目录；内部连接器仍保留兼容读取。
-    let canonicalMarketplaceIds: Set<string> | null = null;
     if (kind === 'agent' || kind === 'skill' || kind === 'tool') {
       const marketRow = await this.prisma.centerRecord.findFirst({
         where: { workspaceId, kind: 'marketplace' },
@@ -79,7 +55,7 @@ export class CenterRecordService {
           marketRow.payload as MarketplacePayload,
         );
         if (kind === 'tool' || kind === 'skill') {
-          canonicalMarketplaceIds = new Set(mapped.map((item) => String(item.id)));
+          const canonicalMarketplaceIds = new Set(mapped.map((item) => String(item.id)));
           for (const [id, payload] of byId) {
             if ((kind === 'skill' || isExternalToolPayload(payload)) && !canonicalMarketplaceIds.has(id)) {
               byId.delete(id);
@@ -92,28 +68,7 @@ export class CenterRecordService {
       }
     }
 
-    if (byId.size === 0) return canonicalMarketplaceIds ? [] : local;
-
-    // Prefer local catalog order, then any DB/marketplace-only extras
-    const ordered: Record<string, unknown>[] = [];
-    const seen = new Set<string>();
-    for (const item of local) {
-      const id = String(item.id);
-      if (
-        canonicalMarketplaceIds &&
-        (kind === 'skill' || isExternalToolPayload(item)) &&
-        !canonicalMarketplaceIds.has(id)
-      ) {
-        seen.add(id);
-        continue;
-      }
-      ordered.push(byId.get(id) ?? item);
-      seen.add(id);
-    }
-    for (const [id, payload] of byId) {
-      if (!seen.has(id)) ordered.push(payload);
-    }
-    return ordered;
+    return [...byId.values()];
   }
 
   async findOne(workspaceId: string, kind: CenterKind, id: string) {
@@ -144,11 +99,7 @@ export class CenterRecordService {
       return row.payload as Record<string, unknown>;
     }
 
-    const local = (LOCAL_CATALOGS[kind][workspaceId] ?? []).find((item) => item.id === id);
-    if (!local || (hasMarketplaceTools && isExternalToolPayload(local))) {
-      throw new NotFoundException(`${kind} ${id} not found`);
-    }
-    return local;
+    throw new NotFoundException(`${kind} ${id} not found`);
   }
 
   async updatePayload(
@@ -255,38 +206,4 @@ export class CenterRecordService {
     });
   }
 
-  async seedAll() {
-    let count = 0;
-    for (const kind of [
-      'prompt',
-      'agent',
-      'skill',
-      'workflow',
-      'knowledge',
-      'tool',
-      'memory',
-    ] as CenterKind[]) {
-      for (const [workspaceId, items] of Object.entries(LOCAL_CATALOGS[kind])) {
-        for (const item of items) {
-          const id = String(item.id);
-          await this.prisma.centerRecord.upsert({
-            where: { id },
-            create: {
-              id,
-              workspaceId,
-              kind,
-              payload: item as Prisma.InputJsonValue,
-            },
-            update: {
-              workspaceId,
-              kind,
-              payload: item as Prisma.InputJsonValue,
-            },
-          });
-          count += 1;
-        }
-      }
-    }
-    return count;
-  }
 }

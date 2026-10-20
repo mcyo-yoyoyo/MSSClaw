@@ -1,10 +1,7 @@
-﻿import { useMemo } from 'react';
-import { SettingsNav } from '@/components/settings/SettingsNav';
+﻿import { SettingsNav } from '@/components/settings/SettingsNav';
 import { SettingsContent } from '@/components/settings/SettingsPanels';
 import { CenterPageHeader } from '@/components/center/CenterShell';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
-import { useWorkspaceConfigStore } from '@/stores/workspaceConfigStore';
 
 export function SettingsPage() {
   const activeTab = useSettingsStore((s) => s.activeTab);
@@ -15,32 +12,6 @@ export function SettingsPage() {
   const setMemberStatus = useSettingsStore((s) => s.setMemberStatus);
   const inviteMember = useSettingsStore((s) => s.inviteMember);
   const removeMember = useSettingsStore((s) => s.removeMember);
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
-  const workspaceList = useWorkspaceStore((s) => s.workspaceList);
-  const getConfig = useWorkspaceConfigStore((s) => s.getConfig);
-
-  const workspace = useMemo(() => {
-    const fromList = workspaceList.find((w) => w.id === workspaceId);
-    const fromConfig = getConfig(workspaceId);
-    return (
-      fromList ??
-      (fromConfig
-        ? {
-            id: fromConfig.id,
-            name: fromConfig.name,
-            namespace: fromConfig.namespace ?? 'default',
-            description: fromConfig.description ?? '',
-            memberCount: members.length,
-          }
-        : {
-            id: workspaceId,
-            name: '工作区',
-            namespace: 'default',
-            description: '',
-            memberCount: members.length,
-          })
-    );
-  }, [workspaceId, workspaceList, getConfig, members.length]);
 
   return (
     <div className="center-surface flex min-w-0 flex-grow overflow-hidden">
@@ -59,7 +30,6 @@ export function SettingsPage() {
           />
           <SettingsContent
             tab={activeTab}
-            workspace={workspace}
             members={members}
             onUpdateRole={updateMemberRole}
             onUpdateOrg={updateMemberOrg}

@@ -2,19 +2,18 @@ import { create } from 'zustand';
 import { CenterApiError, fetchKnowledgeBases, runKnowledgePipelineApi } from '@/api/centerApi';
 import {
   findKnowledgeBaseByName,
-  getKnowledgeBasesByWorkspace,
+  KNOWLEDGE_SEEDS,
   type KnowledgeBase,
   type PipelineStage,
 } from '@/domain/knowledge';
 interface KnowledgeState {
-  workspaceId: string;
   bases: KnowledgeBase[];
   selectedBaseId: string | null;
   selectedDocumentId: string | null;
   pipelineRunning: boolean;
   toast: string | null;
 
-  loadWorkspace: (workspaceId: string) => void;
+  load: () => void;
   selectBase: (id: string | null) => void;
   selectBaseByName: (name: string) => void;
   selectDocument: (id: string | null) => void;
@@ -25,18 +24,16 @@ interface KnowledgeState {
 }
 
 export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
-  workspaceId: 'ws-cn-marketing',
-  bases: getKnowledgeBasesByWorkspace('ws-cn-marketing'),
-  selectedBaseId: getKnowledgeBasesByWorkspace('ws-cn-marketing')[0]?.id ?? null,
+  bases: KNOWLEDGE_SEEDS,
+  selectedBaseId: KNOWLEDGE_SEEDS[0]?.id ?? null,
   selectedDocumentId: null,
   pipelineRunning: false,
   toast: null,
 
-  loadWorkspace: (workspaceId) => {
+  load: () => {
     void (async () => {
-      const bases = await fetchKnowledgeBases(workspaceId);
+      const bases = await fetchKnowledgeBases();
       set({
-        workspaceId,
         bases,
         selectedBaseId: bases[0]?.id ?? null,
         selectedDocumentId: null,
@@ -46,7 +43,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   selectBase: (id) => set({ selectedBaseId: id, selectedDocumentId: null }),
 
   selectBaseByName: (name) => {
-    const base = findKnowledgeBaseByName(get().workspaceId, name);
+    const base = findKnowledgeBaseByName(name);
     if (base) set({ selectedBaseId: base.id, selectedDocumentId: null });
   },
 
@@ -56,7 +53,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     if (get().pipelineRunning) return;
 
     set({ pipelineRunning: true });
-    const { workspaceId, bases } = get();
+    const { bases } = get();
 
     try {
       const stages: Array<{ status: 'chunking' | 'embedding' | 'indexed'; stage: PipelineStage }> = [
@@ -87,7 +84,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
         }));
       }
 
-      const updated = await runKnowledgePipelineApi(workspaceId, baseId, docId);
+      const updated = await runKnowledgePipelineApi(baseId, docId);
       const doc = updated.documents.find((d) => d.id === docId);
       set({
         bases: bases.map((b) => (b.id === baseId ? updated : b)),
@@ -118,8 +115,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   },
 }));
 
-export function resolveKnowledgeBaseIdFromResource(resourceId: string, resourceName?: string | null, workspaceId?: string) {
+export function resolveKnowledgeBaseIdFromResource(resourceId: string, resourceName?: string | null) {
   if (resourceId.startsWith('kb-')) return resourceId;
-  if (resourceName && workspaceId) return findKnowledgeBaseByName(workspaceId, resourceName)?.id ?? null;
+  if (resourceName) return findKnowledgeBaseByName(resourceName)?.id ?? null;
   return null;
 }

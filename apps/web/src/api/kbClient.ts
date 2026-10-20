@@ -36,12 +36,11 @@ function toKbPayload(docs: PrototypeKbDocument[]) {
 }
 
 export async function parseKbDocument(
-  workspaceId: string,
   params: { filename: string; content?: string; sizeBytes?: number },
 ): Promise<ParseKbResult> {
   if (isApiEnabled()) {
     try {
-      const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/knowledge-rag/documents/parse`), {
+      const res = await fetch(apiUrl(`/api/v1/knowledge-rag/documents/parse`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params),
@@ -73,14 +72,13 @@ export async function parseKbDocument(
 }
 
 export async function fetchKbVectorStatus(
-  workspaceId: string,
   docs: PrototypeKbDocument[],
 ): Promise<KbVectorStatus> {
   const indexed = docs.filter((d) => d.indexed);
 
   if (isApiEnabled()) {
     try {
-      const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/knowledge-rag/vector/status`), {
+      const res = await fetch(apiUrl(`/api/v1/knowledge-rag/vector/status`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documents: toKbPayload(indexed) }),
@@ -102,14 +100,13 @@ export async function fetchKbVectorStatus(
 }
 
 export async function rebuildKbVectorIndex(
-  workspaceId: string,
   docs: PrototypeKbDocument[],
 ): Promise<{ message?: string; indexedChunks?: number }> {
   const indexed = docs.filter((d) => d.indexed);
 
   if (isApiEnabled()) {
     try {
-      const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/knowledge-rag/vector/rebuild`), {
+      const res = await fetch(apiUrl(`/api/v1/knowledge-rag/vector/rebuild`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documents: toKbPayload(indexed) }),
@@ -125,7 +122,6 @@ export async function rebuildKbVectorIndex(
 }
 
 export async function searchKbDocuments(
-  workspaceId: string,
   query: string,
   docs: PrototypeKbDocument[],
 ): Promise<KbArtifact> {
@@ -133,7 +129,7 @@ export async function searchKbDocuments(
 
   if (isApiEnabled()) {
     try {
-      const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/knowledge-rag/search`), {
+      const res = await fetch(apiUrl(`/api/v1/knowledge-rag/search`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -172,9 +168,8 @@ export async function searchKbDocuments(
 }
 
 export async function resolveKbContextForTask(
-  workspaceId: string,
   query: string,
   docs: PrototypeKbDocument[],
 ): Promise<KbArtifact> {
-  return searchKbDocuments(workspaceId, query, docs);
+  return searchKbDocuments(query, docs);
 }

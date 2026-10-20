@@ -1,17 +1,14 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
+import { PLATFORM_WORKSPACE_ID } from '../common/platform-workspace';
 import { WorkspacesService } from './workspaces.service';
 
-@Controller('workspaces')
+@Controller('catalog')
 export class WorkspacesController {
   constructor(private readonly workspacesService: WorkspacesService) {}
 
+  /** 平台目录：资源树与对话列表 */
   @Get()
-  list() {
-    return this.workspacesService.findAll();
-  }
-
-  @Get(':id/catalog')
-  catalog(@Param('id') id: string) {
-    return this.workspacesService.findCatalog(id);
+  catalog() {
+    return this.workspacesService.findCatalog(PLATFORM_WORKSPACE_ID);
   }
 }

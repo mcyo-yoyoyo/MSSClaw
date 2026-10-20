@@ -179,9 +179,8 @@ test('分类布局未取得时明确展示加载或失败状态，不伪装成�
 
 test('切换账号会清空上一账号的布局草稿', () => {
   assert.match(layoutStoreSource, /useSessionStore\.subscribe/);
-  assert.match(layoutStoreSource, /stagedDraftsByWorkspace\.clear\(\)/);
   assert.match(
     layoutStoreSource,
-    /workspaceId: currentWorkspaceId\(\),\s*document: null,\s*draft: null,\s*dirty: false/,
+    /operationGeneration \+= 1;\s*useExternalToolLayoutStore\.setState\(\{\s*document: null,\s*draft: null,\s*dirty: false/,
   );
 });

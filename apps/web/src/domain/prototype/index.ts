@@ -6,6 +6,5 @@ export * from '@/domain/prototype/tools';
 export * from '@/domain/prototype/portalContent';
 export * from '@/domain/prototype/kb';
 export * from '@/domain/prototype/automations';
-export * from '@/domain/prototype/workspaces';
 export * from '@/domain/prototype/home';
 export * from '@/domain/prototype/adapters';

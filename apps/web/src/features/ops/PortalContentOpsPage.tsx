@@ -43,7 +43,6 @@ import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeScene
 import { useStationAnnouncementStore } from '@/stores/stationAnnouncementStore';
 import { useAiNewsStore } from '@/stores/aiNewsStore';
 import { useAiBriefEmailCopyStore } from '@/stores/aiBriefEmailCopyStore';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 type EditorTarget = string | 'new' | null;
 type OpsSurface =
@@ -102,7 +101,6 @@ export function PortalContentOpsPage() {
   const howtoToast = usePlazaToolGuideStore((s) => s.toast);
   const dismissHowtoToast = usePlazaToolGuideStore((s) => s.dismissToast);
   const bootstrapHowto = usePlazaToolGuideStore((s) => s.bootstrap);
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
 
   useEffect(() => {
     bootstrapHowto();
@@ -112,7 +110,7 @@ export function PortalContentOpsPage() {
     useStationAnnouncementStore.getState().hydrate();
     useAiNewsStore.getState().hydrate();
     useAiBriefEmailCopyStore.getState().hydrate();
-  }, [bootstrapHowto, workspaceId]);
+  }, [bootstrapHowto]);
 
   useEffect(() => {
     if (!howtoToast) return;

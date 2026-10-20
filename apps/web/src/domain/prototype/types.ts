@@ -438,8 +438,3 @@ export interface PrototypeAutomation {
   lastRun: string;
 }
 
-export interface PrototypeWorkspace {
-  id: string;
-  label: string;
-  short: string;
-}

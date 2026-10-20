@@ -40,17 +40,17 @@ test('新增模型默认展示 OpenAI Bearer 约定并支持调试失败反馈',
   assert.match(source, /upsertPlatformModel\([\s\S]*?baseUrl: draft\.baseUrl\.trim\(\)[\s\S]*?apiKey: draft\.apiKey\.trim\(\)/);
 });
 
-test('模型测试走服务端同一工作区链路，不再从浏览器直连厂商', () => {
-  assert.match(llmClientSource, /\/api\/v1\/workspaces\/\$\{encodeURIComponent\(workspaceId\)\}\/llm-config\/test/);
+test('模型测试走服务端链路，不再从浏览器直连厂商', () => {
+  assert.match(llmClientSource, /\/api\/v1\/llm-config\/test/);
   assert.match(llmClientSource, /testWorkspaceLlmConnection/);
   assert.match(source, /import \{ testWorkspaceLlmConnection/);
   assert.doesNotMatch(source, /testLlmConnection\(/);
 });
 
-test('模型测试显式锁定当前工作区，避免切租户时串用配置', () => {
-  assert.match(source, /testWorkspaceLlmConnection\(\{\s*workspaceId,\s*model: modelId/);
-  assert.match(source, /testWorkspaceLlmConnection\(\{\s*workspaceId:\s*testWorkspaceId,\s*model:\s*model\.id/);
-  assert.match(settingsModalSource, /testWorkspaceLlmConnection\(\{\s*workspaceId,\s*model:/);
+test('模型测试按模型 id 调用服务端配置', () => {
+  assert.match(source, /testWorkspaceLlmConnection\(\{\s*model: modelId/);
+  assert.match(source, /testWorkspaceLlmConnection\(\{\s*model:\s*model\.id/);
+  assert.match(settingsModalSource, /testWorkspaceLlmConnection\(\{\s*model:/);
   assert.match(source, /if \(!isAuthenticated\) return;/);
 });
 
@@ -101,7 +101,6 @@ test('已有模型测试结果在当前页保留诊断并标明使用的保存�
   assert.match(source, /本次使用数据库中已保存的 Base URL 和 API Key/);
   assert.match(source, /hadUnsavedKey/);
   assert.match(source, /result\.diagnostics\.httpStatus/);
-  assert.match(source, /useWorkspaceStore\.getState\(\)\.workspaceId === testWorkspaceId/);
 });
 
 test('客户端保留服务端错误码和脱敏诊断字段', () => {

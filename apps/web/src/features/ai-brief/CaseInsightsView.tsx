@@ -2,12 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { fetchPublishedCaseInsights, type CaseInsightArticle } from '@/api/caseInsightsApi';
 import { getDeptLabel } from '@/domain/orgTaxonomy';
 import { useMarketFilterStore } from '@/stores/marketFilterStore';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 const ARTICLE_URL = `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}#/case-insight`;
 
-function articleUrl(workspaceId: string, id: string) {
-  return `${ARTICLE_URL}?workspaceId=${encodeURIComponent(workspaceId)}&id=${encodeURIComponent(id)}`;
+function articleUrl(id: string) {
+  return `${ARTICLE_URL}?id=${encodeURIComponent(id)}`;
 }
 
 type CasePresentation = {
@@ -38,7 +37,6 @@ function publishedDate(value: string | null) {
 }
 
 export function CaseInsightsView() {
-  const workspaceId = useWorkspaceStore((state) => state.workspaceId);
   const domain = useMarketFilterStore((state) => state.orgSelection.dept[0] ?? null);
   const [items, setItems] = useState<CaseInsightArticle[]>([]);
   const [query, setQuery] = useState('');
@@ -49,12 +47,12 @@ export function CaseInsightsView() {
     let cancelled = false;
     setLoading(true);
     setError(false);
-    void fetchPublishedCaseInsights(workspaceId)
+    void fetchPublishedCaseInsights()
       .then((result) => { if (!cancelled) setItems(result); })
       .catch(() => { if (!cancelled) setError(true); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [workspaceId]);
+  }, []);
 
   const presentation = useMemo(() => new Map(items.map((item) => [item.id, getPresentation(item)])), [items]);
   const visibleItems = useMemo(() => {
@@ -100,7 +98,7 @@ export function CaseInsightsView() {
                     {date ? <time dateTime={item.publishedAt ?? undefined}>{date}</time> : null}
                   </div>
                   <a
-                    href={articleUrl(workspaceId, item.id)}
+                    href={articleUrl(item.id)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block text-left text-[16px] font-semibold leading-snug text-zinc-900 transition hover:text-[#0071e3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]/30"
@@ -129,7 +127,7 @@ export function CaseInsightsView() {
                   </div>
                 </div>
                 {card?.cover ? (
-                  <a href={articleUrl(workspaceId, item.id)} target="_blank" rel="noopener noreferrer" aria-label={`查看案例：${item.title}`} className="order-first aspect-[16/9] w-full overflow-hidden rounded-lg bg-zinc-100 sm:order-none sm:aspect-[4/3]">
+                  <a href={articleUrl(item.id)} target="_blank" rel="noopener noreferrer" aria-label={`查看案例：${item.title}`} className="order-first aspect-[16/9] w-full overflow-hidden rounded-lg bg-zinc-100 sm:order-none sm:aspect-[4/3]">
                     <img src={card.cover} alt="" loading="lazy" className="h-full w-full object-cover transition duration-200 hover:scale-[1.02]" />
                   </a>
                 ) : null}

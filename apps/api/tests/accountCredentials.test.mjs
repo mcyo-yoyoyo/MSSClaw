@@ -47,9 +47,11 @@ function fakePrisma(rows = {}) {
   };
 }
 
+const WS = 'ws-cn-marketing';
+
 const docRow = (kind, payload) => ({
-  id: `doc-${kind}-ws-test`,
-  workspaceId: 'ws-test',
+  id: `doc-${kind}-${WS}`,
+  workspaceId: WS,
   kind: `doc:${kind}`,
   payload,
 });
@@ -59,14 +61,14 @@ test('内置工作区首次 GET 不再把默认口令物化成真实凭证', asy
   const service = new PlatformDocsService(prisma, {});
 
   // 内置工作区仍放行演示口令，但不落库任何真实凭证
-  const builtin = await service.getDoc('ws-mss-ai', 'auth-credentials');
+  const builtin = await service.getDoc(WS, 'auth-credentials');
   assert.deepEqual(builtin.payload, {
     policy: { allowDemoPassword: true },
     credentials: {},
     revision: 0,
   });
 
-  // 非内置（含请求侧自动建出来的）工作区连演示口令都不放行
+  // 非平台空间（旧数据里残留的其他工作区）连演示口令都不放行
   const adhoc = await service.getDoc('ws-test', 'auth-credentials');
   assert.deepEqual(adhoc.payload, {
     policy: { allowDemoPassword: false },
@@ -78,7 +80,7 @@ test('内置工作区首次 GET 不再把默认口令物化成真实凭证', asy
 test('GET 归一化历史 key（大小写 / @company.com），登录才能命中已设密码', async () => {
   const cred = credentialFor('super-secret');
   const prisma = fakePrisma({
-    'doc-auth-credentials-ws-test': docRow('auth-credentials', {
+    [`doc-auth-credentials-${WS}`]: docRow('auth-credentials', {
       policy: { allowDemoPassword: true },
       credentials: { 'Jacky@Company.com': cred },
       revision: 3,
@@ -86,7 +88,7 @@ test('GET 归一化历史 key（大小写 / @company.com），登录才能命中
   });
   const service = new PlatformDocsService(prisma, {});
 
-  const result = await service.getDoc('ws-test', 'auth-credentials');
+  const result = await service.getDoc(WS, 'auth-credentials');
 
   assert.deepEqual(Object.keys(result.payload.credentials), ['jacky@huawei.com']);
   assert.equal(result.payload.revision, 3);
@@ -94,7 +96,7 @@ test('GET 归一化历史 key（大小写 / @company.com），登录才能命中
 
 test('已设密账号不会被默认口令 mssclaw 登进去', async () => {
   const prisma = fakePrisma({
-    'doc-members-ws-test': docRow('members', {
+    [`doc-members-${WS}`]: docRow('members', {
       members: [
         {
           id: 'm-1',
@@ -105,7 +107,7 @@ test('已设密账号不会被默认口令 mssclaw 登进去', async () => {
         },
       ],
     }),
-    'doc-auth-credentials-ws-test': docRow('auth-credentials', {
+    [`doc-auth-credentials-${WS}`]: docRow('auth-credentials', {
       policy: { allowDemoPassword: true },
       credentials: { 'Jacky@Company.com': credentialFor('super-secret') },
       revision: 1,
@@ -115,16 +117,14 @@ test('已设密账号不会被默认口令 mssclaw 登进去', async () => {
 
   const demo = await service.login({
     email: 'jacky@huawei.com',
-    password: 'mssclaw',
-    workspaceId: 'ws-test',
+    password: 'mssclaw'
   });
   assert.equal(demo.ok, false);
   assert.equal(demo.error, '密码错误');
 
   const real = await service.login({
     email: 'JACKY@huawei.com',
-    password: 'super-secret',
-    workspaceId: 'ws-test',
+    password: 'super-secret'
   });
   assert.equal(real.ok, true);
 });
@@ -132,7 +132,7 @@ test('已设密账号不会被默认口令 mssclaw 登进去', async () => {
 test('PUT 拒绝陈旧 revision，避免整份覆盖抹掉他人刚设的密码', async () => {
   const kept = credentialFor('set-by-admin-b');
   const prisma = fakePrisma({
-    'doc-auth-credentials-ws-test': docRow('auth-credentials', {
+    [`doc-auth-credentials-${WS}`]: docRow('auth-credentials', {
       policy: { allowDemoPassword: true },
       credentials: { 'b@huawei.com': kept },
       revision: 5,
@@ -142,7 +142,7 @@ test('PUT 拒绝陈旧 revision，避免整份覆盖抹掉他人刚设的密码'
 
   await assert.rejects(
     // 管理员 A 手里是 revision 4 的旧快照
-    service.putDoc('ws-test', 'auth-credentials', {
+    service.putDoc(WS, 'auth-credentials', {
       policy: { allowDemoPassword: true },
       credentials: { 'a@huawei.com': credentialFor('set-by-admin-a') },
       revision: 4,
@@ -150,13 +150,13 @@ test('PUT 拒绝陈旧 revision，避免整份覆盖抹掉他人刚设的密码'
     (error) => error.getResponse().error === 'auth_credentials_revision_conflict',
   );
 
-  const after = await service.getDoc('ws-test', 'auth-credentials');
+  const after = await service.getDoc(WS, 'auth-credentials');
   assert.deepEqual(Object.keys(after.payload.credentials), ['b@huawei.com']);
 });
 
 test('PUT 命中 revision 时写入成功并递增版本，key 落库即归一化', async () => {
   const prisma = fakePrisma({
-    'doc-auth-credentials-ws-test': docRow('auth-credentials', {
+    [`doc-auth-credentials-${WS}`]: docRow('auth-credentials', {
       policy: { allowDemoPassword: true },
       credentials: {},
       revision: 5,
@@ -164,7 +164,7 @@ test('PUT 命中 revision 时写入成功并递增版本，key 落库即归一�
   });
   const service = new PlatformDocsService(prisma, {});
 
-  const saved = await service.putDoc('ws-test', 'auth-credentials', {
+  const saved = await service.putDoc(WS, 'auth-credentials', {
     policy: { allowDemoPassword: false },
     credentials: { ' Dickson@Company.com ': credentialFor('pw-123456') },
     revision: 5,
@@ -177,7 +177,7 @@ test('PUT 命中 revision 时写入成功并递增版本，key 落库即归一�
 
 test('成员表同样受 revision 保护', async () => {
   const prisma = fakePrisma({
-    'doc-members-ws-test': docRow('members', {
+    [`doc-members-${WS}`]: docRow('members', {
       members: [{ id: 'm-1', name: 'A', email: 'a@huawei.com', role: 'viewer' }],
       revision: 2,
     }),
@@ -185,11 +185,11 @@ test('成员表同样受 revision 保护', async () => {
   const service = new PlatformDocsService(prisma, {});
 
   await assert.rejects(
-    service.putDoc('ws-test', 'members', { members: [], revision: 1 }),
+    service.putDoc(WS, 'members', { members: [], revision: 1 }),
     (error) => error.getResponse().error === 'members_revision_conflict',
   );
 
-  const ok = await service.putDoc('ws-test', 'members', { members: [], revision: 2 });
+  const ok = await service.putDoc(WS, 'members', { members: [], revision: 2 });
   assert.equal(ok.payload.revision, 3);
 });
 
@@ -206,25 +206,25 @@ test('密码表只有 super_admin 能读，写入同样要求 super_admin', asyn
   });
 
   await assert.rejects(
-    controller.getOne('ws-test', 'auth-credentials', 'Bearer t'),
+    controller.getOne('auth-credentials', 'Bearer t'),
     (error) => error.message === 'auth_credentials_admin_required',
   );
   await assert.rejects(
-    controller.putOne('ws-test', 'auth-credentials', { payload: {} }, 'Bearer t'),
+    controller.putOne('auth-credentials', { payload: {} }, 'Bearer t'),
     (error) => error.message === 'auth_credentials_admin_required',
   );
   await assert.rejects(
-    controller.putOne('ws-test', 'members', { payload: { members: [] } }, 'Bearer t'),
+    controller.putOne('members', { payload: { members: [] } }, 'Bearer t'),
     (error) => error.message === 'members_admin_required',
   );
   assert.equal(putCalls, 0);
 
   role = 'super_admin';
-  assert.deepEqual(await controller.getOne('ws-test', 'auth-credentials', 'Bearer t'), {
-    workspaceId: 'ws-test',
+  assert.deepEqual(await controller.getOne('auth-credentials', 'Bearer t'), {
+    workspaceId: WS,
     kind: 'auth-credentials',
   });
-  await controller.putOne('ws-test', 'auth-credentials', { payload: {} }, 'Bearer t');
+  await controller.putOne('auth-credentials', { payload: {} }, 'Bearer t');
   assert.equal(putCalls, 1);
 });
 
@@ -237,12 +237,12 @@ test('未登录既不能读密码表也不能写成员表', async () => {
     },
   });
 
-  await assert.rejects(controller.getOne('ws-test', 'auth-credentials'), {
+  await assert.rejects(controller.getOne('auth-credentials'), {
     name: 'UnauthorizedException',
   });
-  await assert.rejects(controller.putOne('ws-test', 'members', { payload: { members: [] } }), {
+  await assert.rejects(controller.putOne('members', { payload: { members: [] } }), {
     name: 'UnauthorizedException',
   });
   // 门户展示类文档仍对游客开放
-  assert.deepEqual(await controller.getOne('ws-test', 'market-featured'), { ok: true });
+  assert.deepEqual(await controller.getOne('market-featured'), { ok: true });
 });

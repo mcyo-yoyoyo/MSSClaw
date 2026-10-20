@@ -6,7 +6,6 @@ import {
   Get,
   Headers,
   Ip,
-  Param,
   Post,
   Query,
   UnauthorizedException,
@@ -14,6 +13,8 @@ import {
 import { SkipThrottle } from '@nestjs/throttler';
 import { PlatformDocsService } from './platform-docs.service';
 import { PortalAnalyticsService } from './portal-analytics.service';
+// 单租户：原路由参数 workspaceId 固定为平台空间，方法体沿用这个名字（第 2 期随服务层一起去掉）
+import { PLATFORM_WORKSPACE_ID as workspaceId } from '../common/platform-workspace';
 
 const UUID_V4_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -30,7 +31,7 @@ function sessionToken(authorization?: string, xSessionToken?: string): string | 
   return (xSessionToken ?? '').trim() || undefined;
 }
 
-@Controller('workspaces/:workspaceId/portal-analytics')
+@Controller('portal-analytics')
 export class PortalAnalyticsController {
   constructor(
     private readonly analytics: PortalAnalyticsService,
@@ -42,7 +43,6 @@ export class PortalAnalyticsController {
   // a 429 response, which gives anonymous traffic a useful signal for tuning a flood.
   @SkipThrottle()
   async recordPageView(
-    @Param('workspaceId') workspaceId: string,
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-session-token') xSessionToken: string | undefined,
     @Body() body: { eventId?: string; routeKey?: string; visitorId?: string },
@@ -79,7 +79,6 @@ export class PortalAnalyticsController {
   @Post('gate-events')
   @SkipThrottle()
   async recordGateHit(
-    @Param('workspaceId') workspaceId: string,
     @Body()
     body: {
       eventId?: string;
@@ -101,7 +100,6 @@ export class PortalAnalyticsController {
 
   @Get()
   async getReport(
-    @Param('workspaceId') workspaceId: string,
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-session-token') xSessionToken: string | undefined,
     @Query('days') days?: string,

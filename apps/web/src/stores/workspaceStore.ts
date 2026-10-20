@@ -1,47 +1,27 @@
 import { create } from 'zustand';
 import type { ModuleId } from '@/domain/chat';
-import {
-  EXPLORER_SECTIONS,
-  getWorkspaceCatalog,
-  WORKSPACE_LIST,
-  type ExplorerSection,
-  type Workspace,
-  type WorkspaceCatalog,
-} from '@/domain/workspace';
-import { getInitialWorkspaceId } from '@/domain/workspaceConfig';
-import { useWorkspaceConfigStore } from '@/stores/workspaceConfigStore';
-import {
-  fetchAllWorkspaceCatalogs,
-  fetchWorkspaceCatalog,
-  fetchWorkspaceList,
-  getLocalWorkspaceCatalogs,
-} from '@/api/workspaceApi';
+import { EXPLORER_SECTIONS, PLATFORM_CATALOG, type ExplorerSection, type WorkspaceCatalog } from '@/domain/workspace';
+import { fetchPlatformCatalog } from '@/api/workspaceApi';
 import { fetchApiHealthInfo } from '@/api/persistenceApi';
 import { isApiEnabled, isForceLocalDemo } from '@/api/client';
 
+/** 平台目录（资源树、对话列表）与共享 API 连接状态；平台只有一个空间。 */
 interface WorkspaceState {
-  workspaceId: string;
-  workspaceList: Workspace[];
-  catalogs: Record<string, WorkspaceCatalog>;
+  catalog: WorkspaceCatalog;
   catalogReady: boolean;
   catalogLoading: boolean;
   apiConnected: boolean;
-  /** 共享 API 是否配置了部署级 LLM_*（工作区文档配置另计） */
+  /** 共享 API 是否配置了部署级 LLM_*（平台文档配置另计） */
   nestLlmEnvConfigured: boolean;
   /** connected | unreachable | local-demo（强制本地） */
   apiStatus: 'unknown' | 'connected' | 'unreachable' | 'local-demo';
   expandedSections: Record<ExplorerSection, boolean>;
   selectedResourceId: string | null;
-  switchToast: string | null;
 
   bootstrap: () => Promise<void>;
-  getCatalog: (workspaceId: string) => WorkspaceCatalog;
-  currentWorkspace: () => Workspace;
-  switchWorkspace: (workspaceId: string) => string;
   toggleSection: (section: ExplorerSection) => void;
   selectResource: (resourceId: string | null) => void;
   resourceToModule: (kind: 'agent' | 'workflow' | 'knowledge' | 'prompt') => ModuleId;
-  dismissSwitchToast: () => void;
 }
 
 const DEFAULT_EXPANDED = EXPLORER_SECTIONS.reduce(
@@ -53,12 +33,7 @@ const DEFAULT_EXPANDED = EXPLORER_SECTIONS.reduce(
 );
 
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
-  workspaceId: getInitialWorkspaceId(),
-  workspaceList: useWorkspaceConfigStore.getState().getVisibleWorkspaces(),
-  catalogs: {
-    ...getLocalWorkspaceCatalogs(),
-    ...useWorkspaceConfigStore.getState().getCustomCatalogs(),
-  },
+  catalog: PLATFORM_CATALOG,
   catalogReady: false,
   catalogLoading: false,
   apiConnected: false,
@@ -66,7 +41,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   apiStatus: 'unknown',
   expandedSections: DEFAULT_EXPANDED,
   selectedResourceId: null,
-  switchToast: null,
 
   bootstrap: async () => {
     if (get().catalogReady || get().catalogLoading) return;
@@ -74,10 +48,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set({ catalogLoading: true });
 
     const finishLocal = (status: 'unreachable' | 'local-demo') => {
-      const config = useWorkspaceConfigStore.getState();
       set({
-        workspaceList: config.getVisibleWorkspaces(),
-        catalogs: { ...getLocalWorkspaceCatalogs(), ...config.getCustomCatalogs() },
+        catalog: PLATFORM_CATALOG,
         catalogReady: true,
         catalogLoading: false,
         apiConnected: false,
@@ -98,22 +70,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         return;
       }
 
-      const config = useWorkspaceConfigStore.getState();
-      const apiList = await fetchWorkspaceList();
-      const apiIds = new Set(apiList.map((item) => item.id));
-      const visible = config.getVisibleWorkspaces();
-      const workspaceList = visible.length ? visible : apiList;
-      // Only hit API for tenants that exist remotely; fill the rest from local seed
-      // so Network does not fill with catalog 404s for frontend-only ids.
-      const remoteIds = workspaceList.map((item) => item.id).filter((id) => apiIds.has(id));
-      const catalogs = {
-        ...getLocalWorkspaceCatalogs(),
-        ...(await fetchAllWorkspaceCatalogs(remoteIds)),
-        ...config.getCustomCatalogs(),
-      };
       set({
-        workspaceList,
-        catalogs,
+        catalog: await fetchPlatformCatalog(),
         catalogReady: true,
         catalogLoading: false,
         apiConnected: true,
@@ -123,43 +81,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     } catch {
       finishLocal('unreachable');
     }
-  },
-
-  getCatalog: (workspaceId) => {
-    const { catalogs } = get();
-    return catalogs[workspaceId] ?? getWorkspaceCatalog(workspaceId);
-  },
-
-  currentWorkspace: () => {
-    const catalog = get().getCatalog(get().workspaceId);
-    return useWorkspaceConfigStore.getState().resolveWorkspace(catalog.workspace);
-  },
-
-  switchWorkspace: (workspaceId) => {
-    const config = useWorkspaceConfigStore.getState();
-    if (!config.isEnabled(workspaceId)) {
-      set({ switchToast: '该租户已隐藏，请在「租户配置」中启用' });
-      return get().getCatalog(get().workspaceId).defaultChatId;
-    }
-    const catalog = get().getCatalog(workspaceId);
-    const displayName = useWorkspaceConfigStore.getState().resolveWorkspace(catalog.workspace).name;
-    set({
-      workspaceId,
-      selectedResourceId: null,
-      expandedSections: { ...DEFAULT_EXPANDED },
-      switchToast: `已切换到「${displayName}」`,
-    });
-
-    if (isApiEnabled() && !get().catalogs[workspaceId]) {
-      // Prefer local seed when already known; only refresh remotely for ids we have not cached.
-      void fetchWorkspaceCatalog(workspaceId).then((fresh) => {
-        set((state) => ({
-          catalogs: { ...state.catalogs, [workspaceId]: fresh },
-        }));
-      });
-    }
-
-    return catalog.defaultChatId;
   },
 
   toggleSection: (section) =>
@@ -181,8 +102,4 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     } as const;
     return map[kind];
   },
-
-  dismissSwitchToast: () => set({ switchToast: null }),
 }));
-
-export { WORKSPACE_LIST };

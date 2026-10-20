@@ -19,15 +19,10 @@ const MODULE_TO_VIEW: Partial<Record<ModuleId, AppView>> = {
   settings: 'admin',
 };
 
-interface TaskResourceExplorerProps {
-  onWorkspaceSwitch: (workspaceId: string) => void;
-}
-
-export function TaskResourceExplorer({ onWorkspaceSwitch }: TaskResourceExplorerProps) {
+export function TaskResourceExplorer() {
   const open = useTaskStore((s) => s.resourceExplorerOpen);
   const close = useTaskStore((s) => s.closeResourceExplorer);
 
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const expandedSections = useWorkspaceStore((s) => s.expandedSections);
   const selectedResourceId = useWorkspaceStore((s) => s.selectedResourceId);
   const toggleSection = useWorkspaceStore((s) => s.toggleSection);
@@ -58,15 +53,10 @@ export function TaskResourceExplorer({ onWorkspaceSwitch }: TaskResourceExplorer
       />
       <div className="fixed left-0 top-12 z-[75] h-[calc(100vh-3rem)] shadow-2xl">
         <ResourceExplorer
-          workspaceId={workspaceId}
           chats={chats}
           currentChatId={currentChatId}
           expandedSections={expandedSections}
           selectedResourceId={selectedResourceId}
-          onWorkspaceSwitch={(id) => {
-            onWorkspaceSwitch(id);
-            close();
-          }}
           onToggleSection={toggleSection}
           onSwitchChat={handleSwitchChat}
           onOpenModule={handleOpenModule}

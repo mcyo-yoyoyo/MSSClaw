@@ -15,7 +15,6 @@ import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useAuthGateStore } from '@/stores/authGateStore';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 const TOP_SHELF_NAV: { view: AppView; label: string }[] = [
   { view: 'home', label: '首页' },
@@ -32,19 +31,16 @@ const ADMIN_MENU_ITEMS: { view: AppView; label: string }[] = ADMIN_MENU_VIEWS.ma
 
 interface AppHeaderProps {
   apiConnected: boolean;
-  onWorkspaceSwitch?: (workspaceId: string) => void;
 }
 
-export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onWorkspaceSwitch }: AppHeaderProps) {
+export function AppHeader({ apiConnected: _apiConnected }: AppHeaderProps) {
   void _apiConnected;
-  void _onWorkspaceSwitch;
   const appView = useAppViewStore((s) => s.appView);
   const setAppView = useAppViewStore((s) => s.setAppView);
   const expandAdminNav = useAppViewStore((s) => s.expandAdminNav);
   const openPalette = useCommandPaletteStore((s) => s.openPalette);
   const isViewEnabled = useNavPresentationStore((s) => s.isViewEnabled);
   const roleEnabled = useNavPresentationStore((s) => s.roleEnabled);
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const pendingToolId = useNavigationIntentStore((s) => s.pendingToolId);
   const returnTarget = useNavigationIntentStore((s) => s.returnTarget);
   const tools = useMarketplaceStore((s) => s.tools);
@@ -73,7 +69,7 @@ export function AppHeader({ apiConnected: _apiConnected, onWorkspaceSwitch: _onW
   const isOpsShell = defaultShellPerspective(user?.platformRole) === 'ops';
   const adminItems = useMemo(
     () => ADMIN_MENU_ITEMS.filter((i) => isViewEnabled(i.view)),
-    [isViewEnabled, roleEnabled, user?.platformRole, workspaceId],
+    [isViewEnabled, roleEnabled, user?.platformRole],
   );
   const canOpenAdmin = isOpsShell && adminItems.length > 0;
   const adminActive = isOpsOnlyView(appView);

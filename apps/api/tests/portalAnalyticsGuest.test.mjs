@@ -91,7 +91,6 @@ test('anonymous page views require guest:<uuid-v4> and never resolve a session',
   const { controller, analytics, docsCalls } = controllerWith();
 
   await controller.recordPageView(
-    'ws-test',
     undefined,
     undefined,
     { eventId: 'event-0001', routeKey: 'home', visitorId: GUEST_VISITOR_ID },
@@ -101,7 +100,7 @@ test('anonymous page views require guest:<uuid-v4> and never resolve a session',
   assert.equal(docsCalls.length, 0);
   assert.deepEqual(analytics.calls.pageViews, [
     {
-      workspaceId: 'ws-test',
+      workspaceId: 'ws-cn-marketing',
       eventId: 'event-0001',
       routeKey: 'home',
       visitorType: 'guest',
@@ -117,7 +116,6 @@ test('anonymous page views reject missing, unprefixed and non-v4 visitor IDs', a
     const { controller, analytics } = controllerWith();
     await assert.rejects(
       controller.recordPageView(
-        'ws-test',
         undefined,
         undefined,
         { eventId: 'event-0001', routeKey: 'home', visitorId },
@@ -165,16 +163,15 @@ test('a supplied token keeps the authenticated account identity and browser jour
   const { controller, analytics, docsCalls } = controllerWith(session);
 
   await controller.recordPageView(
-    'ws-test',
     'Bearer token-ok',
     undefined,
     { eventId: 'event-0002', routeKey: 'task', visitorId: GUEST_VISITOR_ID },
     '203.0.113.11',
   );
 
-  assert.deepEqual(docsCalls, [{ token: 'token-ok', workspaceId: 'ws-test' }]);
+  assert.deepEqual(docsCalls, [{ token: 'token-ok', workspaceId: 'ws-cn-marketing' }]);
   assert.deepEqual(analytics.calls.pageViews[0], {
-    workspaceId: 'ws-test',
+    workspaceId: 'ws-cn-marketing',
     eventId: 'event-0002',
     routeKey: 'task',
     visitorType: 'user',
@@ -188,7 +185,6 @@ test('an invalid supplied token is not downgraded to a guest request', async () 
   const { controller, analytics } = controllerWith({ ok: false, error: 'expired' });
   await assert.rejects(
     controller.recordPageView(
-      'ws-test',
       'Bearer expired-token',
       undefined,
       { eventId: 'event-0003', routeKey: 'home', visitorId: GUEST_VISITOR_ID },
@@ -201,9 +197,7 @@ test('an invalid supplied token is not downgraded to a guest request', async () 
 
 test('gate hit endpoint validates the guest identity and forwards action, route and IP', async () => {
   const { controller, analytics } = controllerWith();
-  await controller.recordGateHit(
-    'ws-test',
-    {
+  await controller.recordGateHit({
       eventId: 'gate-00001',
       action: 'favorite',
       routeKey: 'market-tool',
@@ -212,7 +206,7 @@ test('gate hit endpoint validates the guest identity and forwards action, route 
     '203.0.113.20',
   );
   assert.deepEqual(analytics.calls.gateHits[0], {
-    workspaceId: 'ws-test',
+    workspaceId: 'ws-cn-marketing',
     eventId: 'gate-00001',
     action: 'favorite',
     routeKey: 'market-tool',
@@ -224,19 +218,18 @@ test('gate hit endpoint validates the guest identity and forwards action, route 
 test('analytics report remains restricted to super_admin', async () => {
   const viewer = controllerWith({ ok: true, user: { id: 'u1', platformRole: 'business_user' } });
   await assert.rejects(
-    viewer.controller.getReport('ws-test', 'Bearer token', undefined, '7'),
+    viewer.controller.getReport('Bearer token', undefined, '7'),
     (error) => error?.getStatus?.() === 403,
   );
   assert.equal(viewer.analytics.calls.reports.length, 0);
 
   const admin = controllerWith({ ok: true, user: { id: 'admin', platformRole: 'super_admin' } });
-  await admin.controller.getReport('ws-test', 'Bearer token', undefined, '30');
+  await admin.controller.getReport('Bearer token', undefined, '30');
   assert.deepEqual(admin.analytics.calls.reports, [
-    { workspaceId: 'ws-test', days: '30', from: undefined, to: undefined },
+    { workspaceId: 'ws-cn-marketing', days: '30', from: undefined, to: undefined },
   ]);
 
   await admin.controller.getReport(
-    'ws-test',
     'Bearer token',
     undefined,
     undefined,
@@ -244,7 +237,7 @@ test('analytics report remains restricted to super_admin', async () => {
     '2026-08-31',
   );
   assert.deepEqual(admin.analytics.calls.reports[1], {
-    workspaceId: 'ws-test',
+    workspaceId: 'ws-cn-marketing',
     days: undefined,
     from: '2026-08-01',
     to: '2026-08-31',

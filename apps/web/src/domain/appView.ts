@@ -24,7 +24,6 @@ export const APP_VIEWS = [
   'prompts',
   'admin',
   'presentation',
-  'workspace-config',
   'portal-ops',
   'portal-dashboard',
   'model-ops',
@@ -114,7 +113,6 @@ export const ADMIN_MENU_VIEWS = [
   'workflow',
   'admin',
   'presentation',
-  'workspace-config',
 ] as const satisfies readonly AppView[];
 
 export function adminMenuOrderIndex(view: AppView): number {

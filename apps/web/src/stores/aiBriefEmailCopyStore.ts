@@ -5,7 +5,6 @@ import {
 } from '@/domain/aiBriefEmailCopy';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   scheduleSavePlatformDoc,
 } from '@/api/platformDocsApi';
@@ -39,7 +38,7 @@ function normalize(raw: Partial<AiBriefEmailCopy> | null | undefined): AiBriefEm
 
 function persist(copy: AiBriefEmailCopy) {
   if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc(currentWorkspaceId(), 'ai-brief-email-copy', copy);
+  void scheduleSavePlatformDoc('ai-brief-email-copy', copy);
 }
 
 interface AiBriefEmailCopyState {
@@ -62,9 +61,7 @@ export const useAiBriefEmailCopyStore = create<AiBriefEmailCopyState>((set, get)
         return;
       }
       try {
-        const remote = await fetchPlatformDoc<Partial<AiBriefEmailCopy>>(
-          currentWorkspaceId(),
-          'ai-brief-email-copy',
+        const remote = await fetchPlatformDoc<Partial<AiBriefEmailCopy>>('ai-brief-email-copy',
         );
         set({ copy: normalize(remote) });
       } catch {

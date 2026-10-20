@@ -1,6 +1,5 @@
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   scheduleSavePlatformDoc,
   peekPlatformDocMemory,
@@ -54,9 +53,7 @@ function consumeLegacyScanGate(): SkillScanGateMode | null {
 }
 
 export function loadSecurityPolicy(): SecurityPolicy {
-  const mem = peekPlatformDocMemory<Partial<SecurityPolicy>>(
-    currentWorkspaceId(),
-    DOC_KIND,
+  const mem = peekPlatformDocMemory<Partial<SecurityPolicy>>(DOC_KIND,
   );
   const base = normalize(mem);
   if (mem && typeof mem.skillScanGate !== 'undefined') {
@@ -65,9 +62,9 @@ export function loadSecurityPolicy(): SecurityPolicy {
   const legacy = consumeLegacyScanGate();
   if (legacy) {
     const next = { ...base, skillScanGate: legacy };
-    setPlatformDocMemory(currentWorkspaceId(), DOC_KIND, next);
+    setPlatformDocMemory(DOC_KIND, next);
     if (canUsePlatformDocsApi()) {
-      void scheduleSavePlatformDoc(currentWorkspaceId(), DOC_KIND, next);
+      void scheduleSavePlatformDoc(DOC_KIND, next);
     }
     return next;
   }
@@ -76,20 +73,18 @@ export function loadSecurityPolicy(): SecurityPolicy {
 
 export function saveSecurityPolicy(patch: Partial<SecurityPolicy>) {
   const next = { ...loadSecurityPolicy(), ...patch };
-  const ws = currentWorkspaceId();
-  setPlatformDocMemory(ws, DOC_KIND, next);
+  setPlatformDocMemory(DOC_KIND, next);
   if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc(ws, DOC_KIND, next);
+  void scheduleSavePlatformDoc(DOC_KIND, next);
 }
 
-export async function hydrateSecurityPolicy(workspaceId?: string): Promise<void> {
-  const ws = workspaceId || currentWorkspaceId();
+export async function hydrateSecurityPolicy(): Promise<void> {
   if (!canUsePlatformDocsApi()) return;
   try {
-    const remote = await fetchPlatformDoc<Partial<SecurityPolicy>>(ws, DOC_KIND);
+    const remote = await fetchPlatformDoc<Partial<SecurityPolicy>>(DOC_KIND);
     const normalized = normalize(remote);
     // 远端未带 skillScanGate 时，保留本机会话已迁入的门禁
-    const prev = peekPlatformDocMemory<Partial<SecurityPolicy>>(ws, DOC_KIND);
+    const prev = peekPlatformDocMemory<Partial<SecurityPolicy>>(DOC_KIND);
     if (
       remote &&
       typeof remote.skillScanGate === 'undefined' &&
@@ -98,7 +93,7 @@ export async function hydrateSecurityPolicy(workspaceId?: string): Promise<void>
     ) {
       normalized.skillScanGate = normalizeGate(prev.skillScanGate);
     }
-    setPlatformDocMemory(ws, DOC_KIND, normalized);
+    setPlatformDocMemory(DOC_KIND, normalized);
   } catch {
     /* keep defaults */
   }

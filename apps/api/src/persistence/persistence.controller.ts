@@ -32,6 +32,8 @@ import {
 import { BlobStoreService, packageArchiveMimeType } from './blob-store.service';
 import { hasValidApiKey } from '../common/optional-api-key.guard';
 import { PlatformDocsService } from './platform-docs.service';
+// 单租户：原路由参数 workspaceId 固定为平台空间，方法体沿用这个名字（第 2 期随服务层一起去掉）
+import { PLATFORM_WORKSPACE_ID as workspaceId } from '../common/platform-workspace';
 
 const MARKET_ENGAGEMENT_ACTIONS = new Set([
   'exposure',
@@ -94,7 +96,7 @@ function isUnsafeInlineMimeType(value: string): boolean {
   return UNSAFE_INLINE_MIME_TYPES.has(mimeType);
 }
 
-@Controller('workspaces/:workspaceId')
+@Controller()
 export class PersistenceController {
   private readonly logger = new Logger(PersistenceController.name);
 
@@ -105,13 +107,12 @@ export class PersistenceController {
   ) {}
 
   @Get('sessions')
-  getSessions(@Param('workspaceId') workspaceId: string) {
+  getSessions() {
     return this.persistence.getSessions(workspaceId);
   }
 
   @Put('sessions')
   putSessions(
-    @Param('workspaceId') workspaceId: string,
     @Body() body: { chats: Record<string, unknown> },
   ) {
     return this.persistence.putSessions(workspaceId, body.chats ?? {});
@@ -119,7 +120,6 @@ export class PersistenceController {
 
   @Get('inbox/messages')
   getInboxMessages(
-    @Param('workspaceId') workspaceId: string,
     @Query('userId') userId: string,
   ) {
     if (!userId) throw new BadRequestException('userId_required');
@@ -128,7 +128,6 @@ export class PersistenceController {
 
   @Post('inbox/messages')
   createInboxMessage(
-    @Param('workspaceId') workspaceId: string,
     @Body()
     body: {
       id?: string;
@@ -160,7 +159,6 @@ export class PersistenceController {
 
   @Post('inbox/messages/:messageId/read')
   markInboxMessageRead(
-    @Param('workspaceId') workspaceId: string,
     @Param('messageId') messageId: string,
     @Body() body: { userId?: string },
   ) {
@@ -170,7 +168,6 @@ export class PersistenceController {
 
   @Post('inbox/read-all')
   markAllInboxMessagesRead(
-    @Param('workspaceId') workspaceId: string,
     @Body() body: { userId?: string },
   ) {
     if (!body.userId) throw new BadRequestException('userId_required');
@@ -179,7 +176,6 @@ export class PersistenceController {
 
   @Delete('inbox/messages/:messageId')
   deleteInboxMessage(
-    @Param('workspaceId') workspaceId: string,
     @Param('messageId') messageId: string,
     @Query('userId') userId: string,
   ) {
@@ -188,12 +184,12 @@ export class PersistenceController {
   }
 
   @Get('marketplace')
-  getMarketplace(@Param('workspaceId') workspaceId: string) {
+  getMarketplace() {
     return this.persistence.getMarketplace(workspaceId);
   }
 
   @Put('marketplace')
-  putMarketplace(@Param('workspaceId') workspaceId: string, @Body() body: MarketplacePayload) {
+  putMarketplace(@Body() body: MarketplacePayload) {
     return this.persistence.putMarketplace(workspaceId, body);
   }
 
@@ -203,7 +199,6 @@ export class PersistenceController {
    */
   @Get('market-engagement')
   async getMarketEngagement(
-    @Param('workspaceId') workspaceId: string,
     @Headers('authorization') authorization?: string,
     @Headers('x-session-token') xSessionToken?: string,
   ) {
@@ -219,7 +214,6 @@ export class PersistenceController {
   // 匿名流量先按 IP 收口；服务内再按访客静默限流并设置数据库每日上限。
   @Throttle({ default: { limit: 300, ttl: 60_000 } })
   async mutateMarketEngagement(
-    @Param('workspaceId') workspaceId: string,
     @Param('contentId') contentId: string,
     @Body()
     body: {
@@ -280,7 +274,6 @@ export class PersistenceController {
   @Post('market-engagement/events')
   @Throttle({ default: { limit: 300, ttl: 60_000 } })
   async recordMarketEngagementEvent(
-    @Param('workspaceId') workspaceId: string,
     @Body()
     body: {
       contentId?: string;
@@ -354,13 +347,12 @@ export class PersistenceController {
   }
 
   @Get('portal-content')
-  getPortalContent(@Param('workspaceId') workspaceId: string) {
+  getPortalContent() {
     return this.persistence.getPortalContent(workspaceId);
   }
 
   @Put('portal-content')
   putPortalContent(
-    @Param('workspaceId') workspaceId: string,
     @Body() body: PortalContentPayload,
   ) {
     return this.persistence.putPortalContent(workspaceId, body ?? { items: [] });
@@ -369,7 +361,6 @@ export class PersistenceController {
   /** 对象存储 blob：用 base64 JSON 上传，避免额外 multer 依赖 */
   @Post('blobs')
   async putBlob(
-    @Param('workspaceId') workspaceId: string,
     @Body()
     body: { name?: string; mimeType?: string; dataBase64?: string },
   ) {
@@ -377,7 +368,7 @@ export class PersistenceController {
       throw new BadRequestException('name_and_dataBase64_required');
     }
     try {
-      return await this.blobs.putBase64(workspaceId, {
+      return await this.blobs.putBase64({
         name: body.name,
         mimeType: body.mimeType,
         dataBase64: body.dataBase64,
@@ -391,16 +382,14 @@ export class PersistenceController {
   /** 用户侧 Skill / Agent 原包：流式写入对象存储，保留配置的体积上限。 */
   @Post('blobs/packages')
   async putPackageBlob(
-    @Param('workspaceId') workspaceId: string,
     @Req() req: Request,
   ) {
-    return this.storePackageBlob(workspaceId, req);
+    return this.storePackageBlob(req);
   }
 
   /** 运营后台 Skill 原包：仅平台运营/能力开发可用，不设应用层体积上限。 */
   @Post('blobs/packages/ops')
   async putOpsPackageBlob(
-    @Param('workspaceId') workspaceId: string,
     @Req() req: Request,
     @Headers('authorization') authorization?: string,
     @Headers('x-session-token') xSessionToken?: string,
@@ -416,11 +405,10 @@ export class PersistenceController {
     if (role !== 'super_admin' && role !== 'capability_ops') {
       throw new ForbiddenException('package_upload_ops_required');
     }
-    return this.storePackageBlob(workspaceId, req, null);
+    return this.storePackageBlob(req, null);
   }
 
   private async storePackageBlob(
-    workspaceId: string,
     req: Request,
     maxBytes?: number | null,
   ) {
@@ -448,7 +436,7 @@ export class PersistenceController {
     }
 
     try {
-      return await this.blobs.putPackageStream(workspaceId, {
+      return await this.blobs.putPackageStream({
         name,
         stream: req,
         contentLength,
@@ -472,16 +460,11 @@ export class PersistenceController {
 
   @Delete('blobs/:blobId')
   async deleteBlob(
-    @Param('workspaceId') workspaceId: string,
     @Param('blobId') blobId: string,
     @Req() req: Request,
   ) {
     try {
-      await this.blobs.delete(
-        workspaceId,
-        blobId,
-        req.header('x-blob-delete-token')?.trim(),
-      );
+      await this.blobs.delete(blobId, req.header('x-blob-delete-token')?.trim());
       return { ok: true, id: blobId };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'blob_delete_failed';
@@ -497,15 +480,21 @@ export class PersistenceController {
     }
   }
 
+  /** 去租户前存下的文件地址（库里、聊天记录、邮件）：永久跳到新地址。 */
+  @Get('workspaces/:legacyWorkspaceId/blobs/:blobId')
+  legacyBlobRedirect(@Param('blobId') blobId: string, @Res() res: Response) {
+    if (!/^[0-9a-f]{32}$/.test(blobId)) throw new NotFoundException('blob_not_found');
+    res.redirect(301, `/api/v1/blobs/${blobId}`);
+  }
+
   @Get('blobs/:blobId')
   @Header('Cache-Control', 'private, max-age=3600')
   async getBlob(
-    @Param('workspaceId') workspaceId: string,
     @Param('blobId') blobId: string,
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const { meta, size, stream } = await this.blobs.get(workspaceId, blobId);
+    const { meta, size, stream } = await this.blobs.get(blobId);
     const storedMimeType = meta.mimeType || 'application/octet-stream';
     // 守卫对本路由放行：栅格图片凭不可猜的随机 ID 公开读取（供 <img> 使用），其余类型仍要 API Key。
     if (!PUBLIC_IMAGE_MIME_TYPES.has(storedMimeType.split(';', 1)[0].trim().toLowerCase()) && !hasValidApiKey(req)) {

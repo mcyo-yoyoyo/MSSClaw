@@ -22,7 +22,6 @@ import {
   LazyModelCatalogOpsPage,
   LazyExecutionHistoryPage,
   LazyApprovalCenterPage,
-  LazyWorkspaceConfigPage,
   LazyPromptCenterPage,
   LazySettingsPage,
   LazySkillCenterPage,
@@ -44,7 +43,6 @@ export interface AppViewRouterHandlers {
   onRunAutomation: (automationId: string, agentId: string, name: string) => void;
   onStartExpertTeam: (plan: ScenarioDemoPlan, fromIndex?: number) => void;
   onOpenTaskChat?: (chatId: string) => void;
-  onWorkspaceSwitch?: (workspaceId: string) => void;
 }
 
 interface AppViewRouterProps {
@@ -76,7 +74,6 @@ const VIEW_LABELS: Partial<Record<AppView, string>> = {
   prompts: '提示词',
   admin: '组织权限',
   presentation: '展示配置',
-  'workspace-config': '租户配置',
   'portal-ops': '门户运营',
   'portal-dashboard': '数据看板',
   'model-ops': '模型配置',
@@ -165,7 +162,7 @@ function AppViewRouterContent({ appView, handlers }: AppViewRouterProps) {
     case 'task':
       return (
         <LazyView label={label}>
-          <LazyTaskCenterPage onWorkspaceSwitch={handlers.onWorkspaceSwitch} />
+          <LazyTaskCenterPage />
         </LazyView>
       );
     case 'messages':
@@ -268,12 +265,6 @@ function AppViewRouterContent({ appView, handlers }: AppViewRouterProps) {
       return (
         <LazyView label={label}>
           <LazyPresentationConfigPage />
-        </LazyView>
-      );
-    case 'workspace-config':
-      return (
-        <LazyView label={label}>
-          <LazyWorkspaceConfigPage />
         </LazyView>
       );
     case 'portal-ops':

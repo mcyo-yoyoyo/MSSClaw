@@ -1,5 +1,4 @@
 import { apiAuthHeaders, apiUrl, fetchWithTimeout, isApiEnabled } from '@/api/client';
-import { currentWorkspaceId } from '@/api/platformDocsApi';
 import type { PrototypeSkillSeed, SkillEvaluationReport } from '@/domain/prototype/types';
 
 function safeBody(skill: PrototypeSkillSeed) {
@@ -19,10 +18,8 @@ function safeBody(skill: PrototypeSkillSeed) {
 /** 服务端评测：API key 只留在服务端，上传正文按字段裁剪后再发送。 */
 export async function evaluateSkillDraft(skill: PrototypeSkillSeed): Promise<SkillEvaluationReport> {
   if (!isApiEnabled()) throw new Error('skill_evaluation_api_disabled');
-  const workspaceId = currentWorkspaceId().trim();
-  if (!workspaceId) throw new Error('skill_evaluation_workspace_missing');
   const response = await fetchWithTimeout(
-    apiUrl(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/skills/evaluate`),
+    apiUrl(`/api/v1/skills/evaluate`),
     {
       method: 'POST',
       headers: {

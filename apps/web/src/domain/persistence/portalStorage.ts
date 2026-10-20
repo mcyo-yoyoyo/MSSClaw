@@ -35,113 +35,112 @@ export type PortalSaveResult = {
   revision?: number;
 };
 
-/** 各 workspace 当前已知的服务端 revision（乐观锁） */
-const revisionByWorkspace = new Map<string, number>();
+/** 当前已知的服务端 revision（乐观锁） */
+let portalRevision = 0;
 /** 内存态：禁止写入 localStorage */
-const memoryPortal = new Map<string, PortalContentSnapshot>();
+let memoryPortal: PortalContentSnapshot | null = null;
 
-export function getPortalRevision(workspaceId: string): number {
-  return revisionByWorkspace.get(workspaceId) ?? 0;
+export function getPortalRevision(): number {
+  return portalRevision;
 }
 
-function setPortalRevision(workspaceId: string, revision: number) {
-  revisionByWorkspace.set(workspaceId, revision);
+function setPortalRevision(revision: number) {
+  portalRevision = revision;
 }
 
-function readLocalPortalContent(workspaceId: string): PortalContentSnapshot {
-  const cached = memoryPortal.get(workspaceId);
+function readLocalPortalContent(): PortalContentSnapshot {
+  const cached = memoryPortal;
   if (cached) {
     return {
       items: pruneRetiredPortalToolRefs(structuredClone(cached.items)),
-      revision: cached.revision ?? getPortalRevision(workspaceId),
+      revision: cached.revision ?? getPortalRevision(),
     };
   }
   return {
     items: pruneRetiredPortalToolRefs(
       structuredClone(demoDefaults(PROTOTYPE_PORTAL_CONTENT)),
     ),
-    revision: getPortalRevision(workspaceId),
+    revision: getPortalRevision(),
   };
 }
 
-function writeLocalPortalContent(workspaceId: string, snapshot: PortalContentSnapshot) {
-  memoryPortal.set(workspaceId, {
+function writeLocalPortalContent(snapshot: PortalContentSnapshot) {
+  memoryPortal = {
     items: structuredClone(snapshot.items),
     revision: snapshot.revision,
-  });
+  };
 }
 
-export async function loadPortalContent(workspaceId: string): Promise<PortalContentSnapshot> {
+export async function loadPortalContent(): Promise<PortalContentSnapshot> {
   const apiOnline = useWorkspaceStore.getState().apiConnected;
   if (apiOnline) {
     try {
-      const remote = await fetchPortalContentApi(workspaceId);
+      const remote = await fetchPortalContentApi();
       if (remote?.items) {
         const revision = remote.revision ?? 0;
-        setPortalRevision(workspaceId, revision);
+        setPortalRevision(revision);
         const merged = pruneRetiredPortalToolRefs(
           mergeCatalog(demoDefaults(PROTOTYPE_PORTAL_CONTENT), remote.items),
         );
-        writeLocalPortalContent(workspaceId, { items: merged, revision });
+        writeLocalPortalContent({ items: merged, revision });
         return { items: merged, revision };
       }
     } catch {
       /* fall through to local cache */
     }
   }
-  return readLocalPortalContent(workspaceId);
+  return readLocalPortalContent();
 }
 
 export async function savePortalContent(
-  workspaceId: string,
   snapshot: PortalContentSnapshot,
 ): Promise<PortalSaveResult> {
   let items = snapshot.items;
   if (useWorkspaceStore.getState().apiConnected) {
     try {
-      items = await externalizePortalItemAttachments(workspaceId, snapshot.items);
+      items = await externalizePortalItemAttachments(snapshot.items);
     } catch (err) {
       console.warn('[portal] blob externalize failed:', err);
     }
   }
   const next: PortalContentSnapshot = {
     items,
-    revision: getPortalRevision(workspaceId),
+    revision: getPortalRevision(),
   };
-  writeLocalPortalContent(workspaceId, next);
+  writeLocalPortalContent(next);
   if (!useWorkspaceStore.getState().apiConnected) {
     reportShareSync({ kind: 'portal', synced: false, reason: 'offline' });
     return { synced: false, error: 'api_offline', items };
   }
   try {
-    const saved = await savePortalContentApi(workspaceId, {
+    const saved = await savePortalContentApi({
       items,
-      expectedRevision: getPortalRevision(workspaceId),
+      expectedRevision: getPortalRevision(),
     });
     if (typeof saved.revision === 'number') {
-      setPortalRevision(workspaceId, saved.revision);
+      setPortalRevision(saved.revision);
     }
-    writeLocalPortalContent(workspaceId, {
+    writeLocalPortalContent({
       items: saved.items ?? items,
-      revision: getPortalRevision(workspaceId),
+      revision: getPortalRevision(),
     });
     reportShareSync({ kind: 'portal', synced: true });
     return {
       synced: true,
       items: saved.items ?? items,
-      revision: getPortalRevision(workspaceId),
+      revision: getPortalRevision(),
     };
   } catch (err) {
     if (err instanceof PortalConflictError) {
       try {
-        const remote = await fetchPortalContentApi(workspaceId);
+        const remote = await fetchPortalContentApi();
         if (remote?.items) {
-          const revision = remote.revision ?? err.revision ?? getPortalRevision(workspaceId);
-          setPortalRevision(workspaceId, revision);
+          const revision = remote.revision ?? err.revision ?? getPortalRevision();
+          setPortalRevision(revision);
           const merged = pruneRetiredPortalToolRefs(
           mergeCatalog(demoDefaults(PROTOTYPE_PORTAL_CONTENT), remote.items),
         );
-          writeLocalPortalContent(workspaceId, { items: merged, revision });
+          writeLocalPortalContent({ items: merged, revision });
           reportShareSync({ kind: 'portal', synced: false, reason: 'conflict' });
           return {
             synced: false,
@@ -171,14 +170,9 @@ export async function savePortalContent(
   }
 }
 
-type QueuedSave = {
-  workspaceId: string;
-  snapshot: PortalContentSnapshot;
-};
-
-const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const queuedByKey = new Map<string, QueuedSave>();
-const inFlightKeys = new Set<string>();
+let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+let queued: PortalContentSnapshot | null = null;
+let inFlight = false;
 
 export type SchedulePortalSaveOptions = {
   /** 外提/冲突后把权威 items 写回 Zustand，避免内存残留 dataUrl */
@@ -186,36 +180,29 @@ export type SchedulePortalSaveOptions = {
 };
 
 /**
- * 防抖 + 串行：同一 workspace 同时只跑一个 save；
+ * 防抖 + 串行：同时只跑一个 save；
  * 飞行中若有新快照，结束后再刷一次最新队列。
  */
 export function scheduleSavePortalContent(
-  workspaceId: string,
   snapshot: PortalContentSnapshot,
   ms = 600,
   options?: SchedulePortalSaveOptions,
 ) {
-  const key = `portal:${workspaceId}`;
-  queuedByKey.set(key, { workspaceId, snapshot: { items: snapshot.items } });
-  const prev = debounceTimers.get(key);
-  if (prev) clearTimeout(prev);
-  debounceTimers.set(
-    key,
-    setTimeout(() => {
-      debounceTimers.delete(key);
-      void flushPortalSave(key, options);
-    }, ms),
-  );
+  queued = { items: snapshot.items };
+  if (debounceTimer) clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    debounceTimer = undefined;
+    void flushPortalSave(options);
+  }, ms);
 }
 
-async function flushPortalSave(key: string, options?: SchedulePortalSaveOptions) {
-  if (inFlightKeys.has(key)) return;
-  const job = queuedByKey.get(key);
-  if (!job) return;
-  queuedByKey.delete(key);
-  inFlightKeys.add(key);
+async function flushPortalSave(options?: SchedulePortalSaveOptions) {
+  if (inFlight || !queued) return;
+  const snapshot = queued;
+  queued = null;
+  inFlight = true;
   try {
-    const result = await savePortalContent(job.workspaceId, job.snapshot);
+    const result = await savePortalContent(snapshot);
     if (result.items) {
       options?.onApplied?.(result.items, { conflict: result.conflict });
     }
@@ -225,9 +212,7 @@ async function flushPortalSave(key: string, options?: SchedulePortalSaveOptions)
       console.warn('[portal] shared API sync failed:', result.error);
     }
   } finally {
-    inFlightKeys.delete(key);
-    if (queuedByKey.has(key)) {
-      void flushPortalSave(key, options);
-    }
+    inFlight = false;
+    if (queued) void flushPortalSave(options);
   }
 }

@@ -45,7 +45,7 @@ function fakePrisma(
 
   return {
     workspace: {
-      findUnique: async () => (workspaceExists ? { id: 'ws-test' } : null),
+      findUnique: async () => (workspaceExists ? { id: 'ws-cn-marketing' } : null),
     },
     centerRecord: {
       findUnique: async () => row,
@@ -300,7 +300,7 @@ test('GET creates and returns the versioned seed when the document is missing', 
   const prisma = fakePrisma();
   const service = new PlatformDocsService(prisma, {});
 
-  const result = await service.getDoc('ws-test', 'external-tool-layout');
+  const result = await service.getDoc('ws-cn-marketing', 'external-tool-layout');
 
   assert.deepEqual(result, {
     kind: 'external-tool-layout',
@@ -313,7 +313,7 @@ test('GET creates and returns the versioned seed when the document is missing', 
 test('first GET migrates custom legacy external pins by marketplace region and pin order', async () => {
   const prisma = fakePrisma(null, 1, [
     {
-      workspaceId: 'ws-test',
+      workspaceId: 'ws-cn-marketing',
       kind: 'doc:market-featured',
       payload: {
         pins: {
@@ -329,7 +329,7 @@ test('first GET migrates custom legacy external pins by marketplace region and p
       },
     },
     {
-      workspaceId: 'ws-test',
+      workspaceId: 'ws-cn-marketing',
       kind: 'marketplace',
       payload: {
         tools: [
@@ -343,7 +343,7 @@ test('first GET migrates custom legacy external pins by marketplace region and p
   ]);
   const service = new PlatformDocsService(prisma, {});
 
-  const result = await service.getDoc('ws-test', 'external-tool-layout');
+  const result = await service.getDoc('ws-cn-marketing', 'external-tool-layout');
 
   assert.deepEqual(result.payload, {
     version: 1,
@@ -380,14 +380,14 @@ test('GET keeps an existing external layout without consulting or applying legac
     },
   };
   const prisma = fakePrisma({
-    id: 'doc-external-tool-layout-ws-test',
-    workspaceId: 'ws-test',
+    id: 'doc-external-tool-layout-ws-cn-marketing',
+    workspaceId: 'ws-cn-marketing',
     kind: 'doc:external-tool-layout',
     payload: existingPayload,
   });
   const service = new PlatformDocsService(prisma, {});
 
-  const result = await service.getDoc('ws-test', 'external-tool-layout');
+  const result = await service.getDoc('ws-cn-marketing', 'external-tool-layout');
 
   assert.deepEqual(result.payload, existingPayload);
   assert.equal(prisma.state().findFirstCalls, 0);
@@ -412,14 +412,14 @@ test('GET adds empty additive category lists to legacy data without persisting o
     },
   };
   const prisma = fakePrisma({
-    id: 'doc-external-tool-layout-ws-test',
-    workspaceId: 'ws-test',
+    id: 'doc-external-tool-layout-ws-cn-marketing',
+    workspaceId: 'ws-cn-marketing',
     kind: 'doc:external-tool-layout',
     payload: existingPayload,
   });
   const service = new PlatformDocsService(prisma, {});
 
-  const result = await service.getDoc('ws-test', 'external-tool-layout');
+  const result = await service.getDoc('ws-cn-marketing', 'external-tool-layout');
 
   assert.deepEqual(result.payload.categories.search, {
     overseasFeaturedIds: ['tool-custom-overseas'],
@@ -445,14 +445,14 @@ test('GET does not disguise malformed stored category lists as legacy missing da
     },
   };
   const prisma = fakePrisma({
-    id: 'doc-external-tool-layout-ws-test',
-    workspaceId: 'ws-test',
+    id: 'doc-external-tool-layout-ws-cn-marketing',
+    workspaceId: 'ws-cn-marketing',
     kind: 'doc:external-tool-layout',
     payload: existingPayload,
   });
   const service = new PlatformDocsService(prisma, {});
 
-  const result = await service.getDoc('ws-test', 'external-tool-layout');
+  const result = await service.getDoc('ws-cn-marketing', 'external-tool-layout');
 
   assert.equal(result.payload.categories.search.domesticFeaturedIds, 'malformed');
   assert.equal(result.payload.categories.search.overseasMoreOrderIds, 'malformed-more');
@@ -480,8 +480,8 @@ test('legacy PUT preserves existing category lists but gives new categories empt
     },
   };
   const prisma = fakePrisma({
-    id: 'doc-external-tool-layout-ws-test',
-    workspaceId: 'ws-test',
+    id: 'doc-external-tool-layout-ws-cn-marketing',
+    workspaceId: 'ws-cn-marketing',
     kind: 'doc:external-tool-layout',
     payload: existingPayload,
   });
@@ -494,7 +494,7 @@ test('legacy PUT preserves existing category lists but gives new categories empt
     overseasFeaturedIds: ['tool-new-overseas'],
   };
 
-  const saved = await service.putDoc('ws-test', 'external-tool-layout', legacyWrite);
+  const saved = await service.putDoc('ws-cn-marketing', 'external-tool-layout', legacyWrite);
 
   assert.deepEqual(saved.payload.categories, {
     search: {
@@ -515,14 +515,14 @@ test('legacy PUT preserves existing category lists but gives new categories empt
 
 test('PUT increments revision and rejects a stale expectedRevision with currentRevision', async () => {
   const prisma = fakePrisma({
-    id: 'doc-external-tool-layout-ws-test',
-    workspaceId: 'ws-test',
+    id: 'doc-external-tool-layout-ws-cn-marketing',
+    workspaceId: 'ws-cn-marketing',
     kind: 'doc:external-tool-layout',
     payload: { ...SEED_EXTERNAL_TOOL_LAYOUT, revision: 2 },
   });
   const service = new PlatformDocsService(prisma, {});
 
-  const saved = await service.putDoc('ws-test', 'external-tool-layout', validLayout(2));
+  const saved = await service.putDoc('ws-cn-marketing', 'external-tool-layout', validLayout(2));
   assert.equal(saved.payload.version, 1);
   assert.equal(saved.payload.revision, 3);
   assert.deepEqual(saved.payload.all, validLayout(2).all);
@@ -530,7 +530,7 @@ test('PUT increments revision and rejects a stale expectedRevision with currentR
   assert.equal(prisma.state().executeCalls, 1);
 
   await assert.rejects(
-    service.putDoc('ws-test', 'external-tool-layout', validLayout(1)),
+    service.putDoc('ws-cn-marketing', 'external-tool-layout', validLayout(1)),
     (error) => {
       assert.equal(error.getStatus(), 409);
       assert.deepEqual(error.getResponse(), {
@@ -554,8 +554,8 @@ test('controller lets guests read external tool layout without a session', async
   });
 
   // 游客模式：货架布局是门户展示数据，未登录也要能渲染
-  assert.deepEqual(await controller.getOne('ws-test', 'external-tool-layout'), {
-    workspaceId: 'ws-test',
+  assert.deepEqual(await controller.getOne('external-tool-layout'), {
+    workspaceId: 'ws-cn-marketing',
     kind: 'external-tool-layout',
   });
   assert.equal(meCalls, 0);
@@ -576,18 +576,17 @@ test('controller allows members to read but only super admins to write the layou
     },
   });
 
-  assert.deepEqual(await controller.getOne('ws-test', 'external-tool-layout'), {
-    workspaceId: 'ws-test',
+  assert.deepEqual(await controller.getOne('external-tool-layout'), {
+    workspaceId: 'ws-cn-marketing',
     kind: 'external-tool-layout',
   });
   await assert.rejects(
-    controller.putOne('ws-test', 'external-tool-layout', { payload: validLayout() }, 'Bearer ok'),
+    controller.putOne('external-tool-layout', { payload: validLayout() }, 'Bearer ok'),
     (error) => error?.getStatus?.() === 403,
   );
 
   role = 'super_admin';
   await controller.putOne(
-    'ws-test',
     'external-tool-layout',
     { payload: validLayout() },
     'Bearer ok',
@@ -609,9 +608,9 @@ test('controller opens internal office scenes for guest reads but still guards w
     },
   });
 
-  assert.deepEqual(await controller.getOne('ws-test', 'internal-office-scenes'), { ok: true });
+  assert.deepEqual(await controller.getOne('internal-office-scenes'), { ok: true });
   await assert.rejects(
-    controller.putOne('ws-test', 'internal-office-scenes', { payload: { entries: [] } }),
+    controller.putOne('internal-office-scenes', { payload: { entries: [] } }),
     (error) => {
       assert.equal(error?.getStatus?.(), 401);
       assert.equal(error?.getResponse?.().message, '未登录');
@@ -636,12 +635,11 @@ test('controller lets workspace members read internal scenes but rejects non-adm
   });
 
   assert.deepEqual(
-    await controller.getOne('ws-test', 'internal-office-scenes', 'Bearer member-token'),
-    { workspaceId: 'ws-test', kind: 'internal-office-scenes' },
+    await controller.getOne('internal-office-scenes', 'Bearer member-token'),
+    { workspaceId: 'ws-cn-marketing', kind: 'internal-office-scenes' },
   );
   await assert.rejects(
     controller.putOne(
-      'ws-test',
       'internal-office-scenes',
       { payload: { entries: [] } },
       'Bearer member-token',
@@ -685,15 +683,14 @@ test('controller allows super admins to write internal scene order without chang
 
   assert.deepEqual(
     await controller.putOne(
-      'ws-test',
       'internal-office-scenes',
       { payload },
       'Bearer admin-token',
     ),
-    { workspaceId: 'ws-test', kind: 'internal-office-scenes', payload },
+    { workspaceId: 'ws-cn-marketing', kind: 'internal-office-scenes', payload },
   );
   assert.deepEqual(saved, {
-    workspaceId: 'ws-test',
+    workspaceId: 'ws-cn-marketing',
     kind: 'internal-office-scenes',
     payload,
   });

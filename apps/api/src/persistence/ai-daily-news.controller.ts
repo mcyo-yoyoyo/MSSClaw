@@ -5,11 +5,11 @@ import {
   Header,
   Headers,
   Post,
-  Query,
   UnauthorizedException,
 } from '@nestjs/common';
 import { AI_NEWS_SOURCE, AiNewsArchiveService } from './ai-news-archive.service';
 import { PlatformDocsService } from './platform-docs.service';
+import { PLATFORM_WORKSPACE_ID } from '../common/platform-workspace';
 
 /**
  * AI 快讯：读数据库归档，不再每次访问都代理上游。
@@ -42,13 +42,12 @@ export class AiDailyNewsController {
   /** 运营手动补拉：内网断网恢复后不必等到次日 08:00 */
   @Post('sync')
   async syncNow(
-    @Query('workspaceId') workspaceId = 'ws-mss-ai',
     @Headers('authorization') authorization?: string,
     @Headers('x-session-token') xSessionToken?: string,
   ) {
     const session = await this.docs.me(
       bearerToken(authorization, xSessionToken),
-      workspaceId,
+      PLATFORM_WORKSPACE_ID,
     );
     if (!session.ok) {
       throw new UnauthorizedException(session.error || 'ai_news_sync_login_required');

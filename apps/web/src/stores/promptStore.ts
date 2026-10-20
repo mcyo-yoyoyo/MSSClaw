@@ -6,19 +6,18 @@ import {
 } from '@/api/centerApi';
 import {
   findPromptByName,
-  getPromptsByWorkspace,
+  PROMPT_SEEDS,
   type Prompt,
   type PromptLifecycle,
 } from '@/domain/prompt';
 
 interface PromptState {
-  workspaceId: string;
   prompts: Prompt[];
   selectedPromptId: string | null;
   lifecycleFilter: PromptLifecycle | 'all';
   toast: string | null;
 
-  loadWorkspace: (workspaceId: string) => void;
+  load: () => void;
   selectPrompt: (promptId: string | null) => void;
   selectPromptByName: (name: string) => void;
   setLifecycleFilter: (filter: PromptLifecycle | 'all') => void;
@@ -29,17 +28,15 @@ interface PromptState {
 }
 
 export const usePromptStore = create<PromptState>((set, get) => ({
-  workspaceId: 'ws-cn-marketing',
-  prompts: getPromptsByWorkspace('ws-cn-marketing'),
-  selectedPromptId: getPromptsByWorkspace('ws-cn-marketing')[0]?.id ?? null,
+  prompts: PROMPT_SEEDS,
+  selectedPromptId: PROMPT_SEEDS[0]?.id ?? null,
   lifecycleFilter: 'all',
   toast: null,
 
-  loadWorkspace: (workspaceId) => {
+  load: () => {
     void (async () => {
-      const prompts = await fetchPrompts(workspaceId);
+      const prompts = await fetchPrompts();
       set({
-        workspaceId,
         prompts,
         selectedPromptId: prompts[0]?.id ?? null,
         lifecycleFilter: 'all',
@@ -50,7 +47,7 @@ export const usePromptStore = create<PromptState>((set, get) => ({
   selectPrompt: (promptId) => set({ selectedPromptId: promptId }),
 
   selectPromptByName: (name) => {
-    const prompt = findPromptByName(get().workspaceId, name) ?? get().prompts.find((p) => p.name === name);
+    const prompt = findPromptByName(name) ?? get().prompts.find((p) => p.name === name);
     if (prompt) set({ selectedPromptId: prompt.id });
   },
 
@@ -58,11 +55,11 @@ export const usePromptStore = create<PromptState>((set, get) => ({
 
   advanceLifecycle: (promptId) => {
     void (async () => {
-      const { prompts, workspaceId } = get();
+      const { prompts } = get();
       const target = prompts.find((p) => p.id === promptId);
       if (!target) return;
       try {
-        const updated = await advancePromptLifecycleApi(workspaceId, promptId);
+        const updated = await advancePromptLifecycleApi(promptId);
         set({
           prompts: prompts.map((p) => (p.id === promptId ? updated : p)),
           toast: `「${target.name}」已推进到 ${updated.lifecycle}`,
@@ -95,11 +92,11 @@ export function mapResourceToPromptId(resourceId: string): string | null {
   return null;
 }
 
-export function resolvePromptIdFromResource(resourceId: string, resourceName?: string | null, workspaceId?: string) {
+export function resolvePromptIdFromResource(resourceId: string, resourceName?: string | null) {
   const mapped = mapResourceToPromptId(resourceId);
   if (mapped) return mapped;
-  if (resourceName && workspaceId) {
-    return findPromptByName(workspaceId, resourceName)?.id ?? null;
+  if (resourceName) {
+    return findPromptByName(resourceName)?.id ?? null;
   }
   return null;
 }

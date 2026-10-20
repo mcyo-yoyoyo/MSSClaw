@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   savePlatformDoc,
 } from '@/api/platformDocsApi';
@@ -22,7 +21,6 @@ import {
   type ExternalToolCategoryListKey,
   type ExternalToolLayoutDocument,
 } from '@/domain/externalToolLayout';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useSessionStore } from '@/stores/sessionStore';
 
 const DOC_KIND = 'external-tool-layout' as const;
@@ -31,14 +29,7 @@ type StateSet = (partial: Partial<ExternalToolLayoutState>) => void;
 type StateGet = () => ExternalToolLayoutState;
 
 let operationGeneration = 0;
-const stagedDraftsByWorkspace = new Map<string, ExternalToolLayoutDocument>();
 
-function layoutsHaveSameContent(
-  left: ExternalToolLayoutDocument,
-  right: ExternalToolLayoutDocument,
-): boolean {
-  return externalToolLayoutsEqual({ ...left, revision: right.revision }, right);
-}
 
 function mutationError(error: unknown): string {
   return error instanceof Error ? error.message : '外部工具布局修改失败';
@@ -81,14 +72,13 @@ function updateDraft(
 }
 
 export interface ExternalToolLayoutState {
-  workspaceId: string | null;
   document: ExternalToolLayoutDocument | null;
   draft: ExternalToolLayoutDocument | null;
   dirty: boolean;
   loading: boolean;
   saving: boolean;
   error: string | null;
-  hydrate: (workspaceId?: string) => Promise<boolean>;
+  hydrate: () => Promise<boolean>;
   beginEdit: () => boolean;
   cancelEdit: () => void;
   saveDraft: () => Promise<boolean>;
@@ -129,7 +119,6 @@ export interface ExternalToolLayoutState {
 }
 
 export const useExternalToolLayoutStore = create<ExternalToolLayoutState>((set, get) => ({
-  workspaceId: null,
   document: null,
   draft: null,
   dirty: false,
@@ -137,21 +126,17 @@ export const useExternalToolLayoutStore = create<ExternalToolLayoutState>((set, 
   saving: false,
   error: null,
 
-  hydrate: async (requestedWorkspaceId) => {
-    const workspaceId = (requestedWorkspaceId || currentWorkspaceId()).trim();
+  hydrate: async () => {
     const previous = get();
-    if (!workspaceId || workspaceId !== currentWorkspaceId()) return false;
     if (previous.loading || previous.saving) return false;
-    if (previous.workspaceId === workspaceId && previous.dirty) {
+    if (previous.dirty) {
       set({ error: '当前有未保存的布局草稿，请先保存或取消。' });
       return false;
     }
 
-    const switchedWorkspace = previous.workspaceId !== workspaceId;
     const generation = ++operationGeneration;
     set({
-      workspaceId,
-      document: switchedWorkspace ? null : previous.document,
+      document: previous.document,
       draft: null,
       dirty: false,
       loading: true,
@@ -160,43 +145,22 @@ export const useExternalToolLayoutStore = create<ExternalToolLayoutState>((set, 
     });
 
     if (!canUsePlatformDocsApi()) {
-      if (generation === operationGeneration && get().workspaceId === workspaceId) {
+      if (generation === operationGeneration) {
         set({ loading: false, error: '未连接后端，无法加载外部工具布局。' });
       }
       return false;
     }
 
     try {
-      const remote = await fetchPlatformDoc<unknown>(workspaceId, DOC_KIND, { fresh: true });
+      const remote = await fetchPlatformDoc<unknown>(DOC_KIND, { fresh: true });
       const document = parseExternalToolLayoutDocument(remote);
-      if (
-        generation !== operationGeneration ||
-        get().workspaceId !== workspaceId ||
-        currentWorkspaceId() !== workspaceId
-      ) {
+      if (generation !== operationGeneration) {
         return false;
       }
-      const stagedDraft = stagedDraftsByWorkspace.get(workspaceId);
-      if (stagedDraft && layoutsHaveSameContent(stagedDraft, document)) {
-        stagedDraftsByWorkspace.delete(workspaceId);
-        set({ document, draft: null, dirty: false, loading: false, error: null });
-      } else if (stagedDraft) {
-        const revisionChanged = stagedDraft.revision !== document.revision;
-        set({
-          document,
-          draft: cloneExternalToolLayoutDocument(stagedDraft),
-          dirty: true,
-          loading: false,
-          error: revisionChanged
-            ? '已恢复该工作区未保存的布局草稿，但服务器版本已更新。请取消草稿后重新编辑。'
-            : '已恢复该工作区未保存的布局草稿。',
-        });
-      } else {
-        set({ document, draft: null, dirty: false, loading: false, error: null });
-      }
+      set({ document, draft: null, dirty: false, loading: false, error: null });
       return true;
     } catch {
-      if (generation === operationGeneration && get().workspaceId === workspaceId) {
+      if (generation === operationGeneration) {
         set({
           loading: false,
           error: '外部工具布局加载失败，未使用本地默认数据替代。',
@@ -224,26 +188,19 @@ export const useExternalToolLayoutStore = create<ExternalToolLayoutState>((set, 
   cancelEdit: () => {
     const state = get();
     if (state.saving) return;
-    if (state.workspaceId) stagedDraftsByWorkspace.delete(state.workspaceId);
     set({ draft: null, dirty: false, error: null });
   },
 
   saveDraft: async () => {
     const state = get();
-    const workspaceId = state.workspaceId;
     if (state.loading || state.saving) return false;
-    if (!state.document || !state.draft || !workspaceId) {
+    if (!state.document || !state.draft) {
       set({ error: '没有可保存的外部工具布局草稿。' });
       return false;
     }
     if (!state.dirty) {
-      stagedDraftsByWorkspace.delete(workspaceId);
       set({ draft: null, error: null });
       return true;
-    }
-    if (workspaceId !== currentWorkspaceId()) {
-      set({ error: '工作区已切换，本次布局改动未提交。' });
-      return false;
     }
     if (state.draft.revision !== state.document.revision) {
       set({ error: '服务器布局已更新，当前草稿不能直接覆盖。请取消草稿后重新编辑。' });
@@ -259,15 +216,11 @@ export const useExternalToolLayoutStore = create<ExternalToolLayoutState>((set, 
     set({ saving: true, error: null });
     let writeSucceeded = false;
     try {
-      await savePlatformDoc(workspaceId, DOC_KIND, payload);
+      await savePlatformDoc(DOC_KIND, payload);
       writeSucceeded = true;
-      const remote = await fetchPlatformDoc<unknown>(workspaceId, DOC_KIND, { fresh: true });
+      const remote = await fetchPlatformDoc<unknown>(DOC_KIND, { fresh: true });
       const document = parseExternalToolLayoutDocument(remote);
-      if (
-        generation !== operationGeneration ||
-        get().workspaceId !== workspaceId ||
-        currentWorkspaceId() !== workspaceId
-      ) {
+      if (generation !== operationGeneration) {
         return false;
       }
       set({
@@ -277,10 +230,9 @@ export const useExternalToolLayoutStore = create<ExternalToolLayoutState>((set, 
         saving: false,
         error: null,
       });
-      stagedDraftsByWorkspace.delete(workspaceId);
       return true;
     } catch (error) {
-      if (generation === operationGeneration && get().workspaceId === workspaceId) {
+      if (generation === operationGeneration) {
         set({ saving: false, error: saveError(error, writeSucceeded) });
       }
       return false;
@@ -340,36 +292,14 @@ export const useExternalToolLayoutStore = create<ExternalToolLayoutState>((set, 
   clearError: () => set({ error: null }),
 }));
 
-useWorkspaceStore.subscribe((state, previous) => {
-  if (state.workspaceId === previous.workspaceId) return;
-  const layoutState = useExternalToolLayoutStore.getState();
-  if (layoutState.workspaceId && layoutState.dirty && layoutState.draft) {
-    stagedDraftsByWorkspace.set(
-      layoutState.workspaceId,
-      cloneExternalToolLayoutDocument(layoutState.draft),
-    );
-  }
-  operationGeneration += 1;
-  useExternalToolLayoutStore.setState({
-    workspaceId: state.workspaceId,
-    document: null,
-    draft: null,
-    dirty: false,
-    loading: false,
-    saving: false,
-    error: null,
-  });
-});
 
 useSessionStore.subscribe((state, previous) => {
   const userId = state.user?.id ?? null;
   const previousUserId = previous.user?.id ?? null;
   if (userId === previousUserId) return;
 
-  stagedDraftsByWorkspace.clear();
   operationGeneration += 1;
   useExternalToolLayoutStore.setState({
-    workspaceId: currentWorkspaceId(),
     document: null,
     draft: null,
     dirty: false,
@@ -379,6 +309,6 @@ useSessionStore.subscribe((state, previous) => {
   });
 
   if (userId && state.isAuthenticated && canUsePlatformDocsApi()) {
-    void useExternalToolLayoutStore.getState().hydrate(currentWorkspaceId());
+    void useExternalToolLayoutStore.getState().hydrate();
   }
 });

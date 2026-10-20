@@ -7,13 +7,12 @@ import {
 } from '@/api/centerApi';
 import {
   findAgentByName,
-  getAgentsByWorkspace,
+  AGENT_SEEDS,
   type Agent,
   type AgentStatus,
 } from '@/domain/agent';
 
 interface AgentState {
-  workspaceId: string;
   agents: Agent[];
   selectedAgentId: string | null;
   statusFilter: AgentStatus | 'all';
@@ -21,7 +20,7 @@ interface AgentState {
   testRunning: boolean;
   toast: string | null;
 
-  loadWorkspace: (workspaceId: string) => void;
+  load: () => void;
   selectAgent: (agentId: string | null) => void;
   selectAgentByName: (name: string) => void;
   setStatusFilter: (filter: AgentStatus | 'all') => void;
@@ -35,19 +34,17 @@ interface AgentState {
 }
 
 export const useAgentStore = create<AgentState>((set, get) => ({
-  workspaceId: 'ws-cn-marketing',
-  agents: getAgentsByWorkspace('ws-cn-marketing'),
-  selectedAgentId: getAgentsByWorkspace('ws-cn-marketing')[0]?.id ?? null,
+  agents: AGENT_SEEDS,
+  selectedAgentId: AGENT_SEEDS[0]?.id ?? null,
   statusFilter: 'all',
   testInput: '',
   testRunning: false,
   toast: null,
 
-  loadWorkspace: (workspaceId) => {
+  load: () => {
     void (async () => {
-      const agents = await fetchAgents(workspaceId);
+      const agents = await fetchAgents();
       set({
-        workspaceId,
         agents,
         selectedAgentId: agents[0]?.id ?? null,
         statusFilter: 'all',
@@ -59,7 +56,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   selectAgent: (agentId) => set({ selectedAgentId: agentId }),
 
   selectAgentByName: (name) => {
-    const agent = findAgentByName(get().workspaceId, name) ?? get().agents.find((a) => a.name === name);
+    const agent = findAgentByName(name) ?? get().agents.find((a) => a.name === name);
     if (agent) set({ selectedAgentId: agent.id });
   },
 
@@ -67,9 +64,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   updatePersona: (agentId, persona) => {
     void (async () => {
-      const { agents, workspaceId } = get();
+      const { agents } = get();
       try {
-        const updated = await patchAgentPersona(workspaceId, agentId, persona);
+        const updated = await patchAgentPersona(agentId, persona);
         set({
           agents: agents.map((a) => (a.id === agentId ? updated : a)),
           toast: `「${updated.name}」人设已保存到共享库`,
@@ -84,11 +81,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   advanceStatus: (agentId) => {
     void (async () => {
-      const { agents, workspaceId } = get();
+      const { agents } = get();
       const target = agents.find((a) => a.id === agentId);
       if (!target) return;
       try {
-        const updated = await advanceAgentStatusApi(workspaceId, agentId);
+        const updated = await advanceAgentStatusApi(agentId);
         set({
           agents: agents.map((a) => (a.id === agentId ? updated : a)),
           toast: `「${target.name}」已推进到 ${updated.status}`,
@@ -130,8 +127,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   },
 }));
 
-export function resolveAgentIdFromResource(resourceId: string, resourceName?: string | null, workspaceId?: string) {
+export function resolveAgentIdFromResource(resourceId: string, resourceName?: string | null) {
   if (resourceId.startsWith('agent-')) return resourceId;
-  if (resourceName && workspaceId) return findAgentByName(workspaceId, resourceName)?.id ?? null;
+  if (resourceName) return findAgentByName(resourceName)?.id ?? null;
   return null;
 }

@@ -5,33 +5,31 @@ import { useWorkflowStore } from '@/stores/workflowStore';
 import { useMemoryStore } from '@/stores/memoryStore';
 import { usePromptStore } from '@/stores/promptStore';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 /**
  * Lazy-load expert platform stores when entering iteration-9 views.
  * agents / skills / tools 已走 marketplaceStore，不再双载 legacy center stores。
  */
 export function usePlatformStoreLoader(appView: AppView) {
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
 
   useEffect(() => {
     if (!isPlatformView(appView)) return;
 
     switch (appView) {
       case 'workflow':
-        useWorkflowStore.getState().loadWorkspace(workspaceId);
+        useWorkflowStore.getState().load();
         break;
       case 'memory':
-        useMemoryStore.getState().loadWorkspace(workspaceId);
+        useMemoryStore.getState().load();
         break;
       case 'prompts':
-        usePromptStore.getState().loadWorkspace(workspaceId);
+        usePromptStore.getState().load();
         break;
       case 'admin':
-        useSettingsStore.getState().loadWorkspace(workspaceId);
+        useSettingsStore.getState().load();
         break;
       default:
         break;
     }
-  }, [appView, workspaceId]);
+  }, [appView]);
 }

@@ -12,7 +12,6 @@ import { Readable } from 'stream';
 
 export type BlobMeta = {
   id: string;
-  workspaceId: string;
   name: string;
   mimeType: string;
   size: number;
@@ -49,7 +48,7 @@ function uploadedBlob(meta: BlobMeta): UploadedBlob {
   const { deleteCapabilityHash: _privateCapability, ...publicMeta } = meta;
   return {
     ...publicMeta,
-    url: `/api/v1/workspaces/${meta.workspaceId}/blobs/${meta.id}`,
+    url: `/api/v1/blobs/${meta.id}`,
   };
 }
 
@@ -70,7 +69,7 @@ function configuredPositiveBytes(name: string, fallback: number): number {
 
 /**
  * 文件存于 S3 兼容对象存储（本地 / 内网为 MinIO）。每个文件两个对象：
- * `<工作区>/<id>.bin` 为内容，`<工作区>/<id>.json` 为元数据；meta 最后写入，读取以 meta 为准。
+ * `<id>.bin` 为内容，`<id>.json` 为元数据；meta 最后写入，读取以 meta 为准。
  */
 @Injectable()
 export class BlobStoreService implements OnModuleInit {
@@ -99,14 +98,13 @@ export class BlobStoreService implements OnModuleInit {
     this.logger.log(`object storage ready: ${this.endpoint}/${this.bucket}`);
   }
 
-  /** 前缀与旧版磁盘目录名一致，迁移脚本按目录名直接映射。 */
-  private key(workspaceId: string, id: string, ext: 'bin' | 'json') {
-    return `${workspaceId.replace(/[^a-zA-Z0-9_-]/g, '_')}/${id}.${ext}`;
+  private key(id: string, ext: 'bin' | 'json') {
+    return `${id}.${ext}`;
   }
 
-  private async readMeta(workspaceId: string, id: string): Promise<BlobMeta> {
+  private async readMeta(id: string): Promise<BlobMeta> {
     const res = await this.s3.send(
-      new GetObjectCommand({ Bucket: this.bucket, Key: this.key(workspaceId, id, 'json') }),
+      new GetObjectCommand({ Bucket: this.bucket, Key: this.key(id, 'json') }),
     );
     return JSON.parse(await res.Body!.transformToString('utf8')) as BlobMeta;
   }
@@ -121,13 +119,13 @@ export class BlobStoreService implements OnModuleInit {
       await this.s3.send(
         new PutObjectCommand({
           Bucket: this.bucket,
-          Key: this.key(meta.workspaceId, meta.id, 'json'),
+          Key: this.key(meta.id, 'json'),
           Body: JSON.stringify(meta, null, 2),
           ContentType: 'application/json',
         }),
       );
     } catch (err) {
-      await this.removeObject(this.key(meta.workspaceId, meta.id, 'bin')).catch(() => undefined);
+      await this.removeObject(this.key(meta.id, 'bin')).catch(() => undefined);
       throw err;
     }
   }
@@ -137,7 +135,6 @@ export class BlobStoreService implements OnModuleInit {
   }
 
   async putBase64(
-    workspaceId: string,
     input: { name: string; mimeType?: string; dataBase64: string },
   ): Promise<UploadedDeletableBlob> {
     const raw = Buffer.from(input.dataBase64, 'base64');
@@ -151,7 +148,6 @@ export class BlobStoreService implements OnModuleInit {
     const deleteCapabilityHash = createHash('sha256').update(deleteToken).digest('hex');
     const meta: BlobMeta = {
       id,
-      workspaceId,
       name: input.name || 'file.bin',
       mimeType: input.mimeType || 'application/octet-stream',
       size: raw.length,
@@ -162,18 +158,17 @@ export class BlobStoreService implements OnModuleInit {
     await this.s3.send(
       new PutObjectCommand({
         Bucket: this.bucket,
-        Key: this.key(workspaceId, id, 'bin'),
+        Key: this.key(id, 'bin'),
         Body: raw,
         ContentType: meta.mimeType,
       }),
     );
     await this.commitMeta(meta);
-    this.logger.log(`blob stored ${workspaceId}/${id} (${meta.size}B)`);
+    this.logger.log(`blob stored ${id} (${meta.size}B)`);
     return { ...uploadedBlob(meta), deleteToken };
   }
 
   async putPackageStream(
-    workspaceId: string,
     input: {
       name: string;
       stream: Readable;
@@ -212,7 +207,7 @@ export class BlobStoreService implements OnModuleInit {
       }
     }
 
-    const binKey = this.key(workspaceId, id, 'bin');
+    const binKey = this.key(id, 'bin');
     try {
       await new Upload({
         client: this.s3,
@@ -233,7 +228,6 @@ export class BlobStoreService implements OnModuleInit {
 
     const meta: BlobMeta = {
       id,
-      workspaceId,
       name: input.name || 'package.bin',
       mimeType,
       size,
@@ -242,19 +236,18 @@ export class BlobStoreService implements OnModuleInit {
       deleteCapabilityHash,
     };
     await this.commitMeta(meta);
-    this.logger.log(`package blob stored ${workspaceId}/${id} (${meta.size}B)`);
+    this.logger.log(`package blob stored ${id} (${meta.size}B)`);
     return { ...uploadedBlob(meta), deleteToken };
   }
 
   async get(
-    workspaceId: string,
     id: string,
   ): Promise<{ meta: BlobMeta; size: number; stream: Readable }> {
     if (!GENERATED_BLOB_ID.test(id)) throw new NotFoundException('blob_not_found');
     try {
-      const meta = await this.readMeta(workspaceId, id);
+      const meta = await this.readMeta(id);
       const res = await this.s3.send(
-        new GetObjectCommand({ Bucket: this.bucket, Key: this.key(workspaceId, id, 'bin') }),
+        new GetObjectCommand({ Bucket: this.bucket, Key: this.key(id, 'bin') }),
       );
       return { meta, size: res.ContentLength ?? meta.size, stream: res.Body as Readable };
     } catch (err) {
@@ -263,12 +256,12 @@ export class BlobStoreService implements OnModuleInit {
     }
   }
 
-  async delete(workspaceId: string, id: string, deleteToken?: string): Promise<void> {
+  async delete(id: string, deleteToken?: string): Promise<void> {
     if (!GENERATED_BLOB_ID.test(id)) throw new Error('invalid_blob_id');
 
     let meta: BlobMeta;
     try {
-      meta = await this.readMeta(workspaceId, id);
+      meta = await this.readMeta(id);
     } catch (err) {
       if (isMissingObject(err)) throw new Error('blob_not_found');
       throw err;
@@ -293,8 +286,8 @@ export class BlobStoreService implements OnModuleInit {
     }
 
     // 先删 meta：读取以 meta 为准，删完立即不可见；内容删除失败只会留下不可达对象。
-    await this.removeObject(this.key(workspaceId, id, 'json'));
-    await this.removeObject(this.key(workspaceId, id, 'bin'));
-    this.logger.log(`blob deleted ${workspaceId}/${id}`);
+    await this.removeObject(this.key(id, 'json'));
+    await this.removeObject(this.key(id, 'bin'));
+    this.logger.log(`blob deleted ${id}`);
   }
 }

@@ -40,8 +40,8 @@ export const TOOL_TYPE_META: Record<ToolType, { icon: string; color: string; lab
   function: { icon: 'fa-code', color: 'slate', label: 'Function' },
 };
 
-export const TOOL_CATALOG: Record<string, PlatformTool[]> = {
-  'ws-3c-latam': [
+/** 平台种子数据（原按工作区区分，现只有一个空间） */
+export const TOOL_SEEDS: PlatformTool[] = [
     {
       id: 'tool-sap',
       name: 'SAP_S4HANA_OData',
@@ -140,62 +140,15 @@ export const TOOL_CATALOG: Record<string, PlatformTool[]> = {
       updatedAt: '2026-06-01',
       author: 'Platform',
     },
-  ],
-  'ws-global-marketing': [
-    {
-      id: 'tool-ga4',
-      name: 'GA4_Reporting_API',
-      displayName: 'Google Analytics 4',
-      description: 'Campaign 转化与漏斗 Reporting API。',
-      type: 'openapi',
-      status: 'active',
-      version: 'v1.0',
-      endpoint: 'https://analyticsdata.googleapis.com/v1beta',
-      method: 'POST',
-      credentialType: 'oauth2',
-      credentialLabel: 'Google Service Account',
-      rateLimit: '100 req/min',
-      timeoutMs: 12000,
-      usedBySkills: ['ROI_Compare'],
-      usedByAgents: ['洞察 Agent'],
-      tags: ['ga4', 'analytics', 'openapi'],
-      updatedAt: '2026-06-10',
-      author: 'Sarah',
-    },
-  ],
-  'ws-rd-knowledge': [
-    {
-      id: 'tool-milvus-rd',
-      name: 'Milvus_gRPC',
-      displayName: 'Milvus RD Cluster',
-      description: '研发知识库专用 Milvus 集群。',
-      type: 'mcp',
-      status: 'testing',
-      version: 'v1.0',
-      endpoint: 'milvus-rd.internal:19530',
-      credentialType: 'api_key',
-      credentialLabel: 'RD Milvus Key',
-      rateLimit: '200 req/min',
-      timeoutMs: 8000,
-      usedBySkills: ['Spec_Search'],
-      usedByAgents: ['研发 RAG Agent'],
-      tags: ['milvus', 'rd'],
-      updatedAt: '2026-05-30',
-      author: 'RD-Team',
-    },
-  ],
-};
+  ];
 
-export function getToolsByWorkspace(workspaceId: string): PlatformTool[] {
-  return TOOL_CATALOG[workspaceId] ?? TOOL_CATALOG['ws-3c-latam'] ?? [];
+
+export function findToolById(id: string): PlatformTool | undefined {
+  return TOOL_SEEDS.find((t) => t.id === id);
 }
 
-export function findToolById(workspaceId: string, id: string): PlatformTool | undefined {
-  return getToolsByWorkspace(workspaceId).find((t) => t.id === id);
-}
-
-export function findToolByName(workspaceId: string, name: string): PlatformTool | undefined {
-  return getToolsByWorkspace(workspaceId).find((t) => t.name === name || t.displayName === name);
+export function findToolByName(name: string): PlatformTool | undefined {
+  return TOOL_SEEDS.find((t) => t.name === name || t.displayName === name);
 }
 
 export function getToolStatusClass(status: ToolStatus) {

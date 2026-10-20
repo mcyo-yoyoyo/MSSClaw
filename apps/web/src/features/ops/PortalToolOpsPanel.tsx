@@ -70,7 +70,6 @@ type InternalSceneDragState = {
   sceneId: string;
   revision: number;
   visibleIds: string[];
-  workspaceId: string;
 };
 
 type DragPreviewPosition = {
@@ -507,7 +506,6 @@ export function PortalToolOpsPanel() {
   const engagementById = useContentEngagementStore((state) => state.byId);
   const guideRecords = usePlazaToolGuideStore((state) => state.records);
   const externalTaxonomy = useExternalTaxonomyCatalogStore((state) => state.catalog);
-  const workspaceId = useWorkspaceStore((state) => state.workspaceId);
   const apiConnected = useWorkspaceStore((state) => state.apiConnected);
 
   const layoutDocument = useExternalToolLayoutStore((state) => state.document);
@@ -567,7 +565,6 @@ export function PortalToolOpsPanel() {
     drag: DragState;
     startX: number;
     startY: number;
-    workspaceId: string;
     moved: boolean;
   } | null>(null);
   const [internalDrag, setInternalDrag] = useState<InternalSceneDragState | null>(null);
@@ -594,10 +591,10 @@ export function PortalToolOpsPanel() {
   }, [externalTaxonomy, externalType]);
 
   useEffect(() => {
-    if (!apiConnected || !workspaceId) return;
-    void hydrateLayout(workspaceId);
-    void hydrateInternalScenes(workspaceId);
-  }, [apiConnected, workspaceId, hydrateInternalScenes, hydrateLayout]);
+    if (!apiConnected) return;
+    void hydrateLayout();
+    void hydrateInternalScenes();
+  }, [apiConnected, hydrateInternalScenes, hydrateLayout]);
 
   useEffect(() => {
     setDragState(null);
@@ -608,7 +605,7 @@ export function PortalToolOpsPanel() {
     setInternalDrag(null);
     internalDragRef.current = null;
     setExternalListMode('listed');
-  }, [workspaceId]);
+  }, []);
 
   const viewer = useMemo(
     () => ({
@@ -923,14 +920,12 @@ export function PortalToolOpsPanel() {
   const persistExternalLayoutChange = async (
     mutate: () => boolean,
     successMessage: string,
-    expectedWorkspaceId: string,
   ): Promise<boolean> => {
     const liveLayoutState = useExternalToolLayoutStore.getState();
     if (
       liveLayoutState.loading ||
       liveLayoutState.saving ||
-      !liveLayoutState.document ||
-      liveLayoutState.workspaceId !== expectedWorkspaceId
+      !liveLayoutState.document
     ) {
       return false;
     }
@@ -938,17 +933,14 @@ export function PortalToolOpsPanel() {
 
     const saved = await saveLayoutDraft();
     if (saved) {
-      if (useExternalToolLayoutStore.getState().workspaceId === expectedWorkspaceId) {
-        showToast(successMessage);
-      }
+      showToast(successMessage);
       return true;
     }
 
     const failedState = useExternalToolLayoutStore.getState();
-    if (failedState.workspaceId !== expectedWorkspaceId) return false;
     const message = failedState.error ?? '外部工具布局保存失败';
     cancelLayoutEdit();
-    await hydrateLayout(expectedWorkspaceId);
+    await hydrateLayout();
     showToast(`${message} 已恢复服务器中的布局。`);
     return false;
   };
@@ -1015,15 +1007,12 @@ export function PortalToolOpsPanel() {
     listId: LayoutListId,
     add: boolean,
   ) => {
-    const expectedWorkspaceId = useExternalToolLayoutStore.getState().workspaceId;
-    if (!expectedWorkspaceId) return;
     void persistExternalLayoutChange(
       () =>
         externalType === 'all'
           ? changeAllFeaturedMembership(card, listId, add)
           : changeCategoryFeaturedMembership(card, listId, add),
       `${card.title} 已${add ? '加入' : '移出'}精选`,
-      expectedWorkspaceId,
     );
   };
   const addToFeatured = (card: MarketShelfCardModel, listId: LayoutListId) =>
@@ -1131,7 +1120,7 @@ export function PortalToolOpsPanel() {
       !externalDragEnabled ||
       layoutState.loading ||
       layoutState.saving ||
-      !layoutState.workspaceId ||
+      !layoutState.document ||
       dragStateRef.current
     ) {
       return;
@@ -1144,7 +1133,6 @@ export function PortalToolOpsPanel() {
       drag,
       startX,
       startY,
-      workspaceId: layoutState.workspaceId,
       moved: false,
     };
   };
@@ -1166,7 +1154,6 @@ export function PortalToolOpsPanel() {
     drag: DragState,
     target: LayoutListId,
     beforeId: string | null,
-    expectedWorkspaceId: string,
   ) => {
     await persistExternalLayoutChange(
       () =>
@@ -1176,14 +1163,12 @@ export function PortalToolOpsPanel() {
             ? dropCategory(drag, target, beforeId)
             : false,
       '外部工具顺序已自动保存',
-      expectedWorkspaceId,
     );
   };
 
   const handleExternalPointerDrop = (
     drag: DragState,
     eventTarget: Element | null,
-    expectedWorkspaceId: string,
   ) => {
     if (!externalDragEnabled) {
       finishExternalDrag();
@@ -1200,7 +1185,7 @@ export function PortalToolOpsPanel() {
         ? cardElement.dataset.layoutCardId ?? null
         : null;
     finishExternalDrag();
-    if (target) void commitExternalDrop(drag, target, beforeId, expectedWorkspaceId);
+    if (target) void commitExternalDrop(drag, target, beforeId);
   };
 
   const handleExternalPointerMoveCapture = (
@@ -1242,7 +1227,6 @@ export function PortalToolOpsPanel() {
     handleExternalPointerDrop(
       pointer.drag,
       event.currentTarget.ownerDocument.elementFromPoint(event.clientX, event.clientY),
-      pointer.workspaceId,
     );
   };
 
@@ -1266,8 +1250,6 @@ export function PortalToolOpsPanel() {
     const liveState = useInternalOfficeSceneCatalogStore.getState();
     if (
       !canManageInternalOrder ||
-      drag.workspaceId !== workspaceId ||
-      liveState.workspaceId !== drag.workspaceId ||
       liveState.loading ||
       liveState.saving
     ) {
@@ -1287,7 +1269,7 @@ export function PortalToolOpsPanel() {
       internalDragRef.current = null;
       setInternalDrag(null);
     }
-    if (saved && useWorkspaceStore.getState().workspaceId === drag.workspaceId) {
+    if (saved) {
       showToast('已保存内部办公场景顺序');
       dismissInternalToast();
     }
@@ -1503,9 +1485,7 @@ export function PortalToolOpsPanel() {
                 !canManageInternalOrder ||
                 !liveState.loaded ||
                 liveState.loading ||
-                liveState.saving ||
-                !liveState.workspaceId ||
-                liveState.workspaceId !== useWorkspaceStore.getState().workspaceId
+                liveState.saving
               ) {
                 return false;
               }
@@ -1515,7 +1495,6 @@ export function PortalToolOpsPanel() {
                 visibleIds: liveState.entries
                   .filter((entry) => entry.visible)
                   .map((entry) => entry.id),
-                workspaceId: liveState.workspaceId,
               };
               internalDragRef.current = nextDrag;
               setInternalDrag(nextDrag);

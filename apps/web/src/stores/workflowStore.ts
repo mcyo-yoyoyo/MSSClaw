@@ -2,13 +2,12 @@ import { create } from 'zustand';
 import { advanceWorkflowStatus as advanceWorkflowStatusApi, CenterApiError, fetchWorkflows } from '@/api/centerApi';
 import {
   findWorkflowByName,
-  getWorkflowsByWorkspace,
+  WORKFLOW_SEEDS,
   type Workflow,
   type WorkflowStatus,
 } from '@/domain/workflow';
 
 interface WorkflowState {
-  workspaceId: string;
   workflows: Workflow[];
   selectedWorkflowId: string | null;
   selectedNodeId: string | null;
@@ -17,7 +16,7 @@ interface WorkflowState {
   debugTrace: string[];
   toast: string | null;
 
-  loadWorkspace: (workspaceId: string) => void;
+  load: () => void;
   selectWorkflow: (id: string | null) => void;
   selectWorkflowByName: (name: string) => void;
   selectNode: (nodeId: string | null) => void;
@@ -30,20 +29,18 @@ interface WorkflowState {
 }
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
-  workspaceId: 'ws-cn-marketing',
-  workflows: getWorkflowsByWorkspace('ws-cn-marketing'),
-  selectedWorkflowId: getWorkflowsByWorkspace('ws-cn-marketing')[0]?.id ?? null,
+  workflows: WORKFLOW_SEEDS,
+  selectedWorkflowId: WORKFLOW_SEEDS[0]?.id ?? null,
   selectedNodeId: null,
   statusFilter: 'all',
   debugRunning: false,
   debugTrace: [],
   toast: null,
 
-  loadWorkspace: (workspaceId) => {
+  load: () => {
     void (async () => {
-      const workflows = await fetchWorkflows(workspaceId);
+      const workflows = await fetchWorkflows();
       set({
-        workspaceId,
         workflows,
         selectedWorkflowId: workflows[0]?.id ?? null,
         selectedNodeId: null,
@@ -56,7 +53,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   selectWorkflow: (id) => set({ selectedWorkflowId: id, selectedNodeId: null, debugTrace: [] }),
 
   selectWorkflowByName: (name) => {
-    const wf = findWorkflowByName(get().workspaceId, name);
+    const wf = findWorkflowByName(name);
     if (wf) set({ selectedWorkflowId: wf.id, selectedNodeId: null, debugTrace: [] });
   },
 
@@ -66,11 +63,11 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   advanceStatus: (workflowId) => {
     void (async () => {
-      const { workflows, workspaceId } = get();
+      const { workflows } = get();
       const target = workflows.find((w) => w.id === workflowId);
       if (!target) return;
       try {
-        const updated = await advanceWorkflowStatusApi(workspaceId, workflowId);
+        const updated = await advanceWorkflowStatusApi(workflowId);
         set({
           workflows: workflows.map((w) => (w.id === workflowId ? updated : w)),
           toast: `「${target.name}」已推进到 ${updated.status}`,
@@ -118,8 +115,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   },
 }));
 
-export function resolveWorkflowIdFromResource(resourceId: string, resourceName?: string | null, workspaceId?: string) {
+export function resolveWorkflowIdFromResource(resourceId: string, resourceName?: string | null) {
   if (resourceId.startsWith('wf-')) return resourceId;
-  if (resourceName && workspaceId) return findWorkflowByName(workspaceId, resourceName)?.id ?? null;
+  if (resourceName) return findWorkflowByName(resourceName)?.id ?? null;
   return null;
 }

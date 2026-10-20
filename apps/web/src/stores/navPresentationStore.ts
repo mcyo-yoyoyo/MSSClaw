@@ -22,10 +22,8 @@ import { isSystemAdmin } from '@/domain/currentUser';
 import { canRoleAccessView } from '@/domain/navRbac';
 import type { PlatformRole } from '@/domain/rbac';
 import { useSessionStore } from '@/stores/sessionStore';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   scheduleSavePlatformDoc,
 } from '@/api/platformDocsApi';
@@ -75,7 +73,7 @@ function fromRemote(remote: Partial<PersistedNavPresentation> | null): Persisted
 
 function persist(state: PersistedNavPresentation) {
   if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc(currentWorkspaceId(), 'nav-presentation', state);
+  void scheduleSavePlatformDoc('nav-presentation', state);
 }
 
 function currentRole(): PlatformRole {
@@ -112,9 +110,7 @@ export const useNavPresentationStore = create<NavPresentationState>((set, get) =
           return;
         }
         try {
-          const remote = await fetchPlatformDoc<Partial<PersistedNavPresentation>>(
-            currentWorkspaceId(),
-            'nav-presentation',
+          const remote = await fetchPlatformDoc<Partial<PersistedNavPresentation>>('nav-presentation',
           );
           set(fromRemote(remote));
         } catch {
@@ -136,8 +132,7 @@ export const useNavPresentationStore = create<NavPresentationState>((set, get) =
       if (get().roleEnabled[role]?.[slot] !== true) return false;
 
       if (slot !== 'warroom') {
-        const workspaceId = useWorkspaceStore.getState().workspaceId;
-        if (!canRoleAccessView(slot, role, workspaceId)) return false;
+        if (!canRoleAccessView(slot, role)) return false;
       }
       return true;
     },

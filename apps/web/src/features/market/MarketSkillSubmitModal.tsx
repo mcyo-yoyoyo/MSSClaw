@@ -40,7 +40,6 @@ import {
   isPackageUploadContextCurrent,
   uploadWorkspacePackage,
 } from '@/api/blobApi';
-import { currentWorkspaceId } from '@/api/platformDocsApi';
 import { requireLogin } from '@/stores/authGateStore';
 import { evaluateAndPersistSkill } from '@/domain/skillEvaluation';
 
@@ -197,18 +196,16 @@ export function MarketSkillSubmitModal({
     const descZh = desc.trim() || '业务提报场景技能（待运营完善）';
     let packageBlob: PrototypeSkillSeed['packageBlob'];
     let uploadedPackage: Awaited<ReturnType<typeof uploadWorkspacePackage>> | undefined;
-    let packageWorkspaceId: string | undefined;
 
     if (packageFile) {
       setSubmitting(true);
       try {
-        packageWorkspaceId = currentWorkspaceId();
-        const uploaded = await uploadWorkspacePackage(packageWorkspaceId, packageFile);
+        const uploaded = await uploadWorkspacePackage(packageFile);
         uploadedPackage = uploaded;
-        if (!isPackageUploadContextCurrent(uploaded, currentWorkspaceId())) {
-          void deleteWorkspaceBlob(packageWorkspaceId, uploaded).catch(() => undefined);
+        if (!isPackageUploadContextCurrent(uploaded)) {
+          void deleteWorkspaceBlob(uploaded).catch(() => undefined);
           uploadedPackage = undefined;
-          showToast('工作区或 API 配置已变更，请重新提交');
+          showToast('API 配置已变更，请重新提交');
           setSubmitting(false);
           return;
         }
@@ -290,8 +287,8 @@ export function MarketSkillSubmitModal({
       });
       showToast('技能已提报，进入发布审批');
     } catch {
-      if (uploadedPackage && packageWorkspaceId) {
-        void deleteWorkspaceBlob(packageWorkspaceId, uploadedPackage).catch(() => undefined);
+      if (uploadedPackage) {
+        void deleteWorkspaceBlob(uploadedPackage).catch(() => undefined);
       }
       setSubmitting(false);
       showToast('技能提报失败，请重试');

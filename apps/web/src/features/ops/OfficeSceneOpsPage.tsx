@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { currentWorkspaceId } from '@/api/platformDocsApi';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { CenterPageHeader, StatCardGrid } from '@/components/center/CenterShell';
 import { resolveToolMarketShelf } from '@/domain/aiToolCategories';
@@ -21,7 +20,6 @@ interface SceneDraft {
 
 interface DraftContext {
   entryId: InternalOfficeSceneId;
-  workspaceId: string;
   revision: number;
 }
 
@@ -39,11 +37,11 @@ interface ShelvedDraft {
   entryLabel: string;
 }
 
-/** 路由或工作区切换时只在会话内保留未保存草稿，不写 localStorage。 */
+/** 路由切换时只在会话内保留未保存草稿，不写 localStorage。 */
 const retainedOfficeSceneDrafts = new Map<string, ShelvedDraft>();
 
 function retainedDraftKey(context: DraftContext): string {
-  return `${context.workspaceId}\u0000${context.entryId}`;
+  return context.entryId;
 }
 
 function retainOfficeSceneDraft(draft: ShelvedDraft): void {
@@ -100,9 +98,6 @@ export function OfficeSceneOpsPage({
   const loading = useInternalOfficeSceneCatalogStore((state) => state.loading);
   const saving = useInternalOfficeSceneCatalogStore((state) => state.saving);
   const loaded = useInternalOfficeSceneCatalogStore((state) => state.loaded);
-  const sceneWorkspaceId = useInternalOfficeSceneCatalogStore(
-    (state) => state.workspaceId,
-  );
   const revision = useInternalOfficeSceneCatalogStore((state) => state.revision);
   const hydrate = useInternalOfficeSceneCatalogStore((state) => state.hydrate);
   const updateEntry = useInternalOfficeSceneCatalogStore(
@@ -135,8 +130,7 @@ export function OfficeSceneOpsPage({
     const state = useInternalOfficeSceneCatalogStore.getState();
     if (
       embedded &&
-      state.loaded &&
-      state.workspaceId === currentWorkspaceId()
+      state.loaded
     ) {
       return;
     }
@@ -175,9 +169,7 @@ export function OfficeSceneOpsPage({
   const pageReady = loaded && toolCatalogAvailable;
   const draftStale = Boolean(
     draftContext &&
-      (!sceneWorkspaceId ||
-        draftContext.workspaceId !== sceneWorkspaceId ||
-        draftContext.revision !== revision ||
+      (draftContext.revision !== revision ||
         draftContext.entryId !== selectedId),
   );
   const editorUnavailable = saving || loading || !pageReady || draftStale;
@@ -202,32 +194,6 @@ export function OfficeSceneOpsPage({
     context: draftContext,
     entryLabel: selected?.label ?? '',
   };
-  const previousWorkspaceRef = useRef(sceneWorkspaceId);
-
-  useEffect(() => {
-    const previousWorkspace = previousWorkspaceRef.current;
-    previousWorkspaceRef.current = sceneWorkspaceId;
-    if (
-      !previousWorkspace ||
-      !sceneWorkspaceId ||
-      previousWorkspace === sceneWorkspaceId ||
-      !dirty ||
-      !draft ||
-      !baseDraft ||
-      !draftContext
-    ) {
-      return;
-    }
-    const retained = {
-      draft: { ...draft },
-      baseDraft: { ...baseDraft },
-      context: { ...draftContext },
-      entryLabel: selected?.label ?? draftContext.entryId,
-    };
-    retainOfficeSceneDraft(retained);
-    setShelvedDrafts(listRetainedOfficeSceneDrafts());
-  }, [baseDraft, dirty, draft, draftContext, sceneWorkspaceId, selected?.label]);
-
   useEffect(() => {
     const warnBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!dirty && retainedOfficeSceneDrafts.size === 0) return;
@@ -261,15 +227,10 @@ export function OfficeSceneOpsPage({
     entry: InternalOfficeSceneCatalogEntry,
     nextRevision = revision,
   ) => {
-    if (!sceneWorkspaceId) return;
     const next = draftOf(entry);
     setDraft(next);
     setBaseDraft(next);
-    setDraftContext({
-      entryId: entry.id,
-      workspaceId: sceneWorkspaceId,
-      revision: nextRevision,
-    });
+    setDraftContext({ entryId: entry.id, revision: nextRevision });
     setToolQuery('');
     setEditorError(null);
   };
@@ -288,17 +249,15 @@ export function OfficeSceneOpsPage({
   }, [entries, selectedId]);
 
   useEffect(() => {
-    if (!selected || !sceneWorkspaceId) return;
-    const sameDraftContext =
-      draftContext?.entryId === selected.id &&
-      draftContext.workspaceId === sceneWorkspaceId;
+    if (!selected) return;
+    const sameDraftContext = draftContext?.entryId === selected.id;
     if (sameDraftContext && draftContext.revision === revision) return;
     // clean 草稿跟随 fresh DB 快照自动重建；有改动时保留旧草稿并进入 stale 提示。
     if (sameDraftContext && dirty) return;
     installDraft(selected);
-    // installDraft 仅在选择、工作区或 clean DB revision 改变时建立草稿基线。
+    // installDraft 仅在选择或 clean DB revision 改变时建立草稿基线。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dirty, revision, sceneWorkspaceId, selected?.id]);
+  }, [dirty, revision, selected?.id]);
 
   const filteredCandidates = useMemo(() => {
     const query = toolQuery.trim().toLocaleLowerCase();
@@ -336,8 +295,6 @@ export function OfficeSceneOpsPage({
     if (
       readOnly ||
       !shelvedDraft ||
-      !sceneWorkspaceId ||
-      shelvedDraft.context.workspaceId !== sceneWorkspaceId ||
       saving ||
       loading
     ) {
@@ -361,11 +318,7 @@ export function OfficeSceneOpsPage({
     setSelectedId(entry.id);
     setDraft({ ...shelvedDraft.draft });
     setBaseDraft(draftOf(entry));
-    setDraftContext({
-      entryId: entry.id,
-      workspaceId: sceneWorkspaceId,
-      revision,
-    });
+    setDraftContext({ entryId: entry.id, revision });
     setEditorError('已恢复会话内保留的草稿，请核对当前数据库内容后再保存。');
     dismissShelvedDraft(shelvedDraft);
   };
@@ -398,15 +351,7 @@ export function OfficeSceneOpsPage({
     ) {
       return;
     }
-    const actionWorkspaceId = sceneWorkspaceId;
-    if (!actionWorkspaceId) return;
     const id = await addEntry();
-    if (
-      useInternalOfficeSceneCatalogStore.getState().workspaceId !==
-      actionWorkspaceId
-    ) {
-      return;
-    }
     if (!id) {
       setEditorError(storeError('新增失败，数据库内容未改变。'));
       return;
@@ -419,9 +364,7 @@ export function OfficeSceneOpsPage({
 
   const saveDraft = async () => {
     if (readOnly || !selected || !draft || controlsDisabled) return;
-    const actionWorkspaceId = sceneWorkspaceId;
     const actionEntryId = selected.id;
-    if (!actionWorkspaceId) return;
     const label = draft.label.trim();
     if (!label) {
       setEditorError('请填写场景名。');
@@ -444,12 +387,6 @@ export function OfficeSceneOpsPage({
     }
     setEditorError(null);
     const ok = await updateEntry(actionEntryId, patch);
-    if (
-      useInternalOfficeSceneCatalogStore.getState().workspaceId !==
-      actionWorkspaceId
-    ) {
-      return;
-    }
     if (!ok) {
       setEditorError(storeError('保存失败，草稿已保留。'));
       return;
@@ -473,16 +410,8 @@ export function OfficeSceneOpsPage({
     ) {
       return;
     }
-    const actionWorkspaceId = sceneWorkspaceId;
     const actionEntryId = selected.id;
-    if (!actionWorkspaceId) return;
     const ok = await removeEntry(actionEntryId);
-    if (
-      useInternalOfficeSceneCatalogStore.getState().workspaceId !==
-      actionWorkspaceId
-    ) {
-      return;
-    }
     if (!ok) {
       setEditorError(storeError('删除失败，数据库中的场景仍然保留。'));
       return;
@@ -568,18 +497,16 @@ export function OfficeSceneOpsPage({
                 className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2 text-[11px] text-amber-800"
               >
                 <span className="min-w-0 flex-1">
-                  已在当前会话保留「{shelvedDraft.entryLabel}」的未保存草稿（工作区 {shelvedDraft.context.workspaceId}），未写入数据库。
+                  已在当前会话保留「{shelvedDraft.entryLabel}」的未保存草稿，未写入数据库。
                 </span>
-                {shelvedDraft.context.workspaceId === sceneWorkspaceId ? (
-                  <button
-                    type="button"
-                    disabled={saving || loading}
-                    onClick={() => restoreShelvedDraft(shelvedDraft)}
-                    className="rounded-lg border border-amber-300 bg-white px-2 py-1 font-medium disabled:opacity-40"
-                  >
-                    恢复草稿
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  disabled={saving || loading}
+                  onClick={() => restoreShelvedDraft(shelvedDraft)}
+                  className="rounded-lg border border-amber-300 bg-white px-2 py-1 font-medium disabled:opacity-40"
+                >
+                  恢复草稿
+                </button>
                 <button
                   type="button"
                   onClick={() => dismissShelvedDraft(shelvedDraft)}

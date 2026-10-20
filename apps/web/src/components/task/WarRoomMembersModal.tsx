@@ -3,13 +3,12 @@ import { cn } from '@/lib/utils';
 import type { ChatConfig, WarRoomMember } from '@/domain/chat';
 import { isWarRoomAdmin } from '@/domain/chat';
 import { getCurrentUserId } from '@/domain/currentUser';
-import { getMembersByWorkspace, type WorkspaceMember } from '@/domain/rbac';
+import { getSeedMembers, type WorkspaceMember } from '@/domain/rbac';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 
 interface WarRoomMembersModalProps {
   open: boolean;
   chat: ChatConfig;
-  workspaceId: string;
   onClose: () => void;
   onAddMember: (member: WarRoomMember) => void;
   onRemoveMember: (memberId: string) => void;
@@ -19,7 +18,6 @@ interface WarRoomMembersModalProps {
 export function WarRoomMembersModal({
   open,
   chat,
-  workspaceId,
   onClose,
   onAddMember,
   onRemoveMember,
@@ -31,7 +29,7 @@ export function WarRoomMembersModal({
 
   const members = chat.members ?? [];
   const isAdmin = isWarRoomAdmin(chat);
-  const workspaceMembers = useMemo(() => getMembersByWorkspace(workspaceId), [workspaceId]);
+  const workspaceMembers = useMemo(() => getSeedMembers(), []);
 
   const memberIds = useMemo(() => new Set(members.map((m) => m.id)), [members]);
   const candidates = useMemo(() => {

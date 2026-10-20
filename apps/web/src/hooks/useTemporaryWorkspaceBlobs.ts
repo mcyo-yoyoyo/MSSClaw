@@ -4,17 +4,15 @@ import {
   isPackageUploadContextCurrent,
   type UploadedPackageBlob,
 } from '@/api/blobApi';
-import { currentWorkspaceId } from '@/api/platformDocsApi';
 
 type TemporaryBlob = {
-  workspaceId: string;
   blob: UploadedPackageBlob;
 };
 
 type BlobIdentity = Pick<UploadedPackageBlob, 'id' | 'url'>;
 
 function trackingKey(entry: TemporaryBlob): string {
-  return `${entry.workspaceId}\n${entry.blob.id}\n${entry.blob.url}`;
+  return `${entry.blob.id}\n${entry.blob.url}`;
 }
 
 function sameBlob(entry: TemporaryBlob, blob: BlobIdentity): boolean {
@@ -30,7 +28,7 @@ export function useTemporaryWorkspaceBlobs(sessionKey: string | null) {
   const generationRef = useRef(0);
 
   const deleteQuietly = (entry: TemporaryBlob) => {
-    void deleteWorkspaceBlob(entry.workspaceId, entry.blob).catch(() => undefined);
+    void deleteWorkspaceBlob(entry.blob).catch(() => undefined);
   };
 
   const cleanup = (keepBlob?: BlobIdentity) => {
@@ -61,15 +59,11 @@ export function useTemporaryWorkspaceBlobs(sessionKey: string | null) {
     currentGeneration: () => generationRef.current,
     isCurrent: (generation: number) => generation === generationRef.current,
     /** 返回 false 表示上传完成时弹窗会话已结束，该 blob 已安排删除。 */
-    trackUploaded: (
-      workspaceId: string,
-      blob: UploadedPackageBlob,
-      generation: number,
-    ): boolean => {
-      const entry = { workspaceId, blob };
+    trackUploaded: (blob: UploadedPackageBlob, generation: number): boolean => {
+      const entry = { blob };
       if (
         generation !== generationRef.current ||
-        !isPackageUploadContextCurrent(blob, currentWorkspaceId())
+        !isPackageUploadContextCurrent(blob)
       ) {
         deleteQuietly(entry);
         return false;
@@ -91,7 +85,7 @@ export function useTemporaryWorkspaceBlobs(sessionKey: string | null) {
       const match = [...blobsRef.current.entries()].find(([, entry]) => sameBlob(entry, blob));
       if (!match) return true;
       const [key, entry] = match;
-      if (isPackageUploadContextCurrent(entry.blob, currentWorkspaceId())) return true;
+      if (isPackageUploadContextCurrent(entry.blob)) return true;
       blobsRef.current.delete(key);
       deleteQuietly(entry);
       return false;

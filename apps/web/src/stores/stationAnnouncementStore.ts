@@ -10,7 +10,6 @@ import {
 import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   peekPlatformDocMemory,
   savePlatformDoc,
@@ -83,7 +82,7 @@ export const useStationAnnouncementStore = create<StationAnnouncementState>((set
         return;
       }
       try {
-        const remote = await fetchPlatformDoc<AnnouncementDoc>(currentWorkspaceId(), DOC_KIND);
+        const remote = await fetchPlatformDoc<AnnouncementDoc>(DOC_KIND);
         const list = Array.isArray(remote?.items) ? remote.items : [];
         // 连了后端就以库为准：空文档就是「还没有公告」。再灌种子会让首页出现
         // 库里不存在的公告，点开也没有对应的消息详情。运营要示例可以点「恢复默认示例」。
@@ -152,14 +151,13 @@ function commit(
   set({ items: normalized, toast });
   if (!canUsePlatformDocsApi()) return;
 
-  const workspaceId = currentWorkspaceId();
   void (async () => {
     try {
-      await savePlatformDoc(workspaceId, DOC_KIND, {
+      await savePlatformDoc(DOC_KIND, {
         items: normalized,
         revision: get().revision,
       });
-      const saved = peekPlatformDocMemory<AnnouncementDoc>(workspaceId, DOC_KIND);
+      const saved = peekPlatformDocMemory<AnnouncementDoc>(DOC_KIND);
       set({
         items: Array.isArray(saved?.items) ? normalize(saved.items) : normalized,
         revision: docRevision(saved?.revision) || get().revision + 1,
@@ -169,7 +167,7 @@ function commit(
       if (message.endsWith('_409')) {
         // 另一个运营先提交了：拉回最新内容，不保留本地草稿，避免把别人的公告覆盖掉。
         try {
-          const fresh = await fetchPlatformDoc<AnnouncementDoc>(workspaceId, DOC_KIND, {
+          const fresh = await fetchPlatformDoc<AnnouncementDoc>(DOC_KIND, {
             fresh: true,
           });
           set({

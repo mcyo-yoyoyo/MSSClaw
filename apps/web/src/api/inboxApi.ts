@@ -12,9 +12,9 @@ export function canUseInboxApi() {
   return canUsePlatformDocsApi();
 }
 
-export async function fetchInboxMessages(workspaceId: string, userId: string) {
+export async function fetchInboxMessages(userId: string) {
   const response = await fetch(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/inbox/messages?userId=${encodeURIComponent(userId)}`),
+    apiUrl(`/api/v1/inbox/messages?userId=${encodeURIComponent(userId)}`),
     { headers: headers(), cache: 'no-store' },
   );
   if (!response.ok) throw new Error(`inbox_get_${response.status}`);
@@ -22,8 +22,8 @@ export async function fetchInboxMessages(workspaceId: string, userId: string) {
   return Array.isArray(body.messages) ? body.messages : [];
 }
 
-export async function createInboxMessage(workspaceId: string, message: InboxMessage) {
-  const response = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/inbox/messages`), {
+export async function createInboxMessage(message: InboxMessage) {
+  const response = await fetch(apiUrl(`/api/v1/inbox/messages`), {
     method: 'POST',
     headers: headers(),
     body: JSON.stringify(message),
@@ -31,16 +31,16 @@ export async function createInboxMessage(workspaceId: string, message: InboxMess
   if (!response.ok) throw new Error(`inbox_create_${response.status}`);
 }
 
-export async function markInboxRead(workspaceId: string, userId: string, messageId: string) {
+export async function markInboxRead(userId: string, messageId: string) {
   const response = await fetch(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/inbox/messages/${encodeURIComponent(messageId)}/read`),
+    apiUrl(`/api/v1/inbox/messages/${encodeURIComponent(messageId)}/read`),
     { method: 'POST', headers: headers(), body: JSON.stringify({ userId }) },
   );
   if (!response.ok) throw new Error(`inbox_read_${response.status}`);
 }
 
-export async function markInboxAllRead(workspaceId: string, userId: string) {
-  const response = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/inbox/read-all`), {
+export async function markInboxAllRead(userId: string) {
+  const response = await fetch(apiUrl(`/api/v1/inbox/read-all`), {
     method: 'POST',
     headers: headers(),
     body: JSON.stringify({ userId }),
@@ -49,13 +49,12 @@ export async function markInboxAllRead(workspaceId: string, userId: string) {
 }
 
 export async function deleteInboxForUser(
-  workspaceId: string,
   userId: string,
   messageId: string,
 ) {
   const response = await fetch(
     apiUrl(
-      `/api/v1/workspaces/${workspaceId}/inbox/messages/${encodeURIComponent(messageId)}?userId=${encodeURIComponent(userId)}`,
+      `/api/v1/inbox/messages/${encodeURIComponent(messageId)}?userId=${encodeURIComponent(userId)}`,
     ),
     { method: 'DELETE', headers: headers() },
   );

@@ -62,7 +62,7 @@ function reportGuestGateHit(action: AuthGateAction): void {
   ) {
     return;
   }
-  void recordGuestGateHitApi(workspace.workspaceId, {
+  void recordGuestGateHitApi({
     eventId: createGateEventId(),
     routeKey,
     action,

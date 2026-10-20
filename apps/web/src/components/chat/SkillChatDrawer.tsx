@@ -14,7 +14,6 @@ import type { ChatMessage } from '@/domain/chat';
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { loadSessions, scheduleSaveSessions } from '@/domain/persistence/storage';
 import { getCurrentUserId } from '@/domain/currentUser';
 import type { ChatConfig } from '@/domain/chat';
@@ -89,7 +88,6 @@ export function SkillChatDrawer({ skill, open, onClose, onSkillChange }: SkillCh
   const runRef = useRef<ActiveRun | null>(null);
   const resizeRef = useRef({ pointerId: -1, startX: 0, startWidth: 0, lastWidth: 560 });
   const nextRunId = useRef(0);
-  const workspaceId = useWorkspaceStore((state) => state.workspaceId);
   const agents = useMarketplaceStore((state) => state.agents);
   const skills = useMarketplaceStore((state) => state.skills);
   const [drawerWidth, setDrawerWidth] = useState(() => {
@@ -159,7 +157,7 @@ export function SkillChatDrawer({ skill, open, onClose, onSkillChange }: SkillCh
     setMessages(initialMessages);
     setHistoryReady(false);
     let active = true;
-    void loadSessions(workspaceId).then((chats) => {
+    void loadSessions().then((chats) => {
       if (!active) return;
       persistedChatsRef.current = chats ?? {};
       setHistoryChats(Object.values(chats ?? {}).filter((chat) => chat.id.startsWith('skill:')));
@@ -170,10 +168,10 @@ export function SkillChatDrawer({ skill, open, onClose, onSkillChange }: SkillCh
     return () => {
       active = false;
     };
-  }, [skill?.id, workspaceId]);
+  }, [skill?.id]);
 
   useEffect(() => {
-    if (!skill || !workspaceId || !historyReady || messages.some((message) => message.streaming)) return;
+    if (!skill || !historyReady || messages.some((message) => message.streaming)) return;
     const id = `skill:${skill.id}`;
     const chat: ChatConfig = {
       id,
@@ -191,8 +189,8 @@ export function SkillChatDrawer({ skill, open, onClose, onSkillChange }: SkillCh
     const next = { ...persistedChatsRef.current, [id]: chat };
     persistedChatsRef.current = next;
     setHistoryChats(Object.values(next).filter((candidate) => candidate.id.startsWith('skill:')));
-    scheduleSaveSessions(workspaceId, next);
-  }, [displayName, historyReady, messages, skill, workspaceId]);
+    scheduleSaveSessions(next);
+  }, [displayName, historyReady, messages, skill]);
 
   useEffect(() => {
     if (open) return;
@@ -319,7 +317,6 @@ export function SkillChatDrawer({ skill, open, onClose, onSkillChange }: SkillCh
         for await (const event of streamExecution({
           chatId: `skill_drawer_${currentSkill.id}`,
           message: prompt,
-          workspaceId,
           signal: controller.signal,
           planSteps,
           agentId: agent?.id,

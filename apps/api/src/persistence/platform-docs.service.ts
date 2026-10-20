@@ -2,7 +2,6 @@ import { BadRequestException, ConflictException, Injectable, Logger } from '@nes
 import { createHash, randomBytes } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { buildCatalogPayload, WORKSPACE_CATALOGS } from '../data/workspace-catalogs';
 import {
   SEED_BUSINESS_SCENARIO_CATALOG,
   SEED_EXTERNAL_TAXONOMY,
@@ -14,6 +13,7 @@ import {
   canonicalizeStationAnnouncements,
   syncStationAnnouncementBroadcast,
 } from './station-announcement-broadcast';
+import { PLATFORM_WORKSPACE_ID } from '../common/platform-workspace';
 
 /** 允许持久化的平台文档 kind（对应原前端 localStorage 配置） */
 export const PLATFORM_DOC_KINDS = [
@@ -830,9 +830,6 @@ function membersFromPayload(payload: unknown): Array<Record<string, unknown>> {
   return Array.isArray(payload) ? payload.filter(isJsonObject) : [];
 }
 
-const DEFAULT_WORKSPACE_ID = 'ws-mss-ai';
-const PROTOTYPE_WORKSPACE_ID = 'ws-cn-marketing';
-
 /**
  * 只有这些工作区允许「按需播种默认成员 / 默认口令策略」。
  *
@@ -840,11 +837,7 @@ const PROTOTYPE_WORKSPACE_ID = 'ws-cn-marketing';
  * 含 super_admin 的默认成员表 + 允许演示口令的凭证表，攻击者就能在自造的空间里
  * 用默认口令登录拿到令牌，再凭邮箱把身份带进真实空间——绕过真实空间设置的强密码。
  */
-const SEEDABLE_ACCOUNT_WORKSPACE_IDS = new Set<string>([
-  DEFAULT_WORKSPACE_ID,
-  PROTOTYPE_WORKSPACE_ID,
-  ...WORKSPACE_CATALOGS.map((catalog) => catalog.workspace.id),
-]);
+const SEEDABLE_ACCOUNT_WORKSPACE_IDS = new Set<string>([PLATFORM_WORKSPACE_ID]);
 
 /** 登录时通过的口令来源。跨工作区复用会话时据此判断目标空间的要求是否更严 */
 interface SessionAuthProvenance {
@@ -1373,7 +1366,7 @@ export class PlatformDocsService {
   }) {
     const email = normalizedAccountEmail(body.email);
     const password = body.password ?? '';
-    const workspaceId = body.workspaceId || DEFAULT_WORKSPACE_ID;
+    const workspaceId = PLATFORM_WORKSPACE_ID;
     if (!email || !password) throw new BadRequestException('email_and_password_required');
 
     // 登录不得触发「工作区缺失即自动创建」：否则任意编造的 workspaceId 都会被建出来，
@@ -1472,7 +1465,7 @@ export class PlatformDocsService {
     | { ok: true; user: Record<string, unknown>; token: string; expiresAt: string; provisioned: boolean }
     | { ok: false; code: string; error: string; detail?: string }
   > {
-    const workspaceId = input.workspaceId || DEFAULT_WORKSPACE_ID;
+    const workspaceId = PLATFORM_WORKSPACE_ID;
     const email = normalizedAccountEmail(input.email);
     const externalId = input.externalId.trim();
 
@@ -1609,7 +1602,7 @@ export class PlatformDocsService {
     return { ok: true, user, token, expiresAt, provisioned };
   }
 
-  async me(token: string | undefined, workspaceId = 'ws-mss-ai') {
+  async me(token: string | undefined, workspaceId = PLATFORM_WORKSPACE_ID) {
     if (!token) return { ok: false as const, error: '未登录' };
     const resolved = await this.findSession(workspaceId, token);
     if (!resolved) return { ok: false as const, error: '会话已失效，请重新登录' };
@@ -1633,7 +1626,7 @@ export class PlatformDocsService {
     };
   }
 
-  async logout(token: string | undefined, workspaceId = 'ws-mss-ai') {
+  async logout(token: string | undefined, workspaceId = PLATFORM_WORKSPACE_ID) {
     if (token) {
       const resolved = await this.findSession(workspaceId, token);
       if (resolved) await this.deleteSession(resolved.workspaceId, token);
@@ -1737,12 +1730,8 @@ export class PlatformDocsService {
       where: { id: docId(workspaceId, 'members') },
       select: { payload: true },
     });
-    // 内置目录工作区在首次切换时允许初始化默认成员；其它（含自动创建的自定义工作区）
     // 必须已有明确成员表，不能在一次鉴权请求里凭空获得默认成员。
-    let membersPayload: unknown = membersRow?.payload;
-    if (!membersPayload && WORKSPACE_CATALOGS.some((catalog) => catalog.workspace.id === workspaceId)) {
-      membersPayload = await this.seedIfNeeded(workspaceId, 'members');
-    }
+    const membersPayload: unknown = membersRow?.payload;
     if (!membersPayload) return null;
     const members = membersFromPayload(membersPayload);
     const sourceEmail = normalizedAccountEmail(sourceUser.email);
@@ -1837,21 +1826,6 @@ export class PlatformDocsService {
     if (row) return;
 
     // 本地/首次启动：缺少工作区时自动补齐，避免 login/docs 直接 404
-    const catalog = WORKSPACE_CATALOGS.find((c) => c.workspace.id === workspaceId);
-    if (catalog) {
-      await this.prisma.workspace.create({
-        data: {
-          id: catalog.workspace.id,
-          name: catalog.workspace.name,
-          namespace: catalog.workspace.namespace,
-          description: catalog.workspace.description,
-          memberCount: catalog.workspace.memberCount,
-          defaultChatId: catalog.defaultChatId,
-          catalogJson: buildCatalogPayload(catalog) as Prisma.InputJsonValue,
-        },
-      });
-      return;
-    }
 
     await this.prisma.workspace.create({
       data: {

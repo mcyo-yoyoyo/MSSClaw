@@ -168,9 +168,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       set({ bootstrapped: true });
       return;
     }
-    const ws = useWorkspaceStore.getState().workspaceId || 'ws-mss-ai';
     try {
-      const me = await fetchSessionMeApi(ws);
+      const me = await fetchSessionMeApi();
       if (epoch !== sessionEpoch) return;
       if (me.ok) {
         const user = fromApiUser(me.user);
@@ -209,7 +208,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (currentAuthMode() === 'oauth') {
       return { ok: false, error: '当前环境已启用企业统一身份登录，请从登录页跳转认证' };
     }
-    const ws = useWorkspaceStore.getState().workspaceId || 'ws-mss-ai';
     const visitorId = get().visitorId || getVisitorId();
     sessionEpoch += 1;
 
@@ -219,7 +217,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       isApiEnabled() && apiStatus !== 'unreachable' && apiStatus !== 'local-demo';
     if (tryRemote) {
       try {
-        const remote = await loginWithApi({ email, password, workspaceId: ws, visitorId });
+        const remote = await loginWithApi({ email, password, visitorId });
         if (remote.ok && remote.token) {
           writeToken(remote.token);
           const user = fromApiUser(remote.user);
@@ -277,8 +275,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   /** 登出回落游客态而非登录页：门户内容保持可浏览 */
   logout: async () => {
-    const ws = useWorkspaceStore.getState().workspaceId || 'ws-mss-ai';
-    const platformLogout = logoutWithApi(ws);
+    const platformLogout = logoutWithApi();
     writeToken(null);
     get().enterGuest({ suppressGate: true });
 

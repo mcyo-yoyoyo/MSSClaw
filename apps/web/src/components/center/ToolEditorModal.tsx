@@ -39,7 +39,6 @@ import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 import { cn } from '@/lib/utils';
 import { storeImageDataUrl } from '@/api/blobApi';
-import { currentWorkspaceId } from '@/api/platformDocsApi';
 
 const LOGO_MAX_BYTES = 512 * 1024;
 
@@ -94,7 +93,7 @@ function readLogoFile(file: File): Promise<string> {
     reader.onload = () => resolve(String(reader.result || ''));
     reader.onerror = () => reject(new Error('读取失败'));
     reader.readAsDataURL(file);
-  }).then((dataUrl) => storeImageDataUrl(currentWorkspaceId(), file, dataUrl));
+  }).then((dataUrl) => storeImageDataUrl(file, dataUrl));
 }
 
 type EditorTarget = string | 'new' | 'new-external' | null;

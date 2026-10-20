@@ -19,11 +19,9 @@ type MarketplaceSaveResult = {
 
 type StorageModule = {
   flushSaveMarketplace: (
-    workspaceId: string,
     snapshot: MarketplaceSnapshot,
   ) => Promise<MarketplaceSaveResult>;
   scheduleSaveMarketplace: (
-    workspaceId: string,
     snapshot: MarketplaceSnapshot,
     ms?: number,
   ) => void;
@@ -133,35 +131,33 @@ async function waitForCallCount(calls: FetchCall[], count: number, timeoutMs = 1
   assert.equal(calls.length, count);
 }
 
-function enableRemoteApi(workspaceId: string) {
+function enableRemoteApi() {
   workspaceStore.setState({
-    workspaceId,
     apiConnected: true,
     apiStatus: 'connected',
   });
 }
 
 test('flush cancels a pending debounce, writes the latest snapshot once, and waits for PUT', async () => {
-  const workspaceId = 'ws-test-flush-latest';
   const calls: FetchCall[] = [];
   const response = deferred<Response>();
-  enableRemoteApi(workspaceId);
+  enableRemoteApi();
   globalThis.fetch = (async (input, init) => {
     calls.push(readFetchCall(input, init));
     return response.promise;
   }) as typeof fetch;
 
-  storage.scheduleSaveMarketplace(workspaceId, snapshot('stale'), 30);
+  storage.scheduleSaveMarketplace(snapshot('stale'), 30);
   let settled = false;
   const saving = storage
-    .flushSaveMarketplace(workspaceId, snapshot('latest'))
+    .flushSaveMarketplace(snapshot('latest'))
     .finally(() => {
       settled = true;
     });
 
   await nextTurn();
   assert.equal(calls.length, 1);
-  assert.equal(calls[0]?.url, `/api/v1/workspaces/${workspaceId}/marketplace`);
+  assert.equal(calls[0]?.url, '/api/v1/marketplace');
   assert.equal(calls[0]?.method, 'PUT');
   assert.equal(calls[0]?.body.tools[0]?.id, 'latest');
   assert.equal(settled, false, 'flush must not resolve before the remote PUT resolves');
@@ -172,19 +168,18 @@ test('flush cancels a pending debounce, writes the latest snapshot once, and wai
   assert.equal(calls.length, 1, 'the cancelled debounce must not write again');
 });
 
-test('flush serializes writes for one workspace', async () => {
-  const workspaceId = 'ws-test-flush-serial';
+test('flush serializes writes', async () => {
   const calls: FetchCall[] = [];
   const responses = [deferred<Response>(), deferred<Response>()];
-  enableRemoteApi(workspaceId);
+  enableRemoteApi();
   globalThis.fetch = (async (input, init) => {
     const callIndex = calls.length;
     calls.push(readFetchCall(input, init));
     return responses[callIndex]!.promise;
   }) as typeof fetch;
 
-  const first = storage.flushSaveMarketplace(workspaceId, snapshot('first'));
-  const second = storage.flushSaveMarketplace(workspaceId, snapshot('second'));
+  const first = storage.flushSaveMarketplace(snapshot('first'));
+  const second = storage.flushSaveMarketplace(snapshot('second'));
 
   await nextTurn();
   assert.equal(calls.length, 1, 'the second PUT must wait for the first PUT');
@@ -201,18 +196,16 @@ test('flush serializes writes for one workspace', async () => {
 });
 
 test('flush exposes a failed remote write to its caller', async () => {
-  const workspaceId = 'ws-test-flush-failure';
-  enableRemoteApi(workspaceId);
+  enableRemoteApi();
   globalThis.fetch = (async () => new Response(null, { status: 503 })) as typeof fetch;
 
   assert.deepEqual(
-    await storage.flushSaveMarketplace(workspaceId, snapshot('failed')),
+    await storage.flushSaveMarketplace(snapshot('failed')),
     { synced: false, reason: 'failed', detail: 'HTTP 503' },
   );
 });
 
 test('saveToolNow commits the edited tool only after the remote save succeeds', async () => {
-  const workspaceId = 'ws-test-tool-success';
   const calls: FetchCall[] = [];
   const response = deferred<Response>();
   const originalTool = {
@@ -227,7 +220,7 @@ test('saveToolNow commits the edited tool only after the remote save succeeds', 
     logoUrl:
       'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/trae-color.svg',
   };
-  enableRemoteApi(workspaceId);
+  enableRemoteApi();
   marketplaceStore.setState({
     agents: [],
     skills: [],
@@ -261,7 +254,6 @@ test('saveToolNow commits the edited tool only after the remote save succeeds', 
 });
 
 test('saveToolNow can directly persist external tool listing and unlisting', async () => {
-  const workspaceId = 'ws-test-tool-direct-unlist';
   const calls: FetchCall[] = [];
   const listedTool = {
     id: 'tool-direct-unlist',
@@ -270,7 +262,7 @@ test('saveToolNow can directly persist external tool listing and unlisting', asy
     published: true,
     marketShelf: 'external',
   };
-  enableRemoteApi(workspaceId);
+  enableRemoteApi();
   marketplaceStore.setState({
     agents: [],
     skills: [],
@@ -303,7 +295,6 @@ test('saveToolNow can directly persist external tool listing and unlisting', asy
 });
 
 test('saveToolNow keeps the previous tool when the remote save fails', async () => {
-  const workspaceId = 'ws-test-tool-failure';
   const originalTool = {
     id: 'tool-excel-trae-work',
     name: 'Trae Work',
@@ -314,7 +305,7 @@ test('saveToolNow keeps the previous tool when the remote save fails', async () 
     ...originalTool,
     homepageUrl: 'https://www.trae.cn',
   };
-  enableRemoteApi(workspaceId);
+  enableRemoteApi();
   marketplaceStore.setState({
     agents: [],
     skills: [],
@@ -333,12 +324,11 @@ test('saveToolNow keeps the previous tool when the remote save fails', async () 
 });
 
 test('deleteToolNow commits the removal only after the remote save succeeds', async () => {
-  const workspaceId = 'ws-test-tool-delete-success';
   const calls: FetchCall[] = [];
   const response = deferred<Response>();
   const keepTool = { id: 'tool-keep', name: 'Keep' };
   const deleteTool = { id: 'tool-delete', name: 'Delete' };
-  enableRemoteApi(workspaceId);
+  enableRemoteApi();
   marketplaceStore.setState({
     agents: [],
     skills: [],
@@ -367,9 +357,8 @@ test('deleteToolNow commits the removal only after the remote save succeeds', as
 });
 
 test('deleteToolNow keeps the tool when the remote save fails', async () => {
-  const workspaceId = 'ws-test-tool-delete-failure';
   const tool = { id: 'tool-delete-failure', name: 'Delete failure' };
-  enableRemoteApi(workspaceId);
+  enableRemoteApi();
   marketplaceStore.setState({
     agents: [],
     skills: [],
@@ -387,63 +376,7 @@ test('deleteToolNow keeps the tool when the remote save fails', async () => {
   assert.deepEqual(marketplaceStore.getState().tools, [tool]);
 });
 
-test('deleteToolNow remains global when the workspace changes mid-request', async () => {
-  const workspaceId = 'ws-test-tool-delete-switch-origin';
-  const response = deferred<Response>();
-  const tool = { id: 'tool-delete-switch', name: 'Delete switch' };
-  enableRemoteApi(workspaceId);
-  marketplaceStore.setState({
-    agents: [],
-    skills: [],
-    tools: [tool],
-    automations: [],
-    kbDocs: [],
-  });
-  globalThis.fetch = (async () => response.promise) as typeof fetch;
-
-  const deleting = marketplaceStore.getState().deleteToolNow(tool.id);
-  await nextTurn();
-  workspaceStore.setState({ workspaceId: 'ws-test-tool-delete-switch-destination' });
-  response.resolve(new Response(null, { status: 200 }));
-
-  assert.deepEqual(await deleting, { synced: true });
-  assert.deepEqual(marketplaceStore.getState().tools, []);
-});
-
-test('saveToolNow remains global when the workspace changes mid-request', async () => {
-  const workspaceId = 'ws-test-tool-switch-origin';
-  const response = deferred<Response>();
-  const originalTool = {
-    id: 'tool-workspace-switch',
-    name: 'Workspace switch',
-    desc: '',
-    homepageUrl: 'https://old.example.com',
-  };
-  const editedTool = {
-    ...originalTool,
-    homepageUrl: 'https://new.example.com',
-  };
-  enableRemoteApi(workspaceId);
-  marketplaceStore.setState({
-    agents: [],
-    skills: [],
-    tools: [originalTool],
-    automations: [],
-    kbDocs: [],
-  });
-  globalThis.fetch = (async () => response.promise) as typeof fetch;
-
-  const saving = marketplaceStore.getState().saveToolNow(editedTool);
-  await nextTurn();
-  workspaceStore.setState({ workspaceId: 'ws-test-tool-switch-destination' });
-  response.resolve(new Response(null, { status: 200 }));
-
-  assert.deepEqual(await saving, { synced: true });
-  assert.deepEqual(marketplaceStore.getState().tools, [editedTool]);
-});
-
 test('ordinary persist during saveToolNow keeps both the edited branding and the latest invoke count', async () => {
-  const workspaceId = 'ws-test-tool-save-plus-persist';
   const calls: FetchCall[] = [];
   const firstResponse = deferred<Response>();
   const logoUrl =
@@ -460,7 +393,7 @@ test('ordinary persist during saveToolNow keeps both the edited branding and the
     homepageUrl: 'https://www.trae.ai/',
     logoUrl,
   };
-  enableRemoteApi(workspaceId);
+  enableRemoteApi();
   marketplaceStore.setState({
     agents: [],
     skills: [],
@@ -489,7 +422,6 @@ test('ordinary persist during saveToolNow keeps both the edited branding and the
 });
 
 test('concurrent saveToolNow calls do not overwrite the first confirmed tool with a stale snapshot', async () => {
-  const workspaceId = 'ws-test-concurrent-tools';
   const calls: FetchCall[] = [];
   const responses = [deferred<Response>(), deferred<Response>()];
   const firstOriginal = {
@@ -512,7 +444,7 @@ test('concurrent saveToolNow calls do not overwrite the first confirmed tool wit
     ...secondOriginal,
     homepageUrl: 'https://new-second.example.com',
   };
-  enableRemoteApi(workspaceId);
+  enableRemoteApi();
   marketplaceStore.setState({
     agents: [],
     skills: [],

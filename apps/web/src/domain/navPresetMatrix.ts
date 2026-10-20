@@ -134,12 +134,6 @@ export function validateNamedPresetMatrices(): string[] {
   ] as NavSlotId[]) {
     if (!mvpAdmin.has(id)) errors.push(`customer/super_admin 应启用治理项 ${id}`);
   }
-  if (mvpAdmin.has('workspace-config')) {
-    errors.push('customer/super_admin 不应默认启用租户配置（MVP 弱化入口）');
-  }
-  if (!stdAdmin.has('workspace-config')) {
-    errors.push('standard/super_admin 应启用租户配置');
-  }
 
   return errors;
 }

@@ -5,7 +5,6 @@ import { getCurrentUserId } from '@/domain/currentUser';
 import { RETIRED_DEMO_TOOL_IDS } from '@/domain/prototype/tools';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   peekPlatformDocMemory,
   scheduleSavePlatformDoc,
@@ -75,13 +74,12 @@ function persistForUser(items: RecentMarketItem[]) {
   const next = pruneItems(items);
   const uid = userBucket();
   if (!uid || !canUsePlatformDocsApi()) return next;
-  const ws = currentWorkspaceId();
-  const mem = peekPlatformDocMemory<RecentDoc>(ws, DOC_KIND) ?? {};
+  const mem = peekPlatformDocMemory<RecentDoc>(DOC_KIND) ?? {};
   const byUserId: Record<string, RecentMarketItem[]> = { ...(mem.byUserId ?? {}) };
   byUserId[uid] = next;
   const payload: RecentDoc = { byUserId };
-  setPlatformDocMemory(ws, DOC_KIND, payload);
-  void scheduleSavePlatformDoc(ws, DOC_KIND, payload);
+  setPlatformDocMemory(DOC_KIND, payload);
+  void scheduleSavePlatformDoc(DOC_KIND, payload);
   return next;
 }
 
@@ -103,9 +101,9 @@ export const useRecentMarketStore = create<RecentMarketState>((set, get) => ({
         return;
       }
       try {
-        const remote = await fetchPlatformDoc<RecentDoc>(currentWorkspaceId(), DOC_KIND);
+        const remote = await fetchPlatformDoc<RecentDoc>(DOC_KIND);
         const items = readUserItems(remote, uid);
-        if (remote) setPlatformDocMemory(currentWorkspaceId(), DOC_KIND, remote);
+        if (remote) setPlatformDocMemory(DOC_KIND, remote);
         if (items.length) {
           set({ items });
           return;

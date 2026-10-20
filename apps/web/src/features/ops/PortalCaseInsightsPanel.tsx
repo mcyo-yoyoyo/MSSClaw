@@ -14,7 +14,6 @@ import { CaseHtml } from '@/features/ai-brief/CaseHtml';
 import { CaseMarkdown } from '@/features/ai-brief/CaseMarkdown';
 import { emptyCaseDraft, parseCaseHtml, type ParsedCaseHtmlArticle } from '@/domain/caseInsightImport';
 import { HQ_DEPTS } from '@/domain/orgTaxonomy';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { storeImageDataUrl } from '@/api/blobApi';
 
 type StatusTab = 'all' | 'draft' | 'published' | 'archived' | 'trash';
@@ -67,7 +66,6 @@ function validOptionalSourceUrl(value: string) {
 }
 
 export function PortalCaseInsightsPanel() {
-  const workspaceId = useWorkspaceStore((state) => state.workspaceId);
   const [items, setItems] = useState<CaseInsightArticle[]>([]);
   const [trashItems, setTrashItems] = useState<CaseInsightArticle[]>([]);
   const [statusTab, setStatusTab] = useState<StatusTab>('all');
@@ -96,8 +94,8 @@ export function PortalCaseInsightsPanel() {
 
   const reload = async () => {
     const [active, trash] = await Promise.all([
-      fetchCaseInsightsForOps(workspaceId, 'active'),
-      fetchCaseInsightsForOps(workspaceId, 'trash'),
+      fetchCaseInsightsForOps('active'),
+      fetchCaseInsightsForOps('trash'),
     ]);
     setItems(active);
     setTrashItems(trash);
@@ -107,7 +105,7 @@ export function PortalCaseInsightsPanel() {
   useEffect(() => {
     setLoading(true);
     void reload().catch(() => setMessage('案例列表加载失败，请检查后台连接')).finally(() => setLoading(false));
-  }, [workspaceId]);
+  }, []);
 
   const visibleItems = useMemo(() => {
     const source = statusTab === 'trash' ? trashItems : items.filter((item) => statusTab === 'all' || item.status === statusTab);
@@ -130,8 +128,8 @@ export function PortalCaseInsightsPanel() {
 
   const allExisting = async () => {
     const [active, trash] = await Promise.all([
-      fetchCaseInsightsForOps(workspaceId, 'active'),
-      fetchCaseInsightsForOps(workspaceId, 'trash'),
+      fetchCaseInsightsForOps('active'),
+      fetchCaseInsightsForOps('trash'),
     ]);
     return [...active, ...trash];
   };
@@ -240,7 +238,7 @@ export function PortalCaseInsightsPanel() {
         reader.onerror = () => reject(new Error('cover_read_failed'));
         reader.readAsDataURL(file);
       });
-      updateDraft({ coverImage: await storeImageDataUrl(workspaceId, file, image) });
+      updateDraft({ coverImage: await storeImageDataUrl(file, image) });
     } catch {
       setCoverError('封面上传失败，请检查后端连接后重新选择图片。');
     } finally {
@@ -254,22 +252,22 @@ export function PortalCaseInsightsPanel() {
     let existing = item.existing;
     let version = item.draft.version;
     if (existing?.deletedAt) {
-      const restored = await restoreCaseInsight(workspaceId, existing.id, existing.version ?? 0);
+      const restored = await restoreCaseInsight(existing.id, existing.version ?? 0);
       version = restored.version;
       existing = { ...existing, deletedAt: null, status: restored.status as CaseInsightArticle['status'], version: restored.version };
     }
     const payload: CaseInsightDraft = { ...item.draft, version };
     const saved = existing
-      ? await updateCaseInsight(workspaceId, existing.id, payload)
-      : await createCaseInsight(workspaceId, payload);
+      ? await updateCaseInsight(existing.id, payload)
+      : await createCaseInsight(payload);
     let nextVersion = saved.version;
     if (action === 'publish') {
-      const result = await changeCaseInsightStatus(workspaceId, saved.id, saved.version, 'publish');
+      const result = await changeCaseInsightStatus(saved.id, saved.version, 'publish');
       nextVersion = result.version;
     }
     const [active, trash] = await Promise.all([
-      fetchCaseInsightsForOps(workspaceId, 'active'),
-      fetchCaseInsightsForOps(workspaceId, 'trash'),
+      fetchCaseInsightsForOps('active'),
+      fetchCaseInsightsForOps('trash'),
     ]);
     setItems(active);
     setTrashItems(trash);
@@ -329,7 +327,7 @@ export function PortalCaseInsightsPanel() {
     setBusy(true);
     setMessage('');
     try {
-      await changeCaseInsightStatus(workspaceId, item.id, item.version, action);
+      await changeCaseInsightStatus(item.id, item.version, action);
       await reload();
       setMessage(action === 'publish' ? '已发布' : '已下架，用户侧不再展示');
     } catch (error) {
@@ -341,7 +339,7 @@ export function PortalCaseInsightsPanel() {
     if (!item.version) return;
     setBusy(true);
     try {
-      await deleteCaseInsight(workspaceId, item.id, item.version);
+      await deleteCaseInsight(item.id, item.version);
       setConfirmDeleteId(null);
       await reload();
       setMessage('已移入回收站；已发布文章已从用户侧隐藏');
@@ -353,7 +351,7 @@ export function PortalCaseInsightsPanel() {
     if (!item.version) return;
     setBusy(true);
     try {
-      await restoreCaseInsight(workspaceId, item.id, item.version);
+      await restoreCaseInsight(item.id, item.version);
       await reload();
       setMessage('文章已恢复；如需重新展示，请再发布一次');
     } catch { setMessage('恢复失败，请刷新后重试'); }

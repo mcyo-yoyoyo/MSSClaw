@@ -6,7 +6,6 @@ import {
   type PlazaToolGuideRecord,
 } from '@/domain/plazaToolGuides';
 import { demoDefaults } from '@/domain/demoContentPolicy';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 import {
   canUsePlatformDocsApi,
   fetchPlatformDoc,
@@ -30,17 +29,17 @@ function mergeGuideCatalog(
   return [...map.values()];
 }
 
-function persist(workspaceId: string, records: PlazaToolGuideRecord[]) {
+function persist(records: PlazaToolGuideRecord[]) {
   if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc(workspaceId, 'plaza-howto', { records });
+  void scheduleSavePlatformDoc('plaza-howto', { records });
 }
 
 interface PlazaToolGuideState {
   ready: boolean;
   records: PlazaToolGuideRecord[];
   toast: string | null;
-  bootstrap: (workspaceId?: string) => void;
-  hydrate: (workspaceId?: string) => void;
+  bootstrap: () => void;
+  hydrate: () => void;
   persist: () => void;
   guidesFor: (toolId: string) => PlazaToolGuide[];
   upsert: (record: PlazaToolGuideRecord, isNew?: boolean) => void;
@@ -55,8 +54,7 @@ export const usePlazaToolGuideStore = create<PlazaToolGuideState>((set, get) => 
   records: howtoSeeds(),
   toast: null,
 
-  hydrate: (workspaceId) => {
-    const ws = workspaceId || useWorkspaceStore.getState().workspaceId;
+  hydrate: () => {
     void (async () => {
       const seeds = howtoSeeds();
       if (!canUsePlatformDocsApi()) {
@@ -64,9 +62,7 @@ export const usePlazaToolGuideStore = create<PlazaToolGuideState>((set, get) => 
         return;
       }
       try {
-        const remote = await fetchPlatformDoc<{ records?: PlazaToolGuideRecord[] }>(
-          ws,
-          'plaza-howto',
+        const remote = await fetchPlatformDoc<{ records?: PlazaToolGuideRecord[] }>('plaza-howto',
         );
         const saved = Array.isArray(remote?.records)
           ? remote.records
@@ -83,13 +79,12 @@ export const usePlazaToolGuideStore = create<PlazaToolGuideState>((set, get) => 
     })();
   },
 
-  bootstrap: (workspaceId) => {
-    get().hydrate(workspaceId);
+  bootstrap: () => {
+    get().hydrate();
   },
 
   persist: () => {
-    const ws = useWorkspaceStore.getState().workspaceId;
-    persist(ws, get().records);
+    persist(get().records);
   },
 
   guidesFor: (toolId) =>

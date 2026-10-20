@@ -3,12 +3,11 @@
  * 各业务 store 在 hydrate() 内自行 fetchPlatformDoc，不再写 localStorage。
  */
 
-import { canUsePlatformDocsApi, currentWorkspaceId } from '@/api/platformDocsApi';
+import { canUsePlatformDocsApi } from '@/api/platformDocsApi';
 import { hydrateAccountCredentials } from '@/domain/accountCredentials';
 import { hydrateMembersFromServer } from '@/stores/settingsStore';
 
-export async function hydrateAllPlatformDocs(workspaceId?: string): Promise<void> {
-  const ws = workspaceId || currentWorkspaceId();
+export async function hydrateAllPlatformDocs(): Promise<void> {
   if (!canUsePlatformDocsApi()) return;
 
   // 密码表只有 super_admin 能读（服务端 403）。非管理员不必发这一次请求，
@@ -16,17 +15,13 @@ export async function hydrateAllPlatformDocs(workspaceId?: string): Promise<void
   const { useSessionStore } = await import('@/stores/sessionStore');
   const isAuthenticated = useSessionStore.getState().isAuthenticated;
   if (useSessionStore.getState().user?.platformRole === 'super_admin') {
-    await hydrateAccountCredentials(ws);
+    await hydrateAccountCredentials();
   }
-  const members = await hydrateMembersFromServer(ws);
+  const members = await hydrateMembersFromServer();
   const { useSettingsStore } = await import('@/stores/settingsStore');
-  // 工作区切换期间旧 hydrate 可能后返回；不能把成员面板切回旧空间。
-  if (currentWorkspaceId() === ws) {
-    useSettingsStore.setState({ workspaceId: ws, members });
-  }
+  useSettingsStore.setState({ members });
 
   const { useNavPresentationStore } = await import('@/stores/navPresentationStore');
-  const { useWorkspaceConfigStore } = await import('@/stores/workspaceConfigStore');
   const { useStationAnnouncementStore } = await import('@/stores/stationAnnouncementStore');
   const { usePlazaToolGuideStore } = await import('@/stores/plazaToolGuideStore');
   const { useMssBuildStatsCopyStore } = await import('@/stores/mssBuildStatsCopyStore');
@@ -53,14 +48,13 @@ export async function hydrateAllPlatformDocs(workspaceId?: string): Promise<void
   const { useAssetApprovalStore } = await import('@/stores/assetApprovalStore');
 
   useNavPresentationStore.getState().hydrate();
-  useWorkspaceConfigStore.getState().hydrate();
   useStationAnnouncementStore.getState().hydrate();
-  usePlazaToolGuideStore.getState().bootstrap(ws);
+  usePlazaToolGuideStore.getState().bootstrap();
   useMssBuildStatsCopyStore.getState().hydrate();
   useBusinessScenarioCatalogStore.getState().hydrate();
   useExternalTaxonomyCatalogStore.getState().hydrate();
   useInternalOfficeSceneCatalogStore.getState().hydrate();
-  useExternalToolLayoutStore.getState().hydrate(ws);
+  useExternalToolLayoutStore.getState().hydrate();
   useOrgTaxonomyStore.getState().hydrate();
   useMarketFavoriteStore.getState().hydrate();
   useRecentMarketStore.getState().hydrate();
@@ -80,15 +74,15 @@ export async function hydrateAllPlatformDocs(workspaceId?: string): Promise<void
   const { hydrateInboxMessages } = await import('@/domain/persistence/inboxStorage');
   const { useInboxStore } = await import('@/stores/inboxStore');
   const { getCurrentUserId } = await import('@/domain/currentUser');
-  const inbox = await hydrateInboxMessages(ws, getCurrentUserId());
+  const inbox = await hydrateInboxMessages(getCurrentUserId());
   useInboxStore.setState({ messages: inbox.messages });
 
   const { hydrateWarroomWebhookUrl } = await import('@/domain/webhookConfig');
   const { hydrateSecurityPolicy } = await import('@/domain/securityPolicy');
   const { hydrateDemoContentPolicy } = await import('@/domain/demoContentPolicy');
   await Promise.all([
-    hydrateWarroomWebhookUrl(ws),
-    hydrateSecurityPolicy(ws),
-    hydrateDemoContentPolicy(ws),
+    hydrateWarroomWebhookUrl(),
+    hydrateSecurityPolicy(),
+    hydrateDemoContentPolicy(),
   ]);
 }

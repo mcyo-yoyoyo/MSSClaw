@@ -12,7 +12,6 @@ import {
   isPackageUploadContextCurrent,
   uploadWorkspaceOpsPackage,
 } from '@/api/blobApi';
-import { currentWorkspaceId } from '@/api/platformDocsApi';
 import { normalizePackageUploadFile, RAR_PACKAGE_ACCEPT } from '@/domain/rarUpload';
 import { packageZipErrorMessage } from '@/domain/safeZip';
 
@@ -75,7 +74,6 @@ export function SkillOpsRequestModal({
         return;
       }
       setSubmitting(true);
-      const workspaceId = currentWorkspaceId();
       // RAR 先转成 ZIP 再归档
       let upload: File;
       try {
@@ -91,15 +89,15 @@ export function SkillOpsRequestModal({
       }
       let uploaded: Awaited<ReturnType<typeof uploadWorkspaceOpsPackage>>;
       try {
-        uploaded = await uploadWorkspaceOpsPackage(workspaceId, upload);
+        uploaded = await uploadWorkspaceOpsPackage(upload);
       } catch {
         showToast('完整包上传失败，请检查后端连接后重试');
         setSubmitting(false);
         return;
       }
-      if (!isPackageUploadContextCurrent(uploaded, currentWorkspaceId())) {
-        void deleteWorkspaceBlob(workspaceId, uploaded).catch(() => undefined);
-        showToast('工作区或 API 配置已变更，请重新提交');
+      if (!isPackageUploadContextCurrent(uploaded)) {
+        void deleteWorkspaceBlob(uploaded).catch(() => undefined);
+        showToast('API 配置已变更，请重新提交');
         setSubmitting(false);
         return;
       }
@@ -117,7 +115,7 @@ export function SkillOpsRequestModal({
           packageSize: uploaded.size,
         });
       } catch {
-        void deleteWorkspaceBlob(workspaceId, uploaded).catch(() => undefined);
+        void deleteWorkspaceBlob(uploaded).catch(() => undefined);
         showToast('更新申请创建失败，请重试');
         setSubmitting(false);
         return;

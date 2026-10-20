@@ -11,7 +11,6 @@
 
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   peekPlatformDocMemory,
   savePlatformDoc,
@@ -51,8 +50,8 @@ let memory: CredPayload = {
   revision: 0,
 };
 /** 仅在「服务端读取成功」后置位；读失败绝不置位 */
-let hydratedWs: string | null = null;
-let hydrateInflight: { ws: string; promise: Promise<boolean> } | null = null;
+let hydrated = false;
+let hydrateInflight: Promise<boolean> | null = null;
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase().replace(/@company\.com$/i, '@huawei.com');
@@ -132,19 +131,18 @@ function isConflict(error: unknown): boolean {
  * 任何失败都会作废 hydration，杜绝「拿失败后的本地快照再覆盖一次」。
  */
 async function flush(): Promise<void> {
-  const ws = currentWorkspaceId();
-  if (hydratedWs !== ws) throw new Error(NOT_HYDRATED_ERROR);
+  if (!hydrated) throw new Error(NOT_HYDRATED_ERROR);
   if (!canUsePlatformDocsApi()) {
     throw new Error('共享服务未连通，无法保存账号密码。请先部署 Nest /api。');
   }
   try {
-    await savePlatformDoc(ws, 'auth-credentials', memory);
+    await savePlatformDoc('auth-credentials', memory);
   } catch (error) {
-    hydratedWs = null;
+    hydrated = false;
     throw isConflict(error) ? new Error(CONFLICT_ERROR) : error;
   }
   // savePlatformDoc 会把服务端回写的 canonical payload（含新 revision）放进会话缓存。
-  const canonical = peekPlatformDocMemory<unknown>(ws, 'auth-credentials');
+  const canonical = peekPlatformDocMemory<unknown>('auth-credentials');
   if (canonical) memory = normalizePayload(canonical);
 }
 
@@ -152,20 +150,19 @@ async function flush(): Promise<void> {
  * 从服务端读取凭证文档。返回是否读取成功——调用方据此决定能否写入。
  * 非 super_admin 会被服务端 403，此处静默返回 false（只读场景不受影响）。
  */
-export async function hydrateAccountCredentials(workspaceId?: string): Promise<boolean> {
-  const ws = workspaceId || currentWorkspaceId();
-  if (hydratedWs === ws) return true;
+export async function hydrateAccountCredentials(): Promise<boolean> {
+  if (hydrated) return true;
   if (!canUsePlatformDocsApi()) return false;
-  if (hydrateInflight && hydrateInflight.ws === ws) return hydrateInflight.promise;
+  if (hydrateInflight) return hydrateInflight;
 
   const promise = (async () => {
     try {
       // fresh：凭证是权威数据，绝不用会话缓存冒充数据库状态。
-      const remote = await fetchPlatformDoc<unknown>(ws, 'auth-credentials', {
+      const remote = await fetchPlatformDoc<unknown>('auth-credentials', {
         fresh: true,
       });
       memory = normalizePayload(remote ?? {});
-      hydratedWs = ws;
+      hydrated = true;
       return true;
     } catch {
       // 读失败保持未 hydrate：后续写入会被 flush() 拒绝，而不是覆盖线上数据。
@@ -174,13 +171,13 @@ export async function hydrateAccountCredentials(workspaceId?: string): Promise<b
       hydrateInflight = null;
     }
   })();
-  hydrateInflight = { ws, promise };
+  hydrateInflight = promise;
   return promise;
 }
 
 /** 当前是否已持有服务端凭证快照（可写） */
 export function isCredentialsHydrated(): boolean {
-  return hydratedWs === currentWorkspaceId();
+  return hydrated;
 }
 
 export function loadAuthPolicy(): AuthPolicy {

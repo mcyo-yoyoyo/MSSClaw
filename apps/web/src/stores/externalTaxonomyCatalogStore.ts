@@ -14,7 +14,6 @@ import {
 } from '@/domain/externalTaxonomyCatalog';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   scheduleSavePlatformDoc,
 } from '@/api/platformDocsApi';
@@ -56,7 +55,7 @@ function normalizeCatalog(
 function persist(catalog: ExternalTaxonomyCatalog) {
   setExternalTaxonomyCatalog(catalog);
   if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc(currentWorkspaceId(), 'external-taxonomy', catalog);
+  void scheduleSavePlatformDoc('external-taxonomy', catalog);
 }
 
 interface ExternalTaxonomyCatalogState {
@@ -94,9 +93,7 @@ export const useExternalTaxonomyCatalogStore = create<ExternalTaxonomyCatalogSta
           return;
         }
         try {
-          const remote = await fetchPlatformDoc<Partial<ExternalTaxonomyCatalog>>(
-            currentWorkspaceId(),
-            'external-taxonomy',
+          const remote = await fetchPlatformDoc<Partial<ExternalTaxonomyCatalog>>('external-taxonomy',
           );
           const catalog = normalizeCatalog(remote);
           setExternalTaxonomyCatalog(catalog);

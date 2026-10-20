@@ -29,10 +29,9 @@ export type MarketEngagementMutation = {
 
 /** 身份由会话 token 决定：游客只拿到聚合计数，个人态为空 */
 export async function fetchMarketEngagementApi(
-  workspaceId: string,
 ): Promise<MarketEngagementSnapshot> {
   const res = await fetch(
-    apiUrl(`/api/v1/workspaces/${workspaceId}/market-engagement`),
+    apiUrl(`/api/v1/market-engagement`),
     { headers: { Accept: 'application/json', ...apiAuthHeaders() }, cache: 'no-store' },
   );
   if (!res.ok) throw new Error(`market_engagement_get_${res.status}`);
@@ -40,7 +39,6 @@ export async function fetchMarketEngagementApi(
 }
 
 export async function mutateMarketEngagementApi(
-  workspaceId: string,
   contentId: string,
   input: {
     action: MarketEngagementAction;
@@ -52,7 +50,7 @@ export async function mutateMarketEngagementApi(
 ): Promise<MarketEngagementMutation> {
   const res = await fetch(
     apiUrl(
-      `/api/v1/workspaces/${workspaceId}/market-engagement/${encodeURIComponent(contentId)}/actions`,
+      `/api/v1/market-engagement/${encodeURIComponent(contentId)}/actions`,
     ),
     {
       method: 'POST',

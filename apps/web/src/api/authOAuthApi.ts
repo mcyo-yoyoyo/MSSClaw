@@ -52,11 +52,9 @@ export type AuthorizeUrlResult =
   | { ok: false; code: string; error: string; detail: string; hint: string; traceId: string };
 
 export async function fetchAuthorizeUrl(params: {
-  workspaceId?: string;
   returnTo?: string;
 }): Promise<AuthorizeUrlResult> {
   const qs = new URLSearchParams();
-  if (params.workspaceId) qs.set('workspaceId', params.workspaceId);
   if (params.returnTo) qs.set('returnTo', params.returnTo);
   const res = await fetch(apiUrl(`/api/v1/auth/oauth/authorize-url?${qs.toString()}`), {
     headers: jsonHeaders(),
@@ -89,7 +87,6 @@ export interface OAuthCallbackSuccess {
     avatar: string;
     deptIds: string[];
     regionId: string | null;
-    workspaceId: string;
     externalId?: string | null;
     postName?: string | null;
     orgPath?: string | null;

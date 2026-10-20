@@ -2,7 +2,6 @@ import { z } from 'zod';
 import {
   getPrototypeSkillsAsDomain,
 } from '@/domain/prototype/adapters';
-import { PROTOTYPE_WORKSPACE_ID } from '@/domain/prototype/constants';
 
 export const SkillLifecycleSchema = z.enum(['create', 'debug', 'review', 'publish', 'online', 'deprecated']);
 export type SkillLifecycle = z.infer<typeof SkillLifecycleSchema>;
@@ -44,25 +43,16 @@ export const SKILL_LIFECYCLE_FLOW: SkillLifecycle[] = ['create', 'debug', 'revie
 
 const PROTOTYPE_SKILL_LIST = getPrototypeSkillsAsDomain();
 
-export const SKILL_CATALOG: Record<string, Skill[]> = {
-  [PROTOTYPE_WORKSPACE_ID]: PROTOTYPE_SKILL_LIST,
-  'ws-apac': PROTOTYPE_SKILL_LIST,
-  'ws-3c-latam': PROTOTYPE_SKILL_LIST,
-  'ws-mea': PROTOTYPE_SKILL_LIST,
-  'ws-eurasia': PROTOTYPE_SKILL_LIST,
-  'ws-europe': PROTOTYPE_SKILL_LIST,
-};
+/** 平台种子数据（原按工作区区分，现只有一个空间） */
+export const SKILL_SEEDS: Skill[] = PROTOTYPE_SKILL_LIST;
 
-export function getSkillsByWorkspace(workspaceId: string): Skill[] {
-  return SKILL_CATALOG[workspaceId] ?? PROTOTYPE_SKILL_LIST;
+
+export function findSkillById(id: string): Skill | undefined {
+  return SKILL_SEEDS.find((s) => s.id === id);
 }
 
-export function findSkillById(workspaceId: string, id: string): Skill | undefined {
-  return getSkillsByWorkspace(workspaceId).find((s) => s.id === id);
-}
-
-export function findSkillByName(workspaceId: string, name: string): Skill | undefined {
-  return getSkillsByWorkspace(workspaceId).find((s) => s.name === name || s.displayName === name);
+export function findSkillByName(name: string): Skill | undefined {
+  return SKILL_SEEDS.find((s) => s.name === name || s.displayName === name);
 }
 
 export function getSkillLifecycleLabel(lifecycle: SkillLifecycle) {

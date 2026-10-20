@@ -64,8 +64,8 @@ test('工具运营内部页复用用户侧卡片并启用精简自动保存视�
   );
   assert.match(
     internalDropSource,
-    /drag\.workspaceId !== workspaceId[\s\S]*?liveState\.workspaceId !== drag\.workspaceId/,
-    '松手保存前必须保持原有工作区隔离，不能把旧拖拽写入新工作区',
+    /!canManageInternalOrder \|\|\s*liveState\.loading \|\|\s*liveState\.saving/,
+    '松手保存前必须确认目录不在加载或保存中，不能把旧拖拽写进新快照',
   );
   assert.doesNotMatch(
     portalPanelSource,
@@ -248,7 +248,7 @@ test('门户显式只读模式覆盖场景详情与工具绑定', () => {
 test('嵌入版复用已加载快照并自动更新无改动草稿', () => {
   assert.match(
     officeScenePageSource,
-    /embedded &&\s*state\.loaded &&\s*state\.workspaceId === currentWorkspaceId\(\)/,
+    /embedded &&\s*state\.loaded\s*\)/,
     '门户已加载场景后，嵌入组件不应再次 fresh hydrate 并锁住表单',
   );
   assert.match(
@@ -304,8 +304,8 @@ test('外部工具全部筛选维护四个独立列表并在操作后立即保�
   );
   assert.match(
     portalPanelSource,
-    /failedState\.workspaceId !== expectedWorkspaceId[\s\S]*?cancelLayoutEdit\(\)[\s\S]*?hydrateLayout\(expectedWorkspaceId\)/,
-    '自动保存失败后必须按工作区保护清理旧草稿并刷新服务器版本',
+    /failedState\.error[\s\S]*?cancelLayoutEdit\(\)[\s\S]*?hydrateLayout\(\)/,
+    '自动保存失败后必须清理旧草稿并刷新服务器版本',
   );
 });
 
@@ -658,13 +658,13 @@ test('外部工具恢复简单跟手预览，pointerup 才一次性落位', () =
   );
   assert.match(
     portalPanelSource,
-    /const persistExternalLayoutChange = async \([\s\S]*?expectedWorkspaceId: string,[\s\S]*?liveLayoutState\.workspaceId !== expectedWorkspaceId/,
-    '真正写入布局前必须再次校验拖拽开始时的工作区',
+    /const persistExternalLayoutChange = async \([\s\S]*?liveLayoutState\.saving \|\|\s*!liveLayoutState\.document/,
+    '真正写入布局前必须再次确认布局不在加载或保存中',
   );
   assert.match(
     portalPanelSource,
-    /workspaceId: layoutState\.workspaceId,[\s\S]*?const handleExternalPointerUpCapture =[\s\S]*?handleExternalPointerDrop\([\s\S]*?pointer\.workspaceId,/,
-    'pointerup 必须传递拖拽开始时捕获的工作区，而不是读取新的工作区',
+    /const handleExternalPointerUpCapture =[\s\S]*?handleExternalPointerDrop\(\s*pointer\.drag,/,
+    'pointerup 必须使用拖拽开始时捕获的拖拽对象',
   );
   assert.match(
     portalPanelSource,

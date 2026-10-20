@@ -1,7 +1,6 @@
 import { apiAuthHeaders, apiUrl } from '@/api/client';
 
 export interface AiBriefEmailSubscriptionRecord {
-  workspaceId: string;
   userId: string;
   userName: string;
   email: string;
@@ -9,9 +8,9 @@ export interface AiBriefEmailSubscriptionRecord {
   updatedAt: string;
 }
 
-function endpoint(workspaceId: string, suffix = ''): string {
+function endpoint(suffix = ''): string {
   return apiUrl(
-    `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/ai-brief/subscriptions${suffix}`,
+    `/api/v1/ai-brief/subscriptions${suffix}`,
   );
 }
 
@@ -25,9 +24,8 @@ async function apiError(res: Response, fallback: string): Promise<Error> {
 }
 
 export async function fetchMyAiBriefSubscription(
-  workspaceId: string,
 ): Promise<AiBriefEmailSubscriptionRecord | null> {
-  const res = await fetch(endpoint(workspaceId, '/me'), {
+  const res = await fetch(endpoint('/me'), {
     headers: { Accept: 'application/json', ...apiAuthHeaders() },
     cache: 'no-store',
   });
@@ -39,10 +37,9 @@ export async function fetchMyAiBriefSubscription(
 }
 
 export async function subscribeAiBriefEmail(
-  workspaceId: string,
   email: string,
 ): Promise<AiBriefEmailSubscriptionRecord> {
-  const res = await fetch(endpoint(workspaceId), {
+  const res = await fetch(endpoint(), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -59,8 +56,8 @@ export async function subscribeAiBriefEmail(
   return body.subscription;
 }
 
-export async function unsubscribeAiBriefEmail(workspaceId: string): Promise<void> {
-  const res = await fetch(endpoint(workspaceId, '/me'), {
+export async function unsubscribeAiBriefEmail(): Promise<void> {
+  const res = await fetch(endpoint('/me'), {
     method: 'DELETE',
     headers: { Accept: 'application/json', ...apiAuthHeaders() },
   });
@@ -68,9 +65,8 @@ export async function unsubscribeAiBriefEmail(workspaceId: string): Promise<void
 }
 
 export async function fetchAiBriefSubscriptions(
-  workspaceId: string,
 ): Promise<{ total: number; items: AiBriefEmailSubscriptionRecord[] }> {
-  const res = await fetch(endpoint(workspaceId), {
+  const res = await fetch(endpoint(), {
     headers: { Accept: 'application/json', ...apiAuthHeaders() },
     cache: 'no-store',
   });

@@ -43,7 +43,6 @@ const VIEW_RBAC: Partial<Record<AppView, { module: ResourceModule; min: Permissi
   workflow: { module: 'workflow', min: 'read' },
   admin: { module: 'settings', min: 'admin' },
   presentation: { module: 'settings', min: 'admin' },
-  'workspace-config': { module: 'settings', min: 'admin' },
   'portal-ops': { module: 'settings', min: 'admin' },
   'portal-dashboard': { module: 'settings', min: 'admin' },
   'model-ops': { module: 'settings', min: 'admin' },
@@ -54,12 +53,11 @@ const VIEW_RBAC: Partial<Record<AppView, { module: ResourceModule; min: Permissi
 export function canRoleAccessView(
   view: AppView,
   role: PlatformRole | undefined,
-  workspaceId: string,
 ): boolean {
   if (!role) return view === 'home' || view === 'me' || view === 'task';
   const rule = VIEW_RBAC[view];
   if (!rule) return true;
-  const matrix = getRbacMatrix(workspaceId);
+  const matrix = getRbacMatrix();
   const level = matrix[role]?.[rule.module] ?? 'none';
   return hasAtLeast(level, rule.min);
 }

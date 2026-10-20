@@ -12,13 +12,7 @@ export const LS_TASK_SESSIONS = 'mssclaw_task_sessions';
 export const LS_PORTAL_CONTENT = 'mssclaw_portal_content';
 export const LS_PORTAL_CONTENT_VERSION = 'mssclaw_portal_content_ver';
 
-export function sessionsKeyForWorkspace(workspaceId: string): string {
-  return `mssclaw_sessions_${workspaceId}`;
-}
 
-export function portalContentKeyForWorkspace(workspaceId: string): string {
-  return `mssclaw_portal_content_${workspaceId}`;
-}
 
 /**
  * Marketplace merge strategy (prototype defaults + user/API overrides):

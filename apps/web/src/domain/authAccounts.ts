@@ -1,10 +1,9 @@
 import {
-  MEMBERS_BY_WORKSPACE,
+  getSeedMembers,
   normalizePlatformRole,
   type PlatformRole,
   type WorkspaceMember,
 } from '@/domain/rbac';
-import { PROTOTYPE_WORKSPACE_ID } from '@/domain/prototype/constants';
 import {
   formatOrgAffiliation,
   normalizeOrgAffiliation,
@@ -26,7 +25,6 @@ export interface LoginAccount {
   platformRole: PlatformRole;
   avatar: string;
   status: WorkspaceMember['status'];
-  workspaceIds: string[];
   deptIds: DeptId[];
   regionId: RegionId | null;
 }
@@ -74,7 +72,7 @@ function loadPersistedMembers(): WorkspaceMember[] {
 export function buildLoginAccounts(): LoginAccount[] {
   const byEmail = new Map<string, LoginAccount>();
 
-  const pushMember = (member: WorkspaceMember, workspaceId?: string) => {
+  const pushMember = (member: WorkspaceMember) => {
     const email = migrateDemoEmailDomain(member.email).toLowerCase();
     if (!email) return;
 
@@ -94,7 +92,6 @@ export function buildLoginAccounts(): LoginAccount[] {
         platformRole,
         avatar: member.avatar,
         status: member.status,
-        workspaceIds: workspaceId ? [workspaceId] : [],
         deptIds: aff.deptIds,
         regionId: aff.regionId ?? null,
       });
@@ -107,9 +104,6 @@ export function buildLoginAccounts(): LoginAccount[] {
     if (ROLE_RANK[platformRole] > ROLE_RANK[existing.platformRole]) {
       existing.platformRole = platformRole;
     }
-    if (workspaceId && !existing.workspaceIds.includes(workspaceId)) {
-      existing.workspaceIds.push(workspaceId);
-    }
     const merged = mergeAffiliation(
       { deptIds: existing.deptIds, regionId: existing.regionId },
       aff,
@@ -117,17 +111,10 @@ export function buildLoginAccounts(): LoginAccount[] {
     existing.deptIds = merged.deptIds;
     existing.regionId = merged.regionId ?? null;
 
-    // 默认空间成员优先展示名
-    if (workspaceId === PROTOTYPE_WORKSPACE_ID) {
-      existing.id = member.id;
-      existing.name = member.name;
-      existing.avatar = member.avatar;
-    }
   };
 
-  Object.entries(MEMBERS_BY_WORKSPACE).forEach(([wsId, members]) => {
-    members.forEach((m) => pushMember(m, wsId));
-  });
+  // 种子成员先入表：同一邮箱以它的展示名、头像为准
+  getSeedMembers().forEach((m) => pushMember(m));
   loadPersistedMembers().forEach((m) => pushMember(m));
 
   return [...byEmail.values()].sort((a, b) => {

@@ -83,138 +83,19 @@ const SHARED_KB_PROMPT: WorkspaceResource[] = [
   },
 ];
 
-function makeRegionCatalog(input: {
-  id: string;
-  name: string;
-  namespace: string;
-  description: string;
-  memberCount: number;
-  agentSlice?: number;
-}): WorkspaceCatalog {
-  const agents =
-    input.agentSlice != null
-      ? PROTOTYPE_AGENT_RESOURCES.slice(0, input.agentSlice)
-      : PROTOTYPE_AGENT_RESOURCES;
-  return {
-    workspace: {
-      id: input.id,
-      name: input.name,
-      namespace: input.namespace,
-      description: input.description,
-      memberCount: input.memberCount,
-    },
-    chats: {},
-    defaultChatId: '',
-    resources: [...agents, ...SHARED_KB_PROMPT],
-  };
-}
-
-/** 默认数据空间：华为全球营销服 */
-const HW_GLOBAL_CATALOG = makeRegionCatalog({
-  id: PROTOTYPE_WORKSPACE_ID,
-  name: '华为全球营销服',
-  namespace: 'hw.global.mkt',
-  description: '机关职能 · 华为全球营销服务默认数据空间',
-  memberCount: 4,
-});
-
-const APAC_CATALOG = makeRegionCatalog({
-  id: 'ws-apac',
-  name: '亚太地区部',
-  namespace: 'hw.apac',
-  description: '一线区域 · 亚太地区部作战数据空间',
-  memberCount: 4,
-  agentSlice: 8,
-});
-
-const LATAM_CATALOG = makeRegionCatalog({
-  id: 'ws-3c-latam',
-  name: '拉美地区部',
-  namespace: 'hw.latam',
-  description: '一线区域 · 拉美地区部作战数据空间',
-  memberCount: 4,
-  agentSlice: 6,
-});
-
-const MEA_CATALOG = makeRegionCatalog({
-  id: 'ws-mea',
-  name: '中东地区部',
-  namespace: 'hw.mea',
-  description: '一线区域 · 中东地区部作战数据空间',
-  memberCount: 4,
-  agentSlice: 6,
-});
-
-const EURASIA_CATALOG = makeRegionCatalog({
-  id: 'ws-eurasia',
-  name: '欧亚地区部',
-  namespace: 'hw.eurasia',
-  description: '一线区域 · 欧亚地区部作战数据空间',
-  memberCount: 4,
-  agentSlice: 6,
-});
-
-const EUROPE_CATALOG = makeRegionCatalog({
-  id: 'ws-europe',
-  name: '欧洲地区部',
-  namespace: 'hw.europe',
-  description: '一线区域 · 欧洲地区部作战数据空间',
-  memberCount: 4,
-  agentSlice: 6,
-});
-
-/** 顺序即顶栏数据空间默认排序；默认空间为华为全球营销服 */
-export const WORKSPACE_CATALOG: Record<string, WorkspaceCatalog> = {
-  [PROTOTYPE_WORKSPACE_ID]: HW_GLOBAL_CATALOG,
-  'ws-apac': APAC_CATALOG,
-  'ws-3c-latam': LATAM_CATALOG,
-  'ws-mea': MEA_CATALOG,
-  'ws-eurasia': EURASIA_CATALOG,
-  'ws-europe': EUROPE_CATALOG,
+/** 平台目录种子：接口不可用或返回空目录时使用 */
+export const PLATFORM_CATALOG: WorkspaceCatalog = {
+  workspace: {
+    id: PROTOTYPE_WORKSPACE_ID,
+    name: '华为全球营销服',
+    namespace: 'hw.global.mkt',
+    description: '机关职能 · 华为全球营销服务默认数据空间',
+    memberCount: 4,
+  },
+  chats: {},
+  defaultChatId: '',
+  resources: [...PROTOTYPE_AGENT_RESOURCES, ...SHARED_KB_PROMPT],
 };
-
-export const WORKSPACE_LIST = Object.values(WORKSPACE_CATALOG).map((item) => item.workspace);
-
-export function getWorkspaceCatalog(workspaceId: string): WorkspaceCatalog {
-  return WORKSPACE_CATALOG[workspaceId] ?? HW_GLOBAL_CATALOG;
-}
-
-/** 为自定义租户生成最小可用 Catalog（不预置任务会话） */
-export function createTenantCatalog(input: {
-  id: string;
-  name: string;
-  namespace: string;
-  description?: string;
-  memberCount?: number;
-}): WorkspaceCatalog {
-  return {
-    workspace: {
-      id: input.id,
-      name: input.name,
-      namespace: input.namespace,
-      description: input.description?.trim() || `${input.name} 租户空间`,
-      memberCount: input.memberCount ?? 1,
-    },
-    chats: {},
-    defaultChatId: '',
-    resources: [
-      {
-        id: 'agent-marketing',
-        kind: 'agent',
-        name: '营销 Agent',
-        status: 'online',
-        icon: 'fa-chart-pie',
-      },
-      {
-        id: 'agent-knowledge',
-        kind: 'agent',
-        name: '知识 Agent',
-        status: 'online',
-        icon: 'fa-book-open',
-      },
-    ],
-  };
-}
 
 export function getResourcesByKind(catalog: WorkspaceCatalog, kind: ResourceKind) {
   return catalog.resources.filter((item) => item.kind === kind);

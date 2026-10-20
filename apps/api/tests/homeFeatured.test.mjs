@@ -7,7 +7,7 @@ import { PlatformDocsController } from '../dist/persistence/platform-docs.contro
 function fakePrisma(rows = {}) {
   const store = new Map(Object.entries(rows));
   return {
-    workspace: { findUnique: async () => ({ id: 'ws-test' }) },
+    workspace: { findUnique: async () => ({ id: 'ws-cn-marketing' }) },
     centerRecord: {
       findUnique: async ({ where }) => store.get(where.id) ?? null,
       findMany: async () => [...store.values()],
@@ -34,7 +34,7 @@ function fakePrisma(rows = {}) {
   };
 }
 
-const DOC_ID = 'doc-home-featured-ws-test';
+const DOC_ID = 'doc-home-featured-ws-cn-marketing';
 
 const channels = (overrides = {}) => ({
   external: ['tool-ext-chatgpt'],
@@ -46,14 +46,14 @@ const channels = (overrides = {}) => ({
 test('首页配置首次保存从 revision 0 开始，读取返回规范化后的三栏', async () => {
   const service = new PlatformDocsService(fakePrisma(), {});
 
-  const saved = await service.putDoc('ws-test', 'home-featured', {
+  const saved = await service.putDoc('ws-cn-marketing', 'home-featured', {
     revision: 0,
     channels: channels({ external: [' tool-ext-chatgpt ', 'tool-ext-claude'] }),
   });
   assert.equal(saved.payload.revision, 1);
   assert.deepEqual(saved.payload.channels.external, ['tool-ext-chatgpt', 'tool-ext-claude']);
 
-  const read = await service.getDoc('ws-test', 'home-featured');
+  const read = await service.getDoc('ws-cn-marketing', 'home-featured');
   assert.deepEqual(read.payload, {
     version: 1,
     revision: 1,
@@ -65,7 +65,7 @@ test('首页配置拒绝陈旧 revision，避免覆盖其他管理员的排序',
   const prisma = fakePrisma({
     [DOC_ID]: {
       id: DOC_ID,
-      workspaceId: 'ws-test',
+      workspaceId: 'ws-cn-marketing',
       kind: 'doc:home-featured',
       payload: { version: 1, revision: 3, channels: channels() },
     },
@@ -73,10 +73,10 @@ test('首页配置拒绝陈旧 revision，避免覆盖其他管理员的排序',
   const service = new PlatformDocsService(prisma, {});
 
   await assert.rejects(
-    service.putDoc('ws-test', 'home-featured', { revision: 2, channels: channels() }),
+    service.putDoc('ws-cn-marketing', 'home-featured', { revision: 2, channels: channels() }),
     { name: 'ConflictException' },
   );
-  const saved = await service.putDoc('ws-test', 'home-featured', {
+  const saved = await service.putDoc('ws-cn-marketing', 'home-featured', {
     revision: 3,
     channels: channels({ internal: [] }),
   });
@@ -86,7 +86,7 @@ test('首页配置拒绝陈旧 revision，避免覆盖其他管理员的排序',
 
 test('首页配置写入校验引用格式、重复项与单栏上限', async () => {
   const service = new PlatformDocsService(fakePrisma(), {});
-  const put = (payload) => service.putDoc('ws-test', 'home-featured', { revision: 0, ...payload });
+  const put = (payload) => service.putDoc('ws-cn-marketing', 'home-featured', { revision: 0, ...payload });
 
   await assert.rejects(put({}), /invalid_home_featured:channels:object_required/);
   await assert.rejects(
@@ -109,7 +109,7 @@ test('首页配置读取时丢弃脏数据，不让单条坏引用拖垮首页',
   const prisma = fakePrisma({
     [DOC_ID]: {
       id: DOC_ID,
-      workspaceId: 'ws-test',
+      workspaceId: 'ws-cn-marketing',
       kind: 'doc:home-featured',
       payload: {
         revision: 2,
@@ -122,7 +122,7 @@ test('首页配置读取时丢弃脏数据，不让单条坏引用拖垮首页',
     },
   });
   const service = new PlatformDocsService(prisma, {});
-  const read = await service.getDoc('ws-test', 'home-featured');
+  const read = await service.getDoc('ws-cn-marketing', 'home-featured');
   assert.deepEqual(read.payload, {
     version: 1,
     revision: 2,
@@ -142,17 +142,17 @@ test('首页配置对游客只读开放，写入仅限 super_admin', async () =>
     },
   });
 
-  assert.deepEqual(await controller.getOne('ws-test', 'home-featured'), {
-    workspaceId: 'ws-test',
+  assert.deepEqual(await controller.getOne('home-featured'), {
+    workspaceId: 'ws-cn-marketing',
     kind: 'home-featured',
   });
   await assert.rejects(
-    controller.putOne('ws-test', 'home-featured', { payload: {} }, 'Bearer t'),
+    controller.putOne('home-featured', { payload: {} }, 'Bearer t'),
     (error) => error.message === 'home_featured_admin_required',
   );
   assert.equal(putCalls, 0);
 
   role = 'super_admin';
-  await controller.putOne('ws-test', 'home-featured', { payload: {} }, 'Bearer t');
+  await controller.putOne('home-featured', { payload: {} }, 'Bearer t');
   assert.equal(putCalls, 1);
 });

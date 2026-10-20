@@ -34,29 +34,27 @@ const GUEST_VISITOR_ID = 'guest:00000000-0000-4000-8000-000000000001';
 test('guest reads market engagement aggregates with an empty user id', async () => {
   const { controller, persistence } = controllerWith(NO_SESSION);
 
-  await controller.getMarketEngagement('ws-test');
+  await controller.getMarketEngagement();
 
-  assert.deepEqual(persistence.calls.get, [{ workspaceId: 'ws-test', userId: '' }]);
+  assert.deepEqual(persistence.calls.get, [{ workspaceId: 'ws-cn-marketing', userId: '' }]);
 });
 
 test('logged-in read resolves the user id from the session, not from the caller', async () => {
   const { controller, persistence } = controllerWith(LOGGED_IN);
 
-  await controller.getMarketEngagement('ws-test', 'Bearer token-ok');
+  await controller.getMarketEngagement('Bearer token-ok');
 
-  assert.deepEqual(persistence.calls.get, [{ workspaceId: 'ws-test', userId: 'user-42' }]);
+  assert.deepEqual(persistence.calls.get, [{ workspaceId: 'ws-cn-marketing', userId: 'user-42' }]);
 });
 
 test('guests may still count view and use', async () => {
   const { controller, persistence } = controllerWith(NO_SESSION);
 
   await controller.mutateMarketEngagement(
-    'ws-test',
     'tool-1',
     { action: 'view', eventId: 'event-0001', visitorId: GUEST_VISITOR_ID },
   );
   await controller.mutateMarketEngagement(
-    'ws-test',
     'tool-1',
     { action: 'use', eventId: 'event-0002', visitorId: GUEST_VISITOR_ID },
   );
@@ -76,7 +74,7 @@ test('guests are rejected on like, dislike, favorite and download', async () => 
   for (const action of ['like', 'dislike', 'favorite', 'download']) {
     const { controller, persistence } = controllerWith(NO_SESSION);
     await assert.rejects(
-      controller.mutateMarketEngagement('ws-test', 'tool-1', {
+      controller.mutateMarketEngagement('tool-1', {
         action,
         eventId: `event-${action}`,
         visitorId: GUEST_VISITOR_ID,
@@ -95,7 +93,6 @@ test('a forged userId in the body cannot override the session identity', async (
   const { controller, persistence } = controllerWith(LOGGED_IN);
 
   await controller.mutateMarketEngagement(
-    'ws-test',
     'tool-1',
     { action: 'like', userId: 'someone-else', eventId: 'event-like-1' },
     'Bearer token-ok',
@@ -108,7 +105,7 @@ test('unknown actions are rejected before any session lookup', async () => {
   const { controller, persistence } = controllerWith(LOGGED_IN);
 
   await assert.rejects(
-    controller.mutateMarketEngagement('ws-test', 'tool-1', { action: 'delete' }),
+    controller.mutateMarketEngagement('tool-1', { action: 'delete' }),
     (error) => error?.getStatus?.() === 400,
   );
   assert.equal(persistence.calls.mutate.length, 0);
@@ -119,7 +116,6 @@ test('all mutations require a valid event id', async () => {
   for (const eventId of [undefined, 'short', 'contains spaces']) {
     await assert.rejects(
       controller.mutateMarketEngagement(
-        'ws-test',
         'tool-1',
         { action: 'view', eventId },
         'Bearer token-ok',
@@ -135,7 +131,6 @@ test('non-string event and visitor ids are rejected as bad requests', async () =
     const { controller, persistence } = controllerWith(LOGGED_IN);
     await assert.rejects(
       controller.mutateMarketEngagement(
-        'ws-test',
         'tool-1',
         { action: 'view', eventId },
         'Bearer token-ok',
@@ -148,7 +143,7 @@ test('non-string event and visitor ids are rejected as bad requests', async () =
   for (const visitorId of [42, {}, []]) {
     const { controller, persistence } = controllerWith(NO_SESSION);
     await assert.rejects(
-      controller.mutateMarketEngagement('ws-test', 'tool-1', {
+      controller.mutateMarketEngagement('tool-1', {
         action: 'view',
         eventId: 'event-invalid-visitor',
         visitorId,
@@ -163,7 +158,7 @@ test('anonymous mutations require guest:<uuid-v4>', async () => {
   const { controller, persistence } = controllerWith(NO_SESSION);
   for (const visitorId of [undefined, 'guest:not-a-uuid', '00000000-0000-4000-8000-000000000001']) {
     await assert.rejects(
-      controller.mutateMarketEngagement('ws-test', 'tool-1', {
+      controller.mutateMarketEngagement('tool-1', {
         action: 'view',
         eventId: 'event-guest-1',
         visitorId,
@@ -183,7 +178,7 @@ test('legacy content-engagement document is read-only for every caller', async (
     },
   });
   await assert.rejects(
-    controller.putOne('ws-test', 'content-engagement', {
+    controller.putOne('content-engagement', {
       payload: { byId: { forged: { views: 999 } } },
     }),
     (error) => error?.getStatus?.() === 403,

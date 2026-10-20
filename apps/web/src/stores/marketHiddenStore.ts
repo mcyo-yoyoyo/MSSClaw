@@ -3,7 +3,6 @@ import type { MarketShelfKind } from '@/domain/marketShelf';
 import { getCurrentUserId } from '@/domain/currentUser';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   peekPlatformDocMemory,
   scheduleSavePlatformDoc,
@@ -25,12 +24,11 @@ function userBucket(): string | null {
 function persistForUser(keys: MarketHiddenKey[]) {
   const uid = userBucket();
   if (!uid || !canUsePlatformDocsApi()) return;
-  const ws = currentWorkspaceId();
-  const mem = peekPlatformDocMemory<HiddenDoc>(ws, DOC_KIND) ?? {};
+  const mem = peekPlatformDocMemory<HiddenDoc>(DOC_KIND) ?? {};
   const byUserId = { ...(mem.byUserId ?? {}), [uid]: keys };
   const payload: HiddenDoc = { byUserId };
-  setPlatformDocMemory(ws, DOC_KIND, payload);
-  void scheduleSavePlatformDoc(ws, DOC_KIND, payload);
+  setPlatformDocMemory(DOC_KIND, payload);
+  void scheduleSavePlatformDoc(DOC_KIND, payload);
 }
 
 interface MarketHiddenState {
@@ -51,9 +49,9 @@ export const useMarketHiddenStore = create<MarketHiddenState>((set, get) => ({
         return;
       }
       try {
-        const remote = await fetchPlatformDoc<HiddenDoc>(currentWorkspaceId(), DOC_KIND);
+        const remote = await fetchPlatformDoc<HiddenDoc>(DOC_KIND);
         const keys = Array.isArray(remote?.byUserId?.[uid]) ? remote.byUserId[uid] : [];
-        if (remote) setPlatformDocMemory(currentWorkspaceId(), DOC_KIND, remote);
+        if (remote) setPlatformDocMemory(DOC_KIND, remote);
         set({ keys });
       } catch {
         set({ keys: [] });

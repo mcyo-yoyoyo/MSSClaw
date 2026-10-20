@@ -4,12 +4,8 @@ import { useAppViewStore } from '@/stores/appViewStore';
 import { useConversationStore } from '@/stores/conversationStore';
 import { useTaskStore } from '@/stores/taskStore';
 
-interface TaskGlobalModalsProps {
-  onWorkspaceSwitch?: (workspaceId: string) => void;
-}
-
 /** 侧栏「新建协作空间」入口：挂在 App 级；Agent 新建走做任务页 */
-export function TaskGlobalModals({ onWorkspaceSwitch }: TaskGlobalModalsProps) {
+export function TaskGlobalModals() {
   const createDialogOpen = useTaskStore((s) => s.createDialogOpen);
   const closeCreateDialog = useTaskStore((s) => s.closeCreateDialog);
   const createWarRoomSession = useConversationStore((s) => s.createWarRoomSession);
@@ -17,7 +13,7 @@ export function TaskGlobalModals({ onWorkspaceSwitch }: TaskGlobalModalsProps) {
 
   return (
     <>
-      {onWorkspaceSwitch ? <TaskResourceExplorer onWorkspaceSwitch={onWorkspaceSwitch} /> : null}
+      <TaskResourceExplorer />
       <CreateTaskDialog
         open={createDialogOpen}
         onClose={closeCreateDialog}

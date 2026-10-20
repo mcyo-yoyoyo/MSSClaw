@@ -27,7 +27,6 @@ import { OrgAssetFilterBar } from '@/components/center/OrgAssetFilters';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
 import { fetchKbVectorStatus, type KbVectorStatus } from '@/api/kbClient';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 
 
@@ -126,15 +125,14 @@ export function KnowledgeCenterPage({ onAskDocument }: KnowledgeCenterPageProps)
 
   } = useMarketplaceStore();
 
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const [vectorStatus, setVectorStatus] = useState<KbVectorStatus | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void fetchKbVectorStatus(workspaceId, kbDocs).then(setVectorStatus);
+      void fetchKbVectorStatus(kbDocs).then(setVectorStatus);
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [workspaceId, kbDocs]);
+  }, [kbDocs]);
 
   const uploadRef = useRef<HTMLInputElement>(null);
 

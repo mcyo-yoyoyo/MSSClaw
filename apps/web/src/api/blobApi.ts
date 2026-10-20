@@ -11,7 +11,6 @@ export type UploadedBlob = {
 };
 
 type WorkspaceBlobUploadContext = {
-  workspaceId: string;
   apiBase: string;
   uploadUrl: string;
   deleteUrl: string;
@@ -27,7 +26,6 @@ export type DownloadableBlob = Pick<UploadedBlob, 'url' | 'name'>;
 export type DeletableBlob = Partial<Pick<UploadedBlob, 'id' | 'url'>>;
 
 type PackageUploadContext = {
-  workspaceId: string;
   apiBase: string;
   uploadUrl: string;
   deleteUrl: string;
@@ -90,33 +88,29 @@ function sameHeaders(left: Record<string, string>, right: Record<string, string>
   );
 }
 
-/** 普通附件上传完成后，确认 workspace / API 基址 / 会话仍与发起请求时一致。 */
+/** 普通附件上传完成后，确认 API 基址 / 会话仍与发起请求时一致。 */
 export function isWorkspaceBlobUploadContextCurrent(
   blob: UploadedWorkspaceBlob,
-  workspaceId: string,
 ): boolean {
   const context = blob.__workspaceBlobUploadContext;
   return (
-    context.workspaceId === workspaceId &&
     context.apiBase === getApiBase() &&
     sameHeaders(context.authHeaders, apiAuthHeaders())
   );
 }
 
-/** 上传期间 workspace、API 基址或鉴权配置变化后，旧响应不得写入当前表单。 */
+/** 上传期间 API 基址或鉴权配置变化后，旧响应不得写入当前表单。 */
 export function isPackageUploadContextCurrent(
   blob: UploadedPackageBlob,
-  workspaceId: string,
 ): boolean {
   const context = blob.__packageUploadContext;
   const currentApiBase = getApiBase();
   const currentUploadUrls = ['blobs/packages', 'blobs/packages/ops'].map((endpoint) =>
     freezeRequestUrl(
-      apiUrlForBase(currentApiBase, `/api/v1/workspaces/${workspaceId}/${endpoint}`),
+      apiUrlForBase(currentApiBase, `/api/v1/${endpoint}`),
     ),
   );
   return (
-    context.workspaceId === workspaceId &&
     context.apiBase === currentApiBase &&
     currentUploadUrls.includes(context.uploadUrl) &&
     sameHeaders(context.authHeaders, apiAuthHeaders())
@@ -153,7 +147,6 @@ export function resolveWorkspaceBlobUrl(url: string): string {
 }
 
 export async function uploadWorkspaceBlob(
-  workspaceId: string,
   file: Pick<PortalCasePreviewFile, 'name' | 'mimeType' | 'dataUrl'>,
 ): Promise<UploadedWorkspaceBlob> {
   if (!file.dataUrl?.startsWith('data:')) {
@@ -164,7 +157,7 @@ export async function uploadWorkspaceBlob(
   const apiBase = getApiBase();
   const authHeaders = apiAuthHeaders();
   const uploadUrl = freezeRequestUrl(
-    apiUrlForBase(apiBase, `/api/v1/workspaces/${workspaceId}/blobs`),
+    apiUrlForBase(apiBase, `/api/v1/blobs`),
   );
   const res = await fetch(uploadUrl, {
     method: 'POST',
@@ -195,13 +188,12 @@ export async function uploadWorkspaceBlob(
   };
   Object.defineProperty(result, '__workspaceBlobUploadContext', {
     value: {
-      workspaceId,
       apiBase,
       uploadUrl,
       deleteUrl: freezeRequestUrl(
         apiUrlForBase(
           apiBase,
-          `/api/v1/workspaces/${workspaceId}/blobs/${encodeURIComponent(uploaded.id)}`,
+          `/api/v1/blobs/${encodeURIComponent(uploaded.id)}`,
         ),
       ),
       authHeaders,
@@ -219,13 +211,12 @@ export async function uploadWorkspaceBlob(
  * 离线模式和 SVG 仍内嵌为 data URL：SVG 由 API 按附件下载返回（防 XSS），<img> 显示不了。
  */
 export async function storeImageDataUrl(
-  workspaceId: string,
   file: File,
   dataUrl: string,
 ): Promise<string> {
   if (!isApiEnabled() || file.type === 'image/svg+xml') return dataUrl;
   try {
-    return (await uploadWorkspaceBlob(workspaceId, { name: file.name, mimeType: file.type, dataUrl })).url;
+    return (await uploadWorkspaceBlob({ name: file.name, mimeType: file.type, dataUrl })).url;
   } catch {
     throw new Error('图片上传失败，请检查后端连接后重试');
   }
@@ -279,12 +270,10 @@ function resolveWorkspaceBlobId(blob: string | DeletableBlob): string {
 
 /** 删除未被记录引用的临时 blob；调用方决定是否忽略清理失败。 */
 export async function deleteWorkspaceBlob(
-  workspaceId: string,
   blob: string | DeletableBlob,
   options?: WorkspaceBlobDeleteOptions,
 ): Promise<void> {
   const uploadContext = packageUploadContext(blob) ?? workspaceBlobUploadContext(blob);
-  const targetWorkspaceId = uploadContext?.workspaceId ?? workspaceId;
   const deleteToken = uploadContext?.deleteToken ?? options?.deleteToken?.trim();
   if (!deleteToken) throw new Error('blob_delete_token_required');
 
@@ -295,7 +284,7 @@ export async function deleteWorkspaceBlob(
     uploadContext?.deleteUrl ??
     apiUrlForBase(
       targetApiBase,
-      `/api/v1/workspaces/${targetWorkspaceId}/blobs/${encodeURIComponent(blobId)}`,
+      `/api/v1/blobs/${encodeURIComponent(blobId)}`,
     );
   const res = await fetch(
     deleteUrl,
@@ -317,18 +306,17 @@ export async function deleteWorkspaceBlob(
 export async function deleteUploadedWorkspaceBlob(
   blob: UploadedWorkspaceBlob,
 ): Promise<void> {
-  await deleteWorkspaceBlob(blob.__workspaceBlobUploadContext.workspaceId, blob);
+  await deleteWorkspaceBlob(blob);
 }
 
 async function uploadWorkspacePackageTo(
-  workspaceId: string,
   file: File,
   endpoint: 'blobs/packages' | 'blobs/packages/ops',
 ): Promise<UploadedPackageBlob> {
   const apiBase = getApiBase();
   const authHeaders = apiAuthHeaders();
   const uploadUrl = freezeRequestUrl(
-    apiUrlForBase(apiBase, `/api/v1/workspaces/${workspaceId}/${endpoint}`),
+    apiUrlForBase(apiBase, `/api/v1/${endpoint}`),
   );
   const res = await fetch(uploadUrl, {
     method: 'POST',
@@ -357,7 +345,6 @@ async function uploadWorkspacePackageTo(
   };
   Object.defineProperty(result, '__packageUploadContext', {
     value: {
-      workspaceId,
       apiBase,
       uploadUrl,
       deleteUrl: packageDeleteUrl(uploadUrl, res.url, uploaded.id),
@@ -373,24 +360,21 @@ async function uploadWorkspacePackageTo(
 
 /** 用户侧 Skill / Agent 原始包：保留 200MB 上限。 */
 export async function uploadWorkspacePackage(
-  workspaceId: string,
   file: File,
 ): Promise<UploadedPackageBlob> {
   const sizeError = packageUploadSizeError(file);
   if (sizeError) throw new Error(`package_too_large:${sizeError}`);
-  return uploadWorkspacePackageTo(workspaceId, file, 'blobs/packages');
+  return uploadWorkspacePackageTo(file, 'blobs/packages');
 }
 
 /** 运营后台 Skill 原始包：服务端鉴权后流式上传，不设应用层体积上限。 */
 export function uploadWorkspaceOpsPackage(
-  workspaceId: string,
   file: File,
 ): Promise<UploadedPackageBlob> {
-  return uploadWorkspacePackageTo(workspaceId, file, 'blobs/packages/ops');
+  return uploadWorkspacePackageTo(file, 'blobs/packages/ops');
 }
 
 async function externalizeOne(
-  workspaceId: string,
   file: PortalCasePreviewFile | null | undefined,
 ): Promise<PortalCasePreviewFile | null | undefined> {
   if (!file) return file;
@@ -400,7 +384,7 @@ async function externalizeOne(
   if (file.blobId && file.url) {
     return { ...file, dataUrl: undefined };
   }
-  const uploaded = await uploadWorkspaceBlob(workspaceId, file);
+  const uploaded = await uploadWorkspaceBlob(file);
   return {
     name: file.name,
     mimeType: file.mimeType || uploaded.mimeType,
@@ -414,15 +398,13 @@ async function externalizeOne(
 
 /** 将门户附件 dataUrl 外提到 API 磁盘，缩小 JSON / localStorage */
 export async function externalizePortalItemAttachments(
-  workspaceId: string,
   items: PortalContentItem[],
 ): Promise<PortalContentItem[]> {
   if (!isApiEnabled()) return items;
   const out: PortalContentItem[] = [];
   for (const item of items) {
-    const previewFile = await externalizeOne(workspaceId, item.previewFile ?? null);
+    const previewFile = await externalizeOne(item.previewFile ?? null);
     const layoutPreviewFile = await externalizeOne(
-      workspaceId,
       item.layoutPreviewFile ?? null,
     );
     out.push({

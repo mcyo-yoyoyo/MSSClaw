@@ -31,7 +31,6 @@ import {
   uploadWorkspaceBlob,
   uploadWorkspacePackage,
 } from '@/api/blobApi';
-import { currentWorkspaceId } from '@/api/platformDocsApi';
 import {
   ASSET_VISIBILITY_LABELS,
   HQ_DEPTS,
@@ -90,7 +89,7 @@ function readAvatarFile(file: File): Promise<string> {
     reader.onload = () => resolve(String(reader.result || ''));
     reader.onerror = () => reject(new Error('读取失败'));
     reader.readAsDataURL(file);
-  }).then((dataUrl) => storeImageDataUrl(currentWorkspaceId(), file, dataUrl));
+  }).then((dataUrl) => storeImageDataUrl(file, dataUrl));
 }
 
 function emptyAgent(): PrototypeAgentSeed {
@@ -189,11 +188,10 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
     }
     const replacedPackageBlob = form.packageBlob;
     setUploadingPackage(true);
-    const workspaceId = currentWorkspaceId();
     const uploadGeneration = temporaryPackageBlobs.currentGeneration();
     try {
-      const uploaded = await uploadWorkspacePackage(workspaceId, file);
-      if (!temporaryPackageBlobs.trackUploaded(workspaceId, uploaded, uploadGeneration)) {
+      const uploaded = await uploadWorkspacePackage(file);
+      if (!temporaryPackageBlobs.trackUploaded(uploaded, uploadGeneration)) {
         return;
       }
       temporaryPackageBlobs.discard(replacedPackageBlob);
@@ -246,7 +244,6 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
       return;
     }
 
-    const workspaceId = currentWorkspaceId();
     const generation = caseUploadGenerationRef.current;
     const mimeType = kind === 'pdf' ? PDF_MIME_TYPE : PPTX_MIME_TYPE;
     setUploadingCaseAttachment(true);
@@ -257,14 +254,14 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
         reader.onerror = () => reject(reader.error ?? new Error('file_read_failed'));
         reader.readAsDataURL(file);
       });
-      const uploaded = await uploadWorkspaceBlob(workspaceId, {
+      const uploaded = await uploadWorkspaceBlob({
         name: file.name,
         mimeType,
         dataUrl,
       });
       if (
         generation !== caseUploadGenerationRef.current ||
-        !isWorkspaceBlobUploadContextCurrent(uploaded, currentWorkspaceId())
+        !isWorkspaceBlobUploadContextCurrent(uploaded)
       ) {
         void deleteUploadedWorkspaceBlob(uploaded).catch(() => undefined);
         return;
@@ -479,7 +476,7 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
       .filter(
         ([blobId, uploaded]) =>
           attachedBlobIds.has(blobId) &&
-          !isWorkspaceBlobUploadContextCurrent(uploaded, currentWorkspaceId()),
+          !isWorkspaceBlobUploadContextCurrent(uploaded),
       )
       .map(([blobId]) => blobId);
     if (staleAttachmentIds.length) {
@@ -500,7 +497,7 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
     }
     if (!temporaryPackageBlobs.canCommit(form.packageBlob)) {
       setForm((current) => ({ ...current, packageBlob: undefined }));
-      showToast('工作区或 API 配置已变更，请重新上传执行包');
+      showToast('API 配置已变更，请重新上传执行包');
       return;
     }
     const name = form.name.trim();

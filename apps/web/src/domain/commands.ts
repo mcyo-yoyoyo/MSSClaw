@@ -189,14 +189,6 @@ const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
     run: () => h.goto('presentation'),
   },
   {
-    id: 'goto-workspace-config',
-    label: '打开租户配置',
-    icon: 'fa-building',
-    keywords: 'workspace tenant 租户 组织 事业部',
-    view: 'workspace-config',
-    run: () => h.goto('workspace-config'),
-  },
-  {
     id: 'goto-portal-ops',
     label: '打开门户运营',
     icon: 'fa-newspaper',

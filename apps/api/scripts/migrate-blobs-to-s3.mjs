@@ -1,6 +1,6 @@
 /**
  * 一次性迁移：把旧版本地磁盘 blob（BLOB_ROOT/<工作区>/<id>.bin + <id>.json）复制到 S3 兼容对象存储。
- * 对象键与目录结构一一对应：<工作区目录名>/<id>.bin、<工作区目录名>/<id>.json。
+ * 对象键不分工作区：<id>.bin、<id>.json（文件 id 为随机 32 位十六进制，跨工作区不会重复）。
  *
  * 用法（在 apps/api 下）：npm run migrate:blobs
  *   读取 .env 里的 S3_ENDPOINT / S3_BUCKET / S3_ACCESS_KEY / S3_SECRET_KEY，来源目录取 BLOB_ROOT（默认 apps/api/data/blobs）。
@@ -84,8 +84,8 @@ for (const dir of workspaceDirs) {
     if (!BLOB_ID.test(id)) continue;
     const label = `${dir.name}/${id}`;
     const binPath = path.join(dirPath, `${id}.bin`);
-    const binKey = `${dir.name}/${id}.bin`;
-    const metaKey = `${dir.name}/${id}.json`;
+    const binKey = `${id}.bin`;
+    const metaKey = `${id}.json`;
     try {
       const metaRaw = await readFile(path.join(dirPath, name), 'utf8');
       const meta = JSON.parse(metaRaw);

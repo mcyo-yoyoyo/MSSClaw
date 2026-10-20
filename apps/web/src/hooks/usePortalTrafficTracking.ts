@@ -58,7 +58,6 @@ function rememberCompletedEvent(eventId: string): void {
 }
 
 async function recordWithRetry(
-  workspaceId: string,
   input: { eventId: string; routeKey: string; visitorId: string },
 ): Promise<void> {
   let lastError: unknown;
@@ -67,7 +66,7 @@ async function recordWithRetry(
       await new Promise<void>((resolve) => window.setTimeout(resolve, delay));
     }
     try {
-      await recordPortalPageViewApi(workspaceId, input);
+      await recordPortalPageViewApi(input);
       return;
     } catch (error) {
       lastError = error;
@@ -95,7 +94,6 @@ export function usePortalTrafficTracking(): void {
   const shellReady = useSessionStore((state) => state.shellReady);
   const userId = useSessionStore((state) => state.user?.id ?? '');
   const visitorId = useSessionStore((state) => state.visitorId);
-  const workspaceId = useWorkspaceStore((state) => state.workspaceId);
   const catalogReady = useWorkspaceStore((state) => state.catalogReady);
   const apiConnected = useWorkspaceStore((state) => state.apiConnected);
   const visitorRef = toVisitorRef({ isAuthenticated, userId, visitorId });
@@ -107,7 +105,6 @@ export function usePortalTrafficTracking(): void {
       !shellReady ||
       !visitorRef ||
       !journeyVisitorId ||
-      !workspaceId ||
       !catalogReady ||
       !apiConnected ||
       !PORTAL_TRAFFIC_VIEWS.has(appView)
@@ -117,7 +114,7 @@ export function usePortalTrafficTracking(): void {
       return;
     }
 
-    const entry = getOrCreateEntry(`${workspaceId}:${visitorRef}:${appView}`);
+    const entry = getOrCreateEntry(`${visitorRef}:${appView}`);
     const timer = window.setTimeout(() => {
       const latestSession = useSessionStore.getState();
       const latestWorkspace = useWorkspaceStore.getState();
@@ -134,7 +131,6 @@ export function usePortalTrafficTracking(): void {
         !latestSession.shellReady ||
         latestVisitorRef !== visitorRef ||
         latestJourneyVisitorId !== journeyVisitorId ||
-        latestWorkspace.workspaceId !== workspaceId ||
         !latestWorkspace.catalogReady ||
         !latestWorkspace.apiConnected ||
         currentEntry?.eventId !== entry.eventId
@@ -144,7 +140,7 @@ export function usePortalTrafficTracking(): void {
       if (inFlightEventIds.has(entry.eventId) || completedEventIds.has(entry.eventId)) return;
 
       inFlightEventIds.add(entry.eventId);
-      void recordWithRetry(workspaceId, {
+      void recordWithRetry({
         eventId: entry.eventId,
         routeKey: appView,
         visitorId: journeyVisitorId,
@@ -168,6 +164,5 @@ export function usePortalTrafficTracking(): void {
     journeyVisitorId,
     shellReady,
     visitorRef,
-    workspaceId,
   ]);
 }

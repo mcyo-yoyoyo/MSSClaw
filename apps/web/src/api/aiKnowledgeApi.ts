@@ -3,10 +3,6 @@ import type { AiKnowledgeSolution, DemandDraft, DemandSummary } from '@/domain/a
 import { getVisitorId } from '@/domain/visitorIdentity';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
-function workspaceId(): string {
-  return useWorkspaceStore.getState().workspaceId || 'ws-mss-ai';
-}
-
 function headers(): HeadersInit {
   return {
     'Content-Type': 'application/json',
@@ -17,7 +13,7 @@ function headers(): HeadersInit {
 }
 
 function endpoint(path: string): string {
-  return apiUrl(`/api/v1/workspaces/${workspaceId()}/ai-knowledge${path}`);
+  return apiUrl(`/api/v1/ai-knowledge${path}`);
 }
 
 async function request<T>(

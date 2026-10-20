@@ -9,7 +9,6 @@ import { getSlashQuery, useHomeStore } from '@/stores/homeStore';
 import { useLlmConfigStore } from '@/stores/llmConfigStore';
 import { useConversationStore } from '@/stores/conversationStore';
 import { useSessionStore } from '@/stores/sessionStore';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useSpeechInput } from '@/hooks/useSpeechInput';
 import { HomeSlashMenu } from '@/components/home/HomeSlashMenu';
 import { HomePickerModal } from '@/components/home/HomePickerModal';
@@ -80,7 +79,6 @@ export function SharedComposer({
   const closeSettings = useLlmConfigStore((s) => s.closeSettings);
   const hydrateLlm = useLlmConfigStore((s) => s.hydrate);
   const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   // 选择器只列凭证齐全的模型；一个都没有时给出可操作的提示而不是空下拉。
   const options = useMemo(() => modelOptions(), [config, modelOptions]);
   const noUsableModel = options.length === 0;
@@ -93,7 +91,7 @@ export function SharedComposer({
     };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
-  }, [hydrateLlm, isAuthenticated, workspaceId]);
+  }, [hydrateLlm, isAuthenticated]);
 
   const notify = (msg: string) => {
     useConversationStore.setState({ pushToast: msg });

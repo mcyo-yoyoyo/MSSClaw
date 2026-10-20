@@ -7,8 +7,7 @@ import {
 } from '@/api/aiBriefSubscriptionsApi';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
-} from '@/api/platformDocsApi';
+  } from '@/api/platformDocsApi';
 
 export type AiNewsPreference = {
   /** WeLink 推送意向（接口待上线，暂不开放 UI） */
@@ -61,7 +60,6 @@ export const useAiNewsPreferenceStore = create<AiNewsPreferenceState>((set, get)
 
   hydrate: async () => {
     const generation = ++hydrateGeneration;
-    const workspaceId = currentWorkspaceId();
     if (!canUsePlatformDocsApi()) {
       set({ pref: defaultPref(), loading: false, error: '共享服务未连接' });
       return;
@@ -73,8 +71,8 @@ export const useAiNewsPreferenceStore = create<AiNewsPreferenceState>((set, get)
     }
     set({ loading: true, error: null });
     try {
-      const subscription = await fetchMyAiBriefSubscription(workspaceId);
-      if (generation !== hydrateGeneration || currentWorkspaceId() !== workspaceId) return;
+      const subscription = await fetchMyAiBriefSubscription();
+      if (generation !== hydrateGeneration) return;
       set({
         pref: {
           ...get().pref,
@@ -85,7 +83,7 @@ export const useAiNewsPreferenceStore = create<AiNewsPreferenceState>((set, get)
         loading: false,
       });
     } catch {
-      if (generation !== hydrateGeneration || currentWorkspaceId() !== workspaceId) return;
+      if (generation !== hydrateGeneration) return;
       set({ pref: defaultPref(), loading: false, error: '订阅状态加载失败' });
     }
   },
@@ -110,14 +108,13 @@ export const useAiNewsPreferenceStore = create<AiNewsPreferenceState>((set, get)
       return { ok: false, message: '共享服务未连接，订阅信息无法保存到后台' };
     }
 
-    const workspaceId = currentWorkspaceId();
     const generation = ++saveGeneration;
     set({ saving: true, error: null });
     try {
       if (subscribed) {
-        const saved = await subscribeAiBriefEmail(workspaceId, trimmed);
-        if (generation !== saveGeneration || currentWorkspaceId() !== workspaceId) {
-          return { ok: false, message: '工作区已切换，请重新订阅' };
+        const saved = await subscribeAiBriefEmail(trimmed);
+        if (generation !== saveGeneration) {
+          return { ok: false, message: '已有更新的操作，请重新订阅' };
         }
         set({
           pref: {
@@ -131,9 +128,9 @@ export const useAiNewsPreferenceStore = create<AiNewsPreferenceState>((set, get)
         return { ok: true, message: '订阅成功，邮箱已保存到后台' };
       }
 
-      await unsubscribeAiBriefEmail(workspaceId);
-      if (generation !== saveGeneration || currentWorkspaceId() !== workspaceId) {
-        return { ok: false, message: '工作区已切换，请重新操作' };
+      await unsubscribeAiBriefEmail();
+      if (generation !== saveGeneration) {
+        return { ok: false, message: '已有更新的操作，请重新操作' };
       }
       set({
         pref: {
@@ -146,7 +143,7 @@ export const useAiNewsPreferenceStore = create<AiNewsPreferenceState>((set, get)
       });
       return { ok: true, message: '已取消邮件订阅' };
     } catch {
-      if (generation === saveGeneration && currentWorkspaceId() === workspaceId) {
+      if (generation === saveGeneration) {
         set({ saving: false, error: '订阅信息保存失败' });
       }
       return { ok: false, message: '保存失败，请检查后台服务后重试' };

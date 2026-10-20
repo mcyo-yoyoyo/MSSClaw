@@ -29,7 +29,6 @@ function toRow(entry: AuditLogEntry) {
     角色: entry.role ? ROLE_LABELS[entry.role] : '',
     领域部门: (entry.deptIds ?? []).map(getDeptLabel).join('、') || '未指定',
     区域: entry.regionId ? getRegionLabel(entry.regionId) : '机关/未挂区域',
-    工作区: entry.workspaceId ?? '',
     日志ID: entry.id,
   };
 }
@@ -60,7 +59,7 @@ function querySummary(query?: AuditLogQuery) {
  */
 export function downloadAuditLogsExcel(
   logs: AuditLogEntry[],
-  options?: { query?: AuditLogQuery; workspaceName?: string },
+  options?: { query?: AuditLogQuery },
 ) {
   const rows = logs.map(toRow);
   const detailSheet =
@@ -68,7 +67,6 @@ export function downloadAuditLogsExcel(
 
   const summarySheet = [
     ...querySummary(options?.query),
-    { 指标: '组织/工作区', 值: options?.workspaceName ?? '' },
     { 指标: '导出条数', 值: logs.length },
   ];
 

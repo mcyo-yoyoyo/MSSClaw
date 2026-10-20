@@ -59,8 +59,8 @@ export async function fetchApiHealth(): Promise<boolean> {
   return (await fetchApiHealthInfo()).ok;
 }
 
-export async function fetchSessionsApi(workspaceId: string): Promise<Record<string, ChatConfig> | null> {
-  const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/sessions`), {
+export async function fetchSessionsApi(): Promise<Record<string, ChatConfig> | null> {
+  const res = await fetch(apiUrl(`/api/v1/sessions`), {
     headers: apiAuthHeaders(),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -69,10 +69,9 @@ export async function fetchSessionsApi(workspaceId: string): Promise<Record<stri
 }
 
 export async function saveSessionsApi(
-  workspaceId: string,
   chats: Record<string, ChatConfig>,
 ): Promise<void> {
-  const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/sessions`), {
+  const res = await fetch(apiUrl(`/api/v1/sessions`), {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify({ chats }),
@@ -80,8 +79,8 @@ export async function saveSessionsApi(
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }
 
-export async function fetchMarketplaceApi(workspaceId: string): Promise<Partial<MarketplaceSnapshot> | null> {
-  const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/marketplace`), {
+export async function fetchMarketplaceApi(): Promise<Partial<MarketplaceSnapshot> | null> {
+  const res = await fetch(apiUrl(`/api/v1/marketplace`), {
     headers: apiAuthHeaders(),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -91,10 +90,9 @@ export async function fetchMarketplaceApi(workspaceId: string): Promise<Partial<
 }
 
 export async function saveMarketplaceApi(
-  workspaceId: string,
   snapshot: Partial<MarketplaceSnapshot>,
 ): Promise<void> {
-  const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/marketplace`), {
+  const res = await fetch(apiUrl(`/api/v1/marketplace`), {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify(snapshot),
@@ -139,9 +137,8 @@ export async function saveToolsApi(
 }
 
 export async function fetchPortalContentApi(
-  workspaceId: string,
 ): Promise<{ items: PortalContentItem[]; revision: number } | null> {
-  const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/portal-content`), {
+  const res = await fetch(apiUrl(`/api/v1/portal-content`), {
     headers: apiAuthHeaders(),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -161,10 +158,9 @@ export async function fetchPortalContentApi(
 }
 
 export async function savePortalContentApi(
-  workspaceId: string,
   snapshot: { items: PortalContentItem[]; expectedRevision?: number },
 ): Promise<{ items: PortalContentItem[]; revision: number }> {
-  const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/portal-content`), {
+  const res = await fetch(apiUrl(`/api/v1/portal-content`), {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify({

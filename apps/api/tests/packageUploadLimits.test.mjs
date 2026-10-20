@@ -18,7 +18,7 @@ function request() {
 function controllerFor(role, ok = true) {
   const calls = [];
   const blobs = {
-    putPackageStream: async (_workspaceId, input) => {
+    putPackageStream: async (input) => {
       calls.push(input);
       return { id: 'blob' };
     },
@@ -36,13 +36,12 @@ function controllerFor(role, ok = true) {
 
 test('普通上传保留上限，运营端点只向后台角色传无限策略', async () => {
   const ordinary = controllerFor('business_user');
-  await ordinary.controller.putPackageBlob('ws-test', request());
+  await ordinary.controller.putPackageBlob(request());
   assert.equal(ordinary.calls[0].maxBytes, undefined);
 
   for (const role of ['capability_ops', 'super_admin']) {
     const ops = controllerFor(role);
     await ops.controller.putOpsPackageBlob(
-      'ws-test',
       request(),
       'Bearer valid-session',
       undefined,
@@ -53,7 +52,6 @@ test('普通上传保留上限，运营端点只向后台角色传无限策略',
   const user = controllerFor('business_user');
   await assert.rejects(
     user.controller.putOpsPackageBlob(
-      'ws-test',
       request(),
       'Bearer valid-session',
       undefined,
@@ -63,7 +61,7 @@ test('普通上传保留上限，运营端点只向后台角色传无限策略',
 
   const anonymous = controllerFor('', false);
   await assert.rejects(
-    anonymous.controller.putOpsPackageBlob('ws-test', request(), undefined, undefined),
+    anonymous.controller.putOpsPackageBlob(request(), undefined, undefined),
     (error) => error?.getStatus?.() === 401,
   );
 });
@@ -90,22 +88,22 @@ test('BlobStore 仍限制普通流，但允许已鉴权运营流显式不设上�
     const store = new BlobStoreService();
     await store.onModuleInit();
     await assert.rejects(
-      store.putPackageStream('ws-test', {
+      store.putPackageStream({
         name: 'limited.zip',
         stream: Readable.from([Buffer.from('abc')]),
       }),
       /package_blob_too_large:2/,
     );
-    const uploaded = await store.putPackageStream('ws-test', {
+    const uploaded = await store.putPackageStream({
       name: 'ops.zip',
       stream: Readable.from([Buffer.from('a'), Buffer.from('bc')]),
       maxBytes: null,
     });
     assert.equal(uploaded.size, 3);
-    const fetched = await store.get('ws-test', uploaded.id);
+    const fetched = await store.get(uploaded.id);
     assert.equal(fetched.meta.name, 'ops.zip');
     assert.equal(await readAll(fetched.stream), 'abc');
-    await store.delete('ws-test', uploaded.id, uploaded.deleteToken);
+    await store.delete(uploaded.id, uploaded.deleteToken);
   } finally {
     if (previousLimit === undefined) delete process.env.PACKAGE_BLOB_MAX_BYTES;
     else process.env.PACKAGE_BLOB_MAX_BYTES = previousLimit;
@@ -114,23 +112,23 @@ test('BlobStore 仍限制普通流，但允许已鉴权运营流显式不设上�
 
 test('BlobStore 对象存储往返：上传、读取、删除凭证校验', async () => {
   const store = new BlobStoreService();
-  const uploaded = await store.putBase64('ws-test', {
+  const uploaded = await store.putBase64({
     name: '说明.txt',
     mimeType: 'text/plain',
     dataBase64: Buffer.from('hello').toString('base64'),
   });
-  const fetched = await store.get('ws-test', uploaded.id);
+  const fetched = await store.get(uploaded.id);
   assert.equal(fetched.meta.name, '说明.txt');
   assert.equal(fetched.size, 5);
   assert.equal(await readAll(fetched.stream), 'hello');
 
   await assert.rejects(
-    store.delete('ws-test', uploaded.id, 'x'.repeat(43)),
+    store.delete(uploaded.id, 'x'.repeat(43)),
     /blob_delete_denied/,
   );
-  await store.delete('ws-test', uploaded.id, uploaded.deleteToken);
-  await assert.rejects(store.get('ws-test', uploaded.id), (error) => error?.getStatus?.() === 404);
-  await assert.rejects(store.delete('ws-test', uploaded.id, uploaded.deleteToken), /blob_not_found/);
+  await store.delete(uploaded.id, uploaded.deleteToken);
+  await assert.rejects(store.get(uploaded.id), (error) => error?.getStatus?.() === 404);
+  await assert.rejects(store.delete(uploaded.id, uploaded.deleteToken), /blob_not_found/);
 });
 
 test('BlobStore 缺少对象存储配置时直接报错', () => {
@@ -146,7 +144,7 @@ test('BlobStore 缺少对象存储配置时直接报错', () => {
 test('开启 API Key 时，单个 blob 只有栅格图片免校验，其他类型和接口仍需 Key', async () => {
   const previous = process.env.API_KEY;
   process.env.API_KEY = 'secret-key';
-  const blobPath = `/api/v1/workspaces/ws-test/blobs/${'a'.repeat(32)}`;
+  const blobPath = `/api/v1/blobs/${'a'.repeat(32)}`;
   const req = (method, path, key) => ({
     method,
     path,
@@ -158,7 +156,7 @@ test('开启 API Key 时，单个 blob 只有栅格图片免校验，其他类�
     const blobs = { get: async () => ({ meta: { name: 'f', mimeType }, size: 1, stream }) };
     const res = Object.assign(new PassThrough(), { setHeader() {} });
     const done = new PersistenceController({}, blobs, {})
-      .getBlob('ws-test', 'a'.repeat(32), req('GET', blobPath, key), res);
+      .getBlob('a'.repeat(32), req('GET', blobPath, key), res);
     return { done, stream };
   };
   const is401 = (e) => e?.getStatus?.() === 401;
@@ -179,4 +177,13 @@ test('开启 API Key 时，单个 blob 只有栅格图片免校验，其他类�
     if (previous === undefined) delete process.env.API_KEY;
     else process.env.API_KEY = previous;
   }
+});
+
+test('去租户前的文件地址永久跳到新地址，非法 id 直接 404', () => {
+  let redirected;
+  const res = { redirect: (status, location) => { redirected = { status, location }; } };
+  const controller = new PersistenceController({}, {}, {});
+  controller.legacyBlobRedirect('b'.repeat(32), res);
+  assert.deepEqual(redirected, { status: 301, location: `/api/v1/blobs/${'b'.repeat(32)}` });
+  assert.throws(() => controller.legacyBlobRedirect('../../etc', res), (e) => e?.getStatus?.() === 404);
 });

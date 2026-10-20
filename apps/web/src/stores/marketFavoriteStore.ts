@@ -3,7 +3,6 @@ import type { MarketShelfKind } from '@/domain/marketShelf';
 import { getCurrentUserId } from '@/domain/currentUser';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   peekPlatformDocMemory,
   scheduleSavePlatformDoc,
@@ -60,13 +59,12 @@ function readUserItems(doc: FavoritesDoc | null | undefined, uid: string): Marke
 function persistForUser(items: MarketFavoriteItem[]) {
   const uid = userBucket();
   if (!uid || !canUsePlatformDocsApi()) return;
-  const ws = currentWorkspaceId();
-  const mem = peekPlatformDocMemory<FavoritesDoc>(ws, DOC_KIND) ?? {};
+  const mem = peekPlatformDocMemory<FavoritesDoc>(DOC_KIND) ?? {};
   const byUserId: Record<string, MarketFavoriteItem[]> = { ...(mem.byUserId ?? {}) };
   byUserId[uid] = items.slice(0, MAX);
   const payload: FavoritesDoc = { byUserId };
-  setPlatformDocMemory(ws, DOC_KIND, payload);
-  void scheduleSavePlatformDoc(ws, DOC_KIND, payload);
+  setPlatformDocMemory(DOC_KIND, payload);
+  void scheduleSavePlatformDoc(DOC_KIND, payload);
 }
 
 interface MarketFavoriteState {
@@ -87,9 +85,9 @@ export const useMarketFavoriteStore = create<MarketFavoriteState>((set, get) => 
       return;
     }
     try {
-      const remote = await fetchPlatformDoc<FavoritesDoc>(currentWorkspaceId(), DOC_KIND);
+      const remote = await fetchPlatformDoc<FavoritesDoc>(DOC_KIND);
       const list = readUserItems(remote, uid);
-      if (remote) setPlatformDocMemory(currentWorkspaceId(), DOC_KIND, remote);
+      if (remote) setPlatformDocMemory(DOC_KIND, remote);
       set({ items: list });
     } catch {
       set({ items: [] });

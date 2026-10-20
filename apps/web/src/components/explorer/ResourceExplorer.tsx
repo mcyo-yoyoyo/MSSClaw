@@ -7,42 +7,35 @@ import {
   type ExplorerSection,
   type WorkspaceResource,
 } from '@/domain/workspace';
-import { WorkspaceSwitcher } from '@/components/layout/WorkspaceSwitcher';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { cn } from '@/lib/utils';
 
 interface ResourceExplorerProps {
-  workspaceId: string;
   chats: Record<string, ChatConfig>;
   currentChatId: string;
   expandedSections: Record<ExplorerSection, boolean>;
   selectedResourceId: string | null;
-  onWorkspaceSwitch: (workspaceId: string) => void;
   onToggleSection: (section: ExplorerSection) => void;
   onSwitchChat: (chatId: string) => void;
   onOpenModule: (module: ModuleId, resource: WorkspaceResource) => void;
 }
 
 export function ResourceExplorer({
-  workspaceId,
   chats,
   currentChatId,
   expandedSections,
   selectedResourceId,
-  onWorkspaceSwitch,
   onToggleSection,
   onSwitchChat,
   onOpenModule,
 }: ResourceExplorerProps) {
-  const catalog = useWorkspaceStore((state) => state.getCatalog(workspaceId));
+  const catalog = useWorkspaceStore((state) => state.catalog);
   const conversations = Object.values(chats);
   const starred = conversations.filter((chat) => chat.type === 'group');
   const directAgents = conversations.filter((chat) => chat.type === 'bot');
 
   return (
     <aside className="studio-list-panel w-[300px] z-40">
-      <WorkspaceSwitcher current={catalog.workspace} onSwitch={onWorkspaceSwitch} />
-
       <div className="border-b border-black/[0.05] px-3 pb-3">
         <div className="relative">
           <i className="fa-solid fa-search absolute left-3 top-2.5 text-sm text-[#aeaeb2]" />

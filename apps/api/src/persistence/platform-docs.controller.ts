@@ -7,11 +7,13 @@ import {
   Param,
   Post,
   Put,
-  Query,
   UnauthorizedException,
 } from '@nestjs/common';
 import { PlatformDocsService } from './platform-docs.service';
 import { authMode } from '../auth/oauth.config';
+// 单租户：原路由参数 workspaceId 固定为平台空间，方法体沿用这个名字（第 2 期随服务层一起去掉）
+import { PLATFORM_WORKSPACE_ID as workspaceId } from '../common/platform-workspace';
+import { PLATFORM_WORKSPACE_ID } from '../common/platform-workspace';
 
 /** 仅 super_admin 可读：内含全站密码 salt + hash */
 const ADMIN_ONLY_DOC_KINDS = new Set(['auth-credentials']);
@@ -31,13 +33,12 @@ const MEMBER_REQUIRED_DOC_KINDS = new Set(['llm-config']);
 /** 已迁移为关系表的旧文档只保留读取兼容，任何客户端都不得再覆盖。 */
 const LEGACY_READ_ONLY_DOC_KINDS = new Set(['content-engagement']);
 
-@Controller('workspaces/:workspaceId/docs')
+@Controller('docs')
 export class PlatformDocsController {
   constructor(private readonly docs: PlatformDocsService) {}
 
   @Get()
   async list(
-    @Param('workspaceId') workspaceId: string,
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-session-token') xSessionToken: string | undefined,
   ) {
@@ -59,7 +60,6 @@ export class PlatformDocsController {
    */
   @Get(':kind')
   async getOne(
-    @Param('workspaceId') workspaceId: string,
     @Param('kind') kind: string,
     @Headers('authorization') authorization?: string,
     @Headers('x-session-token') xSessionToken?: string,
@@ -74,7 +74,6 @@ export class PlatformDocsController {
 
   @Put(':kind')
   async putOne(
-    @Param('workspaceId') workspaceId: string,
     @Param('kind') kind: string,
     @Body() body: { payload?: unknown } | Record<string, unknown>,
     @Headers('authorization') authorization?: string,
@@ -157,20 +156,15 @@ export class AuthController {
   me(
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-session-token') xSessionToken: string | undefined,
-    @Query('workspaceId') workspaceId?: string,
   ) {
-    return this.docs.me(bearerToken(authorization, xSessionToken), workspaceId || 'ws-mss-ai');
+    return this.docs.me(bearerToken(authorization, xSessionToken), PLATFORM_WORKSPACE_ID);
   }
 
   @Post('logout')
   logout(
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-session-token') xSessionToken: string | undefined,
-    @Body() body: { workspaceId?: string },
   ) {
-    return this.docs.logout(
-      bearerToken(authorization, xSessionToken),
-      body?.workspaceId || 'ws-mss-ai',
-    );
+    return this.docs.logout(bearerToken(authorization, xSessionToken), PLATFORM_WORKSPACE_ID);
   }
 }

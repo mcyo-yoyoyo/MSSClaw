@@ -5,12 +5,13 @@ import {
   ForbiddenException,
   Get,
   Headers,
-  Param,
   Post,
   UnauthorizedException,
 } from '@nestjs/common';
 import { PlatformDocsService } from './platform-docs.service';
 import { AiBriefSubscriptionsService } from './ai-brief-subscriptions.service';
+// 单租户：原路由参数 workspaceId 固定为平台空间，方法体沿用这个名字（第 2 期随服务层一起去掉）
+import { PLATFORM_WORKSPACE_ID as workspaceId } from '../common/platform-workspace';
 
 function sessionToken(authorization?: string, xSessionToken?: string): string | undefined {
   const raw = (authorization ?? '').trim();
@@ -18,7 +19,7 @@ function sessionToken(authorization?: string, xSessionToken?: string): string | 
   return (xSessionToken ?? '').trim() || undefined;
 }
 
-@Controller('workspaces/:workspaceId/ai-brief/subscriptions')
+@Controller('ai-brief/subscriptions')
 export class AiBriefSubscriptionsController {
   constructor(
     private readonly subscriptions: AiBriefSubscriptionsService,
@@ -27,7 +28,6 @@ export class AiBriefSubscriptionsController {
 
   @Get('me')
   async getMine(
-    @Param('workspaceId') workspaceId: string,
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-session-token') xSessionToken: string | undefined,
   ) {
@@ -37,7 +37,6 @@ export class AiBriefSubscriptionsController {
 
   @Post()
   async subscribe(
-    @Param('workspaceId') workspaceId: string,
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-session-token') xSessionToken: string | undefined,
     @Body() body: { email?: string },
@@ -53,7 +52,6 @@ export class AiBriefSubscriptionsController {
 
   @Delete('me')
   async unsubscribe(
-    @Param('workspaceId') workspaceId: string,
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-session-token') xSessionToken: string | undefined,
   ) {
@@ -63,7 +61,6 @@ export class AiBriefSubscriptionsController {
 
   @Get()
   async list(
-    @Param('workspaceId') workspaceId: string,
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-session-token') xSessionToken: string | undefined,
   ) {

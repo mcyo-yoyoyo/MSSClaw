@@ -167,7 +167,6 @@ export async function* mockExecutionStream(params: {
 export async function* streamExecution(params: {
   chatId: string;
   message: string;
-  workspaceId?: string;
   signal?: AbortSignal;
   planSteps?: string[];
   agentId?: string;
@@ -206,7 +205,6 @@ export async function* streamExecution(params: {
         body: JSON.stringify({
           chatId: params.chatId,
           message: params.message,
-          workspaceId: params.workspaceId,
           // Once any workspace model key exists, pin the selected model. The
           // server must reject an unkeyed selection instead of silently using
           // another deployment credential; with no workspace keys, env fallback

@@ -30,8 +30,8 @@ function stringList(value: unknown, name: string, limit: number): string[] {
   return [...new Set(value.map((item: string) => item.trim()).filter(Boolean))];
 }
 
-/** 对象存储中的图片地址：同源相对路径，或跨域 API 基址下的绝对地址。 */
-const BLOB_IMAGE_URL = /^(?:https?:\/\/[^/\s]+)?\/api\/v1\/workspaces\/[A-Za-z0-9_-]+\/blobs\/[0-9a-f]{32}$/;
+/** 对象存储中的图片地址：同源相对路径，或跨域 API 基址下的绝对地址；带工作区的旧地址仍接受（会被 301 到新地址）。 */
+const BLOB_IMAGE_URL = /^(?:https?:\/\/[^/\s]+)?\/api\/v1\/(?:workspaces\/[A-Za-z0-9_-]+\/)?blobs\/[0-9a-f]{32}$/;
 
 function coverImageField(value: unknown): string | null {
   if (value === null || value === '') return null;

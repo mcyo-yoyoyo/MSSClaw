@@ -6,7 +6,6 @@ import { PortalTrafficPanel } from '@/features/ops/PortalTrafficPanel';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 function DashboardAccessDenied() {
   const setAppView = useAppViewStore((state) => state.setAppView);
@@ -40,11 +39,10 @@ function PortalDataDashboardContent() {
   const officeScenesToast = useInternalOfficeSceneCatalogStore((state) => state.toast);
   const officeScenesToastTone = useInternalOfficeSceneCatalogStore((state) => state.toastTone);
   const hydrateOfficeScenes = useInternalOfficeSceneCatalogStore((state) => state.hydrate);
-  const workspaceId = useWorkspaceStore((state) => state.workspaceId);
 
   useEffect(() => {
-    void hydrateOfficeScenes(workspaceId);
-  }, [hydrateOfficeScenes, workspaceId]);
+    void hydrateOfficeScenes();
+  }, [hydrateOfficeScenes]);
 
   const inventory = useMemo(
     () => buildPortalToolInventory(tools, officeScenes),

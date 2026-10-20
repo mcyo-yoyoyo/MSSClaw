@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   savePlatformDoc,
 } from '@/api/platformDocsApi';
@@ -40,17 +39,16 @@ function parseDocument(remote: HomeFeaturedDocument | null): {
   return { revision, channels };
 }
 
-async function fetchFresh(workspaceId: string) {
+async function fetchFresh() {
   return parseDocument(
-    await fetchPlatformDoc<HomeFeaturedDocument>(workspaceId, DOC_KIND, { fresh: true }),
+    await fetchPlatformDoc<HomeFeaturedDocument>(DOC_KIND, { fresh: true }),
   );
 }
 
-/** 切换工作区或重新加载后，迟到的旧请求不能覆盖当前数据。 */
+/** 重新加载后，迟到的旧请求不能覆盖当前数据。 */
 let operationGeneration = 0;
 
 export interface HomeFeaturedState {
-  workspaceId: string | null;
   revision: number;
   /** null：从未保存过首页配置 */
   channels: HomeFeaturedChannels | null;
@@ -58,12 +56,11 @@ export interface HomeFeaturedState {
   loading: boolean;
   saving: boolean;
   error: string | null;
-  hydrate: (workspaceId?: string) => Promise<boolean>;
+  hydrate: () => Promise<boolean>;
   save: (channels: HomeFeaturedChannels) => Promise<boolean>;
 }
 
 export const useHomeFeaturedStore = create<HomeFeaturedState>((set, get) => ({
-  workspaceId: null,
   revision: 0,
   channels: null,
   loaded: false,
@@ -71,21 +68,11 @@ export const useHomeFeaturedStore = create<HomeFeaturedState>((set, get) => ({
   saving: false,
   error: null,
 
-  hydrate: async (requestedWorkspaceId) => {
-    const workspaceId = (requestedWorkspaceId || currentWorkspaceId()).trim();
-    if (!workspaceId || workspaceId !== currentWorkspaceId()) return false;
+  hydrate: async () => {
     const previous = get();
-    if (previous.workspaceId === workspaceId && (previous.loading || previous.saving)) {
-      return false;
-    }
-    const switchedWorkspace = previous.workspaceId !== workspaceId;
+    if (previous.loading || previous.saving) return false;
     const generation = ++operationGeneration;
-    set({
-      workspaceId,
-      loading: true,
-      error: null,
-      ...(switchedWorkspace ? { revision: 0, channels: null, loaded: false } : {}),
-    });
+    set({ loading: true, error: null });
     if (!canUsePlatformDocsApi()) {
       if (generation === operationGeneration) {
         set({ loading: false, error: '未连接后端，无法加载首页配置。' });
@@ -93,8 +80,8 @@ export const useHomeFeaturedStore = create<HomeFeaturedState>((set, get) => ({
       return false;
     }
     try {
-      const fresh = await fetchFresh(workspaceId);
-      if (generation !== operationGeneration || currentWorkspaceId() !== workspaceId) {
+      const fresh = await fetchFresh();
+      if (generation !== operationGeneration) {
         return false;
       }
       set({ ...fresh, loaded: true, loading: false });
@@ -108,9 +95,8 @@ export const useHomeFeaturedStore = create<HomeFeaturedState>((set, get) => ({
 
   save: async (channels) => {
     const state = get();
-    const workspaceId = state.workspaceId;
     if (state.loading || state.saving) return false;
-    if (!state.loaded || !workspaceId || currentWorkspaceId() !== workspaceId) {
+    if (!state.loaded) {
       set({ error: '首页配置尚未从服务器加载完成，请刷新后重试。' });
       return false;
     }
@@ -122,15 +108,15 @@ export const useHomeFeaturedStore = create<HomeFeaturedState>((set, get) => ({
     set({ saving: true, error: null });
     let writeSucceeded = false;
     try {
-      await savePlatformDoc(workspaceId, DOC_KIND, {
+      await savePlatformDoc(DOC_KIND, {
         version: 1,
         revision: state.revision,
         channels,
       });
       writeSucceeded = true;
       // 以服务端规范化后的数据为准，而不是直接发布本地草稿。
-      const fresh = await fetchFresh(workspaceId);
-      if (generation !== operationGeneration || currentWorkspaceId() !== workspaceId) {
+      const fresh = await fetchFresh();
+      if (generation !== operationGeneration) {
         return false;
       }
       set({ ...fresh, loaded: true, saving: false });

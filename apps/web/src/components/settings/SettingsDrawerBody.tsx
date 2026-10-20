@@ -78,7 +78,7 @@ export function SettingsDrawerBody({ onClose }: SettingsDrawerBodyProps) {
     openLlmSettings();
   };
 
-  const goAdmin = (view: 'presentation' | 'admin' | 'workspace-config') => {
+  const goAdmin = (view: 'presentation' | 'admin') => {
     setAppView(view);
     onClose();
   };
@@ -141,13 +141,6 @@ export function SettingsDrawerBody({ onClose }: SettingsDrawerBodyProps) {
                 className="flow-link-btn w-full py-2.5 text-[12px] font-semibold"
               >
                 组织权限（成员）
-              </button>
-              <button
-                type="button"
-                onClick={() => goAdmin('workspace-config')}
-                className="flow-link-btn w-full py-2.5 text-[12px] font-semibold"
-              >
-                租户配置（数据空间）
               </button>
             </div>
           </SettingsCard>

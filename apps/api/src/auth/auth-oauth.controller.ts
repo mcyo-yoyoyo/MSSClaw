@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, NotFoundException, Post, Query } from '@nestjs/common';
 import { AuthOAuthService } from './auth-oauth.service';
 import { oauthConfig } from './oauth.config';
+import { PLATFORM_WORKSPACE_ID } from '../common/platform-workspace';
 
 /** returnTo 只允许站内 hash 路由，避免变成开放重定向 */
 function safeReturnTo(value: unknown): string {
@@ -23,11 +24,11 @@ export class AuthOAuthController {
   }
 
   @Get('oauth/authorize-url')
-  authorizeUrl(@Query('workspaceId') workspaceId?: string, @Query('returnTo') returnTo?: string) {
+  authorizeUrl(@Query('returnTo') returnTo?: string) {
     if (oauthConfig().mode !== 'oauth') {
       throw new NotFoundException('oauth_not_enabled');
     }
-    return this.oauth.buildAuthorizeUrl(workspaceId || 'ws-mss-ai', safeReturnTo(returnTo));
+    return this.oauth.buildAuthorizeUrl(PLATFORM_WORKSPACE_ID, safeReturnTo(returnTo));
   }
 
   @Post('oauth/callback')

@@ -11,7 +11,7 @@
 | 工作入口 | 首页任务入口、AI 快讯、场景案例、企业内外部工具集市 |
 | 任务执行 | 多轮会话、Agent / Skill 调用、执行过程与交付物展示 |
 | 能力中心 | Agent、Skill、工具、知识库、工作流、自动化、提示词与记忆配置 |
-| 平台运营 | 门户内容、推荐位、场景分类、公告、展示方式与租户配置 |
+| 平台运营 | 门户内容、推荐位、场景分类、公告与展示方式 |
 | 平台治理 | 组织权限、资产审核、执行历史、审计和演示内容开关 |
 
 ## 运行方式
@@ -38,7 +38,6 @@ npm install
 cp deploy/api.env.example apps/api/.env
 npm run prisma:generate --workspace @mss-claw/api
 npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
-npm run prisma:seed --workspace @mss-claw/api
 ```
 
 Windows PowerShell 使用下面的复制命令：
@@ -49,7 +48,6 @@ npm install
 Copy-Item deploy\api.env.example apps\api\.env
 npm run prisma:generate --workspace @mss-claw/api
 npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
-npm run prisma:seed --workspace @mss-claw/api
 ```
 
 ### 按环境启动（前后端分开）
@@ -234,13 +232,13 @@ Browser
 | 范围 | 代表接口 |
 | --- | --- |
 | 健康与认证 | `GET /health`、`POST /auth/login`、`GET /auth/me` |
-| 工作空间 | `GET /workspaces`、`GET /workspaces/:id/catalog` |
+| 平台目录 | `GET /catalog` |
 | 共享数据 | sessions、marketplace、portal-content、docs、blobs |
 | AI 快讯 | `GET /ai-daily-news` |
 | AI 智库 | 需求草稿、澄清、摘要更新、方案生成和当前用户历史方案 |
 | 能力中心 | agents、skills、prompts、workflows、tools、knowledge-bases、memory-stores |
 | 知识检索 | 文档解析、搜索、向量状态与重建 |
-| 执行 | `GET /workspaces/:id/executions`、`POST /executions/stream` |
+| 执行 | `GET /executions`、`POST /executions/stream` |
 
 ## 目录结构
 

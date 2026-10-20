@@ -8,7 +8,6 @@
 
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   scheduleSavePlatformDoc,
   setPlatformDocMemory,
@@ -46,15 +45,14 @@ export function demoDefaults<T>(seeds: T[]): T[] {
   return isDemoContentEnabled() ? seeds : [];
 }
 
-export async function hydrateDemoContentPolicy(workspaceId?: string): Promise<void> {
-  const ws = workspaceId || currentWorkspaceId();
+export async function hydrateDemoContentPolicy(): Promise<void> {
   if (!canUsePlatformDocsApi()) {
-    const peeked = peekPlatformDocMemory<DemoDoc>(ws, 'demo-content');
+    const peeked = peekPlatformDocMemory<DemoDoc>('demo-content');
     memoryDemoOff = Boolean(peeked?.demoContentOff);
     return;
   }
   try {
-    const remote = await fetchPlatformDoc<DemoDoc>(ws, 'demo-content');
+    const remote = await fetchPlatformDoc<DemoDoc>('demo-content');
     memoryDemoOff = Boolean(remote?.demoContentOff);
   } catch {
     /* keep */
@@ -63,11 +61,10 @@ export async function hydrateDemoContentPolicy(workspaceId?: string): Promise<vo
 
 function persistDemoFlag(off: boolean) {
   memoryDemoOff = off;
-  const ws = currentWorkspaceId();
   const payload: DemoDoc = { demoContentOff: off };
-  setPlatformDocMemory(ws, 'demo-content', payload);
+  setPlatformDocMemory('demo-content', payload);
   if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc(ws, 'demo-content', payload);
+  void scheduleSavePlatformDoc('demo-content', payload);
 }
 
 /**

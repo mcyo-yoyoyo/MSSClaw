@@ -1,21 +1,22 @@
 import { Body, Controller, Delete, ForbiddenException, Get, Headers, Param, Post, Put, Query, UnauthorizedException } from '@nestjs/common';
 import { PlatformDocsService } from './platform-docs.service';
 import { CaseInsightsService } from './case-insights.service';
+// 单租户：原路由参数 workspaceId 固定为平台空间，方法体沿用这个名字（第 2 期随服务层一起去掉）
+import { PLATFORM_WORKSPACE_ID as workspaceId } from '../common/platform-workspace';
 
 type ArticleBody = Parameters<CaseInsightsService['create']>[1];
 
-@Controller('workspaces/:workspaceId/case-insights')
+@Controller('case-insights')
 export class CaseInsightsController {
   constructor(private readonly articles: CaseInsightsService, private readonly docs: PlatformDocsService) {}
 
   @Get()
-  listPublished(@Param('workspaceId') workspaceId: string) {
+  listPublished() {
     return this.articles.listPublished(workspaceId);
   }
 
   @Get('ops')
   async listForOps(
-    @Param('workspaceId') workspaceId: string,
     @Query('view') view: string | undefined,
     @Headers('authorization') authorization?: string,
     @Headers('x-session-token') sessionToken?: string,
@@ -26,7 +27,6 @@ export class CaseInsightsController {
 
   @Post()
   async create(
-    @Param('workspaceId') workspaceId: string,
     @Body() body: ArticleBody,
     @Headers('authorization') authorization?: string,
     @Headers('x-session-token') sessionToken?: string,
@@ -37,7 +37,6 @@ export class CaseInsightsController {
 
   @Put(':id')
   async update(
-    @Param('workspaceId') workspaceId: string,
     @Param('id') id: string,
     @Body() body: ArticleBody,
     @Headers('authorization') authorization?: string,
@@ -49,7 +48,6 @@ export class CaseInsightsController {
 
   @Post(':id/publish')
   async publish(
-    @Param('workspaceId') workspaceId: string,
     @Param('id') id: string,
     @Body() body: { version?: number },
     @Headers('authorization') authorization?: string,
@@ -61,7 +59,6 @@ export class CaseInsightsController {
 
   @Post(':id/unpublish')
   async unpublish(
-    @Param('workspaceId') workspaceId: string,
     @Param('id') id: string,
     @Body() body: { version?: number },
     @Headers('authorization') authorization?: string,
@@ -73,7 +70,6 @@ export class CaseInsightsController {
 
   @Delete(':id')
   async delete(
-    @Param('workspaceId') workspaceId: string,
     @Param('id') id: string,
     @Body() body: { version?: number },
     @Headers('authorization') authorization?: string,
@@ -85,7 +81,6 @@ export class CaseInsightsController {
 
   @Post(':id/restore')
   async restore(
-    @Param('workspaceId') workspaceId: string,
     @Param('id') id: string,
     @Body() body: { version?: number },
     @Headers('authorization') authorization?: string,

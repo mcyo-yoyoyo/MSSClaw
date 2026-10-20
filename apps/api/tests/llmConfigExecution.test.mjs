@@ -69,7 +69,7 @@ test('workspace model credentials win over deployment env and stay paired', asyn
   const service = new ExecutionsService(fakePrisma(payload));
   const events = [];
   for await (const event of service.createStream({
-    workspaceId: 'ws-test',
+    workspaceId: 'ws-cn-marketing',
     chatId: 'chat-test',
     message: 'hello',
     planSteps: ['connect'],
@@ -99,7 +99,7 @@ test('chat execution honors the selected model and resolves its own credentials'
   };
   const service = new ExecutionsService(fakePrisma(payload));
   for await (const _event of service.createStream({
-    workspaceId: 'ws-test',
+    workspaceId: 'ws-cn-marketing',
     chatId: 'chat-test',
     message: 'hello',
     model: 'second',
@@ -124,7 +124,7 @@ test('an empty workspace document falls back to a complete env config', async ()
   const service = new ExecutionsService(fakePrisma({ model: 'qwen-test', platformModels: [] }));
   const events = [];
   for await (const event of service.createStream({
-    workspaceId: 'ws-test',
+    workspaceId: 'ws-cn-marketing',
     chatId: 'chat-test',
     message: 'hello',
     planSteps: ['connect'],
@@ -152,7 +152,7 @@ test('an explicitly requested unconfigured model does not fall back to deploymen
       { id: 'missing-model', baseUrl: 'https://db.example/v1', apiKey: '', enabled: true },
     ],
   }));
-  const result = await service.testLlmConnection('ws-test', 'missing-model');
+  const result = await service.testLlmConnection('ws-cn-marketing', 'missing-model');
 
   assert.equal(result.ok, false);
   assert.equal(result.errorCode, 'llm_not_configured');
@@ -182,7 +182,7 @@ test('candidate probe is ephemeral and uses the same stream transport', async ()
     return fakeStreamResponse();
   };
   const service = new ExecutionsService(prisma);
-  const result = await service.testLlmConnection('ws-test', undefined, {
+  const result = await service.testLlmConnection('ws-cn-marketing', undefined, {
     model: 'candidate-model',
     baseUrl: 'https://candidate.example/v1',
     apiKey: 'candidate-key',
@@ -212,7 +212,7 @@ test('probe rejects HTTP errors and empty streams without exposing provider bodi
     JSON.stringify({ error: { message: 'invalid key candidate-key', code: 'invalid_api_key' } }),
     { status: 401, headers: { 'content-type': 'application/json' } },
   );
-  const httpResult = await service.testLlmConnection('ws-test', undefined, {
+  const httpResult = await service.testLlmConnection('ws-cn-marketing', undefined, {
     model: 'candidate-model',
     baseUrl: 'https://candidate.example/v1',
     apiKey: 'candidate-key',
@@ -231,7 +231,7 @@ test('probe rejects HTTP errors and empty streams without exposing provider bodi
     'data: [DONE]\n\n',
     { status: 200, headers: { 'content-type': 'text/event-stream' } },
   );
-  const emptyResult = await service.testLlmConnection('ws-test', undefined, {
+  const emptyResult = await service.testLlmConnection('ws-cn-marketing', undefined, {
     model: 'candidate-model',
     baseUrl: 'https://candidate.example/v1',
     apiKey: 'candidate-key',
@@ -251,7 +251,7 @@ test('probe unwraps nested undici causes instead of stopping at the wrapper', as
     const cancelled = Object.assign(new DOMException('Request was cancelled.'), { cause: socketError });
     throw Object.assign(new TypeError('fetch failed'), { cause: cancelled });
   };
-  const result = await service.testLlmConnection('ws-test', undefined, {
+  const result = await service.testLlmConnection('ws-cn-marketing', undefined, {
     model: 'candidate-model',
     baseUrl: 'http://candidate.example/v1',
     apiKey: 'candidate-key',
@@ -272,7 +272,7 @@ test('probe surfaces AggregateError members from multi-address connects', async 
     ], 'all connect attempts failed'));
     throw Object.assign(new TypeError('fetch failed'), { cause: aggregate });
   };
-  const result = await service.testLlmConnection('ws-test', undefined, {
+  const result = await service.testLlmConnection('ws-cn-marketing', undefined, {
     model: 'candidate-model',
     baseUrl: 'http://candidate.example/v1',
     apiKey: 'candidate-key',
@@ -290,7 +290,7 @@ test('probe reports safe network causes and timeout diagnostics', async () => {
     });
     throw Object.assign(new Error('fetch failed'), { cause });
   };
-  const networkResult = await service.testLlmConnection('ws-test', undefined, {
+  const networkResult = await service.testLlmConnection('ws-cn-marketing', undefined, {
     model: 'candidate-model',
     baseUrl: 'https://candidate.example/v1',
     apiKey: 'candidate-key',
@@ -307,7 +307,7 @@ test('probe reports safe network causes and timeout diagnostics', async () => {
         once: true,
       });
     });
-  const timeoutResult = await service.testLlmConnection('ws-test', undefined, {
+  const timeoutResult = await service.testLlmConnection('ws-cn-marketing', undefined, {
     model: 'candidate-model',
     baseUrl: 'https://candidate.example/v1',
     apiKey: 'candidate-key',
@@ -329,7 +329,7 @@ test('stream read failures do not get reported as HTTP 200 errors', async () => 
     }),
     { status: 200, headers: { 'content-type': 'text/event-stream' } },
   );
-  const result = await service.testLlmConnection('ws-test', undefined, {
+  const result = await service.testLlmConnection('ws-cn-marketing', undefined, {
     model: 'read-error-model',
     baseUrl: 'https://candidate.example/v1',
     apiKey: 'candidate-key',
@@ -355,7 +355,7 @@ test('reasoning-only SSE is reported as unusable, not as a passing test', async 
       'data: [DONE]\n\n',
     { status: 200, headers: { 'content-type': 'text/event-stream' } },
   );
-  const result = await service.testLlmConnection('ws-test', undefined, {
+  const result = await service.testLlmConnection('ws-cn-marketing', undefined, {
     model: 'reasoning-model',
     baseUrl: 'https://candidate.example/v1',
     apiKey: 'candidate-key',
@@ -378,7 +378,7 @@ test('usage-only SSE does not masquerade as a usable chat response', async () =>
       'data: [DONE]\n\n',
     { status: 200, headers: { 'content-type': 'text/event-stream' } },
   );
-  const result = await service.testLlmConnection('ws-test', undefined, {
+  const result = await service.testLlmConnection('ws-cn-marketing', undefined, {
     model: 'usage-only-model',
     baseUrl: 'https://candidate.example/v1',
     apiKey: 'candidate-key',
@@ -429,18 +429,18 @@ test('workspace LLM credentials are not readable or writable by guests', async (
   };
   const controller = new PlatformDocsController(docs);
   await assert.rejects(
-    controller.getOne('ws-test', 'llm-config'),
+    controller.getOne('llm-config'),
     (error) => error?.getStatus?.() === 401,
   );
   await assert.rejects(
-    controller.putOne('ws-test', 'llm-config', { payload: {} }),
+    controller.putOne('llm-config', { payload: {} }),
     (error) => error?.getStatus?.() === 401,
   );
   assert.deepEqual(
-    await controller.getOne('ws-test', 'llm-config', 'Bearer member-token'),
+    await controller.getOne('llm-config', 'Bearer member-token'),
     { kind: 'llm-config', payload: {} },
   );
-  const listed = await controller.list('ws-test', 'Bearer member-token');
+  const listed = await controller.list('Bearer member-token');
   assert.equal(listed.docs['llm-config'], undefined);
 });
 
@@ -461,12 +461,10 @@ test('the server test route requires a workspace session and never persists a ca
   const controller = new ExecutionsController(executions, docs);
 
   await assert.rejects(
-    controller.testLlmConfig('ws-test', { model: 'candidate-model' }),
+    controller.testLlmConfig({ model: 'candidate-model' }),
     (error) => error?.getStatus?.() === 401,
   );
-  const result = await controller.testLlmConfig(
-    'ws-test',
-    {
+  const result = await controller.testLlmConfig({
       model: 'candidate-model',
       baseUrl: 'https://candidate.example/v1',
       apiKey: 'candidate-key',
@@ -475,7 +473,7 @@ test('the server test route requires a workspace session and never persists a ca
   );
   assert.equal(result.ok, true);
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0][0], 'ws-test');
+  assert.deepEqual(calls[0][0], 'ws-cn-marketing');
   assert.equal(calls[0][2].apiKey, 'candidate-key');
 });
 

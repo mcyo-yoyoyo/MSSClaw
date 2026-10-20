@@ -5,7 +5,6 @@ import {
   type AiBriefEmailSubscriptionRecord,
 } from '@/api/aiBriefSubscriptionsApi';
 import { downloadAiBriefSubscriptionsExcel } from '@/domain/aiBriefSubscriptionExport';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 /** 门户运营 · AI 快讯邮件模板文案与落地链接 */
 export function PortalAiBriefEmailPanel() {
@@ -15,9 +14,7 @@ export function PortalAiBriefEmailPanel() {
   const resetToDefaults = useAiBriefEmailCopyStore((s) => s.resetToDefaults);
   const toast = useAiBriefEmailCopyStore((s) => s.toast);
   const dismissToast = useAiBriefEmailCopyStore((s) => s.dismissToast);
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const [subscriptions, setSubscriptions] = useState<AiBriefEmailSubscriptionRecord[]>([]);
-  const [subscriptionsWorkspaceId, setSubscriptionsWorkspaceId] = useState<string | null>(null);
   const [subscriptionsLoading, setSubscriptionsLoading] = useState(false);
   const [subscriptionsError, setSubscriptionsError] = useState<string | null>(null);
   const [subscriptionSearch, setSubscriptionSearch] = useState('');
@@ -29,21 +26,19 @@ export function PortalAiBriefEmailPanel() {
     setSubscriptionsLoading(true);
     setSubscriptionsError(null);
     try {
-      const result = await fetchAiBriefSubscriptions(workspaceId);
+      const result = await fetchAiBriefSubscriptions();
       if (generation !== subscriptionLoadGeneration.current) return;
       setSubscriptions(result.items);
-      setSubscriptionsWorkspaceId(workspaceId);
     } catch {
       if (generation !== subscriptionLoadGeneration.current) return;
       setSubscriptions([]);
-      setSubscriptionsWorkspaceId(workspaceId);
       setSubscriptionsError('订阅名单加载失败，请确认后台服务与管理员权限');
     } finally {
       if (generation === subscriptionLoadGeneration.current) {
         setSubscriptionsLoading(false);
       }
     }
-  }, [workspaceId]);
+  }, []);
 
   useEffect(() => {
     hydrate();
@@ -62,8 +57,7 @@ export function PortalAiBriefEmailPanel() {
     return () => window.clearTimeout(t);
   }, [toast, dismissToast]);
 
-  const activeSubscriptions =
-    subscriptionsWorkspaceId === workspaceId ? subscriptions : [];
+  const activeSubscriptions = subscriptions;
 
   const visibleSubscriptions = useMemo(() => {
     const query = subscriptionSearch.trim().toLowerCase();

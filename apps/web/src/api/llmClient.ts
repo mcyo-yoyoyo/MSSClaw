@@ -4,7 +4,6 @@ import {
   resolveActiveCredentials,
   type LlmConfig,
 } from '@/domain/llmConfig';
-import { currentWorkspaceId } from '@/api/platformDocsApi';
 import { apiAuthHeaders, apiUrl, fetchWithTimeout, isApiEnabled } from '@/api/client';
 import { useLlmConfigStore } from '@/stores/llmConfigStore';
 import type { ActionType } from '@/domain/plan';
@@ -439,7 +438,6 @@ export async function refineTaskTitleWithLlm(
  * for the chat path (unlike the old browser-direct probe).
  */
 export async function testWorkspaceLlmConnection(params?: {
-  workspaceId?: string;
   model?: string;
   /** Optional unsaved values; the server probes them without persisting. */
   baseUrl?: string;
@@ -453,14 +451,6 @@ export async function testWorkspaceLlmConnection(params?: {
     };
   }
 
-  const workspaceId = (params?.workspaceId || currentWorkspaceId()).trim();
-  if (!workspaceId) {
-    return {
-      ok: false,
-      errorCode: 'workspace_missing',
-      message: '未找到工作区，无法测试服务端模型',
-    };
-  }
 
   try {
     const payload: Record<string, string> = {};
@@ -476,7 +466,7 @@ export async function testWorkspaceLlmConnection(params?: {
     }
 
     const res = await fetchWithTimeout(
-      apiUrl(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/llm-config/test`),
+      apiUrl(`/api/v1/llm-config/test`),
       {
         method: 'POST',
         headers: {

@@ -23,10 +23,9 @@
     "test:portal-analytics": "npm run build --silent && node --test tests/portalAnalyticsGuest.test.mjs tests/trustProxy.test.mjs tests/portalAnalyticsSqlite.test.mjs",
     "test:ai-knowledge": "npm run build --silent && node --test tests/aiKnowledge.test.mjs",
     "migrate:blobs": "node --env-file-if-exists=.env scripts/migrate-blobs-to-s3.mjs",
-    "migrate:inline-images": "npm run build --silent && node --env-file-if-exists=.env scripts/migrate-inline-images.mjs",
+    "migrate:blob-refs": "npm run build --silent && node --env-file-if-exists=.env scripts/migrate-blob-refs.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "prisma db seed",
     "import:marketplace": "ts-node --project tsconfig.json scripts/import-marketplace-catalog.ts"
   },
   "dependencies": {
@@ -56,8 +55,5 @@
     "prisma": "^6.5.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.2"
-  },
-  "prisma": {
-    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
   }
 }

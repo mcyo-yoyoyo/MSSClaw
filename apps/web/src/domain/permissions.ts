@@ -18,8 +18,8 @@ function resolveRole(role?: PlatformRole): PlatformRole {
 }
 
 /** 是否可发起/发送对话执行（只读访客为 false） */
-export function canExecuteChat(role?: PlatformRole, workspaceId?: string): boolean {
-  const level = getRbacMatrix(workspaceId ?? '')[resolveRole(role)]?.chat ?? 'none';
+export function canExecuteChat(role?: PlatformRole): boolean {
+  const level = getRbacMatrix()[resolveRole(role)]?.chat ?? 'none';
   return hasAtLeast(level, 'execute');
 }
 

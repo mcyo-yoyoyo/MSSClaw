@@ -1,6 +1,6 @@
 /**
  * 平台配置文档 API：替代原 localStorage 配置落盘。
- * 对应 Nest：GET/PUT /api/v1/workspaces/:id/docs/:kind
+ * 对应 Nest：GET/PUT /api/v1/docs/:kind
  */
 
 import { apiAuthHeaders, apiUrl, fetchWithTimeout, isApiEnabled } from '@/api/client';
@@ -49,41 +49,32 @@ export function canUsePlatformDocsApi(): boolean {
   return isApiEnabled() && useWorkspaceStore.getState().apiConnected;
 }
 
-export function currentWorkspaceId(): string {
-  return useWorkspaceStore.getState().workspaceId || 'ws-mss-ai';
-}
-
 /** 内存态：会话内缓存，禁止写入 localStorage */
 const memoryDocs = new Map<string, unknown>();
 
-function memKey(workspaceId: string, kind: string) {
-  return `${workspaceId}::${kind}`;
-}
-
-export function peekPlatformDocMemory<T>(workspaceId: string, kind: PlatformDocKind): T | null {
-  const v = memoryDocs.get(memKey(workspaceId, kind));
+export function peekPlatformDocMemory<T>(kind: PlatformDocKind): T | null {
+  const v = memoryDocs.get(kind);
   return (v as T) ?? null;
 }
 
-export function setPlatformDocMemory(workspaceId: string, kind: PlatformDocKind, payload: unknown) {
-  memoryDocs.set(memKey(workspaceId, kind), payload);
+export function setPlatformDocMemory(kind: PlatformDocKind, payload: unknown) {
+  memoryDocs.set(kind, payload);
 }
 
 export async function fetchPlatformDoc<T>(
-  workspaceId: string,
   kind: PlatformDocKind,
   opts?: { fresh?: boolean },
 ): Promise<T | null> {
   if (!canUsePlatformDocsApi()) {
     // 未连 API：fresh 读拒绝用内存冒充库；普通读仅会话内存兜底（兼容其它模块）
     if (opts?.fresh) return null;
-    return peekPlatformDocMemory<T>(workspaceId, kind);
+    return peekPlatformDocMemory<T>(kind);
   }
   if (!opts?.fresh) {
-    const cached = peekPlatformDocMemory<T>(workspaceId, kind);
+    const cached = peekPlatformDocMemory<T>(kind);
     if (cached != null) return cached;
   }
-  const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/docs/${kind}`), {
+  const res = await fetch(apiUrl(`/api/v1/docs/${kind}`), {
     headers: {
       Accept: 'application/json',
       ...apiAuthHeaders(),
@@ -94,19 +85,18 @@ export async function fetchPlatformDoc<T>(
   if (!res.ok) throw new Error(`docs_get_${kind}_${res.status}`);
   const body = (await res.json()) as { payload?: T };
   const payload = (body.payload ?? null) as T | null;
-  if (payload != null) setPlatformDocMemory(workspaceId, kind, payload);
+  if (payload != null) setPlatformDocMemory(kind, payload);
   return payload;
 }
 
 export async function savePlatformDoc(
-  workspaceId: string,
   kind: PlatformDocKind,
   payload: unknown,
 ): Promise<void> {
   if (!canUsePlatformDocsApi()) {
     throw new Error('shared_api_required');
   }
-  const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/docs/${kind}`), {
+  const res = await fetch(apiUrl(`/api/v1/docs/${kind}`), {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify({ payload }),
@@ -127,13 +117,12 @@ export async function savePlatformDoc(
       // 写入已经是 2xx；响应体解析失败不应把一次成功写入伪装成失败。
     }
   }
-  setPlatformDocMemory(workspaceId, kind, savedPayload);
+  setPlatformDocMemory(kind, savedPayload);
 }
 
 export async function loginWithApi(params: {
   email: string;
   password: string;
-  workspaceId?: string;
   visitorId?: string;
 }): Promise<
   | {
@@ -148,7 +137,6 @@ export async function loginWithApi(params: {
         avatar: string;
         deptIds: string[];
         regionId: string | null;
-        workspaceId: string;
       };
     }
   | { ok: false; error: string }
@@ -201,13 +189,12 @@ export async function loginWithApi(params: {
           avatar: string;
           deptIds: string[];
           regionId: string | null;
-          workspaceId: string;
         };
       }
     | { ok: false; error: string };
 }
 
-export async function fetchSessionMeApi(workspaceId?: string): Promise<
+export async function fetchSessionMeApi(): Promise<
   | {
       ok: true;
       user: {
@@ -218,15 +205,13 @@ export async function fetchSessionMeApi(workspaceId?: string): Promise<
         avatar: string;
         deptIds: string[];
         regionId: string | null;
-        workspaceId: string;
       };
     }
   | { ok: false; error: string }
 > {
   if (!isApiEnabled()) return { ok: false, error: '共享服务未启用' };
-  const qs = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
   const res = await fetchWithTimeout(
-    apiUrl(`/api/v1/auth/me${qs}`),
+    apiUrl('/api/v1/auth/me'),
     {
       headers: { Accept: 'application/json', ...apiAuthHeaders() },
     },
@@ -244,19 +229,18 @@ export async function fetchSessionMeApi(workspaceId?: string): Promise<
           avatar: string;
           deptIds: string[];
           regionId: string | null;
-          workspaceId: string;
         };
       }
     | { ok: false; error: string };
 }
 
-export async function logoutWithApi(workspaceId?: string): Promise<void> {
+export async function logoutWithApi(): Promise<void> {
   if (!isApiEnabled()) return;
   try {
     await fetchWithTimeout(apiUrl('/api/v1/auth/logout'), {
       method: 'POST',
       headers: jsonHeaders(),
-      body: JSON.stringify({ workspaceId }),
+      body: '{}',
     });
   } catch {
     /* ignore */
@@ -272,19 +256,18 @@ interface PendingDocSave {
 const saveTimers = new Map<string, PendingDocSave>();
 
 export function scheduleSavePlatformDoc(
-  workspaceId: string,
   kind: PlatformDocKind,
   payload: unknown,
   ms = 500,
 ): Promise<void> {
-  const key = memKey(workspaceId, kind);
+  const key = kind;
   return new Promise((resolve, reject) => {
     const prev = saveTimers.get(key);
     if (prev) clearTimeout(prev.timer);
     const waiters = [...(prev?.waiters ?? []), { resolve, reject }];
     const timer = setTimeout(() => {
       saveTimers.delete(key);
-      void savePlatformDoc(workspaceId, kind, payload).then(
+      void savePlatformDoc(kind, payload).then(
         () => waiters.forEach((waiter) => waiter.resolve()),
         (reason) => waiters.forEach((waiter) => waiter.reject(reason)),
       );

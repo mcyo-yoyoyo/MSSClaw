@@ -38,7 +38,6 @@ export function LlmSettingsModal({ open, onClose }: LlmSettingsModalProps) {
   const role = useSessionStore((s) => s.user?.platformRole);
   const isAdmin = isSystemAdmin(role);
   const apiConnected = useWorkspaceStore((s) => s.apiConnected);
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
 
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState(config.baseUrl);
@@ -73,7 +72,7 @@ export function LlmSettingsModal({ open, onClose }: LlmSettingsModalProps) {
     setShowAdd(settingsFocusAdd);
     setTestResult('');
     setCustomDraft({ id: '', label: '', baseUrl: '', apiKey: '' });
-  }, [open, settingsFocusAdd, hydrate, workspaceId]);
+  }, [open, settingsFocusAdd, hydrate]);
 
   useEffect(() => {
     if (!open) return;
@@ -165,7 +164,6 @@ export function LlmSettingsModal({ open, onClose }: LlmSettingsModalProps) {
     setTesting(true);
     setTestResult('正在测试连接…');
     const result = await testWorkspaceLlmConnection({
-      workspaceId,
       model: normalizeLlmModelId(modelId),
       baseUrl: baseUrl.trim(),
       apiKey: apiKey.trim(),

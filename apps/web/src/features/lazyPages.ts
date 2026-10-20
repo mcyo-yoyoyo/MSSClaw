@@ -83,10 +83,6 @@ export const LazyPresentationConfigPage = lazy(() =>
   import('@/features/presentation/PresentationConfigPage').then((m) => ({ default: m.PresentationConfigPage })),
 );
 
-export const LazyWorkspaceConfigPage = lazy(() =>
-  import('@/features/workspace/WorkspaceConfigPage').then((m) => ({ default: m.WorkspaceConfigPage })),
-);
-
 export const LazyPortalContentOpsPage = lazy(() =>
   import('@/features/ops/PortalContentOpsPage').then((m) => ({ default: m.PortalContentOpsPage })),
 );
@@ -147,7 +143,6 @@ export const ROUTE_PREFETCH: Partial<Record<AppView, () => void>> = {
   prompts: () => void import('@/features/_legacy/prompt/PromptCenterPage'),
   admin: () => void import('@/features/_legacy/settings/SettingsPage'),
   presentation: () => void import('@/features/presentation/PresentationConfigPage'),
-  'workspace-config': () => void import('@/features/workspace/WorkspaceConfigPage'),
   'portal-ops': () => void import('@/features/ops/PortalContentOpsPage'),
   'portal-dashboard': () => void import('@/features/ops/PortalDataDashboardPage'),
   'model-ops': () => void import('@/features/ops/ModelCatalogOpsPage'),

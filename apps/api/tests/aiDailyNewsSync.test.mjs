@@ -33,18 +33,18 @@ test('manual AI news sync requires a workspace session', async () => {
   const { controller, state } = createController(null);
 
   await assert.rejects(
-    controller.syncNow('ws-test'),
+    controller.syncNow(),
     (error) => error?.getStatus?.() === 401 && error?.getResponse?.().message === '未登录',
   );
   assert.equal(state().syncCalls, 0);
-  assert.equal(state().receivedWorkspace, 'ws-test');
+  assert.equal(state().receivedWorkspace, 'ws-cn-marketing');
 });
 
 test('manual AI news sync rejects non-admin members', async () => {
   const { controller, state } = createController('business_user');
 
   await assert.rejects(
-    controller.syncNow('ws-test', 'Bearer member-token'),
+    controller.syncNow('Bearer member-token'),
     (error) =>
       error?.getStatus?.() === 403 &&
       error?.getResponse?.().message === 'ai_news_sync_admin_required',
@@ -57,12 +57,12 @@ test('manual AI news sync lets a super admin trigger the archive refresh', async
   const { controller, state } = createController('super_admin');
 
   assert.deepEqual(
-    await controller.syncNow('ws-test', undefined, 'admin-session-token'),
+    await controller.syncNow(undefined, 'admin-session-token'),
     { ok: true, added: 2, total: 12 },
   );
   assert.equal(state().syncCalls, 1);
   assert.equal(state().receivedToken, 'admin-session-token');
-  assert.equal(state().receivedWorkspace, 'ws-test');
+  assert.equal(state().receivedWorkspace, 'ws-cn-marketing');
 });
 
 test('AIHOT proxy is opt-in for test and production startup', () => {

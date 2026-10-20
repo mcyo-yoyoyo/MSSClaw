@@ -24,7 +24,6 @@ export interface AuditLogEntry {
   userName: string;
   userEmail?: string;
   role?: PlatformRole;
-  workspaceId?: string;
   /** 操作时的机关职能（领域）归属，便于按组织轴回溯 */
   deptIds?: DeptId[];
   /** 操作时的一线区域归属 */

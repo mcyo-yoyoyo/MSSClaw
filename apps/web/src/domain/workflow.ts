@@ -120,25 +120,16 @@ const BUDGET_SIM: Workflow = {
 
 const DEFAULT_WORKFLOWS = [Q3_ATTRIBUTION, BUDGET_SIM];
 
-export const WORKFLOW_CATALOG: Record<string, Workflow[]> = {
-  'ws-cn-marketing': DEFAULT_WORKFLOWS,
-  'ws-apac': DEFAULT_WORKFLOWS,
-  'ws-3c-latam': DEFAULT_WORKFLOWS,
-  'ws-mea': DEFAULT_WORKFLOWS,
-  'ws-eurasia': DEFAULT_WORKFLOWS,
-  'ws-europe': DEFAULT_WORKFLOWS,
-};
+/** 平台种子数据（原按工作区区分，现只有一个空间） */
+export const WORKFLOW_SEEDS: Workflow[] = DEFAULT_WORKFLOWS;
 
-export function getWorkflowsByWorkspace(workspaceId: string): Workflow[] {
-  return WORKFLOW_CATALOG[workspaceId] ?? DEFAULT_WORKFLOWS;
+
+export function findWorkflowById(id: string): Workflow | undefined {
+  return WORKFLOW_SEEDS.find((w) => w.id === id);
 }
 
-export function findWorkflowById(workspaceId: string, id: string): Workflow | undefined {
-  return getWorkflowsByWorkspace(workspaceId).find((w) => w.id === id);
-}
-
-export function findWorkflowByName(workspaceId: string, name: string): Workflow | undefined {
-  return getWorkflowsByWorkspace(workspaceId).find((w) => w.name === name);
+export function findWorkflowByName(name: string): Workflow | undefined {
+  return WORKFLOW_SEEDS.find((w) => w.name === name);
 }
 
 export function getWorkflowStatusLabel(status: WorkflowStatus) {

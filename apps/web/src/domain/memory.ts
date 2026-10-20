@@ -334,25 +334,16 @@ const DEFAULT_MEMORIES = [
   RD_RAG_SESSION,
 ];
 
-const MEMORY_BY_WORKSPACE: Record<string, MemoryStore[]> = {
-  'ws-cn-marketing': DEFAULT_MEMORIES,
-  'ws-apac': DEFAULT_MEMORIES,
-  'ws-3c-latam': DEFAULT_MEMORIES,
-  'ws-mea': DEFAULT_MEMORIES,
-  'ws-eurasia': DEFAULT_MEMORIES,
-  'ws-europe': DEFAULT_MEMORIES,
-};
+/** 平台种子数据（原按工作区区分，现只有一个空间） */
+export const MEMORY_SEEDS: MemoryStore[] = DEFAULT_MEMORIES;
 
-export function getMemoryStoresByWorkspace(workspaceId: string): MemoryStore[] {
-  return MEMORY_BY_WORKSPACE[workspaceId] ?? DEFAULT_MEMORIES;
+
+export function findMemoryStoreById(id: string): MemoryStore | undefined {
+  return MEMORY_SEEDS.find((s) => s.id === id);
 }
 
-export function findMemoryStoreById(workspaceId: string, id: string): MemoryStore | undefined {
-  return getMemoryStoresByWorkspace(workspaceId).find((s) => s.id === id);
-}
-
-export function findMemoryStoreByName(workspaceId: string, name: string): MemoryStore | undefined {
-  return getMemoryStoresByWorkspace(workspaceId).find((s) => s.name === name);
+export function findMemoryStoreByName(name: string): MemoryStore | undefined {
+  return MEMORY_SEEDS.find((s) => s.name === name);
 }
 
 export function getMemoryStatusClass(status: MemoryStoreStatus) {

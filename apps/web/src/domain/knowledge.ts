@@ -2,7 +2,6 @@ import { z } from 'zod';
 import {
   getPrototypeKnowledgeBasesAsDomain,
 } from '@/domain/prototype/adapters';
-import { PROTOTYPE_WORKSPACE_ID } from '@/domain/prototype/constants';
 
 export const PipelineStageSchema = z.enum(['document', 'chunk', 'embedding', 'index', 'retriever', 'ready']);
 export type PipelineStage = z.infer<typeof PipelineStageSchema>;
@@ -58,25 +57,16 @@ export const PIPELINE_STAGES: { id: PipelineStage; label: string; icon: string }
 
 const PROTOTYPE_KB_LIST = getPrototypeKnowledgeBasesAsDomain();
 
-export const KNOWLEDGE_CATALOG: Record<string, KnowledgeBase[]> = {
-  [PROTOTYPE_WORKSPACE_ID]: PROTOTYPE_KB_LIST,
-  'ws-apac': PROTOTYPE_KB_LIST,
-  'ws-3c-latam': PROTOTYPE_KB_LIST,
-  'ws-mea': PROTOTYPE_KB_LIST,
-  'ws-eurasia': PROTOTYPE_KB_LIST,
-  'ws-europe': PROTOTYPE_KB_LIST,
-};
+/** 平台种子数据（原按工作区区分，现只有一个空间） */
+export const KNOWLEDGE_SEEDS: KnowledgeBase[] = PROTOTYPE_KB_LIST;
 
-export function getKnowledgeBasesByWorkspace(workspaceId: string): KnowledgeBase[] {
-  return KNOWLEDGE_CATALOG[workspaceId] ?? PROTOTYPE_KB_LIST;
+
+export function findKnowledgeBaseById(id: string): KnowledgeBase | undefined {
+  return KNOWLEDGE_SEEDS.find((kb) => kb.id === id);
 }
 
-export function findKnowledgeBaseById(workspaceId: string, id: string): KnowledgeBase | undefined {
-  return getKnowledgeBasesByWorkspace(workspaceId).find((kb) => kb.id === id);
-}
-
-export function findKnowledgeBaseByName(workspaceId: string, name: string): KnowledgeBase | undefined {
-  return getKnowledgeBasesByWorkspace(workspaceId).find((kb) => kb.name === name);
+export function findKnowledgeBaseByName(name: string): KnowledgeBase | undefined {
+  return KNOWLEDGE_SEEDS.find((kb) => kb.name === name);
 }
 
 export function getDocumentStatusLabel(status: DocumentStatus) {

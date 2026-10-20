@@ -51,8 +51,8 @@ export const PROMPT_LIFECYCLE_FLOW: PromptLifecycle[] = [
   'deprecated',
 ];
 
-export const PROMPT_CATALOG: Record<string, Prompt[]> = {
-  'ws-3c-latam': [
+/** 平台种子数据（原按工作区区分，现只有一个空间） */
+export const PROMPT_SEEDS: Prompt[] = [
     {
       id: 'prompt-qa-strict',
       name: 'ENTERPRISE_QA_STRICT',
@@ -131,98 +131,15 @@ export const PROMPT_CATALOG: Record<string, Prompt[]> = {
         { version: 'v1', lifecycle: 'draft', updatedAt: '2026-06-28', author: 'Jacky', changelog: '草稿' },
       ],
     },
-  ],
-  'ws-global-marketing': [
-    {
-      id: 'prompt-campaign-brief',
-      name: 'CAMPAIGN_BRIEF_GENERATOR',
-      version: 'v2',
-      description: '跨区域 Campaign Brief 自动生成。',
-      template: `为 {{region}} 区域 {{product_line}} 生成 Campaign Brief。
+  ];
 
-目标 KPI：{{kpi}}
-预算上限：{{budget}}
 
-输出：目标人群 / 核心信息 / 渠道组合 / 风险`,
-      variables: [
-        { name: 'region', type: 'string', required: true },
-        { name: 'product_line', type: 'string', required: true },
-        { name: 'kpi', type: 'string', required: true },
-        { name: 'budget', type: 'string', required: true },
-      ],
-      lifecycle: 'released',
-      updatedAt: '2026-06-15',
-      author: 'Sarah',
-      evaluationScore: 0.91,
-      tags: ['campaign', 'global'],
-      versions: [
-        { version: 'v2', lifecycle: 'released', updatedAt: '2026-06-15', author: 'Sarah', changelog: '加入预算约束' },
-        { version: 'v1', lifecycle: 'deprecated', updatedAt: '2026-04-01', author: 'Sarah', changelog: '初始版' },
-      ],
-    },
-    {
-      id: 'prompt-roi-compare',
-      name: 'ROI_CROSS_REGION_COMPARE',
-      version: 'v1',
-      description: '跨区域 ROI 对比分析 Prompt。',
-      template: `对比 {{regions}} 近 {{days}} 天 Campaign ROI，输出表格与结论。`,
-      variables: [
-        { name: 'regions', type: 'array', required: true, defaultValue: 'NA,EMEA,APAC' },
-        { name: 'days', type: 'number', required: true, defaultValue: '30' },
-      ],
-      lifecycle: 'draft',
-      updatedAt: '2026-07-07',
-      author: 'Sarah',
-      tags: ['roi', 'analytics'],
-      versions: [
-        { version: 'v1', lifecycle: 'draft', updatedAt: '2026-07-07', author: 'Sarah', changelog: '草稿创建' },
-      ],
-    },
-  ],
-  'ws-rd-knowledge': [
-    {
-      id: 'prompt-spec-compare',
-      name: 'SPEC_COMPARE_STRICT',
-      version: 'v1',
-      description: '产品规格对比，仅引用规格书字段。',
-      template: `对比以下规格书片段，输出差异表：
-
-<spec_a>{{spec_a}}</spec_a>
-<spec_b>{{spec_b}}</spec_b>
-
-维度：{{dimensions}}`,
-      variables: [
-        { name: 'spec_a', type: 'string', required: true },
-        { name: 'spec_b', type: 'string', required: true },
-        { name: 'dimensions', type: 'array', required: false, defaultValue: '影像,续航,散热' },
-      ],
-      lifecycle: 'approved',
-      updatedAt: '2026-05-30',
-      author: 'RD-Team',
-      evaluationScore: 0.89,
-      tags: ['spec', 'rd'],
-      versions: [
-        { version: 'v1', lifecycle: 'approved', updatedAt: '2026-05-30', author: 'RD-Team', changelog: '首版' },
-      ],
-    },
-  ],
-};
-
-export function getPromptsByWorkspace(workspaceId: string): Prompt[] {
-  return (
-    PROMPT_CATALOG[workspaceId] ??
-    PROMPT_CATALOG['ws-cn-marketing'] ??
-    PROMPT_CATALOG['ws-3c-latam'] ??
-    []
-  );
+export function findPromptByName(name: string): Prompt | undefined {
+  return PROMPT_SEEDS.find((p) => p.name === name);
 }
 
-export function findPromptByName(workspaceId: string, name: string): Prompt | undefined {
-  return getPromptsByWorkspace(workspaceId).find((p) => p.name === name);
-}
-
-export function findPromptById(workspaceId: string, id: string): Prompt | undefined {
-  return getPromptsByWorkspace(workspaceId).find((p) => p.id === id);
+export function findPromptById(id: string): Prompt | undefined {
+  return PROMPT_SEEDS.find((p) => p.id === id);
 }
 
 export function getLifecycleLabel(lifecycle: PromptLifecycle) {

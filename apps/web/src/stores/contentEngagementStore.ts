@@ -5,7 +5,7 @@ import {
   normalizeEngagement,
   type ContentEngagement,
 } from '@/domain/contentEngagement';
-import { canUsePlatformDocsApi, currentWorkspaceId } from '@/api/platformDocsApi';
+import { canUsePlatformDocsApi } from '@/api/platformDocsApi';
 import {
   fetchMarketEngagementApi,
   mutateMarketEngagementApi,
@@ -64,7 +64,7 @@ function runMutation(
     visitorId: guestVisitorRef(),
     ...(assetType ? { assetType } : {}),
   };
-  void mutateMarketEngagementApi(currentWorkspaceId(), id, input)
+  void mutateMarketEngagementApi(id, input)
     .then((result) => {
       const engagement = normalizeEngagement(result.engagement);
       set((state) => ({
@@ -92,7 +92,7 @@ export const useContentEngagementStore = create<ContentEngagementState>((set, ge
         return;
       }
       try {
-        const remote = await fetchMarketEngagementApi(currentWorkspaceId());
+        const remote = await fetchMarketEngagementApi();
         const byId = Object.fromEntries(
           Object.entries(remote.byId ?? {}).map(([id, value]) => [
             id,

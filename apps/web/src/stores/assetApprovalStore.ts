@@ -11,7 +11,6 @@ import { usePortalContentStore } from '@/stores/portalContentStore';
 import { useInboxStore } from '@/stores/inboxStore';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   scheduleSavePlatformDoc,
 } from '@/api/platformDocsApi';
@@ -74,7 +73,7 @@ function userBucket() {
 
 function persistDoc(items: AssetApprovalRecord[], watchedByUserId: Record<string, ApprovalWatchItem[]>) {
   if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc(currentWorkspaceId(), 'asset-approvals', {
+  void scheduleSavePlatformDoc('asset-approvals', {
     items: items.slice(0, 200),
     watchedByUserId,
   } satisfies ApprovalsDoc);
@@ -253,9 +252,7 @@ export const useAssetApprovalStore = create<AssetApprovalState>((set, get) => ({
         return;
       }
       try {
-        const remote = await fetchPlatformDoc<ApprovalsDoc>(
-          currentWorkspaceId(),
-          'asset-approvals',
+        const remote = await fetchPlatformDoc<ApprovalsDoc>('asset-approvals',
         );
         const items = Array.isArray(remote?.items) ? remote.items : [];
         lastWatchedMap =

@@ -21,7 +21,6 @@ function formatTime(iso?: string) {
 }
 
 export function ExecutionHistoryPage() {
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const apiConnected = useWorkspaceStore((s) => s.apiConnected);
   const [rows, setRows] = useState<ExecRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -36,7 +35,7 @@ export function ExecutionHistoryPage() {
     setLoading(true);
     setError(null);
     try {
-      const list = await fetchExecutionHistory(workspaceId, 100);
+      const list = await fetchExecutionHistory(100);
       setRows(list);
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载失败');
@@ -49,7 +48,7 @@ export function ExecutionHistoryPage() {
   useEffect(() => {
     void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on workspace / api flip
-  }, [workspaceId, apiConnected]);
+  }, [apiConnected]);
 
   const doneCount = rows.filter((r) => r.status === 'done').length;
   const errCount = rows.filter((r) => r.status === 'error').length;

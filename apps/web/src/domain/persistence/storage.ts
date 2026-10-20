@@ -46,7 +46,7 @@ type MarketplaceSaveOptions = {
   reportFailure?: boolean;
 };
 
-const memorySessions = new Map<string, Record<string, ChatConfig>>();
+let memorySessions: Record<string, ChatConfig> | null = null;
 
 function emptyMarketplace(): MarketplaceSnapshot {
   return {
@@ -62,7 +62,7 @@ function emptyToolCatalog(): ToolCatalogSnapshot {
   return { tools: [] };
 }
 
-/** 从全局工具 API 读取目录。workspaceId 只保留在旧调用方，不参与请求。 */
+/** 从全局工具 API 读取目录。 */
 export async function loadTools(
   options?: { throwOnRemoteError?: boolean },
 ): Promise<ToolCatalogSnapshot> {
@@ -88,17 +88,16 @@ export async function loadTools(
   return emptyToolCatalog();
 }
 
-/** 显式别名，调用方可读出这是全局目录而非 workspace marketplace。 */
+/** 显式别名，调用方可读出这是全局工具目录而非 marketplace。 */
 export const loadGlobalTools = loadTools;
 
 export async function loadMarketplace(
-  workspaceId: string,
   options?: { throwOnRemoteError?: boolean },
 ): Promise<MarketplaceSnapshot> {
   const apiOnline = useWorkspaceStore.getState().apiConnected;
   if (apiOnline) {
     try {
-      const remote = await fetchMarketplaceApi(workspaceId);
+      const remote = await fetchMarketplaceApi();
       if (remote) {
         return {
           agents: Array.isArray(remote.agents) ? (remote.agents as PrototypeAgentSeed[]) : [],
@@ -119,7 +118,6 @@ export async function loadMarketplace(
 }
 
 export async function saveMarketplace(
-  workspaceId: string,
   snapshot: MarketplaceSnapshot | WorkspaceMarketplaceSnapshot,
   options?: MarketplaceSaveOptions,
 ): Promise<MarketplaceSaveResult> {
@@ -129,7 +127,7 @@ export async function saveMarketplace(
     return result;
   }
   try {
-    await saveMarketplaceApi(workspaceId, snapshot);
+    await saveMarketplaceApi(snapshot);
     const result: MarketplaceSaveResult = { synced: true };
     reportMarketplaceSync(result);
     return result;
@@ -144,7 +142,7 @@ export async function saveMarketplace(
   }
 }
 
-/** 将工具目录写入部署级共享 API；不会携带或读取当前 workspace。 */
+/** 将工具目录写入部署级共享 API。 */
 export async function saveTools(
   snapshot: ToolCatalogSnapshot | PrototypeToolSeed[],
   options?: MarketplaceSaveOptions,
@@ -184,18 +182,16 @@ function reportMarketplaceSync(result: MarketplaceSaveResult) {
   });
 }
 
-function readLocalSessions(workspaceId: string): Record<string, ChatConfig> | null {
-  return memorySessions.get(workspaceId)
-    ? structuredClone(memorySessions.get(workspaceId)!)
-    : null;
+function readLocalSessions(): Record<string, ChatConfig> | null {
+  return memorySessions ? structuredClone(memorySessions) : null;
 }
 
-function writeLocalSessions(workspaceId: string, chats: Record<string, ChatConfig>) {
-  memorySessions.set(workspaceId, structuredClone(chats));
+function writeLocalSessions(chats: Record<string, ChatConfig>) {
+  memorySessions = structuredClone(chats);
 }
 
 /**
- * 工作区会话对当前登录用户可见的子集：
+ * 平台会话对当前登录用户可见的子集：
  * - 协作空间：全员可见（仍受成员权限约束）
  * - 个人 AI 任务：仅 ownerUserId === 当前用户
  * - 无归属的旧个人任务：首次加载时认领给当前用户（迁移）
@@ -257,43 +253,40 @@ function mergeSessionsForPersist(
   return next;
 }
 
-export async function loadSessions(
-  workspaceId: string,
-): Promise<Record<string, ChatConfig> | null> {
+export async function loadSessions(): Promise<Record<string, ChatConfig> | null> {
   let raw: Record<string, ChatConfig> | null = null;
   if (useWorkspaceStore.getState().apiConnected) {
     try {
-      const remote = await fetchSessionsApi(workspaceId);
+      const remote = await fetchSessionsApi();
       if (remote && Object.keys(remote).length) raw = remote;
     } catch {
       /* fall through */
     }
   }
-  if (!raw) raw = readLocalSessions(workspaceId);
+  if (!raw) raw = readLocalSessions();
   if (!raw) return null;
   const filtered = filterSessionsForCurrentUser(raw);
-  writeLocalSessions(workspaceId, filtered);
+  writeLocalSessions(filtered);
   return filtered;
 }
 
 export async function saveSessions(
-  workspaceId: string,
   chats: Record<string, ChatConfig>,
 ): Promise<MarketplaceSaveResult> {
   const owned = filterSessionsForCurrentUser(chats);
-  writeLocalSessions(workspaceId, owned);
+  writeLocalSessions(owned);
   if (!useWorkspaceStore.getState().apiConnected) {
     return { synced: false, reason: 'offline' };
   }
   try {
     let remote: Record<string, ChatConfig> = {};
     try {
-      remote = (await fetchSessionsApi(workspaceId)) ?? {};
+      remote = (await fetchSessionsApi()) ?? {};
     } catch {
       remote = {};
     }
     const merged = mergeSessionsForPersist(remote, owned);
-    await saveSessionsApi(workspaceId, merged);
+    await saveSessionsApi(merged);
     return { synced: true };
   } catch (err) {
     return {
@@ -305,72 +298,64 @@ export async function saveSessions(
 }
 
 const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const marketplaceSaveChains = new Map<string, Promise<MarketplaceSaveResult>>();
+const marketplaceSaveKey = 'marketplace';
+let marketplaceSaveChain: Promise<MarketplaceSaveResult> | undefined;
 const globalToolsSaveKey = 'global-tools';
 let globalToolsSaveChain: Promise<MarketplaceSaveResult> | undefined;
 
 function enqueueMarketplaceSave(
-  workspaceId: string,
   snapshot: MarketplaceSnapshot | WorkspaceMarketplaceSnapshot,
   options?: MarketplaceSaveOptions,
 ): Promise<MarketplaceSaveResult> {
-  const previous = marketplaceSaveChains.get(workspaceId);
+  const previous = marketplaceSaveChain;
   const next = previous
     ? previous.then(
-        () => saveMarketplace(workspaceId, snapshot, options),
-        () => saveMarketplace(workspaceId, snapshot, options),
+        () => saveMarketplace(snapshot, options),
+        () => saveMarketplace(snapshot, options),
       )
-    : saveMarketplace(workspaceId, snapshot, options);
-  marketplaceSaveChains.set(workspaceId, next);
+    : saveMarketplace(snapshot, options);
+  marketplaceSaveChain = next;
   void next.then(
     () => {
-      if (marketplaceSaveChains.get(workspaceId) === next) {
-        marketplaceSaveChains.delete(workspaceId);
-      }
+      if (marketplaceSaveChain === next) marketplaceSaveChain = undefined;
     },
     () => {
-      if (marketplaceSaveChains.get(workspaceId) === next) {
-        marketplaceSaveChains.delete(workspaceId);
-      }
+      if (marketplaceSaveChain === next) marketplaceSaveChain = undefined;
     },
   );
   return next;
 }
 
 export function scheduleSaveMarketplace(
-  workspaceId: string,
   snapshot: MarketplaceSnapshot | WorkspaceMarketplaceSnapshot,
   ms = 600,
 ) {
-  const key = `market:${workspaceId}`;
-  const prev = debounceTimers.get(key);
+  const prev = debounceTimers.get(marketplaceSaveKey);
   if (prev) clearTimeout(prev);
   debounceTimers.set(
-    key,
+    marketplaceSaveKey,
     setTimeout(() => {
-      debounceTimers.delete(key);
-      void enqueueMarketplaceSave(workspaceId, snapshot);
+      debounceTimers.delete(marketplaceSaveKey);
+      void enqueueMarketplaceSave(snapshot);
     }, ms),
   );
 }
 
 /**
- * Cancel the still-pending debounce for this workspace and persist the supplied
+ * Cancel the still-pending debounce and persist the supplied
  * full snapshot now. Already-started writes stay ordered ahead of this one, so
  * an older request cannot finish later and overwrite the confirmed save.
  */
 export function flushSaveMarketplace(
-  workspaceId: string,
   snapshot: MarketplaceSnapshot | WorkspaceMarketplaceSnapshot,
   options?: MarketplaceSaveOptions,
 ): Promise<MarketplaceSaveResult> {
-  const key = `market:${workspaceId}`;
-  const pending = debounceTimers.get(key);
+  const pending = debounceTimers.get(marketplaceSaveKey);
   if (pending) {
     clearTimeout(pending);
-    debounceTimers.delete(key);
+    debounceTimers.delete(marketplaceSaveKey);
   }
-  return enqueueMarketplaceSave(workspaceId, snapshot, options);
+  return enqueueMarketplaceSave(snapshot, options);
 }
 
 function enqueueGlobalToolsSave(
@@ -396,7 +381,7 @@ function enqueueGlobalToolsSave(
   return next;
 }
 
-/** 防抖写入全局工具目录；所有 workspace 共用同一条队列。 */
+/** 防抖写入全局工具目录，单条队列保证先后顺序。 */
 export function scheduleSaveTools(
   snapshot: ToolCatalogSnapshot | PrototypeToolSeed[],
   ms = 600,
@@ -430,15 +415,15 @@ export function flushSaveTools(
 
 export const flushSaveGlobalTools = flushSaveTools;
 
-export function scheduleSaveSessions(workspaceId: string, chats: Record<string, ChatConfig>, ms = 600) {
-  const key = `sessions:${workspaceId}`;
+export function scheduleSaveSessions(chats: Record<string, ChatConfig>, ms = 600) {
+  const key = 'sessions';
   const prev = debounceTimers.get(key);
   if (prev) clearTimeout(prev);
   debounceTimers.set(
     key,
     setTimeout(() => {
       debounceTimers.delete(key);
-      void saveSessions(workspaceId, chats);
+      void saveSessions(chats);
     }, ms),
   );
 }

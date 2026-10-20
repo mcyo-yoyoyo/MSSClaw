@@ -236,12 +236,10 @@ async function readSyncFailure(res: Response): Promise<string> {
 }
 
 /** 运营手动补拉：触发 Nest 从 AIHOT 拉取并合并到数据库归档。 */
-export async function syncAiBotDailyNews(
-  workspaceId: string,
-): Promise<AiBotDailyNewsSyncResponse> {
+export async function syncAiBotDailyNews(): Promise<AiBotDailyNewsSyncResponse> {
   // 后端最慢会经历 10s 直连 + 20s 代理重试，前端超时需覆盖完整链路。
   const res = await fetchWithTimeout(
-    `${apiAiDailyNewsPath()}/sync?workspaceId=${encodeURIComponent(workspaceId)}`,
+    `${apiAiDailyNewsPath()}/sync`,
     {
       method: 'POST',
       headers: { Accept: 'application/json', ...apiAuthHeaders() },

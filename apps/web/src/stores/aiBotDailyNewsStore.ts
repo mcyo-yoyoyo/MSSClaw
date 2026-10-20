@@ -8,7 +8,6 @@ import {
   type AiBotDailyNewsPayload,
   type AiBotNewsItem,
 } from '@/domain/aiBotDailyNews';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 type SyncResult = {
   ok: boolean;
@@ -85,8 +84,7 @@ export const useAiBotDailyNewsStore = create<State>((set, get) => ({
     const operation = (async (): Promise<SyncResult> => {
       set({ syncing: true, error: null });
       try {
-        const workspaceId = useWorkspaceStore.getState().workspaceId || 'ws-mss-ai';
-        const sync = await syncAiBotDailyNews(workspaceId);
+        const sync = await syncAiBotDailyNews();
         if (!sync.ok) {
           const detail = sync.error?.trim();
           const message = detail ? `拉取失败：${detail}` : '未能从 AIHOT 拉取最新快讯';

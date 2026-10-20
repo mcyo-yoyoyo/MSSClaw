@@ -46,8 +46,6 @@ import {
 } from '@/features/lazyPages';
 import { useCommandPaletteStore } from '@/stores/commandPaletteStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
-import { useWorkspaceConfigStore } from '@/stores/workspaceConfigStore';
-import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { getNavMetaLabel } from '@/domain/navPresentation';
 import { roleNavDisabledToast } from '@/domain/permissions';
 import { useShellPerspectiveStore } from '@/stores/shellPerspectiveStore';
@@ -70,13 +68,10 @@ export function App() {
   const hydrateFromServer = useSessionStore((s) => s.hydrateFromServer);
   const resolveAuthMode = useAuthModeStore((s) => s.resolve);
   const shellPerspective = useShellPerspectiveStore((s) => s.perspective);
-  const switchWorkspace = useWorkspaceStore((s) => s.switchWorkspace);
   const bootstrap = useWorkspaceStore((s) => s.bootstrap);
   const catalogReady = useWorkspaceStore((s) => s.catalogReady);
   const catalogLoading = useWorkspaceStore((s) => s.catalogLoading);
   const apiConnected = useWorkspaceStore((s) => s.apiConnected);
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
-  const workspaceList = useWorkspaceStore((s) => s.workspaceList);
 
   const appView = useAppViewStore((s) => s.appView);
   const setAppView = useAppViewStore((s) => s.setAppView);
@@ -87,7 +82,7 @@ export function App() {
   const openSettings = useAppViewStore((s) => s.openSettings);
   const paletteOpen = useCommandPaletteStore((s) => s.open);
 
-  const loadWorkspace = useConversationStore((s) => s.loadWorkspace);
+  const loadChats = useConversationStore((s) => s.loadChats);
   const exportOpen = useConversationStore((s) => s.exportOpen);
   const closeExport = useConversationStore((s) => s.closeExport);
   const exportResult = useConversationStore((s) => s.exportResult);
@@ -98,19 +93,9 @@ export function App() {
   const openExport = useConversationStore((s) => s.openExport);
   const pushToGroup = useConversationStore((s) => s.pushToGroup);
 
-  const workspace = useMemo(
-    () => workspaceList.find((w) => w.id === workspaceId) ?? workspaceList[0] ?? {
-      id: workspaceId,
-      name: '工作区',
-      namespace: 'default',
-      description: '',
-      memberCount: 0,
-    },
-    [workspaceId, workspaceList],
-  );
+  const platformName = useWorkspaceStore((s) => s.catalog.workspace.name);
   const hydratedRef = useRef(false);
   const transitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [workspaceHydrating, setWorkspaceHydrating] = useState(false);
   const [sessionsReady, setSessionsReady] = useState(false);
   const [transit, setTransit] = useState<{ open: boolean; summary: string }>({
     open: false,
@@ -235,92 +220,41 @@ export function App() {
   }, [appView, isGuest, setAppView]);
 
   useEffect(() => {
-    const sync = () => {
-      const next = useWorkspaceConfigStore.getState().getVisibleWorkspaces();
-      const prev = useWorkspaceStore.getState().workspaceList;
-      const same =
-        prev.length === next.length &&
-        prev.every((w, i) =>
-          w.id === next[i]?.id &&
-          w.name === next[i]?.name &&
-          w.namespace === next[i]?.namespace &&
-          w.description === next[i]?.description &&
-          w.memberCount === next[i]?.memberCount,
-        );
-      if (!same) {
-        useWorkspaceStore.setState({ workspaceList: next });
-      }
-    };
-    sync();
-    return useWorkspaceConfigStore.subscribe(sync);
-  }, []);
-
-  useEffect(() => {
     if (!catalogReady || hydratedRef.current) return;
     hydratedRef.current = true;
     setSessionsReady(false);
 
     void (async () => {
       try {
-        const { workspaceId: wsId, getCatalog } = useWorkspaceStore.getState();
-        const defaultChatId = getCatalog(wsId).defaultChatId;
+        const { catalog } = useWorkspaceStore.getState();
+        const defaultChatId = catalog.defaultChatId;
 
-        await useMarketplaceStore.getState().bootstrap(wsId);
-        await usePortalContentStore.getState().bootstrap(wsId);
-        usePlazaToolGuideStore.getState().bootstrap(wsId);
-        useInboxStore.getState().bootstrap(wsId);
+        await useMarketplaceStore.getState().bootstrap();
+        await usePortalContentStore.getState().bootstrap();
+        usePlazaToolGuideStore.getState().bootstrap();
+        useInboxStore.getState().bootstrap();
         try {
           const { hydrateAllPlatformDocs } = await import('@/domain/hydratePlatformDocs');
-          await hydrateAllPlatformDocs(wsId);
+          await hydrateAllPlatformDocs();
         } catch {
           /* docs optional until API ready */
         }
 
-        const persisted = await loadSessions(wsId);
-        const catalogChats = getCatalog(wsId).chats ?? {};
+        const persisted = await loadSessions();
+        const catalogChats = catalog.chats ?? {};
         const mergedSessions = persisted
           ? { ...structuredClone(catalogChats), ...persisted }
           : undefined;
 
-        loadWorkspace(wsId, defaultChatId, mergedSessions);
+        loadChats(defaultChatId, mergedSessions);
       } catch {
         /* 目录/货架加载失败仍进入工作台，避免登录后白屏 */
       } finally {
         setSessionsReady(true);
       }
     })();
-  }, [catalogReady, loadWorkspace]);
+  }, [catalogReady, loadChats]);
 
-  const reloadAllStores = useCallback((nextWorkspaceId: string) => {
-    const defaultChatId = switchWorkspace(nextWorkspaceId);
-    useNavigationIntentStore.getState().clearAll();
-    setWorkspaceHydrating(true);
-    setSessionsReady(false);
-    void (async () => {
-      try {
-        await useMarketplaceStore.getState().bootstrap(nextWorkspaceId);
-        await usePortalContentStore.getState().bootstrap(nextWorkspaceId);
-        usePlazaToolGuideStore.getState().bootstrap(nextWorkspaceId);
-        useInboxStore.getState().bootstrap(nextWorkspaceId);
-        try {
-          const { hydrateAllPlatformDocs } = await import('@/domain/hydratePlatformDocs');
-          await hydrateAllPlatformDocs(nextWorkspaceId);
-        } catch {
-          /* docs optional until API ready */
-        }
-        const persisted = await loadSessions(nextWorkspaceId);
-        const catalog = useWorkspaceStore.getState().getCatalog(nextWorkspaceId);
-        const mergedSessions = persisted
-          ? { ...structuredClone(catalog.chats), ...persisted }
-          : undefined;
-
-        loadWorkspace(nextWorkspaceId, defaultChatId, mergedSessions);
-      } finally {
-        setWorkspaceHydrating(false);
-        setSessionsReady(true);
-      }
-    })();
-  }, [switchWorkspace, loadWorkspace]);
 
   const handleApiRetry = useCallback(() => {
     hydratedRef.current = false;
@@ -493,7 +427,6 @@ export function App() {
       onRunAutomation: handleRunAutomation,
       onStartExpertTeam: handleStartExpertTeam,
       onOpenTaskChat: navigateToTaskChat,
-      onWorkspaceSwitch: reloadAllStores,
     }),
     [
       handleSubmitTask,
@@ -502,7 +435,6 @@ export function App() {
       handleAskKbDocument,
       handleRunAutomation,
       handleStartExpertTeam,
-      reloadAllStores,
     ],
   );
 
@@ -600,7 +532,7 @@ export function App() {
   return (
     <AppErrorBoundary>
     <div className="flex h-screen flex-col">
-      <AppHeader apiConnected={apiConnected} onWorkspaceSwitch={reloadAllStores} />
+      <AppHeader apiConnected={apiConnected} />
       <OfflineBanner onRetry={handleApiRetry} />
 
       <div
@@ -612,14 +544,6 @@ export function App() {
         {appView === 'ai-knowledge' ? null : <AppShellSidebar />}
 
         <main className="main-stage relative flex min-w-0 flex-1 flex-col overflow-hidden">
-          {workspaceHydrating && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#f5f5f7]/80 backdrop-blur-sm">
-              <div className="flex flex-col items-center gap-3">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-zinc-200 border-t-claw-600" />
-                <p className="text-[12px] text-[#86868b]">正在切换工作区…</p>
-              </div>
-            </div>
-          )}
           {blockedOpsView ? (
             <AccessDeniedPanel targetView={blockedOpsView} onBack={clearBlockedOpsView} />
           ) : (
@@ -644,13 +568,13 @@ export function App() {
         <Suspense fallback={null}>
           <LazyExportModal
             open={exportOpen}
-            payload={exportResult(workspace.name)}
+            payload={exportResult(platformName)}
             onClose={closeExport}
           />
         </Suspense>
       )}
 
-      <TaskGlobalModals onWorkspaceSwitch={reloadAllStores} />
+      <TaskGlobalModals />
       <HomeToTaskTransit open={transit.open} summary={transit.summary} />
       <SkillChatDrawer
         skill={skillChatDrawer.skill}

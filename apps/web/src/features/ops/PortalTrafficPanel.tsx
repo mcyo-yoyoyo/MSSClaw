@@ -1209,7 +1209,6 @@ function EmptyRow({ colSpan, label }: { colSpan: number; label: string }) {
 /* ── 面板 ── */
 
 export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError }: PortalTrafficPanelProps) {
-  const workspaceId = useWorkspaceStore((state) => state.workspaceId);
   const apiConnected = useWorkspaceStore((state) => state.apiConnected);
 
   const [ranges, setRanges] = useState<Record<ModuleId, RangeSpec>>({
@@ -1242,7 +1241,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
   useEffect(() => {
     requested.current.clear();
     setCache({});
-  }, [workspaceId, apiConnected]);
+  }, [apiConnected]);
 
   // 按区间签名去重取数：四块默认同为近 7 天时只发一次请求。
   useEffect(() => {
@@ -1271,7 +1270,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
     // 若改用「effect 重跑就作废」的写法，别的模块换区间会把在途请求的结果扔掉，
     // 而签名仍留在 requested 里不会重发，那一块就永远停在读取中。
     for (const item of pending) {
-      void fetchPortalAnalyticsApi(workspaceId, item.range)
+      void fetchPortalAnalyticsApi(item.range)
         .then((report) => {
           if (!mounted.current) return;
           setCache((previous) => ({ ...previous, [item.signature]: { loading: false, report, error: null } }));
@@ -1291,7 +1290,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
         });
     }
     return undefined;
-  }, [apiConnected, ranges, revision, today, workspaceId]);
+  }, [apiConnected, ranges, revision, today]);
 
   const stateOf = useCallback(
     (id: ModuleId): ReportState => {

@@ -81,12 +81,10 @@ export function HomePage({
   const hydrateHidden = useMarketHiddenStore((s) => s.hydrate);
   const externalToolLayout = useExternalToolLayoutStore((s) => s.document);
   const hydrateExternalToolLayout = useExternalToolLayoutStore((s) => s.hydrate);
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const apiConnected = useWorkspaceStore((s) => s.apiConnected);
   const officeSceneEntries = useInternalOfficeSceneCatalogStore((s) => s.entries);
   const homeFeaturedChannels = useHomeFeaturedStore((s) => s.channels);
   const homeFeaturedLoaded = useHomeFeaturedStore((s) => s.loaded);
-  const homeFeaturedWorkspaceId = useHomeFeaturedStore((s) => s.workspaceId);
   const homeFeaturedError = useHomeFeaturedStore((s) => s.error);
   const hydrateHomeFeatured = useHomeFeaturedStore((s) => s.hydrate);
   const guideRecords = usePlazaToolGuideStore((s) => s.records);
@@ -103,9 +101,9 @@ export function HomePage({
     hydrateFavorites();
     hydrateHidden();
     ensurePlazaToolGuidesBootstrapped();
-    if (workspaceId && apiConnected) {
-      void hydrateHomeFeatured(workspaceId);
-      void hydrateExternalToolLayout(workspaceId);
+    if (apiConnected) {
+      void hydrateHomeFeatured();
+      void hydrateExternalToolLayout();
     }
   }, [
     hydrateRecent,
@@ -113,7 +111,6 @@ export function HomePage({
     hydrateHidden,
     hydrateHomeFeatured,
     hydrateExternalToolLayout,
-    workspaceId,
     apiConnected,
   ]);
 
@@ -172,7 +169,7 @@ export function HomePage({
 
   // 首页三栏只读取「门户运营 → 首页配置」；从未保存过配置时才沿用旧规则，避免首页空白。
   const homeFeaturedPending =
-    apiConnected && !homeFeaturedError && (!homeFeaturedLoaded || homeFeaturedWorkspaceId !== workspaceId);
+    apiConnected && !homeFeaturedError && !homeFeaturedLoaded;
   const usesHomeFeaturedConfig = Boolean(homeFeaturedChannels) && !homeFeaturedPending;
 
   const scopedChannelCards = useMemo((): Record<MarketShelfKind, MarketShelfCardModel[]> => {

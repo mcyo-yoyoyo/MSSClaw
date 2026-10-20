@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   peekPlatformDocMemory,
   scheduleSavePlatformDoc,
@@ -38,10 +37,9 @@ function authenticatedUserId(): string {
 function persist(bySkillId: Record<string, SkillReviewItem[]>) {
   authenticatedUserId();
   if (!canUsePlatformDocsApi()) return;
-  const ws = currentWorkspaceId();
   const payload: ReviewsDoc = { bySkillId };
-  setPlatformDocMemory(ws, DOC_KIND, payload);
-  void scheduleSavePlatformDoc(ws, DOC_KIND, payload);
+  setPlatformDocMemory(DOC_KIND, payload);
+  void scheduleSavePlatformDoc(DOC_KIND, payload);
 }
 
 interface SkillReviewState {
@@ -63,10 +61,10 @@ export const useSkillReviewStore = create<SkillReviewState>((set, get) => ({
         return;
       }
       try {
-        const remote = await fetchPlatformDoc<ReviewsDoc>(currentWorkspaceId(), DOC_KIND);
+        const remote = await fetchPlatformDoc<ReviewsDoc>(DOC_KIND);
         const bySkillId =
           remote?.bySkillId && typeof remote.bySkillId === 'object' ? remote.bySkillId : {};
-        if (remote) setPlatformDocMemory(currentWorkspaceId(), DOC_KIND, remote);
+        if (remote) setPlatformDocMemory(DOC_KIND, remote);
         set({ bySkillId });
       } catch {
         set({ bySkillId: {} });
@@ -75,7 +73,7 @@ export const useSkillReviewStore = create<SkillReviewState>((set, get) => ({
   },
 
   listFor: (skillId) => {
-    const mem = peekPlatformDocMemory<ReviewsDoc>(currentWorkspaceId(), DOC_KIND);
+    const mem = peekPlatformDocMemory<ReviewsDoc>(DOC_KIND);
     const fromMem = mem?.bySkillId?.[skillId];
     if (Array.isArray(fromMem)) return fromMem;
     return get().bySkillId[skillId] ?? [];

@@ -11,7 +11,7 @@ interface PortalContentState {
   ready: boolean;
   items: PortalContentItem[];
   toast: string | null;
-  bootstrap: (workspaceId: string) => Promise<void>;
+  bootstrap: () => Promise<void>;
   persist: () => void;
   applyAuthoritativeItems: (items: PortalContentItem[], meta?: { conflict?: boolean }) => void;
   upsertItem: (item: PortalContentItem, isNew?: boolean) => void;
@@ -25,8 +25,7 @@ interface PortalContentState {
 
 function schedulePersist(get: () => PortalContentState) {
   const { items } = get();
-  const workspaceId = useWorkspaceStore.getState().workspaceId;
-  scheduleSavePortalContent(workspaceId, { items }, 600, {
+  scheduleSavePortalContent({ items }, 600, {
     onApplied: (next, meta) => {
       get().applyAuthoritativeItems(next, meta);
     },
@@ -38,8 +37,8 @@ export const usePortalContentStore = create<PortalContentState>((set, get) => ({
   items: structuredClone(demoDefaults(PROTOTYPE_PORTAL_CONTENT)),
   toast: null,
 
-  bootstrap: async (workspaceId) => {
-    const snapshot = await loadPortalContent(workspaceId);
+  bootstrap: async () => {
+    const snapshot = await loadPortalContent();
     set({ items: snapshot.items, ready: true });
   },
 

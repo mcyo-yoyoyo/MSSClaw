@@ -17,7 +17,6 @@ import {
 } from '@/domain/llmConfig';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   savePlatformDoc,
 } from '@/api/platformDocsApi';
@@ -167,11 +166,11 @@ export function normalizeLlmConfig(raw: Partial<LlmConfig> | null | undefined): 
   };
 }
 
-async function persistToDb(workspaceId: string, cfg: LlmConfig): Promise<void> {
+async function persistToDb(cfg: LlmConfig): Promise<void> {
   if (!canUsePlatformDocsApi()) {
     throw new Error('shared_api_required');
   }
-  await savePlatformDoc(workspaceId, 'llm-config', cfg);
+  await savePlatformDoc('llm-config', cfg);
 }
 
 export interface ModelOption {
@@ -229,7 +228,6 @@ export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
   lastError: null,
 
   hydrate: async (opts) => {
-    const workspaceId = currentWorkspaceId();
     const requestVersion = ++configRequestVersion;
     if (!canUsePlatformDocsApi()) {
       set({
@@ -240,19 +238,17 @@ export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
     }
     set({ syncing: true, lastError: null });
     try {
-      const remote = await fetchPlatformDoc<Partial<LlmConfig>>(
-        workspaceId,
-        'llm-config',
+      const remote = await fetchPlatformDoc<Partial<LlmConfig>>('llm-config',
         { fresh: opts?.fresh !== false },
       );
-      if (requestVersion !== configRequestVersion || workspaceId !== currentWorkspaceId()) return;
+      if (requestVersion !== configRequestVersion) return;
       set({
         config: normalizeLlmConfig(remote),
         syncing: false,
         lastError: null,
       });
     } catch (e) {
-      if (requestVersion !== configRequestVersion || workspaceId !== currentWorkspaceId()) return;
+      if (requestVersion !== configRequestVersion) return;
       set({
         syncing: false,
         lastError: e instanceof Error ? e.message : '加载模型配置失败',
@@ -261,7 +257,6 @@ export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
   },
 
   saveConfig: async (patch) => {
-    const workspaceId = currentWorkspaceId();
     const requestVersion = ++configRequestVersion;
     if (!canUsePlatformDocsApi()) {
       const msg = '共享 API 未连接，无法写入数据库。请先连接后端再配置模型。';
@@ -271,20 +266,18 @@ export const useLlmConfigStore = create<LlmConfigState>((set, get) => ({
     const next = normalizeLlmConfig({ ...get().config, ...patch });
     set({ syncing: true, lastError: null });
     try {
-      await persistToDb(workspaceId, next);
-      const remote = await fetchPlatformDoc<Partial<LlmConfig>>(
-        workspaceId,
-        'llm-config',
+      await persistToDb(next);
+      const remote = await fetchPlatformDoc<Partial<LlmConfig>>('llm-config',
         { fresh: true },
       );
-      if (requestVersion !== configRequestVersion || workspaceId !== currentWorkspaceId()) return;
+      if (requestVersion !== configRequestVersion) return;
       set({
         config: normalizeLlmConfig(remote ?? next),
         syncing: false,
         lastError: null,
       });
     } catch (e) {
-      if (requestVersion !== configRequestVersion || workspaceId !== currentWorkspaceId()) return;
+      if (requestVersion !== configRequestVersion) return;
       const msg = e instanceof Error ? e.message : '保存模型配置失败';
       set({ syncing: false, lastError: msg });
       throw e;

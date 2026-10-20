@@ -1,5 +1,4 @@
 ﻿import { useMemo, useRef, useState, type ReactNode } from 'react';
-import type { Workspace } from '@/domain/workspace';
 import {
   getRoleBadgeClass,
   MEMBER_STATUS_LABELS,
@@ -36,7 +35,6 @@ import { getNavMetaLabel } from '@/domain/navPresentation';
 import { cn } from '@/lib/utils';
 import type { InviteMemberInput } from '@/stores/settingsStore';
 import { initMissingAccountPasswords, useSettingsStore } from '@/stores/settingsStore';
-import { useWorkspaceConfigStore } from '@/stores/workspaceConfigStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useOrgTaxonomyStore } from '@/stores/orgTaxonomyStore';
 import { useAuditStore, recordAudit } from '@/stores/auditStore';
@@ -45,7 +43,6 @@ const ROLES = PlatformRoleSchema.options;
 
 interface SettingsContentProps {
   tab: SettingsTab;
-  workspace: Workspace;
   members: WorkspaceMember[];
   onUpdateRole: (memberId: string, role: PlatformRole) => void;
   onUpdateOrg: (
@@ -59,7 +56,6 @@ interface SettingsContentProps {
 
 export function SettingsContent({
   tab,
-  workspace,
   members,
   onUpdateRole,
   onUpdateOrg,
@@ -69,11 +65,10 @@ export function SettingsContent({
 }: SettingsContentProps) {
   const resolved = normalizeSettingsTab(tab);
   if (resolved === 'depts') return <DeptsPanel members={members} />;
-  if (resolved === 'roles') return <RolesAndRbacPanel workspace={workspace} />;
+  if (resolved === 'roles') return <RolesAndRbacPanel />;
   if (resolved === 'members') {
     return (
       <MembersAndOrgPanel
-        workspace={workspace}
         members={members}
         onUpdateRole={onUpdateRole}
         onUpdateOrg={onUpdateOrg}
@@ -83,11 +78,10 @@ export function SettingsContent({
       />
     );
   }
-  return <AuditPanel workspace={workspace} />;
+  return <AuditPanel />;
 }
 
 function MembersAndOrgPanel({
-  workspace,
   members,
   onUpdateRole,
   onUpdateOrg,
@@ -95,7 +89,6 @@ function MembersAndOrgPanel({
   onInvite,
   onRemove,
 }: {
-  workspace: Workspace;
   members: WorkspaceMember[];
   onUpdateRole: (id: string, role: PlatformRole) => void;
   onUpdateOrg: (
@@ -106,13 +99,11 @@ function MembersAndOrgPanel({
   onInvite: (input: InviteMemberInput) => void;
   onRemove: (id: string) => void;
 }) {
-  const updateWorkspace = useWorkspaceConfigStore((s) => s.updateWorkspace);
   const depts = useOrgTaxonomyStore((s) => s.depts);
   const regions = useOrgTaxonomyStore((s) => s.regions);
   const currentUser = useSessionStore((s) => s.user);
   const canManage = currentUser?.platformRole === 'super_admin';
 
-  const [nameDraft, setNameDraft] = useState(workspace.name);
   const [addMode, setAddMode] = useState<'single' | 'batch'>('single');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
@@ -159,41 +150,9 @@ function MembersAndOrgPanel({
     <div className="mx-auto max-w-5xl space-y-5">
       <section className="rounded-2xl border border-zinc-200/90 bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
         <div className="flex flex-wrap items-end gap-3">
-          <label className="min-w-[200px] flex-1 text-[11px] font-semibold text-zinc-500">
-            组织名称
-            <input
-              value={nameDraft}
-              onChange={(e) => setNameDraft(e.target.value)}
-              disabled={!canManage}
-              className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-[13px] font-medium text-zinc-900 disabled:bg-zinc-50"
-            />
-          </label>
-          {canManage ? (
-            <button
-              type="button"
-              onClick={() => {
-                const next = nameDraft.trim();
-                if (!next) return;
-                updateWorkspace(workspace.id, { name: next });
-                recordAudit({
-                  category: 'org',
-                  action: 'org.rename',
-                  module: 'org',
-                  detail: `更新组织显示名为「${next}」`,
-                  workspaceId: workspace.id,
-                });
-              }}
-              className="rounded-lg bg-zinc-900 px-3.5 py-2 text-[12px] font-semibold text-white"
-            >
-              保存
-            </button>
-          ) : null}
           <div className="flex flex-wrap gap-2 text-[12px] text-zinc-500">
             <span className="rounded-full bg-zinc-100 px-2.5 py-1 font-medium text-zinc-700">
               {members.length} 人
-            </span>
-            <span className="rounded-full bg-zinc-50 px-2.5 py-1">
-              ns/{workspace.namespace}
             </span>
           </div>
         </div>
@@ -1189,13 +1148,13 @@ function DeptsPanel({ members }: { members: WorkspaceMember[] }) {
   );
 }
 
-function RolesAndRbacPanel({ workspace }: { workspace: Workspace }) {
+function RolesAndRbacPanel() {
   const modules = Object.keys(MODULE_LABELS) as ResourceModule[];
-  const matrix = getRbacMatrix(workspace.id);
+  const matrix = getRbacMatrix();
 
   return (
     <div className="space-y-6">
-      <Section title={`角色权限 · ${workspace.name}`}>
+      <Section title="角色权限">
         <p className="mb-4 text-xs leading-relaxed text-[#86868b]">
           看懂这一表即可：改谁的权限 → 去「成员」改角色。Admin=完全控制 · Write=编辑 · Execute=运行 ·
           R=只读 · —=无。平台运营为系统预置，不可通过邀请创建。
@@ -1253,7 +1212,7 @@ function RolesAndRbacPanel({ workspace }: { workspace: Workspace }) {
   );
 }
 
-function AuditPanel({ workspace }: { workspace: Workspace }) {
+function AuditPanel() {
   const logs = useAuditStore((s) => s.logs);
   const filter = useAuditStore((s) => s.filter);
   const setFilter = useAuditStore((s) => s.setFilter);
@@ -1280,10 +1239,9 @@ function AuditPanel({ workspace }: { workspace: Workspace }) {
 
   const filtered = useMemo(() => {
     return logs.filter((l) => {
-      if (l.workspaceId && l.workspaceId !== workspace.id) return false;
       return matchAuditLog(l, query);
     });
-  }, [logs, query, workspace.id]);
+  }, [logs, query]);
 
   const allFilteredSelected =
     filtered.length > 0 && filtered.every((l) => selectedIds.has(l.id));
@@ -1335,22 +1293,18 @@ function AuditPanel({ workspace }: { workspace: Workspace }) {
       window.alert(mode === 'selected' ? '请先勾选要导出的日志' : '当前筛选结果为空');
       return;
     }
-    downloadAuditLogsExcel(payload, {
-      query,
-      workspaceName: workspace.name,
-    });
+    downloadAuditLogsExcel(payload, { query });
     recordAudit({
       category: 'org',
       action: 'audit.export',
       module: 'audit',
       detail: `导出审计日志 ${payload.length} 条（${mode === 'selected' ? '勾选' : '当前筛选'}）`,
-      workspaceId: workspace.id,
     });
   };
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <Section title={`审计日志 · ${workspace.name}`}>
+      <Section title="审计日志">
         <p className="mb-3 text-[12px] text-[#6e6e73]">
           支持按类别、领域（部门）、区域与账号搜索；可勾选批量导出 Excel，用于权限使用审计回溯。
         </p>

@@ -2,14 +2,13 @@ import { create } from 'zustand';
 import { fetchTools } from '@/api/centerApi';
 import {
   findToolByName,
-  getToolsByWorkspace,
+  TOOL_SEEDS,
   type PlatformTool,
   type ToolStatus,
   type ToolType,
 } from '@/domain/tool';
 
 interface ToolState {
-  workspaceId: string;
   tools: PlatformTool[];
   selectedToolId: string | null;
   typeFilter: ToolType | 'all';
@@ -17,7 +16,7 @@ interface ToolState {
   testRunning: boolean;
   toast: string | null;
 
-  loadWorkspace: (workspaceId: string) => void;
+  load: () => void;
   selectTool: (id: string | null) => void;
   selectToolByName: (name: string) => void;
   setTypeFilter: (filter: ToolType | 'all') => void;
@@ -29,21 +28,18 @@ interface ToolState {
 }
 
 export const useToolStore = create<ToolState>((set, get) => ({
-  // 旧页面仍有一个 workspaceId 字段，但工具初始目录使用统一离线种子。
-  workspaceId: 'global',
-  tools: getToolsByWorkspace('ws-3c-latam'),
-  selectedToolId: getToolsByWorkspace('ws-3c-latam')[0]?.id ?? null,
+  tools: TOOL_SEEDS,
+  selectedToolId: TOOL_SEEDS[0]?.id ?? null,
   typeFilter: 'all',
   statusFilter: 'all',
   testRunning: false,
   toast: null,
 
-  loadWorkspace: (workspaceId) => {
+  load: () => {
     void (async () => {
       // legacy Tool 中心保留 workspace 参数以兼容路由，但目录本身已是全局单例。
       const tools = await fetchTools();
       set({
-        workspaceId,
         tools,
         selectedToolId: tools[0]?.id ?? null,
         typeFilter: 'all',
@@ -93,7 +89,7 @@ export const useToolStore = create<ToolState>((set, get) => ({
   },
 }));
 
-export function resolveToolIdFromResource(resourceId: string, resourceName?: string | null, workspaceId?: string) {
+export function resolveToolIdFromResource(resourceId: string, resourceName?: string | null) {
   if (resourceId.startsWith('tool-')) return resourceId;
   if (resourceName) {
     const loaded = useToolStore.getState().tools.find(
@@ -101,8 +97,7 @@ export function resolveToolIdFromResource(resourceId: string, resourceName?: str
     );
     if (loaded) return loaded.id;
     // 仅保留静态目录作为离线/旧数据兜底，不参与在线 workspace 分叉。
-    void workspaceId;
-    return findToolByName('ws-3c-latam', resourceName)?.id ?? null;
+      return findToolByName(resourceName)?.id ?? null;
   }
   return null;
 }

@@ -28,7 +28,6 @@ function emptyPlatformModelDraft() {
 }
 
 interface ModelTestDiagnostic {
-  workspaceId: string;
   modelId: string;
   label: string;
   result: LlmTestResult;
@@ -49,7 +48,6 @@ export function ModelCatalogOpsPage() {
   const setDefaultModelId = useLlmConfigStore((s) => s.setDefaultModelId);
   const showToast = useMarketplaceStore((s) => s.showToast);
   const apiConnected = useWorkspaceStore((s) => s.apiConnected);
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
 
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
@@ -64,7 +62,7 @@ export function ModelCatalogOpsPage() {
     setLastModelTest(null);
     if (!isAuthenticated) return;
     void hydrate({ fresh: true });
-  }, [hydrate, apiConnected, workspaceId, isAuthenticated]);
+  }, [hydrate, apiConnected, isAuthenticated]);
 
   useEffect(() => {
     const next: Record<string, string> = {};
@@ -181,7 +179,6 @@ export function ModelCatalogOpsPage() {
     }
     setTestingDraft(true);
     const result = await testWorkspaceLlmConnection({
-      workspaceId,
       model: modelId,
       baseUrl: draft.baseUrl,
       apiKey: draft.apiKey,
@@ -205,27 +202,22 @@ export function ModelCatalogOpsPage() {
 
   const handleTest = async (model: PlatformLlmModel) => {
     setTestingId(model.id);
-    const testWorkspaceId = workspaceId;
     const hadUnsavedKey = (keyDrafts[model.id] ?? '') !== (model.apiKey || '');
     try {
       // Existing-row tests intentionally resolve the saved DB record. Unsaved
       // key edits become effective only after clicking that row's 保存 button.
       const result = await testWorkspaceLlmConnection({
-        workspaceId: testWorkspaceId,
         model: model.id,
       });
-      if (useWorkspaceStore.getState().workspaceId === testWorkspaceId) {
-        setLastModelTest({
-          workspaceId: testWorkspaceId,
-          modelId: model.id,
-          label: model.label,
-          result,
-          testedAt: Date.now(),
-          usedSavedConfig: true,
-          hadUnsavedKey,
-        });
-        showToast(result.message);
-      }
+      setLastModelTest({
+        modelId: model.id,
+        label: model.label,
+        result,
+        testedAt: Date.now(),
+        usedSavedConfig: true,
+        hadUnsavedKey,
+      });
+      showToast(result.message);
     } finally {
       setTestingId(null);
     }
@@ -305,7 +297,6 @@ export function ModelCatalogOpsPage() {
             ) : null}
           </p>
           <p className="mt-1 text-[10px] opacity-70">
-            工作区：{lastModelTest.workspaceId} ·{' '}
             {lastModelTest.usedSavedConfig ? '本次使用数据库中已保存的 Base URL 和 API Key。' : '本次使用临时测试配置。'}
             {lastModelTest.hadUnsavedKey
               ? '当前输入框有未保存 Key，请先点击该行“保存”后再测试。'

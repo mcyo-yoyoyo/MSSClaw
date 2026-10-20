@@ -70,6 +70,7 @@ let sessionStore: LooseStore;
 let announcementStore: LooseStore;
 let inboxStore: LooseStore;
 let announcements: AnnouncementDomain;
+let setPlatformDocMemory: (kind: string, payload: unknown) => void;
 const originalFetch = globalThis.fetch;
 
 before(async () => {
@@ -91,6 +92,9 @@ before(async () => {
   announcements = (await vite.ssrLoadModule(
     '/src/domain/stationAnnouncements.ts',
   )) as unknown as AnnouncementDomain;
+  ({ setPlatformDocMemory } = (await vite.ssrLoadModule('/src/api/platformDocsApi.ts')) as {
+    setPlatformDocMemory: typeof setPlatformDocMemory;
+  });
 });
 
 after(async () => {
@@ -105,9 +109,10 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-/** 每个用例换一个 workspace，避开 platformDocsApi 的会话内缓存 */
-function connect(workspaceId: string) {
-  workspaceStore.setState({ workspaceId, apiConnected: true, apiStatus: 'connected' });
+/** 每个用例清掉 platformDocsApi 的会话内缓存，避免读到上一个用例的公告 */
+function connect() {
+  setPlatformDocMemory('station-announcements', null);
+  workspaceStore.setState({ apiConnected: true, apiStatus: 'connected' });
   sessionStore.setState({
     mode: 'user',
     isGuest: false,
@@ -129,7 +134,6 @@ function announcement(overrides: Record<string, unknown> = {}) {
 }
 
 test('运营自填的标签会被保留，保存时带上 revision 并采用服务端规范化结果', async () => {
-  const workspaceId = 'ws-ann-save';
   const requests: Array<{ method: string; payload?: any }> = [];
   globalThis.fetch = (async (input, init) => {
     const url = String(input);
@@ -147,7 +151,7 @@ test('运营自填的标签会被保留，保存时带上 revision 并采用服�
     return jsonResponse({});
   }) as typeof fetch;
 
-  connect(workspaceId);
+  connect();
   announcementStore.getState().hydrate();
   await new Promise((resolve) => setTimeout(resolve, 20));
 
@@ -175,7 +179,6 @@ test('运营自填的标签会被保留，保存时带上 revision 并采用服�
 });
 
 test('连了后端就以库为准：空文档不再灌演示种子', async () => {
-  const workspaceId = 'ws-ann-empty';
   globalThis.fetch = (async (input) => {
     const url = String(input);
     if (url.includes('/docs/station-announcements')) {
@@ -184,7 +187,7 @@ test('连了后端就以库为准：空文档不再灌演示种子', async () =>
     return jsonResponse({});
   }) as typeof fetch;
 
-  connect(workspaceId);
+  connect();
   announcementStore.getState().hydrate();
   await new Promise((resolve) => setTimeout(resolve, 20));
 
@@ -195,7 +198,6 @@ test('连了后端就以库为准：空文档不再灌演示种子', async () =>
 });
 
 test('另一个运营先提交时拉回最新公告，不覆盖对方内容', async () => {
-  const workspaceId = 'ws-ann-conflict';
   globalThis.fetch = (async (input, init) => {
     const url = String(input);
     if (url.includes('/docs/station-announcements')) {
@@ -207,7 +209,7 @@ test('另一个运营先提交时拉回最新公告，不覆盖对方内容', as
     return jsonResponse({});
   }) as typeof fetch;
 
-  connect(workspaceId);
+  connect();
   announcementStore.getState().upsert(announcement({ id: 'ann-mine', title: '我的公告' }), true);
   await new Promise((resolve) => setTimeout(resolve, 30));
 
@@ -218,7 +220,6 @@ test('另一个运营先提交时拉回最新公告，不覆盖对方内容', as
 });
 
 test('擦掉公告即标已读：写回服务端，且不再进入首页公告条', async () => {
-  const workspaceId = 'ws-ann-dismiss';
   const readCalls: string[] = [];
   globalThis.fetch = (async (input, init) => {
     const url = String(input);
@@ -248,9 +249,9 @@ test('擦掉公告即标已读：写回服务端，且不再进入首页公告�
     return jsonResponse({});
   }) as typeof fetch;
 
-  connect(workspaceId);
+  connect();
   announcementStore.getState().hydrate();
-  inboxStore.getState().bootstrap(workspaceId);
+  inboxStore.getState().bootstrap();
   await new Promise((resolve) => setTimeout(resolve, 30));
 
   assert.deepEqual(
@@ -267,7 +268,6 @@ test('擦掉公告即标已读：写回服务端，且不再进入首页公告�
 });
 
 test('服务端已记为已读的公告不会再出现在首页公告条', async () => {
-  const workspaceId = 'ws-ann-read';
   globalThis.fetch = (async (input) => {
     const url = String(input);
     if (url.includes('/docs/station-announcements')) {
@@ -292,9 +292,9 @@ test('服务端已记为已读的公告不会再出现在首页公告条', async
     return jsonResponse({});
   }) as typeof fetch;
 
-  connect(workspaceId);
+  connect();
   announcementStore.getState().hydrate();
-  inboxStore.getState().bootstrap(workspaceId);
+  inboxStore.getState().bootstrap();
   await new Promise((resolve) => setTimeout(resolve, 30));
 
   assert.equal(announcementStore.getState().items.length, 1);

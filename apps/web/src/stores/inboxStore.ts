@@ -8,7 +8,6 @@ import {
 import { saveInboxMessages } from '@/domain/persistence/inboxStorage';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
 import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 import {
   canUseInboxApi,
   createInboxMessage,
@@ -20,7 +19,7 @@ import {
 interface InboxState {
   ready: boolean;
   messages: InboxMessage[];
-  bootstrap: (workspaceId: string) => void;
+  bootstrap: () => void;
   persist: () => void;
   /** 给指定用户推送；广播用 toUserId='*' */
   pushMessage: (input: {
@@ -44,19 +43,16 @@ interface InboxState {
   seedDemoIfEmpty: (userId: string) => void;
 }
 
-function workspaceId() {
-  return useWorkspaceStore.getState().workspaceId;
-}
 
 export const useInboxStore = create<InboxState>((set, get) => ({
   ready: false,
   messages: [],
 
-  bootstrap: (wsId) => {
+  bootstrap: () => {
     void (async () => {
       const { hydrateInboxMessages } = await import('@/domain/persistence/inboxStorage');
       const uid = getCurrentUserId();
-      const { messages, fromServer } = await hydrateInboxMessages(wsId, uid);
+      const { messages, fromServer } = await hydrateInboxMessages(uid);
       set({ messages, ready: true });
       // 接口拉挂了也会得到空列表，这时再灌演示消息就会越攒越多
       if (uid && (fromServer || !canUseInboxApi())) get().seedDemoIfEmpty(uid);
@@ -64,7 +60,7 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   },
 
   persist: () => {
-    saveInboxMessages(workspaceId(), get().messages);
+    saveInboxMessages(get().messages);
   },
 
   pushMessage: (input) => {
@@ -82,7 +78,7 @@ export const useInboxStore = create<InboxState>((set, get) => ({
     };
     set((s) => ({ messages: [msg, ...s.messages] }));
     get().persist();
-    if (canUseInboxApi()) void createInboxMessage(workspaceId(), msg);
+    if (canUseInboxApi()) void createInboxMessage(msg);
   },
 
   pushToUsers: (userIds, input) => {
@@ -98,7 +94,7 @@ export const useInboxStore = create<InboxState>((set, get) => ({
       messages: s.messages.map((m) => (m.id === id ? { ...m, read: true } : m)),
     }));
     get().persist();
-    if (uid && canUseInboxApi()) void markInboxRead(workspaceId(), uid, id);
+    if (uid && canUseInboxApi()) void markInboxRead(uid, id);
   },
 
   markAllRead: (userId) => {
@@ -109,14 +105,14 @@ export const useInboxStore = create<InboxState>((set, get) => ({
       ),
     }));
     get().persist();
-    if (uid && canUseInboxApi()) void markInboxAllRead(workspaceId(), uid);
+    if (uid && canUseInboxApi()) void markInboxAllRead(uid);
   },
 
   remove: (id) => {
     const uid = getCurrentUserId();
     set((s) => ({ messages: s.messages.filter((m) => m.id !== id) }));
     get().persist();
-    if (uid && canUseInboxApi()) void deleteInboxForUser(workspaceId(), uid, id);
+    if (uid && canUseInboxApi()) void deleteInboxForUser(uid, id);
   },
 
   unreadCount: (userId) => {
@@ -181,7 +177,7 @@ export const useInboxStore = create<InboxState>((set, get) => ({
     set((s) => ({ messages: [...seeds, ...s.messages] }));
     get().persist();
     if (canUseInboxApi()) {
-      for (const message of seeds) void createInboxMessage(workspaceId(), message);
+      for (const message of seeds) void createInboxMessage(message);
     }
   },
 }));

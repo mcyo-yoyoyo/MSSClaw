@@ -6,14 +6,13 @@ import {
 } from '@/api/centerApi';
 import {
   findSkillByName,
-  getSkillsByWorkspace,
+  SKILL_SEEDS,
   type Skill,
   type SkillLifecycle,
   type SkillTraceStep,
 } from '@/domain/skill';
 
 interface SkillState {
-  workspaceId: string;
   skills: Skill[];
   selectedSkillId: string | null;
   lifecycleFilter: SkillLifecycle | 'all';
@@ -21,7 +20,7 @@ interface SkillState {
   liveTrace: SkillTraceStep[];
   toast: string | null;
 
-  loadWorkspace: (workspaceId: string) => void;
+  load: () => void;
   selectSkill: (id: string | null) => void;
   selectSkillByName: (name: string) => void;
   setLifecycleFilter: (filter: SkillLifecycle | 'all') => void;
@@ -40,19 +39,17 @@ const MOCK_TRACE: SkillTraceStep[] = [
 ];
 
 export const useSkillStore = create<SkillState>((set, get) => ({
-  workspaceId: 'ws-cn-marketing',
-  skills: getSkillsByWorkspace('ws-cn-marketing'),
-  selectedSkillId: getSkillsByWorkspace('ws-cn-marketing')[0]?.id ?? null,
+  skills: SKILL_SEEDS,
+  selectedSkillId: SKILL_SEEDS[0]?.id ?? null,
   lifecycleFilter: 'all',
   traceRunning: false,
   liveTrace: [],
   toast: null,
 
-  loadWorkspace: (workspaceId) => {
+  load: () => {
     void (async () => {
-      const skills = await fetchSkills(workspaceId);
+      const skills = await fetchSkills();
       set({
-        workspaceId,
         skills,
         selectedSkillId: skills[0]?.id ?? null,
         lifecycleFilter: 'all',
@@ -65,7 +62,7 @@ export const useSkillStore = create<SkillState>((set, get) => ({
 
   selectSkillByName: (name) => {
     const skill =
-      findSkillByName(get().workspaceId, name) ??
+      findSkillByName(name) ??
       get().skills.find((s) => s.name === name || s.displayName === name);
     if (skill) set({ selectedSkillId: skill.id, liveTrace: [] });
   },
@@ -74,11 +71,11 @@ export const useSkillStore = create<SkillState>((set, get) => ({
 
   advanceLifecycle: (skillId) => {
     void (async () => {
-      const { skills, workspaceId } = get();
+      const { skills } = get();
       const target = skills.find((s) => s.id === skillId);
       if (!target) return;
       try {
-        const updated = await advanceSkillLifecycleApi(workspaceId, skillId);
+        const updated = await advanceSkillLifecycleApi(skillId);
         set({
           skills: skills.map((s) => (s.id === skillId ? updated : s)),
           toast: `「${target.displayName}」已推进到 ${updated.lifecycle}`,
@@ -125,10 +122,9 @@ export const useSkillStore = create<SkillState>((set, get) => ({
 
 export function resolveSkillIdFromResource(
   resourceId: string,
-  resourceName?: string | null,
-  workspaceId?: string,
+  resourceName?: string | null
 ) {
   if (resourceId.startsWith('skill-')) return resourceId;
-  if (resourceName && workspaceId) return findSkillByName(workspaceId, resourceName)?.id ?? null;
+  if (resourceName) return findSkillByName(resourceName)?.id ?? null;
   return null;
 }

@@ -61,7 +61,6 @@ export function PortalHomeFeaturedPanel() {
   const externalToolLayout = useExternalToolLayoutStore((s) => s.document);
   const hydrateExternalToolLayout = useExternalToolLayoutStore((s) => s.hydrate);
   const officeSceneEntries = useInternalOfficeSceneCatalogStore((s) => s.entries);
-  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const apiConnected = useWorkspaceStore((s) => s.apiConnected);
 
   const savedChannels = useHomeFeaturedStore((s) => s.channels);
@@ -83,11 +82,11 @@ export function PortalHomeFeaturedPanel() {
 
   useEffect(() => {
     setEdits(null);
-    if (!workspaceId || !apiConnected) return;
-    void hydrate(workspaceId);
+    if (!apiConnected) return;
+    void hydrate();
     // 仅用于「从未保存过首页配置」时按旧规则预填草稿。
-    void hydrateExternalToolLayout(workspaceId);
-  }, [workspaceId, apiConnected, hydrate, hydrateExternalToolLayout]);
+    void hydrateExternalToolLayout();
+  }, [apiConnected, hydrate, hydrateExternalToolLayout]);
 
   const cardContext = useMemo<HomeChannelCardContext>(
     () => ({

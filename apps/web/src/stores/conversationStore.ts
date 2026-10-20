@@ -109,18 +109,15 @@ interface ConversationState {
   pendingPipeline: PendingPipeline | null;
   expertTeamRelay: ExpertTeamRelay | null;
   activeAgentId: string | null;
-  persistWorkspaceId: string | null;
+  /** 平台会话已加载：之前不能回写，以免用种子覆盖库里的会话 */
+  chatsLoaded: boolean;
   kbArtifact: KbArtifact | null;
   kbPreviewDocId: string | null;
 
   setActiveModule: (module: ModuleId, resourceName?: string | null) => void;
-  loadWorkspace: (workspaceId: string, defaultChatId: string, persistedChats?: Record<string, ChatConfig>) => void;
+  loadChats: (defaultChatId: string, persistedChats?: Record<string, ChatConfig>) => void;
   switchChat: (chatId: string) => void;
-  sendMessage: (
-    text: string,
-    workspaceId?: string,
-    assetType?: PendingTaskSubmit['assetType'],
-  ) => Promise<void>;
+  sendMessage: (text: string, assetType?: PendingTaskSubmit['assetType']) => Promise<void>;
   approvePlan: (planId: string, steps: string[]) => Promise<void>;
   savePlanSteps: (planId: string, steps: string[]) => void;
   cancelStream: () => void;
@@ -204,9 +201,9 @@ function sleep(ms: number) {
 }
 
 function schedulePersistFromState(get: () => ConversationState) {
-  const { chats, persistWorkspaceId } = get();
-  if (!persistWorkspaceId) return;
-  scheduleSaveSessions(persistWorkspaceId, chats);
+  const { chats, chatsLoaded } = get();
+  if (!chatsLoaded) return;
+  scheduleSaveSessions(chats);
 }
 
 type StoreSet = (
@@ -300,7 +297,7 @@ async function advanceExpertTeamRelay(get: () => ConversationState, set: StoreSe
     nextIndex,
     prevReply,
   );
-  await get().sendMessage(message, undefined, 'agent');
+  await get().sendMessage(message, 'agent');
 }
 
 async function runApprovedPipeline(get: () => ConversationState, set: StoreSet) {
@@ -333,9 +330,8 @@ async function runApprovedPipeline(get: () => ConversationState, set: StoreSet) 
 
   if (pipeline.actionType === 'knowledge') {
     set({ isAgentTyping: true, streamStatus: '正在检索知识库…' });
-    const workspaceId = useWorkspaceStore.getState().workspaceId;
     const kbDocs = useMarketplaceStore.getState().kbDocs;
-    const artifact = await resolveKbContextForTask(workspaceId, pipeline.text, kbDocs);
+    const artifact = await resolveKbContextForTask(pipeline.text, kbDocs);
     kbContext = artifact.contextText;
     set({ kbArtifact: artifact });
   }
@@ -484,7 +480,6 @@ async function runApprovedPipeline(get: () => ConversationState, set: StoreSet) 
     for await (const event of streamExecution({
       chatId: currentChatId,
       message: pipeline.text,
-      workspaceId: useWorkspaceStore.getState().workspaceId,
       signal: controller.signal,
       planSteps: pipeline.steps,
       agentId: pipeline.agentId,
@@ -520,7 +515,7 @@ async function runApprovedPipeline(get: () => ConversationState, set: StoreSet) 
 export const useConversationStore = create<ConversationState>((set, get) => ({
   activeModule: 'chat',
   currentChatId: 'marketing',
-  chats: structuredClone(useWorkspaceStore.getState().getCatalog('ws-cn-marketing').chats),
+  chats: structuredClone(useWorkspaceStore.getState().catalog.chats),
   isAgentTyping: false,
   streamStatus: null,
   abortController: null,
@@ -532,18 +527,18 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   pendingPipeline: null,
   expertTeamRelay: null,
   activeAgentId: 'agent-data-analysis',
-  persistWorkspaceId: null,
+  chatsLoaded: false,
   kbArtifact: null,
   kbPreviewDocId: null,
 
   setActiveModule: (module, resourceName = null) =>
     set({ activeModule: module, selectedResourceName: resourceName }),
 
-  loadWorkspace: (workspaceId, defaultChatId, persistedChats) => {
+  loadChats: (defaultChatId, persistedChats) => {
     get().abortController?.abort();
     const prev = get();
     const pending = prev.pendingTaskSubmit;
-    const catalog = useWorkspaceStore.getState().getCatalog(workspaceId);
+    const catalog = useWorkspaceStore.getState().catalog;
     const baseChats = structuredClone(catalog.chats ?? {});
     const merged = persistedChats ? { ...baseChats, ...persistedChats } : baseChats;
     // 移除已下线 WarRoom、Smoke/营销/知识等历史默认会话
@@ -556,7 +551,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       }),
     ) as Record<string, ChatConfig>;
 
-    // 保留水合期间内存里新建的任务，避免刚创建就被异步 loadWorkspace 冲掉
+    // 保留水合期间内存里新建的任务，避免刚创建就被异步 loadChats 冲掉
     for (const [id, chat] of Object.entries(prev.chats)) {
       if (!chats[id] && isUserCreatedTask(chat) && !LEGACY_DEFAULT_CHAT_IDS.has(id)) {
         chats[id] = chat;
@@ -573,7 +568,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     set({
       chats,
       currentChatId: chatId,
-      persistWorkspaceId: workspaceId,
+      chatsLoaded: true,
       activeModule: 'chat',
       selectedResourceName: null,
       isAgentTyping: false,
@@ -617,7 +612,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     });
   },
 
-  sendMessage: async (text, _workspaceId, requestedAssetType) => {
+  sendMessage: async (text, requestedAssetType) => {
     const trimmed = text.trim();
     const { currentChatId, chats, isAgentTyping, pendingPipeline } = get();
     if (!trimmed || isAgentTyping) return;

@@ -29,7 +29,6 @@ import {
   uploadWorkspaceBlob,
   uploadWorkspaceOpsPackage,
 } from '@/api/blobApi';
-import { currentWorkspaceId } from '@/api/platformDocsApi';
 import type { PortalCasePreviewFile } from '@/domain/prototype/portalContent';
 import {
   resolveSkillBusinessScenario,
@@ -83,7 +82,7 @@ function readSkillIconFile(file: File): Promise<string> {
     reader.onload = () => resolve(String(reader.result || ''));
     reader.onerror = () => reject(new Error('读取图片失败'));
     reader.readAsDataURL(file);
-  }).then((dataUrl) => storeImageDataUrl(currentWorkspaceId(), file, dataUrl));
+  }).then((dataUrl) => storeImageDataUrl(file, dataUrl));
 }
 
 type EditorTarget = string | 'new' | null;
@@ -300,10 +299,9 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   ): Promise<boolean> => {
     const replacedPackageBlob = form.packageBlob;
     setUploadingPackage(true);
-    const workspaceId = currentWorkspaceId();
     try {
-      const uploaded = await uploadWorkspaceOpsPackage(workspaceId, file);
-      if (!temporaryPackageBlobs.trackUploaded(workspaceId, uploaded, expectedGeneration)) {
+      const uploaded = await uploadWorkspaceOpsPackage(file);
+      if (!temporaryPackageBlobs.trackUploaded(uploaded, expectedGeneration)) {
         return false;
       }
       temporaryPackageBlobs.discard(replacedPackageBlob);
@@ -459,7 +457,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       .filter(
         ([blobId, uploaded]) =>
           attachedBlobIds.has(blobId) &&
-          !isWorkspaceBlobUploadContextCurrent(uploaded, currentWorkspaceId()),
+          !isWorkspaceBlobUploadContextCurrent(uploaded),
       )
       .map(([blobId]) => blobId);
     if (staleAttachmentIds.length) {
@@ -480,7 +478,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     }
     if (!temporaryPackageBlobs.canCommit(form.packageBlob)) {
       setForm((current) => ({ ...current, packageBlob: undefined }));
-      showToast('工作区或 API 配置已变更，请重新上传 Skill 包');
+      showToast('API 配置已变更，请重新上传 Skill 包');
       return;
     }
     if (!validateStep(1) || !validateStep(2) || !validateStep(3)) {
@@ -1034,7 +1032,6 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                         showToast('样例附件请控制在 12MB 以内');
                         return;
                       }
-                      const workspaceId = currentWorkspaceId();
                       const generation = caseUploadGenerationRef.current;
                       const isPdf = lower.endsWith('.pdf');
                       const mimeType = isPdf ? PDF_MIME_TYPE : PPTX_MIME_TYPE;
@@ -1046,14 +1043,14 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                           reader.onerror = () => reject(reader.error ?? new Error('file_read_failed'));
                           reader.readAsDataURL(file);
                         });
-                        const uploaded = await uploadWorkspaceBlob(workspaceId, {
+                        const uploaded = await uploadWorkspaceBlob({
                           name: file.name,
                           mimeType,
                           dataUrl,
                         });
                         if (
                           generation !== caseUploadGenerationRef.current ||
-                          !isWorkspaceBlobUploadContextCurrent(uploaded, currentWorkspaceId())
+                          !isWorkspaceBlobUploadContextCurrent(uploaded)
                         ) {
                           void deleteUploadedWorkspaceBlob(uploaded).catch(() => undefined);
                           return;

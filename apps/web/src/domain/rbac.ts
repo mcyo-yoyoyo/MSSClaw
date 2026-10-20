@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
-import { PROTOTYPE_WORKSPACE_ID } from '@/domain/prototype/constants';
 
 /** 四角色：平台运营（含原超管）· 能力开发 · 业务用户 · 只读访客 */
 export const PlatformRoleSchema = z.enum([
@@ -169,9 +168,7 @@ export const RBAC_MATRIX: RolePermissionMatrix = matrix(
   },
 );
 
-export const RBAC_MATRIX_BY_WORKSPACE: Record<string, RolePermissionMatrix> = {};
-
-export function getRbacMatrix(_workspaceId: string): RolePermissionMatrix {
+export function getRbacMatrix(): RolePermissionMatrix {
   return RBAC_MATRIX;
 }
 
@@ -235,22 +232,9 @@ export const SEED_MEMBERS: WorkspaceMember[] = [
   },
 ];
 
-/** 内置数据空间 id → 成员表（均指向同一套种子） */
-export const BUILTIN_WORKSPACE_IDS = [
-  PROTOTYPE_WORKSPACE_ID,
-  'ws-apac',
-  'ws-3c-latam',
-  'ws-mea',
-  'ws-eurasia',
-  'ws-europe',
-] as const;
-
-export const MEMBERS_BY_WORKSPACE: Record<string, WorkspaceMember[]> = Object.fromEntries(
-  BUILTIN_WORKSPACE_IDS.map((id) => [id, SEED_MEMBERS.map((m) => ({ ...m, deptIds: [...(m.deptIds ?? [])] }))]),
-);
-
-export function getMembersByWorkspace(workspaceId: string): WorkspaceMember[] {
-  return MEMBERS_BY_WORKSPACE[workspaceId] ?? SEED_MEMBERS.map((m) => ({ ...m }));
+/** 平台种子成员；每次返回新副本，调用方可直接修改。 */
+export function getSeedMembers(): WorkspaceMember[] {
+  return SEED_MEMBERS.map((m) => ({ ...m, deptIds: [...(m.deptIds ?? [])] }));
 }
 
 /** @deprecated 请使用 getCurrentPlatformRole()（domain/currentUser） */

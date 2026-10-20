@@ -2,7 +2,6 @@ import { z } from 'zod';
 import {
   getPrototypeAgentsAsDomain,
 } from '@/domain/prototype/adapters';
-import { PROTOTYPE_WORKSPACE_ID } from '@/domain/prototype/constants';
 
 export const AgentStatusSchema = z.enum(['draft', 'testing', 'published', 'online', 'offline']);
 export type AgentStatus = z.infer<typeof AgentStatusSchema>;
@@ -50,25 +49,16 @@ export const AGENT_STATUS_FLOW: AgentStatus[] = ['draft', 'testing', 'published'
 
 const PROTOTYPE_AGENT_LIST = getPrototypeAgentsAsDomain();
 
-export const AGENT_CATALOG: Record<string, Agent[]> = {
-  [PROTOTYPE_WORKSPACE_ID]: PROTOTYPE_AGENT_LIST,
-  'ws-apac': PROTOTYPE_AGENT_LIST,
-  'ws-3c-latam': PROTOTYPE_AGENT_LIST,
-  'ws-mea': PROTOTYPE_AGENT_LIST,
-  'ws-eurasia': PROTOTYPE_AGENT_LIST,
-  'ws-europe': PROTOTYPE_AGENT_LIST,
-};
+/** 平台种子数据（原按工作区区分，现只有一个空间） */
+export const AGENT_SEEDS: Agent[] = PROTOTYPE_AGENT_LIST;
 
-export function getAgentsByWorkspace(workspaceId: string): Agent[] {
-  return AGENT_CATALOG[workspaceId] ?? PROTOTYPE_AGENT_LIST;
+
+export function findAgentById(id: string): Agent | undefined {
+  return AGENT_SEEDS.find((a) => a.id === id);
 }
 
-export function findAgentById(workspaceId: string, id: string): Agent | undefined {
-  return getAgentsByWorkspace(workspaceId).find((a) => a.id === id);
-}
-
-export function findAgentByName(workspaceId: string, name: string): Agent | undefined {
-  return getAgentsByWorkspace(workspaceId).find((a) => a.name === name);
+export function findAgentByName(name: string): Agent | undefined {
+  return AGENT_SEEDS.find((a) => a.name === name);
 }
 
 export function getAgentStatusLabel(status: AgentStatus) {

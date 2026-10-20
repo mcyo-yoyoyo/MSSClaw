@@ -4,7 +4,6 @@ import {
   Controller,
   Get,
   Headers,
-  Param,
   Post,
   Query,
   Req,
@@ -20,6 +19,8 @@ import type {
 } from './dto/stream-execution.dto';
 import { SseConcurrencyGuard } from '../common/sse-concurrency.guard';
 import { PlatformDocsService } from '../persistence/platform-docs.service';
+// 单租户：原路由参数 workspaceId 固定为平台空间，方法体沿用这个名字（第 2 期随服务层一起去掉）
+import { PLATFORM_WORKSPACE_ID as workspaceId } from '../common/platform-workspace';
 
 function sessionToken(authorization?: string, xSessionToken?: string): string | undefined {
   const raw = (authorization ?? '').trim();
@@ -39,9 +40,8 @@ export class ExecutionsController {
    * 用与聊天完全相同的服务端 SSE 链路探测模型。候选配置只驻留本次请求，
    * 方便“添加模型”先调试再保存；不写入 llm-config，也不返回 Key/响应正文。
    */
-  @Post('workspaces/:workspaceId/llm-config/test')
+  @Post('llm-config/test')
   async testLlmConfig(
-    @Param('workspaceId') workspaceId: string,
     @Body() body: unknown,
     @Headers('authorization') authorization?: string,
     @Headers('x-session-token') xSessionToken?: string,
@@ -70,9 +70,8 @@ export class ExecutionsController {
     return this.executionsService.testLlmConnection(workspaceId, requestedModel as string | undefined);
   }
 
-  @Post('workspaces/:workspaceId/skills/evaluate')
+  @Post('skills/evaluate')
   async evaluateSkill(
-    @Param('workspaceId') workspaceId: string,
     @Body() body: unknown,
     @Headers('authorization') authorization?: string,
     @Headers('x-session-token') xSessionToken?: string,
@@ -84,9 +83,8 @@ export class ExecutionsController {
     return this.executionsService.evaluateSkill(workspaceId, body as Record<string, unknown>);
   }
 
-  @Get('workspaces/:workspaceId/executions')
+  @Get('executions')
   list(
-    @Param('workspaceId') workspaceId: string,
     @Query('limit') limit?: string,
   ) {
     const n = limit ? Number(limit) : 50;
@@ -108,7 +106,6 @@ export class ExecutionsController {
       return;
     }
 
-    const workspaceId = body.workspaceId || 'ws-mss-ai';
     const userId = await this.resolveSessionUserId(workspaceId, authorization, xSessionToken);
     // Build a fresh object so a caller-supplied `userId` (even if added to a future
     // wire DTO) can never become trusted execution identity.

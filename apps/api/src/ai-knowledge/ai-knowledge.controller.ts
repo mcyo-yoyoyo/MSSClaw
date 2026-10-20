@@ -13,6 +13,8 @@ import {
 import type { Request } from 'express';
 import { AiKnowledgeService } from './ai-knowledge.service';
 import type { DemandSummary } from './ai-knowledge.types';
+// 单租户：原路由参数 workspaceId 固定为平台空间，方法体沿用这个名字（第 2 期随服务层一起去掉）
+import { PLATFORM_WORKSPACE_ID as workspaceId } from '../common/platform-workspace';
 
 function bearerToken(authorization?: string, xSessionToken?: string): string | undefined {
   const raw = (authorization ?? '').trim();
@@ -20,13 +22,12 @@ function bearerToken(authorization?: string, xSessionToken?: string): string | u
   return (xSessionToken ?? '').trim() || undefined;
 }
 
-@Controller('workspaces/:workspaceId/ai-knowledge')
+@Controller('ai-knowledge')
 export class AiKnowledgeController {
   constructor(private readonly aiKnowledge: AiKnowledgeService) {}
 
   @Post('drafts')
   async start(
-    @Param('workspaceId') workspaceId: string,
     @Body() body: { question?: string },
     @Req() req: Request,
     @Headers('authorization') authorization?: string,
@@ -39,7 +40,6 @@ export class AiKnowledgeController {
 
   @Get('drafts/:draftId')
   async getDraft(
-    @Param('workspaceId') workspaceId: string,
     @Param('draftId') draftId: string,
     @Req() req: Request,
     @Headers('authorization') authorization?: string,
@@ -52,7 +52,6 @@ export class AiKnowledgeController {
 
   @Post('drafts/:draftId/messages')
   async clarify(
-    @Param('workspaceId') workspaceId: string,
     @Param('draftId') draftId: string,
     @Body() body: { message?: string },
     @Req() req: Request,
@@ -66,7 +65,6 @@ export class AiKnowledgeController {
 
   @Patch('drafts/:draftId/demand')
   async updateDemand(
-    @Param('workspaceId') workspaceId: string,
     @Param('draftId') draftId: string,
     @Body() body: { demand?: Partial<DemandSummary> },
     @Req() req: Request,
@@ -80,7 +78,6 @@ export class AiKnowledgeController {
 
   @Post('drafts/:draftId/generate')
   async generate(
-    @Param('workspaceId') workspaceId: string,
     @Param('draftId') draftId: string,
     @Req() req: Request,
     @Headers('authorization') authorization?: string,
@@ -93,7 +90,6 @@ export class AiKnowledgeController {
 
   @Get('solutions')
   async list(
-    @Param('workspaceId') workspaceId: string,
     @Query('limit') rawLimit: string | undefined,
     @Req() req: Request,
     @Headers('authorization') authorization?: string,
@@ -107,7 +103,6 @@ export class AiKnowledgeController {
 
   @Get('solutions/:solutionId')
   async getSolution(
-    @Param('workspaceId') workspaceId: string,
     @Param('solutionId') solutionId: string,
     @Req() req: Request,
     @Headers('authorization') authorization?: string,
@@ -120,7 +115,6 @@ export class AiKnowledgeController {
 
   @Delete('solutions/:solutionId')
   async remove(
-    @Param('workspaceId') workspaceId: string,
     @Param('solutionId') solutionId: string,
     @Req() req: Request,
     @Headers('authorization') authorization?: string,

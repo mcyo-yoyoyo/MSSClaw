@@ -28,6 +28,7 @@ import {
   type SkillEvaluationInput,
 } from './skill-evaluation';
 import { portalAnalyticsDateKey } from '../persistence/portal-analytics-time';
+import { PLATFORM_WORKSPACE_ID } from '../common/platform-workspace';
 
 const MARKETING_STEPS: ExecutionStep[] = [
   { skill: 'Intent_Parser', time: '120ms', label: '多模态意图识别', detail: '解析群聊上下文，提取实体与 Action。' },
@@ -198,7 +199,7 @@ export class ExecutionsService {
   async *createStream(params: StreamExecutionRequest, signal?: AbortSignal): AsyncGenerator<StreamEvent> {
     if (signal?.aborted) return;
 
-    const workspaceId = params.workspaceId || 'ws-mss-ai';
+    const workspaceId = params.workspaceId || PLATFORM_WORKSPACE_ID;
     const agentType = params.actionType ?? resolveAgentType(params.chatId, params.message);
     const agentName =
       params.agentName?.trim() || getAgentName(params.chatId, agentType);

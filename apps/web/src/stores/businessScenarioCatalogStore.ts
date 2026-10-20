@@ -8,7 +8,6 @@ import {
 } from '@/domain/businessScenarios';
 import {
   canUsePlatformDocsApi,
-  currentWorkspaceId,
   fetchPlatformDoc,
   scheduleSavePlatformDoc,
 } from '@/api/platformDocsApi';
@@ -48,7 +47,7 @@ function normalizeCategories(
 function persist(categories: BusinessScenarioCategory[]) {
   setBusinessScenarioCatalog(categories);
   if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc(currentWorkspaceId(), 'business-scenario-catalog', {
+  void scheduleSavePlatformDoc('business-scenario-catalog', {
     categories,
   });
 }
@@ -85,7 +84,7 @@ export const useBusinessScenarioCatalogStore = create<BusinessScenarioCatalogSta
         try {
           const remote = await fetchPlatformDoc<
             BusinessScenarioCategory[] | { categories?: BusinessScenarioCategory[] }
-          >(currentWorkspaceId(), 'business-scenario-catalog');
+          >('business-scenario-catalog');
           const list = Array.isArray(remote)
             ? remote
             : Array.isArray(remote?.categories)
