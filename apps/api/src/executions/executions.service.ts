@@ -29,6 +29,7 @@ import {
 } from './skill-evaluation';
 import { portalAnalyticsDateKey } from '../persistence/portal-analytics-time';
 import { PLATFORM_WORKSPACE_ID } from '../common/platform-workspace';
+import { readLlmConfigDoc } from '../persistence/llm-config-store';
 
 const MARKETING_STEPS: ExecutionStep[] = [
   { skill: 'Intent_Parser', time: '120ms', label: '多模态意图识别', detail: '解析群聊上下文，提取实体与 Action。' },
@@ -145,7 +146,7 @@ function buildExecutionError(
   };
 }
 
-type ExecutionRecord = {
+export type ExecutionRecord = {
   id: string;
   workspaceId: string;
   chatId: string;
@@ -179,6 +180,53 @@ function normalizeAssetId(value: unknown): string {
   return id;
 }
 
+type ExecutionRow = Prisma.ExecutionGetPayload<object>;
+
+export function executionToRow(record: ExecutionRecord): Prisma.ExecutionUncheckedCreateInput {
+  return {
+    id: record.id,
+    userId: record.userId ?? null,
+    chatId: record.chatId,
+    assetType: record.assetType,
+    assetId: record.assetId,
+    agentType: record.agentType,
+    agentName: record.agentName,
+    status: record.status,
+    source: record.source ?? null,
+    message: record.message,
+    error: record.error ?? null,
+    totalTime: record.totalTime ?? null,
+    hasUsage: Boolean(record.usage),
+    inputTokens: record.usage?.inputTokens ?? null,
+    outputTokens: record.usage?.outputTokens ?? null,
+    steps: record.steps ? (record.steps as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+    startedAt: new Date(record.startedAt),
+    finishedAt: record.finishedAt ? new Date(record.finishedAt) : null,
+  };
+}
+
+/** 对外不带 userId；空的可选字段不输出，与原 JSON 记录一致 */
+export function executionFromRow(row: ExecutionRow, workspaceId: string): ExecutionRecord {
+  return {
+    id: row.id,
+    workspaceId,
+    chatId: row.chatId,
+    message: row.message,
+    agentType: row.agentType as AgentType,
+    agentName: row.agentName,
+    status: row.status as ExecutionRecord['status'],
+    ...(row.source ? { source: row.source as ExecutionSource } : {}),
+    startedAt: row.startedAt.toISOString(),
+    ...(row.finishedAt ? { finishedAt: row.finishedAt.toISOString() } : {}),
+    ...(row.totalTime ? { totalTime: row.totalTime } : {}),
+    ...(row.steps ? { steps: row.steps as unknown as ExecutionStep[] } : {}),
+    ...(row.error ? { error: row.error } : {}),
+    assetId: row.assetId,
+    assetType: row.assetType as ExecutionAssetType,
+    ...(row.hasUsage ? { usage: { inputTokens: row.inputTokens, outputTokens: row.outputTokens } } : {}),
+  };
+}
+
 @Injectable()
 export class ExecutionsService {
   constructor(
@@ -186,14 +234,11 @@ export class ExecutionsService {
   ) {}
 
   async list(workspaceId: string, limit = 50) {
-    const rows = await this.prisma.centerRecord.findMany({
-      where: { kind: 'execution' },
+    const rows = await this.prisma.execution.findMany({
       orderBy: { updatedAt: 'desc' },
       take: Math.min(Math.max(limit, 1), 200),
     });
-    return {
-      executions: rows.map((r) => r.payload as unknown as ExecutionRecord),
-    };
+    return { executions: rows.map((row) => executionFromRow(row, workspaceId)) };
   }
 
   async *createStream(params: StreamExecutionRequest, signal?: AbortSignal): AsyncGenerator<StreamEvent> {
@@ -272,10 +317,8 @@ export class ExecutionsService {
     workspaceId: string,
     requestedModel?: string,
   ): Promise<NestLlmRuntimeConfig | null> {
-    const row = await this.prisma.centerRecord.findUnique({
-      where: { id: `doc-llm-config-${workspaceId}` },
-    });
-    const fromDoc = nestLlmConfigFromDoc(row?.payload, requestedModel);
+    const doc = await readLlmConfigDoc(this.prisma);
+    const fromDoc = nestLlmConfigFromDoc(doc, requestedModel);
     if (fromDoc) return fromDoc;
     // A seeded/empty document should not disable deployment fallback. Once a
     // workspace has stored any key, however, a missing selected-model key is a
@@ -284,7 +327,7 @@ export class ExecutionsService {
     // never hide a missing per-model key behind the deployment fallback.
     const hasRequestedModel =
       typeof requestedModel === 'string' && requestedModel.trim().length > 0;
-    if (hasRequestedModel || this.hasWorkspaceLlmCredential(row?.payload)) return null;
+    if (hasRequestedModel || this.hasWorkspaceLlmCredential(doc)) return null;
     return nestLlmConfigFromEnv();
   }
 
@@ -649,18 +692,8 @@ export class ExecutionsService {
   }
 
   private async saveRecord(record: ExecutionRecord) {
-    const { userId: _userId, ...publicRecord } = record;
-    await this.prisma.centerRecord.upsert({
-      where: { id: record.id },
-      create: {
-        id: record.id,
-        kind: 'execution',
-        payload: publicRecord as unknown as Prisma.InputJsonValue,
-      },
-      update: {
-        payload: publicRecord as unknown as Prisma.InputJsonValue,
-      },
-    });
+    const data = executionToRow(record);
+    await this.prisma.execution.upsert({ where: { id: record.id }, create: data, update: data });
     // Terminal records become one idempotent call fact for the analytics dashboard.
     if (record.status !== 'running') {
       await this.saveCallFact(record).catch(() => undefined);

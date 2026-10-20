@@ -255,7 +255,8 @@ function mergeSessionsForPersist(
 
 export async function loadSessions(): Promise<Record<string, ChatConfig> | null> {
   let raw: Record<string, ChatConfig> | null = null;
-  if (useWorkspaceStore.getState().apiConnected) {
+  // 会话接口按登录人读写，游客只用本机副本
+  if (useWorkspaceStore.getState().apiConnected && getCurrentUserId().trim()) {
     try {
       const remote = await fetchSessionsApi();
       if (remote && Object.keys(remote).length) raw = remote;
@@ -275,7 +276,7 @@ export async function saveSessions(
 ): Promise<MarketplaceSaveResult> {
   const owned = filterSessionsForCurrentUser(chats);
   writeLocalSessions(owned);
-  if (!useWorkspaceStore.getState().apiConnected) {
+  if (!useWorkspaceStore.getState().apiConnected || !getCurrentUserId().trim()) {
     return { synced: false, reason: 'offline' };
   }
   try {

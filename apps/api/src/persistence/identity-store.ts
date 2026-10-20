@@ -40,6 +40,15 @@ function isRecord(value: unknown): value is JsonRecord {
 
 /** 期望版本一致才加一；不一致抛 409（错误体与原文档 CAS 相同）。 */
 export async function bumpRevision(tx: Prisma.TransactionClient, collection: string, expected: number): Promise<number> {
+  return bumpCollectionRevision(tx, collection, expected, `${collection.replace(/-/g, '_')}_revision_conflict`);
+}
+
+export async function bumpCollectionRevision(
+  tx: Prisma.TransactionClient,
+  collection: string,
+  expected: number,
+  conflictError: string,
+): Promise<number> {
   const updated = await tx.collectionRevision.updateMany({
     where: { collection, revision: expected },
     data: { revision: { increment: 1 } },
@@ -51,7 +60,7 @@ export async function bumpRevision(tx: Prisma.TransactionClient, collection: str
     return 1;
   }
   throw new ConflictException({
-    error: `${collection.replace(/-/g, '_')}_revision_conflict`,
+    error: conflictError,
     expectedRevision: expected,
     currentRevision: current?.revision ?? 0,
   });
@@ -66,7 +75,7 @@ async function touchRevision(tx: Prisma.TransactionClient, collection: string): 
   });
 }
 
-async function readRevision(db: Db, collection: string): Promise<number> {
+export async function readRevision(db: Db, collection: string): Promise<number> {
   return (await db.collectionRevision.findUnique({ where: { collection } }))?.revision ?? 0;
 }
 

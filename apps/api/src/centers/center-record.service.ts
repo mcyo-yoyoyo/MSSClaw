@@ -33,7 +33,7 @@ export class CenterRecordService {
 
   async list(workspaceId: string, kind: CenterKind) {
     if (isAssetCenterKind(kind)) return this.listAssets(kind);
-    const rows = await this.prisma.centerRecord.findMany({
+    const rows = await this.prisma.centerResource.findMany({
       where: { kind },
       orderBy: { updatedAt: 'desc' },
     });
@@ -53,8 +53,8 @@ export class CenterRecordService {
       if (!item) throw new NotFoundException(`${kind} ${id} not found`);
       return item;
     }
-    const row = await this.prisma.centerRecord.findFirst({
-      where: { id, kind },
+    const row = await this.prisma.centerResource.findUnique({
+      where: { kind_id: { kind, id } },
     });
     if (row) return row.payload as Record<string, unknown>;
     throw new NotFoundException(`${kind} ${id} not found`);
@@ -74,16 +74,9 @@ export class CenterRecordService {
       updatedAt: new Date().toISOString().slice(0, 10),
     };
 
-    await this.prisma.centerRecord.upsert({
-      where: { id },
-      create: {
-        id,
-        kind,
-        payload: next as Prisma.InputJsonValue,
-      },
-      update: {
-        payload: next as Prisma.InputJsonValue,
-      },
+    await this.prisma.centerResource.update({
+      where: { kind_id: { kind, id } },
+      data: { payload: next as Prisma.InputJsonValue },
     });
 
     return next;

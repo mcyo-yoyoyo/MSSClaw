@@ -7,6 +7,7 @@ import { json, urlencoded } from 'express';
 import type { Server } from 'http';
 import { AppModule } from './app.module';
 import { trustProxySetting } from './common/trust-proxy';
+import { hasSecretKey } from './common/secret-box';
 
 const DEFAULT_HTTP_REQUEST_TIMEOUT_MS = 600_000;
 
@@ -17,6 +18,10 @@ function positiveInteger(value: string | undefined, fallback: number): number {
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
+  // 模型 API Key 加密存库；缺密钥时保存和调用模型都会失败，启动时就拦下
+  if (!hasSecretKey()) {
+    throw new Error('LLM_KEY_SECRET 未配置：模型 API Key 加密存储需要它，见 deploy/api.env.example');
+  }
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['error', 'warn', 'log'],
     bodyParser: false,

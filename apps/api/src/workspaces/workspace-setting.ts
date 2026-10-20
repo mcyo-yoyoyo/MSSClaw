@@ -46,15 +46,3 @@ export async function ensureWorkspace(prisma: PrismaService): Promise<WorkspaceR
   });
   return toRow(row.value);
 }
-
-export async function updateWorkspaceCatalog(prisma: PrismaService, catalog: Prisma.InputJsonValue) {
-  const row = await prisma.appSetting.findUnique({ where: { settingKey: SETTING_KEY } });
-  if (!row) throw new Error('workspace_setting_missing');
-  await prisma.appSetting.update({
-    where: { settingKey: SETTING_KEY },
-    data: {
-      value: { ...(row.value as Prisma.JsonObject), catalog } as Prisma.InputJsonValue,
-      revision: { increment: 1 },
-    },
-  });
-}

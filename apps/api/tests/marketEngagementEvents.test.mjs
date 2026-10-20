@@ -108,10 +108,10 @@ function engagementHarness(
     : []);
   const prisma = {
     appSetting: { findUnique: async () => workspaceExists ? ({ value: { catalog: {} } }) : null },
-    centerRecord: {
-      findUnique: async () => null,
-      findMany: async () => contentRows.filter((row) => row.kind !== 'marketplace'),
-    },
+    // 门户内容、办公场景、中心资源在各自的表里；这些用例只用资产
+    portalContent: { findMany: async () => [] },
+    officeScene: { findMany: async () => [] },
+    centerResource: { findMany: async () => [] },
     ...assetModels(contentRows),
     marketEngagement: { findUnique: async () => metric && ({ ...metric }) },
     marketEngagementEvent: { deleteMany: async () => ({ count: 0 }) },
@@ -310,42 +310,3 @@ test('nested package blob ids are not accepted as marketplace content', async ()
   assert.equal(harness.events.length, 0);
 });
 
-test('legacy JSON migration imports only current catalog content and ignores forged keys', async () => {
-  const upserts = [];
-  let normalizedPayload = null;
-  const legacyRow = {
-    id: 'doc-content-engagement-ws-test',
-    payload: {
-      byId: {
-        'tool-1': { views: 7, likes: 2 },
-        forged: { views: 999999, likes: 999999 },
-      },
-    },
-  };
-  const prisma = {
-    appSetting: { findUnique: async () => ({ value: { catalog: {} } }) },
-    ...assetModels([{ kind: 'marketplace', payload: { tools: [{ id: 'tool-1' }] } }]),
-    centerRecord: {
-      findUnique: async () => legacyRow,
-      findMany: async () => [],
-      update: async ({ data }) => {
-        normalizedPayload = data.payload;
-        return { ...legacyRow, payload: data.payload };
-      },
-    },
-    marketEngagement: {
-      upsert: async (input) => {
-        upserts.push(input);
-        return input.create;
-      },
-    },
-    $transaction: async (operations) => Promise.all(operations),
-  };
-
-  await new PersistenceService(prisma).ensureLegacyMarketEngagementMigrated('ws-test');
-
-  assert.deepEqual(upserts.map((input) => input.create.contentId), ['tool-1']);
-  assert.equal(upserts[0].create.views, 7);
-  assert.equal(upserts[0].create.likes, 2);
-  assert.match(normalizedPayload.normalizedAt, /^\d{4}-\d{2}-\d{2}T/);
-});

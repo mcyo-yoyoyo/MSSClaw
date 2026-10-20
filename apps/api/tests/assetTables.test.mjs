@@ -24,12 +24,19 @@ after(async () => {
 });
 
 beforeEach(async () => {
-  for (const table of ['agent_skill', 'skill_version', 'agent', 'skill', 'tool', 'automation', 'kb_document', 'center_record', 'app_setting']) {
+  for (const table of ['agent_skill', 'skill_version', 'agent', 'skill', 'tool', 'automation', 'kb_document', 'asset_approval', 'app_setting']) {
     await prisma.$executeRawUnsafe(`DELETE FROM "${table}"`);
   }
   await ensureWorkspace(prisma);
 });
 
+const approval = (assetId, status) =>
+  prisma.assetApproval.create({
+    data: {
+      id: `apr-${assetId}`, position: 0, kind: 'skill', assetId, assetName: assetId, submitterName: 't',
+      stepIndex: 0, status, createdAt: new Date(), updatedAt: new Date(),
+    },
+  });
 const skill = (id, extra = {}) => ({
   id, name: id, desc: '', category: 'office', command: `/${id}`, author: 't',
   version: '1.0', connector: '', published: false, invokes: 0, icon: 'fa-puzzle-piece', tags: [], ...extra,
@@ -117,20 +124,13 @@ test('删除下架 Skill：同时从 Agent 编排摘掉，审批记录不动', a
     skills: [skill('skill-delete'), skill('skill-other')],
     agents: [agent('agent-keep', ['skill-delete', 'skill-other'])],
   });
-  await prisma.centerRecord.create({
-    data: {
-      id: `doc-asset-approvals-${WS}`,
-      kind: 'doc:asset-approvals',
-      payload: { items: [{ kind: 'skill', assetId: 'skill-delete', status: 'approved' }] },
-    },
-  });
+  await approval('skill-delete', 'approved');
 
   await service.putMarketplace(WS, { skills: [skill('skill-other')] });
 
   assert.deepEqual((await readAssets(prisma, 'skill')).map((item) => item.id), ['skill-other']);
   assert.deepEqual((await readAssets(prisma, 'agent'))[0].skillIds, ['skill-other']);
-  const approvals = await prisma.centerRecord.findUnique({ where: { id: `doc-asset-approvals-${WS}` } });
-  assert.equal(approvals.payload.items.length, 1);
+  assert.equal(await prisma.assetApproval.count(), 1);
   assert.deepEqual(await new CenterRecordService(prisma).list(WS, 'skill').then((items) => items.map((item) => item.id)), ['skill-other']);
 });
 
@@ -139,13 +139,7 @@ for (const state of [{ published: true }, { pending: true }]) {
     const service = new PersistenceService(prisma);
     await service.putMarketplace(WS, { skills: [skill('skill-delete', { published: Boolean(state.published) })] });
     if (state.pending) {
-      await prisma.centerRecord.create({
-        data: {
-          id: `doc-asset-approvals-${WS}`,
-          kind: 'doc:asset-approvals',
-          payload: { items: [{ kind: 'skill', assetId: 'skill-delete', status: 'pending' }] },
-        },
-      });
+      await approval('skill-delete', 'pending');
     }
     await assert.rejects(service.putMarketplace(WS, { skills: [] }), /仅可删除已下架/);
     assert.deepEqual((await readAssets(prisma, 'skill')).map((item) => item.id), ['skill-delete']);

@@ -31,21 +31,39 @@ function validLayout(expectedRevision = 0) {
   };
 }
 
+/** 文档存在 app_setting（键名 = 文档种类）；初始行和辅助行沿用旧的 { kind: 'doc:…', payload } 写法 */
 function fakePrisma(
   initialRow = null,
   executeResult = 1,
   auxiliaryRows = [],
   workspaceExists = true,
 ) {
-  let row = initialRow;
+  const settings = new Map();
+  if (workspaceExists) settings.set('workspace', { settingKey: 'workspace', value: { catalog: {} } });
+  for (const row of [...auxiliaryRows, ...(initialRow ? [initialRow] : [])]) {
+    if (row.kind.startsWith('doc:')) settings.set(row.kind.slice(4), { settingKey: row.kind.slice(4), value: row.payload });
+  }
   let seededCreate = null;
-  let created = null;
   let executeCalls = 0;
-  let findFirstCalls = 0;
+  let legacyPinReads = 0;
 
   return {
     appSetting: {
-      findUnique: async () => (workspaceExists ? { value: { catalog: {} } } : null),
+      findUnique: async ({ where }) => {
+        if (where.settingKey === 'market-featured') legacyPinReads += 1;
+        return settings.get(where.settingKey) ?? null;
+      },
+      upsert: async ({ where, create }) => {
+        if (!settings.has(where.settingKey)) {
+          seededCreate = create;
+          settings.set(where.settingKey, { ...create });
+        }
+        return settings.get(where.settingKey);
+      },
+      create: async ({ data }) => {
+        settings.set(data.settingKey, { ...data });
+        return data;
+      },
     },
     // 工具在 tool 表；用例里沿用 marketplace 形状的辅助行提供工具清单
     tool: {
@@ -53,31 +71,16 @@ function fakePrisma(
         (auxiliaryRows.find((candidate) => candidate.kind === 'marketplace')?.payload.tools ?? [])
           .map((tool, position) => ({ ...tool, position })),
     },
-    centerRecord: {
-      findUnique: async () => row,
-      findFirst: async ({ where }) => {
-        findFirstCalls += 1;
-        return (
-          auxiliaryRows.find((candidate) => candidate.kind === where.kind) ?? null
-        );
-      },
-      findMany: async () => [],
-      upsert: async ({ create }) => {
-        seededCreate = create;
-        row = { ...create };
-        return row;
-      },
-      create: async ({ data }) => {
-        created = data;
-        row = { ...data };
-        return row;
-      },
-    },
     $executeRaw: async () => {
       executeCalls += 1;
       return executeResult;
     },
-    state: () => ({ row, seededCreate, created, executeCalls, findFirstCalls }),
+    state: () => ({
+      row: settings.get('external-tool-layout') ?? null,
+      seededCreate,
+      executeCalls,
+      findFirstCalls: legacyPinReads,
+    }),
   };
 }
 
@@ -309,8 +312,8 @@ test('GET creates and returns the versioned seed when the document is missing', 
     kind: 'external-tool-layout',
     payload: SEED_EXTERNAL_TOOL_LAYOUT,
   });
-  assert.deepEqual(prisma.state().seededCreate?.payload, SEED_EXTERNAL_TOOL_LAYOUT);
-  assert.equal(prisma.state().seededCreate?.kind, 'doc:external-tool-layout');
+  assert.deepEqual(prisma.state().seededCreate?.value, SEED_EXTERNAL_TOOL_LAYOUT);
+  assert.equal(prisma.state().seededCreate?.settingKey, 'external-tool-layout');
 });
 
 test('first GET migrates custom legacy external pins by marketplace region and pin order', async () => {
@@ -359,7 +362,7 @@ test('first GET migrates custom legacy external pins by marketplace region and p
     },
     categories: {},
   });
-  assert.deepEqual(prisma.state().seededCreate?.payload, result.payload);
+  assert.deepEqual(prisma.state().seededCreate?.value, result.payload);
   assert.equal(prisma.state().findFirstCalls, 1);
 });
 
@@ -431,7 +434,7 @@ test('GET adds empty additive category lists to legacy data without persisting o
     domesticMoreOrderIds: [],
     operatorNote: 'preserve-me',
   });
-  assert.deepEqual(prisma.state().row.payload, existingPayload);
+  assert.deepEqual(prisma.state().row.value, existingPayload);
   assert.equal(prisma.state().seededCreate, null);
 });
 
@@ -460,7 +463,7 @@ test('GET does not disguise malformed stored category lists as legacy missing da
   assert.equal(result.payload.categories.search.domesticFeaturedIds, 'malformed');
   assert.equal(result.payload.categories.search.overseasMoreOrderIds, 'malformed-more');
   assert.deepEqual(result.payload.categories.search.domesticMoreOrderIds, []);
-  assert.deepEqual(prisma.state().row.payload, existingPayload);
+  assert.deepEqual(prisma.state().row.value, existingPayload);
 });
 
 test('legacy PUT preserves existing category lists but gives new categories empty lists', async () => {

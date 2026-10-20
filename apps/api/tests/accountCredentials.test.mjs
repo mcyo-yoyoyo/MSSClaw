@@ -30,7 +30,7 @@ after(async () => {
 });
 
 beforeEach(async () => {
-  for (const table of ['auth_session', 'member_credential', 'member', 'collection_revision', 'app_setting', 'center_record']) {
+  for (const table of ['auth_session', 'member_credential', 'member', 'collection_revision', 'app_setting']) {
     await prisma.$executeRawUnsafe(`DELETE FROM "${table}"`);
   }
 });

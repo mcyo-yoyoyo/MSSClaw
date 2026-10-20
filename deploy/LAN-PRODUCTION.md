@@ -110,7 +110,7 @@ docker compose -f deploy/docker-compose.infra.yml up -d postgres
 3. 预览：`npm run migrate:sqlite-to-pg --workspace @mss-claw/api -- /绝对路径/prod.db`，核对各工作区数据量，确认 `ws-cn-marketing` 以外的空间只是种子数据或可以舍弃
 4. 执行：同一命令末尾加 `--apply`。目标表必须为空，全部写入在一个事务里，失败整体回滚；输出「完成。」才算成功
 5. 文件存储还没迁到 MinIO 的，接着做下面「文件存储」的迁移步骤（`migrate:blob-refs` 改的是 PG 里的数据，必须在第 4 步之后、第 6 步之前）
-6. 拆资产表：见下面「资产表」的第 3、4 步
+6. 依次做下面第 3～6 期的「预览 → 执行」（`migrate:assets` → `migrate:identity` → `migrate:personal-data` → `migrate:remaining`）。第 2 步的 `migrate deploy` 已经建好所有表，各期里的 `migrate deploy` 和启动 API 都跳过；第 6 期之前先配好 `LLM_KEY_SECRET`
 7. 启动 API，抽查登录、三个货架、看板数字、一个附件
 8. SQLite 文件保留到下个版本；回滚 = 停 API、`DATABASE_URL` 改回 SQLite、部署上一个版本
 
@@ -144,6 +144,22 @@ docker compose -f deploy/docker-compose.infra.yml up -d postgres
 4. 执行：同一命令末尾加 `-- --apply`，输出「与预期一致」才算成功
 5. 前端随这一期一起发版（收藏等改走 /api/v1/me/... 接口），启动 API 后用一个账号收藏、取消收藏、写备注各试一次
 6. 回滚 = 停 API、`pg_restore` 第 1 步的备份、前后端都部署上一个版本
+
+**其余数据（第 6 期，停机进行）**：会话、办公场景、门户内容、公告、AI 新闻与快讯归档、审批、审计、模型配置、执行记录、AI 智库、原型中心资源拆进各自的表，导航、精选等配置文档移到 `app_setting`，搬完删除过渡表 `center_record`。
+
+1. 停止 API；`pg_dump` 备份
+2. 在 `apps/api/.env` 配置 `LLM_KEY_SECRET`（`openssl rand -hex 32` 生成，见 `deploy/api.env.example`）。模型 API Key 用它加密存库，API 启动时缺它直接退出；丢了或改了，已存的 Key 只能在「模型与 API」里重新填写，所以要和数据库口令一样单独保管
+3. `npx prisma migrate deploy`（在 `apps/api` 下）建表；`center_record` 里还有数据时这一步不删它
+4. 预览：`npm run migrate:remaining --workspace @mss-claw/api`。脚本在事务里完整跑一遍、逐类读回核对后回滚，每一类都要是「一致」；它还会列出丢弃的内容：
+   - 审计只保留最近 180 天
+   - 旧站内信文档（8 月起前端已改读站内信表，里面是当时的公告副本），列出标题后丢弃
+   - 从未使用的 `ai-news-prefs`
+   - 遇到不认识的记录或目标表已有数据会直接停下
+5. 执行：同一命令末尾加 `-- --apply`，输出「完成，center_record 已删除」才算成功
+6. 前端随这一期一起发版（会话接口改为登录后才可读写），启动 API 后抽查：首页公告和办公场景、AI 快讯、模型与 API 页的 Key、审批列表；两个账号各建一个任务，互相看不到
+7. 回滚 = 停 API、`pg_restore` 第 1 步的备份、前后端都部署上一个版本
+
+注意：API 启动时会给空的办公场景、模型配置等写入默认数据，导致脚本因「目标表不是空的」停下，所以第 5 步之前不要启动 API。
 
 ### 文件存储（MinIO）
 

@@ -17,6 +17,7 @@
  */
 import { DatabaseSync } from 'node:sqlite';
 import { PrismaClient } from '@prisma/client';
+import { centerRecord, ensureCenterRecordTable } from './lib/center-record.mjs';
 
 const PLATFORM = 'ws-cn-marketing';
 const GLOBAL_SCOPES = ['__global__', 'global'];
@@ -237,10 +238,13 @@ async function main() {
   }
 
   const prisma = new PrismaClient();
+  // center_record 是过渡表：Prisma 里已没有这个模型，走原始 SQL；全新库上它已被第 6 期迁移删掉，这里重建
+  const table = (db, model) => (model === 'centerRecord' ? centerRecord(db) : db[model]);
   try {
+    await ensureCenterRecordTable(prisma);
     const nonEmpty = [];
     for (const model of Object.keys(tables)) {
-      const count = await prisma[model].count();
+      const count = await table(prisma, model).count();
       if (count) nonEmpty.push(`${model} ${count}`);
     }
     if (nonEmpty.length) {
@@ -252,7 +256,7 @@ async function main() {
       for (const [model, rows] of Object.entries(tables)) {
         inserted[model] = 0;
         for (let i = 0; i < rows.length; i += CHUNK) {
-          const { count } = await tx[model].createMany({ data: rows.slice(i, i + CHUNK), skipDuplicates: true });
+          const { count } = await table(tx, model).createMany({ data: rows.slice(i, i + CHUNK), skipDuplicates: true });
           inserted[model] += count;
         }
       }
@@ -261,7 +265,7 @@ async function main() {
     console.log('\n已写入（统计表按 eventId / 主键去重，重复的跳过）：');
     let mismatch = false;
     for (const [model, rows] of Object.entries(tables)) {
-      const stored = await prisma[model].count();
+      const stored = await table(prisma, model).count();
       const skipped = rows.length - inserted[model];
       if (stored !== inserted[model]) mismatch = true;
       console.log(`  ${model.padEnd(26)} ${stored}${skipped ? `（重复跳过 ${skipped}）` : ''}${stored !== inserted[model] ? '  ← 与写入数不一致' : ''}`);

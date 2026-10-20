@@ -1,5 +1,5 @@
 /**
- * 打印每个工作区 llm-config 里「谁在用哪个模型」。
+ * 打印模型配置里「谁在用哪个模型」。
  *
  * 三条链路读的是三个不同字段，排查时先用这个脚本对齐：
  *   智库「帮找」  -> defaultModelId（组织默认）
@@ -22,8 +22,16 @@ function endpoint(baseUrl) {
   }
 }
 
-const rows = await prisma.centerRecord.findMany({ where: { kind: 'doc:llm-config' } });
-if (!rows.length) console.log('没有找到任何 llm-config 文档。');
+// 第 6 期起模型配置在 llm_model_config + app_setting('llm-selection')；Key 已加密，这里只看是否为空，不用解密
+const [selection, models] = await Promise.all([
+  prisma.appSetting.findUnique({ where: { settingKey: 'llm-selection' } }),
+  prisma.llmModelConfig.findMany({ orderBy: { position: 'asc' } }),
+]);
+const inScope = (scope) => models.filter((m) => m.scope === scope).map((m) => ({ ...m, id: m.modelId }));
+const rows = selection || models.length
+  ? [{ id: 'llm-config', payload: { ...(selection?.value ?? {}), platformModels: inScope('platform'), customModels: inScope('custom') } }]
+  : [];
+if (!rows.length) console.log('还没有保存过模型配置。');
 
 for (const row of rows) {
   const config = row.payload ?? {};

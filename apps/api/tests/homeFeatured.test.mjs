@@ -3,38 +3,31 @@ import test from 'node:test';
 import { PlatformDocsService } from '../dist/persistence/platform-docs.service.js';
 import { PlatformDocsController } from '../dist/persistence/platform-docs.controller.js';
 
-/** 按 id 存文档的假 prisma，$executeRaw 走 revision CAS 语义 */
-function fakePrisma(rows = {}) {
-  const store = new Map(Object.entries(rows));
+/** 按设置键存文档的假 prisma（app_setting），$executeRaw 走 revision CAS 语义 */
+function fakePrisma(docs = {}) {
+  const store = new Map(Object.entries(docs).map(([key, value]) => [key, { settingKey: key, value }]));
+  store.set('workspace', { settingKey: 'workspace', value: { catalog: {} } });
   return {
-    appSetting: { findUnique: async () => ({ value: { catalog: {} } }) },
-    centerRecord: {
-      findUnique: async ({ where }) => store.get(where.id) ?? null,
-      findMany: async () => [...store.values()],
+    appSetting: {
+      findUnique: async ({ where }) => store.get(where.settingKey) ?? null,
       create: async ({ data }) => {
-        store.set(data.id, { ...data });
-        return store.get(data.id);
+        store.set(data.settingKey, { ...data });
+        return store.get(data.settingKey);
       },
       upsert: async ({ where, create }) => {
-        if (!store.has(where.id)) store.set(where.id, { ...create });
-        return store.get(where.id);
-      },
-      update: async ({ where, data }) => {
-        store.set(where.id, { ...store.get(where.id), ...data });
-        return store.get(where.id);
+        if (!store.has(where.settingKey)) store.set(where.settingKey, { ...create });
+        return store.get(where.settingKey);
       },
     },
-    $executeRaw: async (_strings, payloadJson, id, expectedRevision) => {
-      const row = store.get(id);
-      const current = typeof row?.payload?.revision === 'number' ? row.payload.revision : 0;
+    $executeRaw: async (_strings, payloadJson, key, expectedRevision) => {
+      const row = store.get(key);
+      const current = typeof row?.value?.revision === 'number' ? row.value.revision : 0;
       if (!row || current !== expectedRevision) return 0;
-      store.set(id, { ...row, payload: JSON.parse(payloadJson) });
+      store.set(key, { ...row, value: JSON.parse(payloadJson) });
       return 1;
     },
   };
 }
-
-const DOC_ID = 'doc-home-featured-ws-cn-marketing';
 
 const channels = (overrides = {}) => ({
   external: ['tool-ext-chatgpt'],
@@ -63,12 +56,7 @@ test('首页配置首次保存从 revision 0 开始，读取返回规范化后�
 
 test('首页配置拒绝陈旧 revision，避免覆盖其他管理员的排序', async () => {
   const prisma = fakePrisma({
-    [DOC_ID]: {
-      id: DOC_ID,
-      workspaceId: 'ws-cn-marketing',
-      kind: 'doc:home-featured',
-      payload: { version: 1, revision: 3, channels: channels() },
-    },
+    'home-featured': { version: 1, revision: 3, channels: channels() },
   });
   const service = new PlatformDocsService(prisma, {});
 
@@ -107,11 +95,7 @@ test('首页配置写入校验引用格式、重复项与单栏上限', async ()
 
 test('首页配置读取时丢弃脏数据，不让单条坏引用拖垮首页', async () => {
   const prisma = fakePrisma({
-    [DOC_ID]: {
-      id: DOC_ID,
-      workspaceId: 'ws-cn-marketing',
-      kind: 'doc:home-featured',
-      payload: {
+    'home-featured': {
         revision: 2,
         channels: {
           external: ['tool-a', 'tool-a', 42, ''],
@@ -119,7 +103,6 @@ test('首页配置读取时丢弃脏数据，不让单条坏引用拖垮首页',
           projects: ['skill:s-1', 'bad-ref', 'agent:a-1'],
         },
       },
-    },
   });
   const service = new PlatformDocsService(prisma, {});
   const read = await service.getDoc('ws-cn-marketing', 'home-featured');

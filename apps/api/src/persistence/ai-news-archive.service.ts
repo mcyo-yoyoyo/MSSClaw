@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import type { Prisma } from '@prisma/client';
 import { ProxyAgent, fetch as undiciFetch } from 'undici';
 import { PrismaService } from '../prisma/prisma.service';
+import { inTransaction, readRows, replaceRows, type Db, type TableSpec } from './json-table';
 
 export const AI_NEWS_SOURCE = 'https://aihot.virxact.com';
 const ITEMS_API = `${AI_NEWS_SOURCE}/api/v1/items?mode=selected&window=7d&limit=100`;
@@ -44,10 +45,26 @@ function describeError(e: unknown): string {
   return cause ? `${e.message} (${String(cause)})` : e.message || 'fetch failed';
 }
 
-/** 全局单条记录：AI 快讯不区分工作区，各租户读同一份公共资讯 */
-const ARCHIVE_ID = 'doc-ai-news-archive';
-const ARCHIVE_KIND = 'doc:ai-news-archive';
-const ARCHIVE_WORKSPACE = 'global';
+/** 快讯条目一行一条；同步状态单独存一条设置 */
+const FEED_ITEM: TableSpec = {
+  label: 'invalid_ai_news_feed_item',
+  model: 'aiNewsFeedItem',
+  key: 'id',
+  fields: {
+    id: { type: 'string', required: true },
+    publishedAt: { type: 'string', required: true },
+    dateLabel: { type: 'string', required: true },
+    title: { type: 'string', required: true },
+    summary: { type: 'string', required: true },
+    url: { type: 'string', required: true },
+    source: { type: 'string' },
+    category: { type: 'string' },
+    reason: { type: 'string' },
+    score: { type: 'int' },
+    aihotUrl: { type: 'string' },
+  },
+};
+const SYNC_SETTING_KEY = 'ai-news-feed.sync';
 
 type AihotItem = {
   id?: string;
@@ -77,7 +94,7 @@ export interface ArchivedNewsItem {
   aihotUrl?: string;
 }
 
-interface ArchivePayload {
+export interface ArchivePayload {
   items: ArchivedNewsItem[];
   updatedAt: string;
   lastSyncAt?: string;
@@ -129,7 +146,7 @@ function toArchived(item: AihotItem): ArchivedNewsItem | null {
     source: item.source?.name?.trim() || undefined,
     category: item.category || undefined,
     reason: item.reason?.trim() || undefined,
-    score: typeof item.score === 'number' ? item.score : undefined,
+    score: typeof item.score === 'number' && Number.isFinite(item.score) ? Math.round(item.score) : undefined,
     aihotUrl: item.links?.aihot || undefined,
   };
 }
@@ -141,9 +158,36 @@ function toArchived(item: AihotItem): ArchivedNewsItem | null {
  * 合并而非只取前一天：内网环境定时任务失败是常态，7 天窗口可自动补回
  * 漏掉的日期；按 id 去重，重复执行不会产生脏数据。
  *
- * 存储沿用 CenterRecord（doc:ai-news-archive），不新增表——内网 Windows
- * 部署最怕表结构变更，这样升级时无需执行迁移。
+ * 条目存 ai_news_feed_item，同步状态存 app_setting('ai-news-feed.sync')。
  */
+export async function readAiNewsArchive(db: Db): Promise<ArchivePayload> {
+  const [rows, setting] = await Promise.all([
+    readRows(db, FEED_ITEM),
+    db.appSetting.findUnique({ where: { settingKey: SYNC_SETTING_KEY } }),
+  ]);
+  const sync = (setting?.value ?? {}) as Omit<ArchivePayload, 'items'>;
+  return {
+    items: (rows as unknown as ArchivedNewsItem[]).sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)),
+    updatedAt: sync.updatedAt ?? new Date(0).toISOString(),
+    lastSyncAt: sync.lastSyncAt,
+    lastSyncError: sync.lastSyncError,
+    lastSyncVia: sync.lastSyncVia,
+  };
+}
+
+export async function writeAiNewsArchive(db: Db, { items, ...sync }: ArchivePayload) {
+  const value = JSON.parse(JSON.stringify(sync)) as Prisma.InputJsonObject;
+  await inTransaction(db, async (tx) => {
+    // 按差异写：同步失败只记状态时条目不动，没变的条目也不重写
+    await replaceRows(tx, FEED_ITEM, items);
+    await tx.appSetting.upsert({
+      where: { settingKey: SYNC_SETTING_KEY },
+      create: { settingKey: SYNC_SETTING_KEY, value },
+      update: { value },
+    });
+  });
+}
+
 @Injectable()
 export class AiNewsArchiveService implements OnModuleInit {
   private readonly logger = new Logger(AiNewsArchiveService.name);
@@ -312,27 +356,11 @@ export class AiNewsArchiveService implements OnModuleInit {
     };
   }
 
-  private async readArchive(): Promise<ArchivePayload> {
-    const row = await this.prisma.centerRecord.findUnique({ where: { id: ARCHIVE_ID } });
-    const payload = row?.payload as ArchivePayload | undefined;
-    return {
-      items: Array.isArray(payload?.items) ? payload!.items : [],
-      updatedAt: payload?.updatedAt ?? new Date(0).toISOString(),
-      lastSyncAt: payload?.lastSyncAt,
-      lastSyncError: payload?.lastSyncError,
-      lastSyncVia: payload?.lastSyncVia,
-    };
+  private readArchive() {
+    return readAiNewsArchive(this.prisma);
   }
 
-  private async writeArchive(payload: ArchivePayload) {
-    await this.prisma.centerRecord.upsert({
-      where: { id: ARCHIVE_ID },
-      create: {
-        id: ARCHIVE_ID,
-        kind: ARCHIVE_KIND,
-        payload: payload as unknown as Prisma.InputJsonValue,
-      },
-      update: { payload: payload as unknown as Prisma.InputJsonValue },
-    });
+  private writeArchive(payload: ArchivePayload) {
+    return writeAiNewsArchive(this.prisma, payload);
   }
 }

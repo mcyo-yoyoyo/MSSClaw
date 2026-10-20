@@ -23,13 +23,10 @@ export type PlatformDocKind =
   | 'home-featured'
   | 'org-taxonomy'
   | 'market-featured'
-  | 'content-engagement'
   | 'audit-log'
-  | 'ai-news-prefs'
   | 'asset-approvals'
   | 'skill-reviews'
   | 'llm-config'
-  | 'inbox'
   | 'warroom-webhook'
   | 'security-policy'
   | 'demo-content';

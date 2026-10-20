@@ -14,6 +14,7 @@
  *   npm run migrate:personal-data -- --apply  写入：目标表必须为空，全部在一个事务里，失败整体回滚
  */
 import { PrismaClient } from '@prisma/client';
+import { centerRecord } from './lib/center-record.mjs';
 
 const apply = process.argv.includes('--apply');
 const prisma = new PrismaClient();
@@ -63,7 +64,7 @@ function assetRef(item) {
 }
 
 async function main() {
-  const docs = await prisma.centerRecord.findMany({
+  const docs = await centerRecord(prisma).findMany({
     where: { kind: { in: ['doc:market-favorites', 'doc:market-recent', 'doc:market-hidden', 'doc:skill-reviews'] } },
   });
   const byKind = new Map();
@@ -162,7 +163,7 @@ async function main() {
     if (recent.length) await tx.marketRecentView.createMany({ data: recent });
     if (hidden.length) await tx.marketHiddenItem.createMany({ data: hidden });
     if (reviews.length) await tx.skillReview.createMany({ data: reviews });
-    await tx.centerRecord.deleteMany({ where: { id: { in: docs.map((row) => row.id) } } });
+    await centerRecord(tx).deleteMany({ where: { id: { in: docs.map((row) => row.id) } } });
   }, { maxWait: 60_000, timeout: 300_000 });
 
   const stored = await Promise.all([

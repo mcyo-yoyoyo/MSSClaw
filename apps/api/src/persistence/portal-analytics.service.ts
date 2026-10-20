@@ -1,12 +1,12 @@
-import { BadRequestException, Injectable, Optional } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { createHash, randomUUID } from 'crypto';
 import { readAssets } from './asset-catalog';
+import { readOfficeSceneEntries } from './operations-store';
 import { memberToJson, readMembers } from './identity-store';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   GLOBAL_TOOLS_RECORD_ID,
   GLOBAL_TOOLS_RECORD_KIND,
-  PersistenceService,
 } from './persistence.service';
 import {
   PORTAL_ANALYTICS_TIME_ZONE,
@@ -488,7 +488,6 @@ export class PortalAnalyticsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Optional() private readonly persistence?: PersistenceService,
   ) {}
 
   /**
@@ -667,9 +666,6 @@ export class PortalAnalyticsService {
     rawFrom?: string,
     rawTo?: string,
   ): Promise<PortalAnalyticsReport> {
-    // 旧版本把累计互动保存在 JSON 文档中；看板直达也必须先完成一次性迁移，
-    // 不能依赖用户先打开市场页面触发 engagement GET。
-    await this.persistence?.ensureLegacyMarketEngagementMigrated(workspaceId);
     const { days, from, to, today } = normalizedReportRange(rawDays, rawFrom, rawTo);
     const activityFrom = [from, naturalWeekStart(to), naturalMonthStart(to)].sort()[0] ?? from;
 
@@ -1689,21 +1685,11 @@ export class PortalAnalyticsService {
   private async readCenterRows(
     workspaceId: string,
   ): Promise<Array<{ id: string; kind: string; payload: unknown }>> {
-    const client = (this.prisma as unknown as {
-      centerRecord?: {
-        findMany?: (args: unknown) => Promise<Array<{ id: string; kind: string; payload: unknown }>>;
-      };
-    }).centerRecord;
-    if (!client?.findMany) return [];
-    const rows = await client.findMany({
-      where: {
-        kind: {
-          in: ['portal-content', 'doc:internal-office-scenes', 'workflow', 'knowledge'],
-        },
-      },
-      select: { id: true, kind: true, payload: true },
-    });
-    const result = Array.isArray(rows) ? [...rows] : [];
+    const result: Array<{ id: string; kind: string; payload: unknown }> = [];
+    // 测试替身可能没有这些表
+    if ((this.prisma as unknown as { officeScene?: unknown }).officeScene) {
+      result.push({ id: 'internal-office-scenes', kind: 'doc:internal-office-scenes', payload: { entries: await readOfficeSceneEntries(this.prisma) } });
+    }
     // 资产在资产表里：拼成旧的「货架快照行 + 全局工具行」，readAssetCatalog 的统计口径不用动。
     if ((this.prisma as unknown as { tool?: unknown }).tool) {
       const [tools, agents, skills, automations, kbDocs] = await Promise.all(

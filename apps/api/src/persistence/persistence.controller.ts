@@ -106,16 +106,22 @@ export class PersistenceController {
     private readonly docs: PlatformDocsService,
   ) {}
 
+  /** 会话按登录人读写：个人任务只见自己的，WarRoom 只见自己在成员里的 */
   @Get('sessions')
-  getSessions() {
-    return this.persistence.getSessions(workspaceId);
+  async getSessions(
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    return this.persistence.getSessions(await this.requireSessionUserId(authorization, xSessionToken));
   }
 
   @Put('sessions')
-  putSessions(
-    @Body() body: { chats: Record<string, unknown> },
+  async putSessions(
+    @Body() body: { chats?: unknown },
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
   ) {
-    return this.persistence.putSessions(workspaceId, body.chats ?? {});
+    return this.persistence.putSessions(await this.requireSessionUserId(authorization, xSessionToken), body?.chats ?? {});
   }
 
   @Get('inbox/messages')
@@ -338,6 +344,12 @@ export class PersistenceController {
     const session = await this.docs.me(token, workspaceId);
     if (!session.ok) return '';
     return String(session.user?.id ?? '').trim();
+  }
+
+  private async requireSessionUserId(authorization?: string, xSessionToken?: string): Promise<string> {
+    const userId = await this.optionalSessionUserId(workspaceId, authorization, xSessionToken);
+    if (!userId) throw new UnauthorizedException('login_required');
+    return userId;
   }
 
   private requireGuestVisitorId(raw?: unknown): string {

@@ -8,32 +8,20 @@ export class WorkspacesService {
 
   async findCatalog() {
     const row = await ensureWorkspace(this.prisma);
-    const json = row.catalogJson as {
-      workspace?: unknown;
-      chats?: Record<string, unknown>;
-      resources?: unknown[];
-    } | null;
-    const empty =
-      !json ||
-      typeof json !== 'object' ||
-      !json.workspace ||
-      !json.chats ||
-      (Object.keys(json.chats).length === 0 && (json.resources?.length ?? 0) === 0);
-    return empty && json?.workspace
-      ? json
-      : empty
-        ? {
-            workspace: {
-              id: row.id,
-              name: row.name,
-              namespace: row.namespace,
-              description: row.description,
-              memberCount: row.memberCount,
-            },
-            chats: {},
-            resources: [],
-            defaultChatId: row.defaultChatId || 'default',
-          }
-        : row.catalogJson;
+    const json = row.catalogJson as { workspace?: unknown } | null;
+    // 会话在 chat_session 表，按登录人走 /sessions；目录里一律不带，旧库没迁走的也不外露
+    if (json && typeof json === 'object' && json.workspace) return { ...json, chats: {} };
+    return {
+      workspace: {
+        id: row.id,
+        name: row.name,
+        namespace: row.namespace,
+        description: row.description,
+        memberCount: row.memberCount,
+      },
+      chats: {},
+      resources: [],
+      defaultChatId: row.defaultChatId || 'default',
+    };
   }
 }

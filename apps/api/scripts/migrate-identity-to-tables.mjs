@@ -23,6 +23,7 @@ import {
   prepareMembers,
   readCredentialsDoc,
 } from '../dist/persistence/identity-store.js';
+import { centerRecord } from './lib/center-record.mjs';
 
 const apply = process.argv.includes('--apply');
 const prisma = new PrismaClient();
@@ -30,7 +31,7 @@ const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Arra
 const optionalText = (value) => (typeof value === 'string' && value.trim() ? value.trim() : null);
 
 async function main() {
-  const docs = await prisma.centerRecord.findMany({
+  const docs = await centerRecord(prisma).findMany({
     where: { kind: { in: ['doc:members', 'doc:auth-credentials', 'doc:auth-sessions'] } },
   });
   const byKind = new Map();
@@ -140,7 +141,7 @@ async function main() {
         update: { revision },
       });
     }
-    await tx.centerRecord.deleteMany({ where: { id: { in: docs.map((row) => row.id) } } });
+    await centerRecord(tx).deleteMany({ where: { id: { in: docs.map((row) => row.id) } } });
   }, { maxWait: 60_000, timeout: 300_000 });
 
   // 读回核对：成员逐字段（最近活跃除外）、密码逐条

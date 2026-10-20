@@ -198,7 +198,7 @@ hooks/             # 路由、Focus Trap 等
 | `KnowledgeRagModule` | 文档解析、检索、向量索引状态 |
 | `HealthController` | `GET /api/v1/health` |
 
-数据存 **PostgreSQL**：货架资产在 `tool`、`skill`、`agent` 等资产表，平台目录在 `app_setting`，其余 Center 记录暂以 JSON 存在过渡表 `center_record`（表结构见 `docs/database-design.sql`）。
+数据存 **PostgreSQL**，表结构见 `docs/database-design.sql`：货架资产、成员、个人数据、会话、审批、审计、执行记录等都有正式表；导航、精选、分类等配置文档整份存在 `app_setting`（键名即文档种类）。
 
 ### 4.5 数据流（重要原则）
 

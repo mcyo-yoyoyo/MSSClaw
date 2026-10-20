@@ -21,17 +21,6 @@ model AppSetting {
   @@map("app_setting")
 }
 
-/// 过渡表：其余 JSON 文档，第 6 期结束后删除。记录 id 沿用旧值（如 marketplace-ws-cn-marketing）。
-model CenterRecord {
-  id        String   @id
-  kind      String
-  payload   Json
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
-
-  @@index([kind], map: "center_record_kind_idx")
-  @@map("center_record")
-}
-
 /// 市场内容的聚合互动指标。所有计数由后端原子更新，前端只读取结果。
 model MarketEngagement {
   contentId String   @id @map("content_id")
@@ -566,4 +555,294 @@ model SkillReview {
 
   @@index([skillId, createdAt], map: "skill_review_skill_idx")
   @@map("skill_review")
+}
+
+// ---------------------------------------------------------------------------
+// 第 6 期其余文档（docs/database-design.sql A4、B8、B9、C1–C4、E3–E5、F1–F4）。
+// 接口 JSON 自带的时间（毫秒或 ISO 字符串）直接存进对应列；只用来原样返回、不参与排序的 ISO 字符串存文本。
+
+/// 内部办公场景：原 doc:internal-office-scenes.entries[]；整表替换用 collection_revision('office-scenes')
+model OfficeScene {
+  id          String   @id
+  position    Int
+  label       String
+  english     String
+  description String
+  icon        String
+  visible     Boolean
+  toolId      String?  @map("tool_id")
+  toolBlurb   String?  @map("tool_blurb")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("office_scene")
+}
+
+/// 原型中心资源：prompt / workflow / knowledge / memory，嵌套深，整体存 jsonb
+model CenterResource {
+  kind      String
+  id        String
+  payload   Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([kind, id])
+  @@map("center_resource")
+}
+
+/// 门户知识地图内容：原 center_record portal-content 的 items[]；整表替换用 collection_revision('portal-content')
+model PortalContent {
+  id                String   @id
+  position          Int
+  type              String
+  title             String
+  desc              String   @map("description")
+  icon              String
+  published         Boolean?
+  isGold            Boolean? @map("is_gold")
+  sourceType        String?  @map("source_type")
+  visibility        String?
+  publisher         String?  @map("publisher_name")
+  publisherUserId   String?  @map("publisher_member_id")
+  ownerDeptIds      Json?    @map("owner_dept_ids")
+  ownerRegionId     String?  @map("owner_region_id")
+  scenarioTags      Json?    @map("scenario_tags")
+  homepageUrl       String?  @map("homepage_url")
+  kbDocId           String?  @map("kb_doc_id")
+  agentId           String?  @map("agent_id")
+  skillId           String?  @map("skill_id")
+  primarySkillId    String?  @map("primary_skill_id")
+  toolId            String?  @map("tool_id")
+  painPoint         String?  @map("pain_point")
+  impactMetric      String?  @map("impact_metric")
+  steps             Json?
+  packageVersion    String?  @map("package_version")
+  previewFile       Json?    @map("preview_file")
+  layoutPreviewFile Json?    @map("layout_preview_file")
+  publishedAt       String   @map("published_at")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("portal_content")
+}
+
+/// 资产审批单：原 doc:asset-approvals.items[]；时间来自前端毫秒数
+model AssetApproval {
+  id                String    @id
+  position          Int
+  kind              String    @map("asset_kind")
+  assetId           String    @map("asset_id")
+  assetName         String    @map("asset_name")
+  submitterUserId   String?   @map("submitter_member_id")
+  submitterName     String    @map("submitter_name")
+  stepIndex         Int       @map("step_index") @db.SmallInt
+  status            String
+  reasons           Json?
+  note              String?
+  rejectNote        String?   @map("reject_note")
+  targetVersion     String?   @map("target_version")
+  packageBlob       Json?     @map("package_blob")
+  unpublishMode     String?   @map("unpublish_mode")
+  unpublishVersions Json?     @map("unpublish_versions")
+  decidedAt         DateTime? @map("decided_at") @db.Timestamptz(3)
+  createdAt         DateTime  @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @map("updated_at") @db.Timestamptz(3)
+
+  @@index([kind, assetId, status], map: "asset_approval_asset_idx")
+  @@map("asset_approval")
+}
+
+/// 审批关注：原 doc:asset-approvals.watchedByUserId[uid][]
+model AssetApprovalWatch {
+  memberId  String   @map("member_id")
+  kind      String   @map("asset_kind")
+  assetId   String   @map("asset_id")
+  assetName String   @map("asset_name")
+  position  Int
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([memberId, kind, assetId])
+  @@map("asset_approval_watch")
+}
+
+/// 审计日志：只追加，保留 180 天
+model AuditLog {
+  no          BigInt   @id @default(autoincrement()) @map("id")
+  entryId     String   @unique @map("entry_id")
+  occurredAt  DateTime @map("occurred_at") @db.Timestamptz(3)
+  category    String
+  action      String
+  module      String
+  detail      String
+  actorName   String   @map("actor_name")
+  actorEmail  String?  @map("actor_email")
+  actorRole   String?  @map("actor_role")
+  deptIds     Json?    @map("dept_ids")
+  regionId    String?  @map("region_id")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([occurredAt], map: "audit_log_time_idx")
+  @@map("audit_log")
+}
+
+/// 站内公告：原 doc:station-announcements.items[]；整表替换用 collection_revision('station-announcements')
+model StationAnnouncement {
+  id          String   @id
+  position    Int
+  title       String
+  body        String
+  badge       String
+  badgeColor  String?  @map("badge_color")
+  published   Boolean
+  publishedAt String   @map("published_at")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("station_announcement")
+}
+
+/// 运营发布的 AI 新闻：原 doc:ai-news.items[]
+model AiNewsPost {
+  id          String   @id
+  position    Int
+  title       String
+  summary     String?
+  body        String
+  cadence     String
+  source      String?
+  publishedAt String   @map("published_at")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("ai_news_post")
+}
+
+/// AIHOT 快讯归档：原 doc-ai-news-archive.items[]；同步状态在 app_setting('ai-news-feed.sync')
+model AiNewsFeedItem {
+  id          String   @id
+  publishedAt String   @map("published_at")
+  dateLabel   String   @map("date_label")
+  title       String
+  summary     String
+  url         String
+  source      String?
+  category    String?
+  reason      String?
+  score       Int?
+  aihotUrl    String?  @map("aihot_url")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([publishedAt], map: "ai_news_feed_item_published_idx")
+  @@map("ai_news_feed_item")
+}
+
+/// 执行记录：原 center_record kind=execution
+model Execution {
+  id           String    @id
+  userId       String?   @map("member_id")
+  chatId       String    @map("chat_id")
+  assetType    String    @map("asset_type")
+  assetId      String    @map("asset_id")
+  agentType    String    @map("agent_type")
+  agentName    String    @map("agent_name")
+  status       String
+  source       String?
+  message      String
+  error        String?
+  totalTime    String?   @map("total_time_label")
+  inputTokens  Int?      @map("input_tokens")
+  outputTokens Int?      @map("output_tokens")
+  hasUsage     Boolean   @default(false) @map("has_usage")
+  steps        Json?
+  startedAt    DateTime  @map("started_at") @db.Timestamptz(3)
+  finishedAt   DateTime? @map("finished_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([updatedAt], map: "execution_updated_idx")
+  @@map("execution")
+}
+
+/// AI 智库需求草稿：owner 原来编码进主键，现在是普通列
+model AiKnowledgeDraft {
+  id                 String   @id
+  ownerKey           String   @map("owner_key")
+  ownerMemberId      String?  @map("owner_member_id")
+  scenarioId         String   @map("scenario_id")
+  originalQuestion   String   @map("original_question")
+  demand             Json
+  messages           Json
+  clarificationCount Int      @map("clarification_count") @db.SmallInt
+  createdAt          DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime @map("updated_at") @db.Timestamptz(3)
+
+  @@index([ownerKey, updatedAt], map: "ai_knowledge_draft_owner_idx")
+  @@map("ai_knowledge_draft")
+}
+
+/// AI 智库方案：生成后不再修改；正文（需求、对话、行动、证据等）整体存 content
+model AiKnowledgeSolution {
+  id               String   @id
+  ownerKey         String   @map("owner_key")
+  ownerMemberId    String?  @map("owner_member_id")
+  scenarioId       String   @map("scenario_id")
+  title            String
+  domain           String
+  maturity         String
+  generationSource String   @map("generation_source")
+  model            String?
+  originalQuestion String   @map("original_question")
+  content          Json
+  createdAt        DateTime @map("created_at") @db.Timestamptz(3)
+
+  @@index([ownerKey, createdAt], map: "ai_knowledge_solution_owner_idx")
+  @@map("ai_knowledge_solution")
+}
+
+/// 模型目录：原 doc:llm-config.platformModels[] / customModels[]；api_key 加密存储（enc:v1:...）
+model LlmModelConfig {
+  scope        String
+  modelId      String   @map("model_id")
+  position     Int
+  source       String?
+  label        String
+  providerName String?  @map("provider_name")
+  baseUrl      String   @map("base_url")
+  apiKey       String?  @map("api_key")
+  enabled      Boolean?
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([scope, modelId])
+  @@map("llm_model_config")
+}
+
+/// 对话 / 任务会话：原 app_setting('workspace').catalog.chats；个人会话只给本人，WarRoom 给成员
+model ChatSession {
+  id                 String    @id
+  ownerUserId        String?   @map("owner_member_id")
+  ownerEmail         String?   @map("owner_email")
+  type               String
+  sessionGroup       String?   @map("session_group")
+  title              String
+  status             String?
+  icon               String
+  iconBg             String?   @map("icon_bg")
+  color              String
+  badge              String?
+  agentId            String?   @map("agent_id")
+  skillId            String?   @map("skill_id")
+  actionType         String?   @map("action_type")
+  taskSource         String?   @map("task_source")
+  businessScenarioId String?   @map("business_scenario_id")
+  adminId            String?   @map("admin_member_id")
+  members            Json?
+  prompts            Json
+  history            Json
+  pinnedAt           DateTime? @map("pinned_at") @db.Timestamptz(3)
+  createdAt          DateTime? @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([ownerUserId, updatedAt], map: "chat_session_owner_idx")
+  @@map("chat_session")
 }

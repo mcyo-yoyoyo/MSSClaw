@@ -146,6 +146,7 @@ async function main() {
     OAUTH_DEBUG_USERINFO: '0',
     API_KEY: '',
     CORS_ORIGIN: baseUrl,
+    LLM_KEY_SECRET: process.env.LLM_KEY_SECRET || 'e2e-llm-key-secret',
   };
   delete env.RUST_LOG; // Prisma schema engine 会被外部 Rust 日志设置干扰
 

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
 import {
   createSession,
@@ -18,6 +18,19 @@ import { Prisma } from '@prisma/client';
 import { ensureWorkspace } from '../workspaces/workspace-setting';
 import { readAssets } from './asset-catalog';
 import { readSkillReviewsDoc } from './personal-data';
+import {
+  appendAuditDoc,
+  readAiNewsDoc,
+  readApprovalsDoc,
+  readAuditDoc,
+  readOfficeScenesDoc,
+  readStationAnnouncements,
+  writeAiNewsDoc,
+  writeApprovalsDoc,
+  writeOfficeScenesDoc,
+  writeStationAnnouncements,
+} from './operations-store';
+import { readLlmConfigDoc, writeLlmConfigDoc } from './llm-config-store';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   SEED_BUSINESS_SCENARIO_CATALOG,
@@ -50,13 +63,10 @@ export const PLATFORM_DOC_KINDS = [
   'home-featured',
   'org-taxonomy',
   'market-featured',
-  'content-engagement',
   'audit-log',
-  'ai-news-prefs',
   'asset-approvals',
   'skill-reviews',
   'llm-config',
-  'inbox',
   'warroom-webhook',
   'security-policy',
   'demo-content',
@@ -648,24 +658,6 @@ function canonicalizeOfficeSceneInput(payload: unknown): CanonicalOfficeSceneInp
   return { expectedRevision, entries };
 }
 
-/** 旧数据没有 revision 时按 0 处理；不在 GET 时回写或替换其业务内容。 */
-function storedOfficeSceneRevision(payload: unknown): number {
-  if (!isJsonObject(payload)) return 0;
-  const revision = payload.revision;
-  return typeof revision === 'number' && Number.isSafeInteger(revision) && revision >= 0
-    ? revision
-    : 0;
-}
-
-function officeScenePayloadForRead(payload: unknown): unknown {
-  if (Array.isArray(payload)) {
-    return { version: 1, revision: 0, entries: payload };
-  }
-  if (!isJsonObject(payload)) return payload;
-  const { expectedRevision: _discarded, ...stored } = payload;
-  return { ...stored, revision: storedOfficeSceneRevision(payload) };
-}
-
 /** Missing/legacy revisions are revision zero until the first successful CAS write. */
 export function storedExternalToolLayoutRevision(payload: unknown): number {
   if (!isJsonObject(payload)) return 0;
@@ -733,10 +725,6 @@ function isDocKind(kind: string): kind is PlatformDocKind {
   return (PLATFORM_DOC_KINDS as readonly string[]).includes(kind);
 }
 
-function docId(workspaceId: string, kind: string) {
-  return `doc-${kind}-${workspaceId}`;
-}
-
 function docRevision(payload: unknown): number {
   if (!isJsonObject(payload)) return 0;
   const revision = payload.revision;
@@ -798,6 +786,55 @@ function shouldUpgradeMarketDoc(kind: PlatformDocKind, payload: unknown): boolea
   );
 }
 
+/** 全新库的模型目录：与前端 DEFAULT_LLM_CONFIG / seedPlatformModels 对齐，权威在 DB */
+function defaultLlmConfig() {
+  return {
+    model: 'glm-5.1',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    apiKey: '',
+    defaultModelId: 'glm-5.1',
+    platformModels: [
+      {
+        id: 'glm-5.1',
+        label: 'GLM 5.1',
+        baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+        providerName: '智谱',
+        apiKey: '',
+        enabled: true,
+        source: 'preset',
+      },
+      {
+        id: 'deepseek-v4-flash',
+        label: 'DeepSeek V4 Flash',
+        baseUrl: 'https://api.deepseek.com/v1',
+        providerName: 'DeepSeek',
+        apiKey: '',
+        enabled: true,
+        source: 'preset',
+      },
+      {
+        id: 'deepseek-v4-pro',
+        label: 'DeepSeek V4 Pro',
+        baseUrl: 'https://api.deepseek.com/v1',
+        providerName: 'DeepSeek',
+        apiKey: '',
+        enabled: true,
+        source: 'preset',
+      },
+      {
+        id: 'qwen3.7-plus',
+        label: 'Qwen 3.7 Plus',
+        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        providerName: '通义',
+        apiKey: '',
+        enabled: true,
+        source: 'preset',
+      },
+    ],
+    customModels: [],
+  };
+}
+
 @Injectable()
 export class PlatformDocsService {
   private readonly logger = new Logger(PlatformDocsService.name);
@@ -807,35 +844,53 @@ export class PlatformDocsService {
     private readonly portalAnalytics: PortalAnalyticsService,
   ) {}
 
-  async getDoc(workspaceId: string, kind: string): Promise<{ kind: string; payload: unknown }> {
+  /**
+   * 已拆成正式表的文档：读取走各自的表，返回形状与原文档一致。
+   * memberId 只用于「我关注的审批」这类按人隔离的部分。
+   */
+  private async readTableDoc(kind: PlatformDocKind, memberId?: string): Promise<unknown | undefined> {
+    switch (kind) {
+      case 'members':
+        await ensureMembersSeeded(this.prisma);
+        return readMembersDoc(this.prisma);
+      case 'auth-credentials':
+        return readCredentialsDoc(this.prisma);
+      case 'skill-reviews':
+        return readSkillReviewsDoc(this.prisma);
+      case 'internal-office-scenes':
+        return readOfficeScenesDoc(this.prisma);
+      case 'station-announcements':
+        return readStationAnnouncements(this.prisma);
+      case 'ai-news':
+        return readAiNewsDoc(this.prisma);
+      case 'audit-log':
+        return readAuditDoc(this.prisma);
+      case 'asset-approvals':
+        return readApprovalsDoc(this.prisma, memberId);
+      case 'llm-config':
+        return (await readLlmConfigDoc(this.prisma)) ?? writeLlmConfigDoc(this.prisma, defaultLlmConfig());
+      default:
+        return undefined;
+    }
+  }
+
+  async getDoc(workspaceId: string, kind: string, memberId?: string): Promise<{ kind: string; payload: unknown }> {
     if (!isDocKind(kind)) throw new BadRequestException(`unsupported_doc_kind:${kind}`);
     await this.ensureWorkspace(workspaceId);
-    if (kind === 'members') {
-      await ensureMembersSeeded(this.prisma);
-      return { kind, payload: await readMembersDoc(this.prisma) };
-    }
-    if (kind === 'auth-credentials') return { kind, payload: await readCredentialsDoc(this.prisma) };
-    if (kind === 'skill-reviews') return { kind, payload: await readSkillReviewsDoc(this.prisma) };
+    const fromTable = await this.readTableDoc(kind, memberId);
+    if (fromTable !== undefined) return { kind, payload: fromTable };
 
-    const row = await this.prisma.centerRecord.findUnique({
-      where: { id: docId(workspaceId, kind) },
-    });
+    const row = await this.findSetting(kind);
     if (row) {
       if (kind === 'external-tool-layout') {
         return { kind, payload: externalToolLayoutPayloadForRead(row.payload) };
-      }
-      if (kind === 'internal-office-scenes') {
-        return { kind, payload: officeScenePayloadForRead(row.payload) };
       }
       if (kind === 'home-featured') {
         return { kind, payload: homeFeaturedPayloadForRead(row.payload) };
       }
       if (shouldUpgradeMarketDoc(kind, row.payload)) {
         const payload = initialMarketDoc(kind)!;
-        await this.prisma.centerRecord.update({
-          where: { id: row.id },
-          data: { payload: payload as Prisma.InputJsonValue },
-        });
+        await this.writeSetting(kind, payload);
         return { kind, payload };
       }
       return { kind, payload: row.payload };
@@ -849,47 +904,44 @@ export class PlatformDocsService {
     workspaceId: string,
     kind: string,
     payload: unknown,
+    memberId?: string,
   ): Promise<{ kind: string; payload: unknown }> {
     if (!isDocKind(kind)) throw new BadRequestException(`unsupported_doc_kind:${kind}`);
     await this.ensureWorkspace(workspaceId);
-    if (kind === 'external-tool-layout') {
-      return this.putExternalToolLayoutDoc(workspaceId, payload);
-    }
-    if (kind === 'internal-office-scenes') {
-      return this.putInternalOfficeScenesDoc(workspaceId, payload);
-    }
-    if (kind === 'auth-credentials') {
-      const { doc, skipped } = await writeCredentialsDoc(this.prisma, payload);
-      if (skipped.length) {
-        this.logger.warn(`密码表里有找不到成员的邮箱，已跳过：${skipped.join(', ')}`);
+    switch (kind) {
+      case 'external-tool-layout':
+        return this.putExternalToolLayoutDoc(workspaceId, payload);
+      case 'internal-office-scenes':
+        return { kind, payload: await writeOfficeScenesDoc(this.prisma, canonicalizeOfficeSceneInput(payload)) };
+      case 'auth-credentials': {
+        const { doc, skipped } = await writeCredentialsDoc(this.prisma, payload);
+        if (skipped.length) {
+          this.logger.warn(`密码表里有找不到成员的邮箱，已跳过：${skipped.join(', ')}`);
+        }
+        return { kind, payload: doc };
       }
-      return { kind, payload: doc };
+      case 'members':
+        return { kind, payload: await writeMembersDoc(this.prisma, payload) };
+      case 'home-featured':
+        return this.putRevisionedDoc(workspaceId, 'home-featured', payload, (input) => ({
+          version: 1,
+          channels: canonicalizeHomeFeaturedInput(input),
+        }));
+      case 'station-announcements':
+        return this.putStationAnnouncementsDoc(workspaceId, payload);
+      case 'ai-news':
+        return { kind, payload: await writeAiNewsDoc(this.prisma, payload) };
+      case 'audit-log':
+        return { kind, payload: await appendAuditDoc(this.prisma, payload) };
+      case 'asset-approvals':
+        if (!memberId) throw new UnauthorizedException('asset_approvals_login_required');
+        return { kind, payload: await writeApprovalsDoc(this.prisma, payload, memberId) };
+      case 'llm-config':
+        return { kind, payload: await writeLlmConfigDoc(this.prisma, payload) };
+      default:
+        await this.writeSetting(kind, payload);
+        return { kind, payload };
     }
-    if (kind === 'members') {
-      return { kind, payload: await writeMembersDoc(this.prisma, payload) };
-    }
-    if (kind === 'home-featured') {
-      return this.putRevisionedDoc(workspaceId, 'home-featured', payload, (input) => ({
-        version: 1,
-        channels: canonicalizeHomeFeaturedInput(input),
-      }));
-    }
-    if (kind === 'station-announcements') {
-      return this.putStationAnnouncementsDoc(workspaceId, payload);
-    }
-    const id = docId(workspaceId, kind);
-    await this.prisma.centerRecord.upsert({
-      where: { id },
-      create: {
-        id,
-        kind: `doc:${kind}`,
-        payload: (payload ?? {}) as Prisma.InputJsonValue,
-      },
-      update: {
-        payload: (payload ?? {}) as Prisma.InputJsonValue,
-      },
-    });
-    return { kind, payload };
   }
 
   /**
@@ -897,23 +949,14 @@ export class PlatformDocsService {
    * 再把变更同步成全员广播消息，首页的「未读」和我的消息的详情都挂在它上面。
    */
   private async putStationAnnouncementsDoc(workspaceId: string, payload: unknown) {
-    const existing = await this.prisma.centerRecord.findUnique({
-      where: { id: docId(workspaceId, 'station-announcements') },
-    });
-    const previous = canonicalizeStationAnnouncements(existing?.payload).items;
-    const saved = await this.putRevisionedDoc(
-      workspaceId,
-      'station-announcements',
-      payload,
-      (input) => canonicalizeStationAnnouncements(input),
+    const previous = (await readStationAnnouncements(this.prisma)).items;
+    const saved = await writeStationAnnouncements(
+      this.prisma,
+      docRevision(payload),
+      canonicalizeStationAnnouncements(payload).items,
     );
-    const next = canonicalizeStationAnnouncements(saved.payload).items;
     try {
-      await syncStationAnnouncementBroadcast(
-        this.prisma,
-        previous,
-        next,
-      );
+      await syncStationAnnouncementBroadcast(this.prisma, previous, saved.items);
     } catch (error) {
       // 文档已经写成功；广播失败不能把一次成功的发布判成失败。同步是幂等的，
       // 下一次保存会重新对齐，首页在缺记录时也按未读展示。
@@ -923,37 +966,32 @@ export class PlatformDocsService {
         }`,
       );
     }
-    return saved;
+    return { kind: 'station-announcements', payload: saved };
   }
 
-  async listDocs(workspaceId: string) {
+  async listDocs(workspaceId: string, memberId?: string) {
     await this.ensureWorkspace(workspaceId);
-    const rows = await this.prisma.centerRecord.findMany({
-      where: { kind: { startsWith: 'doc:' } },
+    const rows = await this.prisma.appSetting.findMany({
+      where: { settingKey: { in: [...PLATFORM_DOC_KINDS] } },
     });
     const byKind: Record<string, unknown> = {};
-    await ensureMembersSeeded(this.prisma);
-    byKind.members = await readMembersDoc(this.prisma);
-    byKind['auth-credentials'] = await readCredentialsDoc(this.prisma);
-    byKind['skill-reviews'] = await readSkillReviewsDoc(this.prisma);
     for (const kind of PLATFORM_DOC_KINDS) {
-      if (kind === 'members' || kind === 'auth-credentials' || kind === 'skill-reviews') continue;
-      const row = rows.find((r) => r.id === docId(workspaceId, kind));
+      const fromTable = await this.readTableDoc(kind, memberId);
+      if (fromTable !== undefined) {
+        byKind[kind] = fromTable;
+        continue;
+      }
+      const row = rows.find((r) => r.settingKey === kind);
       if (row && kind === 'external-tool-layout') {
-        byKind[kind] = externalToolLayoutPayloadForRead(row.payload);
-      } else if (row && kind === 'internal-office-scenes') {
-        byKind[kind] = officeScenePayloadForRead(row.payload);
+        byKind[kind] = externalToolLayoutPayloadForRead(row.value);
       } else if (row && kind === 'home-featured') {
-        byKind[kind] = homeFeaturedPayloadForRead(row.payload);
-      } else if (row && shouldUpgradeMarketDoc(kind, row.payload)) {
+        byKind[kind] = homeFeaturedPayloadForRead(row.value);
+      } else if (row && shouldUpgradeMarketDoc(kind, row.value)) {
         const payload = initialMarketDoc(kind)!;
-        await this.prisma.centerRecord.update({
-          where: { id: row.id },
-          data: { payload: payload as Prisma.InputJsonValue },
-        });
+        await this.writeSetting(kind, payload);
         byKind[kind] = payload;
       } else {
-        byKind[kind] = row ? row.payload : await this.seedIfNeeded(workspaceId, kind);
+        byKind[kind] = row ? row.value : await this.seedIfNeeded(workspaceId, kind);
       }
     }
     return { docs: byKind };
@@ -970,8 +1008,8 @@ export class PlatformDocsService {
     canonicalize: (input: unknown) => Record<string, unknown>,
   ) {
     const expectedRevision = docRevision(payload);
-    const id = docId(workspaceId, kind);
-    const existing = await this.prisma.centerRecord.findUnique({ where: { id } });
+    const id = kind;
+    const existing = await this.findSetting(id);
     const currentRevision = existing ? docRevision(existing.payload) : 0;
 
     if (expectedRevision !== currentRevision) {
@@ -989,15 +1027,11 @@ export class PlatformDocsService {
 
     if (!existing) {
       try {
-        await this.prisma.centerRecord.create({
-          data: {
-            id,
-            kind: `doc:${kind}`,
-            payload: nextPayload as unknown as Prisma.InputJsonValue,
-          },
+        await this.prisma.appSetting.create({
+          data: { settingKey: id, value: nextPayload as unknown as Prisma.InputJsonValue },
         });
       } catch (error) {
-        const raced = await this.prisma.centerRecord.findUnique({ where: { id } });
+        const raced = await this.findSetting(id);
         if (raced) {
           throw new ConflictException({
             error: `${kind.replace(/-/g, '_')}_revision_conflict`,
@@ -1013,7 +1047,7 @@ export class PlatformDocsService {
     const changed = await this.compareAndSwapPayload(id, JSON.stringify(nextPayload), expectedRevision);
 
     if (changed !== 1) {
-      const raced = await this.prisma.centerRecord.findUnique({ where: { id } });
+      const raced = await this.findSetting(id);
       throw new ConflictException({
         error: `${kind.replace(/-/g, '_')}_revision_conflict`,
         expectedRevision,
@@ -1038,8 +1072,8 @@ export class PlatformDocsService {
       'domesticMoreOrderIds',
     );
     const { expectedRevision, all, categories } = canonicalizeExternalToolLayoutInput(payload);
-    const id = docId(workspaceId, 'external-tool-layout');
-    const existing = await this.prisma.centerRecord.findUnique({ where: { id } });
+    const id = 'external-tool-layout';
+    const existing = await this.findSetting(id);
     const currentRevision = existing
       ? storedExternalToolLayoutRevision(existing.payload)
       : 0;
@@ -1091,16 +1125,12 @@ export class PlatformDocsService {
 
     if (!existing) {
       try {
-        await this.prisma.centerRecord.create({
-          data: {
-            id,
-            kind: 'doc:external-tool-layout',
-            payload: nextPayload as unknown as Prisma.InputJsonValue,
-          },
+        await this.prisma.appSetting.create({
+          data: { settingKey: id, value: nextPayload as unknown as Prisma.InputJsonValue },
         });
       } catch (error) {
-        // Concurrent first writers race on the deterministic CenterRecord ID.
-        const raced = await this.prisma.centerRecord.findUnique({ where: { id } });
+        // 并发首次写入在同一个设置键上竞争
+        const raced = await this.findSetting(id);
         if (raced) {
           throw new ConflictException({
             error: 'external_tool_layout_revision_conflict',
@@ -1116,7 +1146,7 @@ export class PlatformDocsService {
     const changed = await this.compareAndSwapPayload(id, JSON.stringify(nextPayload), expectedRevision);
 
     if (changed !== 1) {
-      const raced = await this.prisma.centerRecord.findUnique({ where: { id } });
+      const raced = await this.findSetting(id);
       throw new ConflictException({
         error: 'external_tool_layout_revision_conflict',
         expectedRevision,
@@ -1125,64 +1155,6 @@ export class PlatformDocsService {
     }
 
     return { kind: 'external-tool-layout', payload: nextPayload };
-  }
-
-  private async putInternalOfficeScenesDoc(workspaceId: string, payload: unknown) {
-    const { expectedRevision, entries } = canonicalizeOfficeSceneInput(payload);
-    const id = docId(workspaceId, 'internal-office-scenes');
-    const existing = await this.prisma.centerRecord.findUnique({ where: { id } });
-    const currentRevision = existing ? storedOfficeSceneRevision(existing.payload) : 0;
-
-    if (expectedRevision !== currentRevision) {
-      throw new ConflictException({
-        error: 'internal_office_scenes_revision_conflict',
-        expectedRevision,
-        currentRevision,
-      });
-    }
-
-    const nextPayload = {
-      version: SEED_INTERNAL_OFFICE_SCENES.version,
-      revision: currentRevision + 1,
-      entries,
-    };
-
-    if (!existing) {
-      try {
-        await this.prisma.centerRecord.create({
-          data: {
-            id,
-            kind: 'doc:internal-office-scenes',
-            payload: nextPayload as unknown as Prisma.InputJsonValue,
-          },
-        });
-      } catch (error) {
-        // 两个首次写请求并发时，唯一键失败的一方必须表现为 revision 冲突。
-        const raced = await this.prisma.centerRecord.findUnique({ where: { id } });
-        if (raced) {
-          throw new ConflictException({
-            error: 'internal_office_scenes_revision_conflict',
-            expectedRevision,
-            currentRevision: storedOfficeSceneRevision(raced.payload),
-          });
-        }
-        throw error;
-      }
-      return { kind: 'internal-office-scenes', payload: nextPayload };
-    }
-
-    const changed = await this.compareAndSwapPayload(id, JSON.stringify(nextPayload), expectedRevision);
-
-    if (changed !== 1) {
-      const raced = await this.prisma.centerRecord.findUnique({ where: { id } });
-      throw new ConflictException({
-        error: 'internal_office_scenes_revision_conflict',
-        expectedRevision,
-        currentRevision: raced ? storedOfficeSceneRevision(raced.payload) : 0,
-      });
-    }
-
-    return { kind: 'internal-office-scenes', payload: nextPayload };
   }
 
   async login(body: {
@@ -1376,17 +1348,32 @@ export class PlatformDocsService {
    * revision 在 JSON payload 里：用条件更新完成 compare-and-swap，避免两个进程读到同一 revision 后互相覆盖。
    * 没有整数 revision 的旧记录按 0 处理。返回更新行数（0 表示被别人抢先）。
    */
-  private compareAndSwapPayload(id: string, payload: string, expectedRevision: number) {
+  private compareAndSwapPayload(key: string, payload: string, expectedRevision: number) {
     return this.prisma.$executeRaw`
-      UPDATE "center_record"
-      SET "payload" = ${payload}::jsonb, "updated_at" = now()
-      WHERE "id" = ${id}
+      UPDATE "app_setting"
+      SET "value" = ${payload}::jsonb, "revision" = "revision" + 1, "updated_at" = now()
+      WHERE "setting_key" = ${key}
         AND CASE
-          WHEN jsonb_typeof("payload" -> 'revision') = 'number' AND ("payload" ->> 'revision') ~ '^-?[0-9]+$'
-          THEN ("payload" ->> 'revision')::bigint
+          WHEN jsonb_typeof("value" -> 'revision') = 'number' AND ("value" ->> 'revision') ~ '^-?[0-9]+$'
+          THEN ("value" ->> 'revision')::bigint
           ELSE 0
         END = ${expectedRevision}::bigint
     `;
+  }
+
+  /** 配置类文档整份存在 app_setting（setting_key = 文档种类），value 即接口返回的文档 */
+  private async findSetting(key: string): Promise<{ payload: Prisma.JsonValue } | null> {
+    const row = await this.prisma.appSetting.findUnique({ where: { settingKey: key } });
+    return row ? { payload: row.value } : null;
+  }
+
+  private async writeSetting(key: string, payload: unknown) {
+    const value = (payload ?? {}) as Prisma.InputJsonValue;
+    await this.prisma.appSetting.upsert({
+      where: { settingKey: key },
+      create: { settingKey: key, value },
+      update: { value, revision: { increment: 1 } },
+    });
   }
 
   private async ensureWorkspace(_workspaceId: string) {
@@ -1395,10 +1382,7 @@ export class PlatformDocsService {
 
   private async initialExternalToolLayoutSeed(workspaceId: string) {
     const [marketFeatured, tools] = await Promise.all([
-      this.prisma.centerRecord.findFirst({
-        where: { kind: 'doc:market-featured' },
-        select: { payload: true },
-      }),
+      this.findSetting('market-featured'),
       readAssets(this.prisma, 'tool'),
     ]);
     return buildExternalToolLayoutSeed(marketFeatured?.payload, { tools });
@@ -1412,83 +1396,19 @@ export class PlatformDocsService {
     let payload: unknown = {};
     if (marketSeed !== undefined) {
       payload = marketSeed;
-    } else if (kind === 'ai-news') {
-      payload = { items: [] };
-    } else if (kind === 'station-announcements') {
-      payload = { items: [] };
     } else if (kind === 'plaza-howto') {
       payload = { records: [] };
-    } else if (kind === 'audit-log') {
-      payload = { logs: [] };
     } else if (kind === 'market-featured') {
       payload = { pins: [] };
-    } else if (kind === 'content-engagement') {
-      payload = { map: {}, votes: {} };
-    } else if (kind === 'ai-news-prefs') {
-      payload = { byUser: {} };
-    } else if (kind === 'asset-approvals') {
-      payload = { items: [], watchedByUserId: {} };
-    } else if (kind === 'llm-config') {
-      // 与前端 DEFAULT_LLM_CONFIG / seedPlatformModels 对齐，权威在 DB
-      payload = {
-        model: 'glm-5.1',
-        baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-        apiKey: '',
-        defaultModelId: 'glm-5.1',
-        platformModels: [
-          {
-            id: 'glm-5.1',
-            label: 'GLM 5.1',
-            baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-            providerName: '智谱',
-            apiKey: '',
-            enabled: true,
-            source: 'preset',
-          },
-          {
-            id: 'deepseek-v4-flash',
-            label: 'DeepSeek V4 Flash',
-            baseUrl: 'https://api.deepseek.com/v1',
-            providerName: 'DeepSeek',
-            apiKey: '',
-            enabled: true,
-            source: 'preset',
-          },
-          {
-            id: 'deepseek-v4-pro',
-            label: 'DeepSeek V4 Pro',
-            baseUrl: 'https://api.deepseek.com/v1',
-            providerName: 'DeepSeek',
-            apiKey: '',
-            enabled: true,
-            source: 'preset',
-          },
-          {
-            id: 'qwen3.7-plus',
-            label: 'Qwen 3.7 Plus',
-            baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-            providerName: '通义',
-            apiKey: '',
-            enabled: true,
-            source: 'preset',
-          },
-        ],
-        customModels: [],
-      };
     } else if (kind === 'demo-content') {
       payload = { demoContentOff: false };
     } else {
       payload = {};
     }
 
-    const id = docId(workspaceId, kind);
-    await this.prisma.centerRecord.upsert({
-      where: { id },
-      create: {
-        id,
-        kind: `doc:${kind}`,
-        payload: payload as Prisma.InputJsonValue,
-      },
+    await this.prisma.appSetting.upsert({
+      where: { settingKey: kind },
+      create: { settingKey: kind, value: payload as Prisma.InputJsonValue },
       update: {},
     });
     return payload;

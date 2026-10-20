@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PersistenceController } from '../dist/persistence/persistence.controller.js';
 import { PlatformDocsController } from '../dist/persistence/platform-docs.controller.js';
+import { PlatformDocsService } from '../dist/persistence/platform-docs.service.js';
 
 /** 只记录调用参数的持久化桩，用于断言控制器解析出的身份 */
 function fakePersistence() {
@@ -169,19 +170,12 @@ test('anonymous mutations require guest:<uuid-v4>', async () => {
   assert.equal(persistence.calls.mutate.length, 0);
 });
 
-test('legacy content-engagement document is read-only for every caller', async () => {
-  let writes = 0;
-  const controller = new PlatformDocsController({
-    putDoc: async () => {
-      writes += 1;
-      return { kind: 'content-engagement', payload: {} };
-    },
-  });
+test('legacy content-engagement document kind no longer exists, so nobody can write it', async () => {
+  // 旧互动文档已由迁移脚本导入计数表后删除；种类不在白名单里，服务层直接拒绝
+  const service = new PlatformDocsService({}, {});
   await assert.rejects(
-    controller.putOne('content-engagement', {
-      payload: { byId: { forged: { views: 999 } } },
-    }),
-    (error) => error?.getStatus?.() === 403,
+    service.putDoc('ws-cn-marketing', 'content-engagement', { byId: { forged: { views: 999 } } }),
+    (error) => error?.getStatus?.() === 400,
   );
-  assert.equal(writes, 0);
 });
+

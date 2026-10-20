@@ -70,16 +70,9 @@ export class AiKnowledgeResourceService {
   ) {}
 
   async searchCases(workspaceId: string, query: string, limit = 5): Promise<SolutionResource[]> {
-    const [rows, localCases] = await Promise.all([
-      this.prisma.centerRecord.findMany({
-        where: { kind: { in: ['case', 'ai-case'] } },
-        orderBy: { updatedAt: 'desc' },
-        take: 200,
-      }),
-      this.loadLocalCases(),
-    ]);
-    const databaseCases = rows.map((row) => row.payload as CatalogItem);
-    return this.rank('case', [...databaseCases, ...localCases], query, 8)
+    // 案例只来自随包的本地案例库（库里从没有写入过 case / ai-case 记录）
+    const localCases = await this.loadLocalCases();
+    return this.rank('case', localCases, query, 8)
       .filter((resource) => matchesRequiredCaseIntent(query, this.caseEvidenceText(resource)))
       .slice(0, normalizedLimit(limit));
   }

@@ -13,6 +13,7 @@ import {
   type LlmDocModelStatus,
   type NestLlmRuntimeConfig,
 } from '../executions/llm.client';
+import { readLlmConfigDoc } from '../persistence/llm-config-store';
 import { PlatformDocsService } from '../persistence/platform-docs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -36,11 +37,73 @@ import type {
   SolutionResource,
 } from './ai-knowledge.types';
 
-const DRAFT_KIND = 'ai-knowledge-draft';
-const SOLUTION_KIND = 'ai-knowledge-solution';
 
-type StoredDraft = DemandDraft & { ownerKey: string };
-type StoredSolution = AiKnowledgeSolution & { ownerKey: string };
+type SolutionRow = Prisma.AiKnowledgeSolutionGetPayload<object>;
+
+export function draftToRow(draft: DemandDraft, actor: Pick<AiKnowledgeActor, 'key' | 'userId'>) {
+  return {
+    id: draft.id,
+    ownerKey: actor.key,
+    ownerMemberId: actor.userId ?? null,
+    scenarioId: draft.scenarioId,
+    originalQuestion: draft.originalQuestion,
+    demand: draft.demand as unknown as Prisma.InputJsonValue,
+    messages: draft.messages as unknown as Prisma.InputJsonValue,
+    clarificationCount: draft.clarificationCount,
+    createdAt: new Date(draft.createdAt),
+    updatedAt: new Date(draft.updatedAt),
+  };
+}
+
+export function solutionToRow(
+  solution: AiKnowledgeSolution,
+  actor: Pick<AiKnowledgeActor, 'key' | 'userId'>,
+): Prisma.AiKnowledgeSolutionCreateInput {
+  const { id, scenarioId, title, domain, maturity, generationSource, model, originalQuestion, createdAt, ...content } = solution;
+  return {
+    id,
+    ownerKey: actor.key,
+    ownerMemberId: actor.userId ?? null,
+    scenarioId,
+    title,
+    domain,
+    maturity,
+    generationSource,
+    model: model ?? null,
+    originalQuestion,
+    content: content as unknown as Prisma.InputJsonValue,
+    createdAt: new Date(createdAt),
+  };
+}
+
+export function draftFromRow(row: Prisma.AiKnowledgeDraftGetPayload<object>): DemandDraft {
+  return {
+    id: row.id,
+    scenarioId: row.scenarioId as DemandDraft['scenarioId'],
+    originalQuestion: row.originalQuestion,
+    demand: row.demand as unknown as DemandDraft['demand'],
+    messages: row.messages as unknown as DemandDraft['messages'],
+    clarificationCount: row.clarificationCount,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+/** 方案正文（需求、对话、行动、证据等）整体存 content，读出时铺回顶层 */
+export function solutionFromRow(row: SolutionRow): AiKnowledgeSolution {
+  return {
+    ...(row.content as unknown as Omit<AiKnowledgeSolution, 'id'>),
+    id: row.id,
+    scenarioId: row.scenarioId as AiKnowledgeSolution['scenarioId'],
+    title: row.title,
+    domain: row.domain,
+    maturity: row.maturity as AiKnowledgeSolution['maturity'],
+    generationSource: row.generationSource as AiKnowledgeSolution['generationSource'],
+    ...(row.model ? { model: row.model } : {}),
+    originalQuestion: row.originalQuestion,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
 
 function hash(value: string): string {
   return createHash('sha256').update(value).digest('hex');
@@ -187,73 +250,45 @@ export class AiKnowledgeService {
     }
 
     await this.saveSolution(workspaceId, actor, solution);
-    await this.prisma.centerRecord.delete({
-      where: { id: this.recordId(DRAFT_KIND, workspaceId, actor, draft.id) },
-    }).catch(() => undefined);
+    await this.prisma.aiKnowledgeDraft.deleteMany({ where: { id: draft.id, ownerKey: actor.key } });
     return { solution };
   }
 
   async listSolutions(workspaceId: string, actor: AiKnowledgeActor, limit = 50) {
-    const rows = await this.prisma.centerRecord.findMany({
-      where: { kind: SOLUTION_KIND },
-      orderBy: { updatedAt: 'desc' },
-      take: Math.min(Math.max(limit, 1) * 4, 400),
+    const rows = await this.prisma.aiKnowledgeSolution.findMany({
+      where: { ownerKey: actor.key },
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(Math.max(limit, 1), 100),
     });
-    const solutions = rows
-      .map((row) => row.payload as unknown as StoredSolution)
-      .filter((item) => item.ownerKey === actor.key)
-      .slice(0, Math.min(Math.max(limit, 1), 100))
-      .map(({ ownerKey: _ownerKey, ...solution }) => solution);
-    return { solutions };
+    return { solutions: rows.map(solutionFromRow) };
   }
 
   async getSolution(workspaceId: string, actor: AiKnowledgeActor, solutionId: string) {
-    const row = await this.prisma.centerRecord.findUnique({
-      where: { id: this.recordId(SOLUTION_KIND, workspaceId, actor, solutionId) },
-    });
-    const payload = row?.payload as unknown as StoredSolution | undefined;
-    if (!row || payload?.ownerKey !== actor.key) {
+    const row = await this.prisma.aiKnowledgeSolution.findUnique({ where: { id: solutionId } });
+    if (!row || row.ownerKey !== actor.key) {
       throw new NotFoundException('ai_knowledge_solution_not_found');
     }
-    const { ownerKey: _ownerKey, ...solution } = payload;
-    return { solution };
+    return { solution: solutionFromRow(row) };
   }
 
   async deleteSolution(workspaceId: string, actor: AiKnowledgeActor, solutionId: string) {
     await this.getSolution(workspaceId, actor, solutionId);
-    await this.prisma.centerRecord.delete({
-      where: { id: this.recordId(SOLUTION_KIND, workspaceId, actor, solutionId) },
-    });
+    await this.prisma.aiKnowledgeSolution.delete({ where: { id: solutionId } });
     return { ok: true };
   }
 
-  private recordId(kind: string, workspaceId: string, actor: AiKnowledgeActor, id: string): string {
-    return `${kind}:${hash(workspaceId).slice(0, 12)}:${hash(actor.key).slice(0, 20)}:${id}`;
-  }
-
+  /** 草稿 id 由服务端生成；更新前都已经过 requireDraft 校验归属 */
   private async saveDraft(workspaceId: string, actor: AiKnowledgeActor, draft: DemandDraft) {
-    const payload: StoredDraft = { ...draft, ownerKey: actor.key };
-    await this.prisma.centerRecord.upsert({
-      where: { id: this.recordId(DRAFT_KIND, workspaceId, actor, draft.id) },
-      create: {
-        id: this.recordId(DRAFT_KIND, workspaceId, actor, draft.id),
-        kind: DRAFT_KIND,
-        payload: payload as unknown as Prisma.InputJsonValue,
-      },
-      update: { payload: payload as unknown as Prisma.InputJsonValue },
-    });
+    const { id, ...data } = draftToRow(draft, actor);
+    await this.prisma.aiKnowledgeDraft.upsert({ where: { id }, create: { id, ...data }, update: data });
   }
 
-  private async requireDraft(workspaceId: string, actor: AiKnowledgeActor, draftId: string) {
-    const row = await this.prisma.centerRecord.findUnique({
-      where: { id: this.recordId(DRAFT_KIND, workspaceId, actor, draftId) },
-    });
-    const payload = row?.payload as unknown as StoredDraft | undefined;
-    if (!row || payload?.ownerKey !== actor.key) {
+  private async requireDraft(workspaceId: string, actor: AiKnowledgeActor, draftId: string): Promise<DemandDraft> {
+    const row = await this.prisma.aiKnowledgeDraft.findUnique({ where: { id: draftId } });
+    if (!row || row.ownerKey !== actor.key) {
       throw new NotFoundException('ai_knowledge_draft_not_found');
     }
-    const { ownerKey: _ownerKey, ...draft } = payload;
-    return draft;
+    return draftFromRow(row);
   }
 
   private async saveSolution(
@@ -261,14 +296,7 @@ export class AiKnowledgeService {
     actor: AiKnowledgeActor,
     solution: AiKnowledgeSolution,
   ) {
-    const payload: StoredSolution = { ...solution, ownerKey: actor.key };
-    await this.prisma.centerRecord.create({
-      data: {
-        id: this.recordId(SOLUTION_KIND, workspaceId, actor, solution.id),
-        kind: SOLUTION_KIND,
-        payload: payload as unknown as Prisma.InputJsonValue,
-      },
-    });
+    await this.prisma.aiKnowledgeSolution.create({ data: solutionToRow(solution, actor) });
   }
 
   /**
@@ -290,10 +318,8 @@ export class AiKnowledgeService {
     config: NestLlmRuntimeConfig | null;
     status: LlmDocModelStatus;
   }> {
-    const row = await this.prisma.centerRecord.findUnique({
-      where: { id: `doc-llm-config-${workspaceId}` },
-    });
-    if (!row) {
+    const payload = await readLlmConfigDoc(this.prisma);
+    if (!payload) {
       // 工作区还没建过配置文档时才允许退到部署级 LLM_* 环境变量。
       const fromEnv = nestLlmConfigFromEnv();
       return {
@@ -303,11 +329,7 @@ export class AiKnowledgeService {
           : { ok: false, model: '', reason: 'no_document' },
       };
     }
-    const payload = row.payload;
-    const doc =
-      payload && typeof payload === 'object' && !Array.isArray(payload)
-        ? (payload as Record<string, unknown>)
-        : undefined;
+    const doc = payload;
     const defaultModelId =
       typeof doc?.defaultModelId === 'string' && doc.defaultModelId.trim()
         ? doc.defaultModelId

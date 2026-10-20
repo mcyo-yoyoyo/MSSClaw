@@ -196,16 +196,20 @@ GET /api/v1/ai-daily-news
 DATABASE_URL="postgresql://mssclaw:mssclaw_dev@127.0.0.1:5432/mssclaw?schema=public"
 ```
 
-目标库表见 [`docs/database-design.sql`](./docs/database-design.sql)，分六期落地。当前（第 5 期）主要的表：
+目标库表见 [`docs/database-design.sql`](./docs/database-design.sql)，六期已全部落地。主要的表：
 
 | 表 | 主要内容 |
 | --- | --- |
 | `tool` / `skill` / `skill_version` / `agent` / `agent_skill` / `automation` / `kb_document` | 货架资产；接口仍按整份快照收发，后端逐行写入 |
 | `member` / `member_credential` / `auth_session` | 成员、密码（sha256 加盐）、登录会话（只存令牌哈希）；接口仍是 `/docs/members`、`/docs/auth-credentials` |
 | `market_favorite` / `market_user_vote` / `market_recent_view` / `market_hidden_item` / `skill_review` | 个人数据；收藏、最近浏览、隐藏按条读写（`/api/v1/me/...`，只能读写自己的） |
-| `app_setting` | 平台配置；`workspace` 键存原工作空间元数据、目录 JSON 和任务会话，`tool-catalog.meta` 存工具目录版本，`auth-policy` 存演示口令开关 |
-| `collection_revision` | 整份保存的集合（成员表、密码表）的版本号，用来拒绝过期的整份覆盖 |
-| `center_record` | 过渡表：工作流、门户内容、执行记录、审计和平台配置等 JSON 数据，后续各期拆成正式表 |
+| `chat_session` | 任务会话；按登录人读写（`/api/v1/sessions`）：个人任务只见自己的，WarRoom 只见自己在成员里的 |
+| `office_scene` / `portal_content` / `station_announcement` / `ai_news_post` / `ai_news_feed_item` | 办公场景、门户内容、站内公告、运营 AI 新闻、AIHOT 快讯归档 |
+| `asset_approval` / `asset_approval_watch` / `audit_log` | 资产审批单与各人的关注、审计日志（保留 180 天） |
+| `llm_model_config` | 模型目录；API Key 用 `LLM_KEY_SECRET` 加密存储 |
+| `execution` / `ai_knowledge_draft` / `ai_knowledge_solution` / `center_resource` | 执行记录、AI 智库草稿与方案、原型中心资源（prompt / workflow / knowledge / memory） |
+| `app_setting` | 平台配置；键名即文档种类（导航、首页精选、分类、安全策略等，内容原样 JSON），另有 `workspace`（工作空间元数据与目录）、`llm-selection`、`ai-news-feed.sync`、`tool-catalog.meta`、`auth-policy` |
+| `collection_revision` | 整份保存的集合（成员表、密码表、办公场景、站内公告、门户内容）的版本号，用来拒绝过期的整份覆盖 |
 | 统计与消息 | 互动累计与行为事件、门户访问、每日登录、登录墙转化、站内信、快讯订阅、案例洞察 |
 
 API 测试会在同一个库里建临时 schema 并在结束时删除；连接串取 `TEST_DATABASE_URL`，其次 `DATABASE_URL`。
@@ -289,7 +293,7 @@ npm run build
 
 ## 当前边界
 
-- 货架资产已拆成正式表，但仍按整份快照写入，两人同时保存时后保存的覆盖先保存的；成员与密码表已拆成正式表并按版本号拒绝过期覆盖；配置、门户内容等仍以整份 JSON 存在过渡表 `center_record`，靠 revision 乐观锁，后续各期拆成正式表。
+- 货架资产已拆成正式表，但仍按整份快照写入，两人同时保存时后保存的覆盖先保存的；成员与密码表已拆成正式表并按版本号拒绝过期覆盖；办公场景、公告、门户内容等整份保存的集合按版本号拒绝过期覆盖；导航、精选等配置以整份 JSON 存在 `app_setting`。
 - API Key 和当前会话认证用于演示级保护，不等同于完整的企业 SSO、JWT 与细粒度 RBAC。
 - LLM 执行使用 OpenAI 兼容接口；工作流编排和 Agent runtime 仍处于持续演进阶段。
 - 后端接口不可用时，部分页面仍可能展示本地兜底数据，但新增和修改不保证保存或跨设备同步。

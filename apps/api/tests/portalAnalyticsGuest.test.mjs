@@ -81,9 +81,8 @@ function recordingPrisma(queryRows, centerRows = [], assets = null) {
     countCalls,
     queryCalls,
     prisma: {
-      centerRecord: {
-        findMany: async () => centerRows,
-      },
+      // center_record 已删除：用例传入的残留投影行不会再被读到，只确认它们不影响统计
+      officeScene: { findMany: async () => [] },
       ...(assets ? assetTables(assets) : {}),
       portalPageView: writer('portalPageView'),
       portalConversionEvent: writer('portalConversionEvent'),
@@ -827,13 +826,7 @@ test('analytics counts legacy request:download facts as downloads', async () => 
     }
     if (sql.includes('FROM "market_engagement_stat" AS m')) return [{}];
     return [];
-  }, [
-    {
-      id: 'marketplace-ws-test',
-      kind: 'marketplace',
-      payload: { skills: [{ id: 'skill-legacy', name: '旧 Skill', published: true }] },
-    },
-  ]);
+  }, [], { skills: [{ id: 'skill-legacy', name: '旧 Skill', published: true }] });
   const report = await new PortalAnalyticsService(db.prisma).getReport('ws-test', 1);
   assert.equal(report.behavior.totals.downloads, 1);
   assert.equal(report.assets.rows.find((row) => row.contentId === 'skill-legacy')?.downloads, 1);

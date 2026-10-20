@@ -6,9 +6,11 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { createHash, randomUUID } from 'crypto';
-import { findWorkspace, updateWorkspaceCatalog } from '../workspaces/workspace-setting';
+import { findWorkspace } from '../workspaces/workspace-setting';
 import { PrismaService } from '../prisma/prisma.service';
 import type { MarketplacePayload } from './marketplace-center-sync';
+import { readChats, writeChats } from './chat-session-store';
+import { hasPendingApproval, readPortalContent, writePortalContent } from './operations-store';
 import {
   readAssetIds,
   readAssets,
@@ -146,12 +148,6 @@ const MARKET_ENGAGEMENT_VISITOR_RATE_LIMIT = 60;
 const MARKET_ENGAGEMENT_DAILY_VISITOR_LIMIT = 500;
 const MARKET_ENGAGEMENT_RETENTION_DAYS = 180;
 const MARKET_ENGAGEMENT_RETENTION_CHECK_INTERVAL = 256;
-const MARKET_ENGAGEMENT_CENTER_KINDS = [
-  'portal-content',
-  'doc:internal-office-scenes',
-  'workflow',
-  'knowledge',
-] as const;
 const MARKET_ENGAGEMENT_STATIC_CONTENT_IDS = new Set<string>(
   SEED_MARKET_ENGAGEMENT_STATIC_CONTENT_IDS,
 );
@@ -162,17 +158,6 @@ function optionalTrimmedString(value: unknown, errorCode: string): string {
   return value.trim();
 }
 
-type LegacyEngagement = {
-  id?: string;
-  views?: number;
-  uses?: number;
-  likes?: number;
-  dislikes?: number;
-  downloads?: number;
-  favorites?: number;
-  updatedAt?: string;
-};
-
 function normalizeExternalToolName(value: unknown): string {
   return String(value ?? '').trim().toLocaleLowerCase();
 }
@@ -182,20 +167,6 @@ function normalizeExternalToolUrl(value: unknown): string {
     .trim()
     .replace(/\/+$/, '')
     .toLocaleLowerCase();
-}
-
-function addTopLevelItemIds(value: unknown, ids: Set<string>, prefix = ''): void {
-  if (!Array.isArray(value)) return;
-  value.forEach((item) => {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) return;
-    const id = String((item as Record<string, unknown>).id ?? '').trim();
-    if (id) ids.add(`${prefix}${id}`);
-  });
-}
-
-function legacyEngagementCount(value: unknown): number {
-  const parsed = Number(value ?? 0);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
 }
 
 /**
@@ -528,19 +499,12 @@ export class PersistenceService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async getSessions(workspaceId: string) {
-    const row = await findWorkspace(this.prisma);
-    if (!row) throw new NotFoundException(`Workspace ${workspaceId} not found`);
-    const catalog = row.catalogJson as Record<string, unknown>;
-    return { chats: (catalog.chats as Record<string, unknown>) ?? {} };
+  getSessions(memberId: string) {
+    return readChats(this.prisma, memberId).then((chats) => ({ chats }));
   }
 
-  async putSessions(workspaceId: string, chats: Record<string, unknown>) {
-    const row = await findWorkspace(this.prisma);
-    if (!row) throw new NotFoundException(`Workspace ${workspaceId} not found`);
-    const catalog = { ...(row.catalogJson as Record<string, unknown>), chats };
-    await updateWorkspaceCatalog(this.prisma, catalog as Prisma.InputJsonValue);
-    return { chats };
+  putSessions(memberId: string, chats: unknown) {
+    return writeChats(this.prisma, memberId, chats);
   }
 
   async getInboxMessages(workspaceId: string, userId: string) {
@@ -709,13 +673,10 @@ export class PersistenceService {
       const nextIds = new Set(payload.skills.map((item) => (item as { id?: string })?.id));
       const removed = (await readAssets(this.prisma, 'skill')).filter((item) => !nextIds.has(item.id as string));
       if (removed.length) {
-        const approvals = await this.prisma.centerRecord.findUnique({
-          where: { id: `doc-asset-approvals-${workspaceId}` },
-        });
-        const items = (approvals?.payload as { items?: Array<{ kind?: string; assetId?: string; status?: string }> } | undefined)?.items ?? [];
-        if (removed.some((skill) =>
-          skill.published || items.some((record) => record.kind === 'skill' && record.assetId === skill.id && record.status === 'pending'),
-        )) {
+        if (
+          removed.some((skill) => skill.published) ||
+          (await hasPendingApproval(this.prisma, 'skill', removed.map((skill) => String(skill.id))))
+        ) {
           throw new ConflictException('仅可删除已下架且无待处理审批的 Skill，请刷新后重试');
         }
         // 删掉的 Skill 同时从 Agent 编排里摘掉
@@ -749,7 +710,6 @@ export class PersistenceService {
 
   /** userId 为空表示游客：只返回聚合计数，不带个人投票/收藏态 */
   async getMarketEngagement(workspaceId: string, userId: string) {
-    await this.ensureLegacyMarketEngagementMigrated(workspaceId);
     const [metrics, votes, favorites] = await Promise.all([
       this.prisma.marketEngagement.findMany(),
       userId ? this.prisma.marketUserVote.findMany({ where: { userId } }) : Promise.resolve([]),
@@ -830,7 +790,6 @@ export class PersistenceService {
       throw new BadRequestException('invalid_guest_visitor_id');
     }
 
-    await this.ensureLegacyMarketEngagementMigrated(workspaceId);
     await this.assertKnownMarketEngagementContent(workspaceId, contentId);
 
     const occurredAt = new Date();
@@ -1031,30 +990,23 @@ export class PersistenceService {
     }
   }
 
-  private async knownMarketEngagementContentIds(_workspaceId: string): Promise<Set<string>> {
+  /** 迁移脚本导入旧互动计数时也用它过滤已不存在的内容 */
+  async knownMarketEngagementContentIds(_workspaceId: string): Promise<Set<string>> {
     const workspace = await findWorkspace(this.prisma);
     if (!workspace) throw new NotFoundException('market_engagement_workspace_not_found');
 
     const assetKinds: AssetKind[] = ['tool', 'skill', 'agent', 'automation', 'kbDoc'];
-    const [rows, ...assetIds] = await Promise.all([
-      this.prisma.centerRecord.findMany({
-        where: { kind: { in: [...MARKET_ENGAGEMENT_CENTER_KINDS] } },
-        select: { id: true, kind: true, payload: true },
-      }),
+    const [portalItems, scenes, resources, ...assetIds] = await Promise.all([
+      this.prisma.portalContent.findMany({ select: { id: true } }),
+      this.prisma.officeScene.findMany({ select: { id: true } }),
+      this.prisma.centerResource.findMany({ where: { kind: { in: ['workflow', 'knowledge'] } }, select: { id: true } }),
       ...assetKinds.map((kind) => readAssetIds(this.prisma, kind)),
     ]);
     const knownIds = new Set(MARKET_ENGAGEMENT_STATIC_CONTENT_IDS);
     assetIds.flat().forEach((id) => knownIds.add(id));
-    rows.forEach((row) => {
-      if (row.kind === 'workflow' || row.kind === 'knowledge') knownIds.add(row.id);
-      if (!row.payload || typeof row.payload !== 'object' || Array.isArray(row.payload)) return;
-      const payload = row.payload as Record<string, unknown>;
-      if (row.kind === 'portal-content') {
-        addTopLevelItemIds(payload.items, knownIds);
-      } else if (row.kind === 'doc:internal-office-scenes') {
-        addTopLevelItemIds(payload.entries, knownIds, 'office-scene-');
-      }
-    });
+    portalItems.forEach((item) => knownIds.add(item.id));
+    resources.forEach((item) => knownIds.add(item.id));
+    scenes.forEach((scene) => knownIds.add(`office-scene-${scene.id}`));
     return knownIds;
   }
 
@@ -1209,100 +1161,11 @@ export class PersistenceService {
     };
   }
 
-  /** 将旧 content-engagement JSON 文档一次性迁入原子计数表，避免已有数据丢失。 */
-  async ensureLegacyMarketEngagementMigrated(workspaceId: string) {
-    const legacyRow = await this.prisma.centerRecord.findUnique({
-      where: { id: `doc-content-engagement-${workspaceId}` },
-    });
-    if (!legacyRow) return;
-    const payload = (legacyRow.payload ?? {}) as {
-      byId?: Record<string, LegacyEngagement>;
-      map?: Record<string, LegacyEngagement>;
-      normalizedAt?: string;
-    };
-    if (payload.normalizedAt) return;
-    const legacyMap = payload.byId ?? payload.map ?? {};
-    const knownIds = await this.knownMarketEngagementContentIds(workspaceId);
-    const entries = Object.entries(legacyMap).filter(([contentId]) => knownIds.has(contentId));
-    if (entries.length) {
-      await this.prisma.$transaction(
-        entries.map(([contentId, value]) => {
-          const parsedDate = value.updatedAt ? new Date(value.updatedAt) : new Date();
-          const updatedAt = Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
-          return this.prisma.marketEngagement.upsert({
-            where: { contentId },
-            create: {
-              contentId,
-              views: legacyEngagementCount(value.views ?? value.uses),
-              uses: legacyEngagementCount(value.uses),
-              likes: legacyEngagementCount(value.likes),
-              dislikes: legacyEngagementCount(value.dislikes),
-              downloads: legacyEngagementCount(value.downloads),
-              favorites: legacyEngagementCount(value.favorites),
-              updatedAt,
-            },
-            update: {},
-          });
-        }),
-      );
-    }
-    await this.prisma.centerRecord.update({
-      where: { id: legacyRow.id },
-      data: {
-        payload: {
-          ...payload,
-          normalizedAt: new Date().toISOString(),
-        } as Prisma.InputJsonValue,
-      },
-    });
+  async getPortalContent(_workspaceId: string): Promise<PortalContentPayload | null> {
+    return readPortalContent(this.prisma);
   }
 
-  async getPortalContent(workspaceId: string): Promise<PortalContentPayload | null> {
-    const row = await this.prisma.centerRecord.findFirst({
-      where: { kind: 'portal-content' },
-    });
-    if (!row) return null;
-    const payload = row.payload as PortalContentPayload;
-    return {
-      items: Array.isArray(payload.items) ? payload.items : [],
-      revision: typeof payload.revision === 'number' ? payload.revision : 0,
-    };
-  }
-
-  async putPortalContent(workspaceId: string, payload: PortalContentPayload) {
-    const id = `portal-content-${workspaceId}`;
-    const existing = await this.prisma.centerRecord.findUnique({ where: { id } });
-    const current = (existing?.payload as PortalContentPayload | undefined) ?? {};
-    const currentRev = typeof current.revision === 'number' ? current.revision : 0;
-    const expected =
-      typeof payload.expectedRevision === 'number' ? payload.expectedRevision : undefined;
-
-    // 有 expectedRevision 时做乐观锁；缺省（旧客户端）仍允许写入并递增
-    if (expected != null && expected !== currentRev) {
-      throw new ConflictException({
-        message: 'portal_content_conflict',
-        revision: currentRev,
-        items: Array.isArray(current.items) ? current.items : [],
-      });
-    }
-
-    const nextRev = currentRev + 1;
-    const nextPayload: PortalContentPayload = {
-      items: Array.isArray(payload.items) ? payload.items : [],
-      revision: nextRev,
-    };
-
-    await this.prisma.centerRecord.upsert({
-      where: { id },
-      create: {
-        id,
-        kind: 'portal-content',
-        payload: nextPayload as Prisma.InputJsonValue,
-      },
-      update: {
-        payload: nextPayload as Prisma.InputJsonValue,
-      },
-    });
-    return nextPayload;
+  async putPortalContent(_workspaceId: string, payload: PortalContentPayload) {
+    return writePortalContent(this.prisma, payload);
   }
 }

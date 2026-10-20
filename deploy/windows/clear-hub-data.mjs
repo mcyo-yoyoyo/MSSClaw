@@ -158,13 +158,6 @@ async function main() {
     prisma.marketRecentView.count(),
   ]);
 
-  const docKinds = ['doc:content-engagement'];
-
-  const docRows = await prisma.centerRecord.findMany({
-    where: { kind: { in: docKinds } },
-    select: { id: true, kind: true },
-  });
-
   const [skillCount, agentCount, toolCount] = await Promise.all([
     prisma.skill.count(),
     prisma.agent.count(),
@@ -176,7 +169,6 @@ async function main() {
   console.log(`  点赞点踩               ${voteCount} 行（每个用户的投票状态）`);
   console.log(`  收藏                   ${favoriteCount} 行`);
   console.log(`  最近浏览               ${recentCount} 行`);
-  console.log(`  旧互动 doc 记录         ${docRows.length} 条（content-engagement）`);
   if (!keepContent) {
     console.log(`  Skill                  ${skillCount} 条（连同版本记录）`);
     console.log(`  Agent                  ${agentCount} 条（连同编排的 Skill 列表）`);
@@ -206,14 +198,6 @@ async function main() {
     await tx.marketUserVote.deleteMany();
     await tx.marketFavorite.deleteMany();
     await tx.marketRecentView.deleteMany();
-
-    // 旧互动文档清成空对象而不是删行：读取时缺行会走首次迁移逻辑
-    if (docRows.length > 0) {
-      await tx.centerRecord.updateMany({
-        where: { id: { in: docRows.map((row) => row.id) } },
-        data: { payload: {} },
-      });
-    }
 
     if (!keepContent) {
       // skill_version、agent_skill 外键级联删除

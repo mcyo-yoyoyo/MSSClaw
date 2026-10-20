@@ -18,6 +18,7 @@ import {
   replaceAssets,
   writeToolCatalogMeta,
 } from '../dist/persistence/asset-catalog.js';
+import { centerRecord } from './lib/center-record.mjs';
 
 const apply = process.argv.includes('--apply');
 const prisma = new PrismaClient();
@@ -43,9 +44,9 @@ function sortKeys(value) {
 
 async function main() {
   const [globalTools, marketplaceRows, projections] = await Promise.all([
-    prisma.centerRecord.findUnique({ where: { id: 'global-tools' } }),
-    prisma.centerRecord.findMany({ where: { kind: 'marketplace' } }),
-    prisma.centerRecord.groupBy({ by: ['kind'], where: { kind: { in: ['agent', 'skill', 'tool'] } }, _count: true }),
+    centerRecord(prisma).findUnique({ where: { id: 'global-tools' } }),
+    centerRecord(prisma).findMany({ where: { kind: 'marketplace' } }),
+    centerRecord(prisma).groupBy({ by: ['kind'], where: { kind: { in: ['agent', 'skill', 'tool'] } }, _count: true }),
   ]);
   if (marketplaceRows.length > 1) {
     throw new Error(`有 ${marketplaceRows.length} 行 marketplace（${marketplaceRows.map((row) => row.id).join('，')}），只应有平台空间那一行`);
@@ -109,7 +110,7 @@ async function main() {
   await prisma.$transaction(async (tx) => {
     for (const [kind, items] of Object.entries(lists)) await replaceAssets(tx, kind, items ?? []);
     await writeToolCatalogMeta(tx, meta);
-    await tx.centerRecord.deleteMany({
+    await centerRecord(tx).deleteMany({
       where: { OR: [{ id: 'global-tools' }, { kind: { in: ['marketplace', 'agent', 'skill', 'tool'] } }] },
     });
   }, { maxWait: 60_000, timeout: 600_000 });

@@ -17,14 +17,19 @@ const originalEnv = {
   testTimeout: process.env.LLM_TEST_TIMEOUT_MS,
 };
 
+/** 模型配置拆在 app_setting('llm-selection') 和 llm_model_config 里；这里按同样的形状喂给服务 */
 function fakePrisma(payload) {
   const writes = [];
+  const { platformModels = [], customModels = [], ...top } = payload ?? {};
+  const rows = [
+    ...platformModels.map(({ id, ...model }, position) => ({ scope: 'platform', position, modelId: id, ...model })),
+    ...customModels.map(({ id, ...model }, position) => ({ scope: 'custom', position, modelId: id, ...model })),
+  ];
   return {
     writes,
-    centerRecord: {
-      findUnique: async () => ({ payload }),
-      upsert: async (args) => writes.push(args),
-    },
+    appSetting: { findUnique: async () => (Object.keys(top).length ? { value: top } : null) },
+    llmModelConfig: { findMany: async ({ where }) => rows.filter((row) => row.scope === where.scope) },
+    execution: { upsert: async (args) => writes.push(args) },
     $executeRaw: async () => 1,
   };
 }

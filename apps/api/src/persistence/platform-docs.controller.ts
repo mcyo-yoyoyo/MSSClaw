@@ -27,11 +27,13 @@ const ADMIN_WRITABLE_DOC_KINDS = new Set([
   'home-featured',
 ]);
 
-/** 工作区成员才能访问的共享凭证文档；游客不得读写真实 API Key。 */
-const MEMBER_REQUIRED_DOC_KINDS = new Set(['llm-config']);
+/** 工作区成员才能访问的共享凭证文档；游客不得读写真实 API Key / Webhook 令牌。 */
+const MEMBER_REQUIRED_DOC_KINDS = new Set(['llm-config', 'warroom-webhook']);
+/** 含按人隔离部分的文档：读取时带上会话里的成员 id，写入必须登录 */
+const MEMBER_SCOPED_DOC_KINDS = new Set(['asset-approvals']);
 
 /** 已迁移为关系表的旧文档只保留读取兼容，任何客户端都不得再覆盖。 */
-const LEGACY_READ_ONLY_DOC_KINDS = new Set(['content-engagement', 'skill-reviews']);
+const LEGACY_READ_ONLY_DOC_KINDS = new Set(['skill-reviews']);
 
 @Controller('docs')
 export class PlatformDocsController {
@@ -43,7 +45,7 @@ export class PlatformDocsController {
     @Headers('x-session-token') xSessionToken: string | undefined,
   ) {
     const user = await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
-    const result = await this.docs.listDocs(workspaceId);
+    const result = await this.docs.listDocs(workspaceId, String(user.id));
     if (String(user.platformRole ?? '') !== 'super_admin') {
       // 全量文档里含密码表与模型 API Key，非平台运营不得整包拿走。
       for (const kind of ADMIN_ONLY_DOC_KINDS) delete result.docs[kind];
@@ -69,7 +71,10 @@ export class PlatformDocsController {
     } else if (MEMBER_REQUIRED_DOC_KINDS.has(kind)) {
       await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
     }
-    return this.docs.getDoc(workspaceId, kind);
+    const memberId = MEMBER_SCOPED_DOC_KINDS.has(kind)
+      ? await this.optionalMemberId(authorization, xSessionToken)
+      : undefined;
+    return this.docs.getDoc(workspaceId, kind, memberId);
   }
 
   @Put(':kind')
@@ -87,9 +92,12 @@ export class PlatformDocsController {
     } else if (MEMBER_REQUIRED_DOC_KINDS.has(kind)) {
       await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
     }
+    const memberId = MEMBER_SCOPED_DOC_KINDS.has(kind)
+      ? String((await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken)).id)
+      : undefined;
     const payload =
       body && typeof body === 'object' && 'payload' in body ? body.payload : body;
-    return this.docs.putDoc(workspaceId, kind, payload ?? {});
+    return this.docs.putDoc(workspaceId, kind, payload ?? {}, memberId);
   }
 
   private async requireSuperAdmin(
@@ -107,6 +115,11 @@ export class PlatformDocsController {
       throw new ForbiddenException(`${kind.replace(/-/g, '_')}_admin_required`);
     }
     return user;
+  }
+
+  private async optionalMemberId(authorization?: string, xSessionToken?: string): Promise<string | undefined> {
+    const session = await this.docs.me(bearerToken(authorization, xSessionToken), workspaceId);
+    return session.ok ? String(session.user.id) : undefined;
   }
 
   private async requireWorkspaceMember(

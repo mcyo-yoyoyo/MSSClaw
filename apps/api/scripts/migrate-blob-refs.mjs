@@ -12,6 +12,7 @@
 import { createHash } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { BlobStoreService } from '../dist/persistence/blob-store.service.js';
+import { centerRecord } from './lib/center-record.mjs';
 
 const INLINE_IMAGE = /^data:(image\/(?:png|jpeg|gif|webp|avif));base64,([A-Za-z0-9+/=\s]+)$/i;
 const LEGACY_BLOB_URL = /\/api\/v1\/workspaces\/[A-Za-z0-9_-]+\/blobs\/([0-9a-f]{32})/g;
@@ -86,7 +87,7 @@ async function migrateRows(label, rows, update) {
 
 let cursor;
 for (;;) {
-  const rows = await prisma.centerRecord.findMany({
+  const rows = await centerRecord(prisma).findMany({
     take: 50,
     ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
     orderBy: { id: 'asc' },
@@ -97,7 +98,7 @@ for (;;) {
   await migrateRows(
     'CenterRecord',
     rows.map((row) => ({ id: row.id, columns: { payload: row.payload } })),
-    (id, data) => prisma.centerRecord.update({ where: { id }, data }),
+    (id, data) => centerRecord(prisma).update({ where: { id }, data }),
   );
 }
 

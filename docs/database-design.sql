@@ -1,6 +1,6 @@
 -- ============================================================================
 -- MSS Claw 目标库表结构 · PostgreSQL 17 · 单租户
--- 版本：v0.4（2026-10-19）
+-- 版本：v0.5（2026-10-20，第 6 期落地）
 -- 来源：docs/database-mysql-design.md v0.1（MySQL 草案）改为 PG、去掉租户，并按 2026-10-19 的代码和存量数据校正
 --
 -- 本文件描述六期全部完成后的最终结构，用于审查表结构本身。
@@ -31,7 +31,10 @@
 --   第 5 期  个人数据：market_favorite / market_user_vote / market_recent_view / market_hidden_item / skill_review（2026-10-21 完成）。
 --            收藏、最近浏览、隐藏改成按条读写的 /me/... 接口（服务端按会话认人，别人的读不到也改不了），前端随之改；
 --            Skill 评价界面没有写入口，改为只读。数据库迁移从旧互动表复制点赞点踩后删表，其余由 migrate-personal-data.mjs 迁入。
---   第 6 期  其余：配置、审批、审计、门户内容、办公场景、对话、消息、资讯、执行、AI 智库、模型配置；之后删除 center_record
+--   第 6 期  其余：配置、审批、审计、门户内容、办公场景、对话、资讯、执行、AI 智库、模型配置（2026-10-20 完成），center_record 已删除。
+--            接口形状不变；会话改为登录后只读写本人可见的，模型 API Key 用部署环境变量 LLM_KEY_SECRET 加密，审计保留 180 天。
+--            迁移脚本 apps/api/scripts/migrate-remaining.mjs（预览在事务里跑完再回滚）；全新库上第 2~5 期脚本经 scripts/lib/center-record.mjs
+--            访问过渡表，第 2 期脚本写入前按需重建它。
 --
 -- 字段核对范围：第 2 期的表按现有 schema.prisma 逐列转换；第 3 期的资产表已对照 TS 类型和存量数据逐字段核对；
 --               第 4–6 期的表沿用草案字段，进入该期时再对照代码和存量数据逐字段核对一次。
@@ -119,7 +122,8 @@ create index auth_session_member_idx on auth_session (member_id);
 create index auth_session_expires_idx on auth_session (expires_at);   -- 定时清理过期会话
 
 -- A4 对话 / 任务会话【第 6 期】来源：app_setting('workspace') 里 catalog 的 chats[chatId]（原 Workspace.catalogJson.chats）
---   待定（草案问题 2）：现有会话接口没有登录校验，改表时是否改为必须登录、只读写本人会话。
+--   GET/PUT /sessions 必须登录：个人任务只见 owner 是本人或没有 owner 的（谁先保存就归谁），WarRoom（type=group 或
+--   session_group=pinned）只见成员为空或含本人的；PUT 只动看得见的会话，个人任务 owner 强制为本人。
 create table chat_session (
   id                   text primary key,
   owner_member_id      text,                                    -- 空表示协作空间（WarRoom）或历史共享会话
@@ -575,7 +579,7 @@ create index skill_review_skill_idx on skill_review (skill_id, created_at);
 -- E. 消息与资讯
 -- ============================================================================
 
--- E1 站内信【第 2 期建，第 6 期并入旧 doc:inbox】来源：InboxMessageRecord
+-- E1 站内信【第 2 期建】来源：InboxMessageRecord。旧 doc:inbox 自 8 月起已停用（只剩当时的公告副本），第 6 期列出后丢弃
 create table inbox_message (
   id             text primary key,
   kind           text not null,                                 -- system / user / deliverable / ai_news
@@ -753,7 +757,7 @@ create index ai_knowledge_solution_owner_idx on ai_knowledge_solution (owner_key
 
 -- F4 模型配置【第 6 期】来源：doc:llm-config.platformModels[] 与 customModels[]
 --   顶层 model / defaultModelId 存 app_setting('llm-selection')；顶层 baseUrl / apiKey 是所选模型的快照，读取时由所选模型行拼出。
---   待定（草案问题 5）：api_key 是否加密存储（需新增部署环境变量作为密钥）。
+--   api_key 加密存储：AES-256-GCM，密钥由部署环境变量 LLM_KEY_SECRET 派生，API 启动时缺它直接退出。
 create table llm_model_config (
   scope         text not null,                                  -- platform（平台目录）/ custom（自定义扩展）
   model_id      text not null,                                  -- 调用 API 时传的 model
@@ -761,7 +765,7 @@ create table llm_model_config (
   label         text not null,
   provider_name text,
   base_url      text not null,                                  -- OpenAI 兼容 Base URL
-  api_key       text,                                           -- 明文，或启用加密后的密文 enc:v1:...
+  api_key       text,                                           -- 密文 enc:v1:...（空串表示没填）
   enabled       boolean not null default true,
   position      integer not null default 0,                     -- 目录顺序
   created_at    timestamptz(3) not null default now(),
@@ -786,7 +790,7 @@ create table llm_model_config (
 --       warroom-webhook（可能含令牌，读取权限需复核）/ security-policy / demo-content
 create table app_setting (
   setting_key          text primary key,
-  value                jsonb not null,                          -- 文档内容（去掉 revision / expectedRevision）
+  value                jsonb not null,                          -- 文档内容原样存；带 revision 的文档按 value 里的 revision 做条件更新
   schema_version       integer,                                 -- 文档内 version 字段
   revision             integer not null default 0,              -- 乐观锁
   updated_by_member_id text,
@@ -873,10 +877,10 @@ create index portal_conversion_event_journey_idx on portal_conversion_event (jou
 
 
 -- ============================================================================
--- 过渡表：第 2 期建，在后续期次删除
+-- 过渡表：第 2 期建，已在后续期次删除（保留定义备查）
 -- ============================================================================
 
--- 通用 JSON 记录【第 2 期建，第 6 期结束后删除】来源：CenterRecord（只迁 ws-cn-marketing 与全局记录）
+-- 通用 JSON 记录【第 2 期建，第 6 期已删除】来源：CenterRecord（只迁 ws-cn-marketing 与全局记录）
 --   记录 id 沿用旧值（如 marketplace-ws-cn-marketing），后端按固定工作区拼出，所以不需要 workspace_id 列。
 --   各期把对应 kind 迁到正式表后删掉这里的对应行。kind=agent/skill/tool 投影行第 2 期照迁，第 3 期迁移脚本已删除；
 --   旧版专家页的 /agents、/skills 改为从资产表实时映射，只有 Agent 人设可改（写回 agent.system_prompt）。
