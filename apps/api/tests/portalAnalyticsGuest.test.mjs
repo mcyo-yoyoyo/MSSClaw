@@ -50,10 +50,23 @@ function controllerWith(session = { ok: false, error: '未登录' }) {
 }
 
 function recordingPrisma(queryRows, centerRows = [], globalToolsRow = null) {
+  // 写入走 createMany(skipDuplicates)；每日上限先 count 再写，这里 count 恒为 0。
   const executeCalls = [];
+  const countCalls = [];
   const queryCalls = [];
+  const writer = (model) => ({
+    count: async ({ where }) => {
+      countCalls.push({ model, where });
+      return 0;
+    },
+    createMany: async ({ data: [row] }) => {
+      executeCalls.push({ model, row });
+      return { count: 1 };
+    },
+  });
   return {
     executeCalls,
+    countCalls,
     queryCalls,
     prisma: {
       centerRecord: {
@@ -61,10 +74,9 @@ function recordingPrisma(queryRows, centerRows = [], globalToolsRow = null) {
         findUnique: async ({ where } = {}) =>
           where?.id === 'global-tools' ? globalToolsRow : null,
       },
-      $executeRaw: async (strings, ...values) => {
-        executeCalls.push({ sql: strings.join('?'), values });
-        return 1;
-      },
+      portalPageView: writer('portalPageView'),
+      portalConversionEvent: writer('portalConversionEvent'),
+      portalDailyLogin: writer('portalDailyLogin'),
       $queryRaw: async (strings, ...values) => {
         const call = { sql: strings.join('?'), values };
         queryCalls.push(call);
@@ -248,13 +260,12 @@ test('page-view writes hash guest/account separately and share one browser journ
   const guestDb = recordingPrisma();
   const guestService = new PortalAnalyticsService(guestDb.prisma);
   const guestResponse = await guestService.recordPageView(pageInput());
-  const guestValues = guestDb.executeCalls[0].values;
+  const guestValues = guestDb.executeCalls[0].row;
 
-  assert.equal(guestValues[4], sha256(`ws-test:guest:${VISITOR_UUID}`));
-  assert.equal(guestValues[5], 'guest');
-  assert.equal(guestValues[6], sha256(`ws-test:visitor:${VISITOR_UUID}`));
-  assert.equal(guestValues.at(-1), 500);
-  assert.match(guestDb.executeCalls[0].sql, /SELECT COUNT\(\*\)[\s\S]+visitorHash/);
+  assert.equal(guestValues.visitorHash, sha256(`ws-test:guest:${VISITOR_UUID}`));
+  assert.equal(guestValues.visitorType, 'guest');
+  assert.equal(guestValues.journeyHash, sha256(`ws-test:visitor:${VISITOR_UUID}`));
+  assert.deepEqual(guestDb.countCalls[0].where, { dateKey: guestValues.dateKey, visitorHash: guestValues.visitorHash });
   assert.deepEqual(guestResponse, { accepted: true, date: guestResponse.date });
 
   const userDb = recordingPrisma();
@@ -266,13 +277,13 @@ test('page-view writes hash guest/account separately and share one browser journ
       rawVisitorId: 'user-42',
     }),
   );
-  const userValues = userDb.executeCalls[0].values;
+  const userValues = userDb.executeCalls[0].row;
   assert.equal(
-    userValues[4],
+    userValues.visitorHash,
     sha256('mss-claw:portal-uv:v1:ws-test:account:user-42'),
   );
-  assert.equal(userValues[5], 'user');
-  assert.equal(userValues[6], guestValues[6]);
+  assert.equal(userValues.visitorType, 'user');
+  assert.equal(userValues.journeyHash, guestValues.journeyHash);
 });
 
 test('the 61st visitor request in one minute is silently accepted without a write', async () => {
@@ -334,10 +345,10 @@ test('gate events are whitelisted, idempotent and use the same journey hash', as
     clientIp: '203.0.113.20',
   });
   const call = db.executeCalls[0];
-  assert.match(call.sql, /INSERT OR IGNORE INTO "PortalConversionEvent"/);
-  assert.equal(call.values[3], 'guest_gate_hit');
-  assert.equal(call.values[4], 'submit-skill');
-  assert.equal(call.values[6], sha256(`ws-test:visitor:${VISITOR_UUID}`));
+  assert.equal(call.model, 'portalConversionEvent');
+  assert.equal(call.row.eventType, 'guest_gate_hit');
+  assert.equal(call.row.action, 'submit-skill');
+  assert.equal(call.row.journeyHash, sha256(`ws-test:visitor:${VISITOR_UUID}`));
 
   await assert.rejects(
     service.recordGateHit({
@@ -368,13 +379,13 @@ test('successful logins preserve daily account dedupe and append journey convers
   assert.equal(db.executeCalls.length, 4);
   const firstConversion = db.executeCalls[1];
   const secondConversion = db.executeCalls[3];
-  assert.equal(firstConversion.values[3], 'login_success');
-  assert.equal(firstConversion.values[6], sha256(`ws-test:visitor:${VISITOR_UUID}`));
+  assert.equal(firstConversion.row.eventType, 'login_success');
+  assert.equal(firstConversion.row.journeyHash, sha256(`ws-test:visitor:${VISITOR_UUID}`));
   assert.equal(
-    firstConversion.values[7],
+    firstConversion.row.userHash,
     sha256('mss-claw:portal-uv:v1:ws-test:account:user-42'),
   );
-  assert.notEqual(firstConversion.values[1], secondConversion.values[1]);
+  assert.notEqual(firstConversion.row.eventId, secondConversion.row.eventId);
 });
 
 test('auth login forwards the stable visitor ID to the service', async () => {
@@ -402,7 +413,7 @@ test('reports expose guest/user splits and a time-ordered gate conversion funnel
     day: '2-digit',
   }).format(new Date());
   const db = recordingPrisma(({ sql }) => {
-    if (sql.includes('MAX("occurredAt")')) {
+    if (sql.includes('MAX("occurred_at")')) {
       return [{
         pv: 12,
         uv: 5,
@@ -413,17 +424,17 @@ test('reports expose guest/user splits and a time-ordered gate conversion funnel
         updatedAt: new Date('2026-08-28T00:00:00.000Z'),
       }];
     }
-    if (sql.includes('GROUP BY p."dateKey"')) {
+    if (sql.includes('GROUP BY p."date_key"')) {
       return [{ date: today, pv: 12, uv: 5, guestPv: 7, guestUv: 3, userPv: 5, userUv: 2 }];
     }
-    if (sql.includes('GROUP BY p."routeKey"')) {
+    if (sql.includes('GROUP BY p."route_key"')) {
       return [{ routeKey: 'home', pv: 12, uv: 5, guestPv: 7, guestUv: 3, userPv: 5, userUv: 2 }];
     }
-    if (sql.includes('PortalDailyLogin')) return [{ users: 2 }];
+    if (sql.includes('portal_daily_login')) return [{ users: 2 }];
     if (sql.includes('AS "convertedUv"')) {
       return [{ action: 'favorite', hits: 8, guestUv: 4, convertedUv: 1 }];
     }
-    if (sql.includes('FROM "MarketEngagement" AS m')) {
+    if (sql.includes('FROM "market_engagement_stat" AS m')) {
       return [{
         views: 120,
         favorites: 18,
@@ -434,7 +445,7 @@ test('reports expose guest/user splits and a time-ordered gate conversion funnel
         updatedAt: new Date('2026-08-31T02:00:00.000Z'),
       }];
     }
-    if (sql.includes('FROM "MarketEngagementEvent" AS e')) {
+    if (sql.includes('FROM "market_engagement_event" AS e')) {
       return [{ date: today, views: 9, favorites: 2, likes: 3, dislikes: 1, redirects: 4 }];
     }
     throw new Error(`unexpected query: ${sql}`);
@@ -474,17 +485,17 @@ test('reports expose guest/user splits and a time-ordered gate conversion funnel
   assert.equal(report.behavior.series[0].date, today);
   assert.equal(report.behavior.trackingStartedAt, '2026-08-31T01:00:00.000Z');
   const funnelSql = db.queryCalls.find((call) => call.sql.includes('AS "convertedUv"')).sql;
-  assert.match(funnelSql, /l\."occurredAt" >= g\."occurredAt"/);
-  const totalSql = db.queryCalls.find((call) => call.sql.includes('MAX("occurredAt")')).sql;
-  assert.match(totalSql, /p\."visitorType" = 'user' THEN p\."visitorHash"/);
-  assert.match(totalSql, /l\."occurredAt" >= p\."occurredAt"/);
+  assert.match(funnelSql, /l\."occurred_at" >= g\."occurred_at"/);
+  const totalSql = db.queryCalls.find((call) => call.sql.includes('MAX("occurred_at")')).sql;
+  assert.match(totalSql, /p\."visitor_type" = 'user' THEN p\."visitor_hash"/);
+  assert.match(totalSql, /l\."occurred_at" >= p\."occurred_at"/);
 });
 
 test('custom ranges are inclusive, bounded and reject invalid dates', async () => {
   const db = recordingPrisma(({ sql }) => {
-    if (sql.includes('MAX("occurredAt")')) return [{}];
-    if (sql.includes('PortalDailyLogin')) return [{ users: 0 }];
-    if (sql.includes('FROM "MarketEngagement" AS m')) return [{}];
+    if (sql.includes('MAX("occurred_at")')) return [{}];
+    if (sql.includes('portal_daily_login')) return [{ users: 0 }];
+    if (sql.includes('FROM "market_engagement_stat" AS m')) return [{}];
     return [];
   });
   const service = new PortalAnalyticsService(db.prisma);
@@ -695,15 +706,15 @@ test('black asset report excludes portal-content and treats only explicit redire
     },
   ];
   const db = recordingPrisma(({ sql }) => {
-    if (sql.includes('MAX("occurredAt")')) return [{}];
-    if (sql.includes('GROUP BY p."dateKey"') || sql.includes('GROUP BY p."routeKey"')) return [];
+    if (sql.includes('MAX("occurred_at")')) return [{}];
+    if (sql.includes('GROUP BY p."date_key"') || sql.includes('GROUP BY p."route_key"')) return [];
     if (sql.includes('MIN("eventAt")')) {
       return [{ visitorHash: 'user-hash', firstDate: today, firstAt: new Date(), lastAt: new Date() }];
     }
-    if (sql.includes('PortalDailyLogin')) return [{ users: 0 }];
+    if (sql.includes('portal_daily_login')) return [{ users: 0 }];
     if (sql.includes('AS "convertedUv"')) return [];
-    if (sql.includes('GROUP BY "dateKey", "visitorHash"')) return [];
-    if (sql.includes('GROUP BY e."dateKey", e."contentId"')) {
+    if (sql.includes('GROUP BY "date_key", "visitor_hash"')) return [];
+    if (sql.includes('GROUP BY e."date_key", e."content_id"')) {
       return [
         {
           date: today,
@@ -740,7 +751,7 @@ test('black asset report excludes portal-content and treats only explicit redire
         },
       ];
     }
-    if (sql.includes('m."contentId" AS "contentId"')) {
+    if (sql.includes('m."content_id" AS "contentId"')) {
       return [
         {
           contentId: 'tool-company',
@@ -772,21 +783,21 @@ test('black asset report excludes portal-content and treats only explicit redire
         { contentId: 'portal-only', assetType: 'tool', action: 'redirect', events: 999, uv: 999 },
       ];
     }
-    if (sql.includes('e."visitorHash" AS "visitorHash"')) {
+    if (sql.includes('e."visitor_hash" AS "visitorHash"')) {
       return [
         { contentId: 'tool-company', assetType: 'unknown', visitorHash: 'visitor-1', downloads: 2 },
         { contentId: 'tool-company', assetType: 'agent', visitorHash: 'visitor-forged', downloads: 500 },
         { contentId: 'portal-only', assetType: 'tool', visitorHash: 'visitor-2', downloads: 999 },
       ];
     }
-    if (sql.includes('AND "action" = \'call\'')) {
+    if (sql.includes('WHERE "action" = \'call\'')) {
       return [
         { contentId: 'tool-company', assetType: 'unknown', visitorHash: 'visitor-1', success: 1, durationMs: 10, inputTokens: 1, outputTokens: 2 },
         { contentId: 'tool-company', assetType: 'agent', visitorHash: 'visitor-forged', success: 1, durationMs: 10, inputTokens: 500, outputTokens: 500 },
         { contentId: 'portal-only', assetType: 'tool', visitorHash: 'visitor-2', success: 1, durationMs: 10, inputTokens: 100, outputTokens: 100 },
       ];
     }
-    if (sql.includes('FROM "MarketEngagement" AS m')) {
+    if (sql.includes('FROM "market_engagement_stat" AS m')) {
       return [{ views: 10, favorites: 2, likes: 3, dislikes: 1, redirects: 4, downloads: 5 }];
     }
     return [];
@@ -832,8 +843,8 @@ test('analytics counts legacy request:download facts as downloads', async () => 
     day: '2-digit',
   }).format(new Date());
   const db = recordingPrisma(({ sql }) => {
-    if (sql.includes('MAX("occurredAt")')) return [{}];
-    if (sql.includes('GROUP BY e."dateKey", e."contentId"')) {
+    if (sql.includes('MAX("occurred_at")')) return [{}];
+    if (sql.includes('GROUP BY e."date_key", e."content_id"')) {
       return sql.includes("'request:download'")
         ? [{ date: today, contentId: 'skill-legacy', assetType: 'skill', views: 0, favorites: 0, likes: 0, dislikes: 0, redirects: 0, downloads: 1 }]
         : [];
@@ -843,7 +854,7 @@ test('analytics counts legacy request:download facts as downloads', async () => 
         ? [{ contentId: 'skill-legacy', assetType: 'skill', action: 'request:download', events: 1, uv: 1 }]
         : [];
     }
-    if (sql.includes('FROM "MarketEngagement" AS m')) return [{}];
+    if (sql.includes('FROM "market_engagement_stat" AS m')) return [{}];
     return [];
   }, [
     {

@@ -3,9 +3,10 @@
  *   1. 内嵌图片（整串 data:image/...;base64 字段值）上传到对象存储，替换成 /api/v1/blobs/<id>。
  *      不处理 SVG（API 按附件下载返回，<img> 显示不了）和 HTML 正文中间嵌着的图片。
  *   2. 去租户前的文件地址 /api/v1/workspaces/<ws>/blobs/<id> 改写为 /api/v1/blobs/<id>（字符串中任意位置）。
- * 范围：CenterRecord.payload、Workspace.catalogJson（对话记录等）、案例洞察的封面和正文。
+ * 范围：center_record.payload、app_setting.value（原工作区目录与对话记录）、案例洞察的封面和正文。
  *
  * 用法（在 apps/api 下；停机执行，先备份数据库）：npm run migrate:blob-refs
+ * 读写的是 PG 新表，所以要在 migrate:sqlite-to-pg 之后运行。
  * 可重复执行：替换后的值不再匹配，第二次运行不会再有改动。
  */
 import { createHash } from 'node:crypto';
@@ -100,11 +101,11 @@ for (;;) {
   );
 }
 
-const workspaces = await prisma.workspace.findMany({ select: { id: true, catalogJson: true } });
+const settings = await prisma.appSetting.findMany({ select: { settingKey: true, value: true } });
 await migrateRows(
-  'Workspace',
-  workspaces.map((row) => ({ id: row.id, columns: { catalogJson: row.catalogJson } })),
-  (id, data) => prisma.workspace.update({ where: { id }, data }),
+  'AppSetting',
+  settings.map((row) => ({ id: row.settingKey, columns: { value: row.value } })),
+  (settingKey, data) => prisma.appSetting.update({ where: { settingKey }, data }),
 );
 
 const articleColumns = {

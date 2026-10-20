@@ -80,9 +80,9 @@ function asList(value: Prisma.JsonValue | null): string[] {
 export class CaseInsightsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listPublished(workspaceId: string) {
+  async listPublished() {
     const rows = await this.prisma.caseInsightArticle.findMany({
-      where: { workspaceId, status: 'published', deletedAt: null, OR: [{ publishedHtml: { not: null } }, { publishedMarkdown: { not: null } }] },
+      where: { status: 'published', deletedAt: null, OR: [{ publishedHtml: { not: null } }, { publishedMarkdown: { not: null } }] },
       orderBy: [{ sortOrder: 'asc' }, { publishedAt: 'desc' }],
     });
     return { items: rows.map((row) => ({
@@ -100,9 +100,9 @@ export class CaseInsightsService {
     })) };
   }
 
-  async listForOps(workspaceId: string, includeDeleted = false) {
+  async listForOps(includeDeleted = false) {
     const rows = await this.prisma.caseInsightArticle.findMany({
-      where: { workspaceId, ...(includeDeleted ? { deletedAt: { not: null } } : { deletedAt: null }) },
+      where: { ...(includeDeleted ? { deletedAt: { not: null } } : { deletedAt: null }) },
       orderBy: [{ updatedAt: 'desc' }],
     });
     return { items: rows.map((row) => ({
@@ -128,33 +128,33 @@ export class CaseInsightsService {
     })) };
   }
 
-  async create(workspaceId: string, body: ArticleInput) {
+  async create(body: ArticleInput) {
     const input = parseInput(body);
-    const row = await this.prisma.caseInsightArticle.create({ data: { ...input, workspaceId } });
+    const row = await this.prisma.caseInsightArticle.create({ data: input });
     return { id: row.id, version: row.version };
   }
 
-  async update(workspaceId: string, id: string, body: ArticleInput) {
+  async update(id: string, body: ArticleInput) {
     const input = parseInput(body);
     if (!Number.isSafeInteger(body.version) || (body.version ?? 0) < 1) throw new BadRequestException('case_version_required');
     const result = await this.prisma.caseInsightArticle.updateMany({
-      where: { workspaceId, id, version: body.version },
+      where: { id, version: body.version },
       data: { ...input, version: { increment: 1 } },
     });
     if (!result.count) throw new ConflictException('case_revision_conflict');
     return { id, version: body.version! + 1 };
   }
 
-  async setStatus(workspaceId: string, id: string, version: number, action: 'publish' | 'unpublish') {
+  async setStatus(id: string, version: number, action: 'publish' | 'unpublish') {
     if (!Number.isSafeInteger(version) || version < 1) throw new BadRequestException('case_version_required');
-    const row = await this.prisma.caseInsightArticle.findFirst({ where: { workspaceId, id } });
+    const row = await this.prisma.caseInsightArticle.findFirst({ where: { id } });
     if (!row) throw new NotFoundException('case_not_found');
     if (row.version !== version) throw new ConflictException('case_revision_conflict');
     if (action === 'publish' && (!row.title.trim() || !row.draftHtml.trim())) {
       throw new BadRequestException('case_title_body_required');
     }
     const result = await this.prisma.caseInsightArticle.updateMany({
-      where: { workspaceId, id, version },
+      where: { id, version },
       data: action === 'publish'
         ? {
             status: 'published',
@@ -177,25 +177,25 @@ export class CaseInsightsService {
     return { id, version: version + 1, status: action === 'publish' ? 'published' : 'archived' };
   }
 
-  async delete(workspaceId: string, id: string, version: number) {
-    const row = await this.prisma.caseInsightArticle.findFirst({ where: { workspaceId, id, deletedAt: null } });
+  async delete(id: string, version: number) {
+    const row = await this.prisma.caseInsightArticle.findFirst({ where: { id, deletedAt: null } });
     if (!row) throw new NotFoundException('case_not_found');
     if (row.version !== version) throw new ConflictException('case_revision_conflict');
     const result = await this.prisma.caseInsightArticle.updateMany({
-      where: { workspaceId, id, version },
+      where: { id, version },
       data: { deletedAt: new Date(), deletedFromStatus: row.status, status: row.status === 'published' ? 'archived' : row.status, version: { increment: 1 } },
     });
     if (!result.count) throw new ConflictException('case_revision_conflict');
     return { id, version: version + 1, deleted: true };
   }
 
-  async restore(workspaceId: string, id: string, version: number) {
-    const row = await this.prisma.caseInsightArticle.findFirst({ where: { workspaceId, id, deletedAt: { not: null } } });
+  async restore(id: string, version: number) {
+    const row = await this.prisma.caseInsightArticle.findFirst({ where: { id, deletedAt: { not: null } } });
     if (!row) throw new NotFoundException('case_not_found');
     if (row.version !== version) throw new ConflictException('case_revision_conflict');
     const restoredStatus = row.deletedFromStatus === 'draft' ? 'draft' : 'archived';
     const result = await this.prisma.caseInsightArticle.updateMany({
-      where: { workspaceId, id, version },
+      where: { id, version },
       data: { deletedAt: null, deletedFromStatus: null, status: restoredStatus, version: { increment: 1 } },
     });
     if (!result.count) throw new ConflictException('case_revision_conflict');

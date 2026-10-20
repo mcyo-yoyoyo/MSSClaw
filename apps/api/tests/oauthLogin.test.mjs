@@ -26,21 +26,16 @@ const member = (over = {}) => ({
   ...over,
 });
 
-function buildDocs({ members = [member()], workspaces = ['ws-cn-marketing'] } = {}) {
+function buildDocs({ members = [member()] } = {}) {
   const rows = new Map();
-  const wsRows = new Map(workspaces.map((id) => [id, { id }]));
   rows.set('doc-members-ws-cn-marketing', {
     id: 'doc-members-ws-cn-marketing',
-    workspaceId: 'ws-cn-marketing',
     kind: 'doc:members',
     payload: { members, revision: 1 },
   });
 
   const prisma = {
-    workspace: {
-      findUnique: async ({ where }) => wsRows.get(where.id) ?? null,
-      create: async ({ data }) => (wsRows.set(data.id, data), data),
-    },
+    appSetting: { findUnique: async () => ({ value: { catalog: {} } }) },
     centerRecord: {
       findUnique: async ({ where }) => rows.get(where.id) ?? null,
       findFirst: async () => null,
@@ -55,7 +50,7 @@ function buildDocs({ members = [member()], workspaces = ['ws-cn-marketing'] } = 
         return rows.get(where.id);
       },
     },
-    $executeRaw: async (_s, json, _u, id, expected) => {
+    $executeRaw: async (_s, json, id, expected) => {
       const row = rows.get(id);
       const current = typeof row?.payload?.revision === 'number' ? row.payload.revision : 0;
       if (!row || current !== expected) return 0;

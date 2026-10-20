@@ -195,7 +195,7 @@ export class AiKnowledgeService {
 
   async listSolutions(workspaceId: string, actor: AiKnowledgeActor, limit = 50) {
     const rows = await this.prisma.centerRecord.findMany({
-      where: { workspaceId, kind: SOLUTION_KIND },
+      where: { kind: SOLUTION_KIND },
       orderBy: { updatedAt: 'desc' },
       take: Math.min(Math.max(limit, 1) * 4, 400),
     });
@@ -212,7 +212,7 @@ export class AiKnowledgeService {
       where: { id: this.recordId(SOLUTION_KIND, workspaceId, actor, solutionId) },
     });
     const payload = row?.payload as unknown as StoredSolution | undefined;
-    if (!row || row.workspaceId !== workspaceId || payload?.ownerKey !== actor.key) {
+    if (!row || payload?.ownerKey !== actor.key) {
       throw new NotFoundException('ai_knowledge_solution_not_found');
     }
     const { ownerKey: _ownerKey, ...solution } = payload;
@@ -237,7 +237,6 @@ export class AiKnowledgeService {
       where: { id: this.recordId(DRAFT_KIND, workspaceId, actor, draft.id) },
       create: {
         id: this.recordId(DRAFT_KIND, workspaceId, actor, draft.id),
-        workspaceId,
         kind: DRAFT_KIND,
         payload: payload as unknown as Prisma.InputJsonValue,
       },
@@ -250,7 +249,7 @@ export class AiKnowledgeService {
       where: { id: this.recordId(DRAFT_KIND, workspaceId, actor, draftId) },
     });
     const payload = row?.payload as unknown as StoredDraft | undefined;
-    if (!row || row.workspaceId !== workspaceId || payload?.ownerKey !== actor.key) {
+    if (!row || payload?.ownerKey !== actor.key) {
       throw new NotFoundException('ai_knowledge_draft_not_found');
     }
     const { ownerKey: _ownerKey, ...draft } = payload;
@@ -266,7 +265,6 @@ export class AiKnowledgeService {
     await this.prisma.centerRecord.create({
       data: {
         id: this.recordId(SOLUTION_KIND, workspaceId, actor, solution.id),
-        workspaceId,
         kind: SOLUTION_KIND,
         payload: payload as unknown as Prisma.InputJsonValue,
       },

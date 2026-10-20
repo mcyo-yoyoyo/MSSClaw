@@ -81,19 +81,37 @@ cp ../../deploy/api.env.example .env
 #   THROTTLE_LIMIT=6000                 （内网 NAT 共享出口 IP，勿用过小默认）
 #   MAX_CONCURRENT_SSE=200
 #   S3_ENDPOINT / S3_BUCKET / S3_ACCESS_KEY / S3_SECRET_KEY   （文件存储 MinIO，见下方「文件存储」）
-#   DATABASE_URL="file:./prod.db"       （试点 / 小团队可用 SQLite）
+#   DATABASE_URL="postgresql://mssclaw:密码@127.0.0.1:5432/mssclaw?schema=public"   （见下方「数据库」）
 #   AIHOT_PROXY_ENABLED=1                （生产启用 AIHOT 显式代理）
 #   HTTPS_PROXY=http://proxyjp.huawei.com:8080
 #   不要设置 NODE_USE_ENV_PROXY=1；模型请求必须直连内网
-#   # 百人以上共享写：换 Postgres，例如
-#   # DATABASE_URL="postgresql://mssclaw:密码@127.0.0.1:5432/mssclaw"
 
+npx prisma migrate deploy   # 建表 / 升级表结构，每次发版都执行
 npm run build
 # 该入口会设置 AIHOT_PROXY_ENABLED=1，并清除 Node 全局环境代理开关
 node scripts/start-api.mjs production
 # systemd / pm2 也应托管上面的 launcher，不要绕过它直接执行 npm run start:prod
 # 建议用 systemd / pm2 守护进程
 ```
+
+### 数据库（PostgreSQL）
+
+```bash
+# 在数据库服务器上，先用环境变量或同目录 .env 覆盖默认口令（PG_USER / PG_PASSWORD / PG_DB）
+docker compose -f deploy/docker-compose.infra.yml up -d postgres
+```
+
+备份用 `pg_dump`（`docker compose -f deploy/docker-compose.infra.yml exec postgres pg_dump -U mssclaw -Fc mssclaw > mssclaw-$(date +%F).dump`），建议每天定时执行并拷到另一台机器。
+
+**从旧版 SQLite 一次性迁移（停机进行）**：只迁 `ws-cn-marketing` 与全局数据，其他工作区的文档不迁；统计（行为事件、页面访问、每日登录、转化事件）各工作区合并，互动累计值按内容求和。
+
+1. 停止 API；备份 SQLite 文件（`prod.db` 连同 `prod.db-wal`、`prod.db-shm`）和 `BLOB_ROOT` 目录
+2. 启动 PostgreSQL，把 `apps/api/.env` 的 `DATABASE_URL` 换成 PG 连接串，执行 `npx prisma migrate deploy`（在 `apps/api` 下）建表
+3. 预览：`npm run migrate:sqlite-to-pg --workspace @mss-claw/api -- /绝对路径/prod.db`，核对各工作区数据量，确认 `ws-cn-marketing` 以外的空间只是种子数据或可以舍弃
+4. 执行：同一命令末尾加 `--apply`。目标表必须为空，全部写入在一个事务里，失败整体回滚；输出「完成。」才算成功
+5. 文件存储还没迁到 MinIO 的，接着做下面「文件存储」的迁移步骤（`migrate:blob-refs` 改的是 PG 里的数据，必须在第 4 步之后）
+6. 启动 API，抽查登录、三个货架、看板数字、一个附件
+7. SQLite 文件保留到下个版本；回滚 = 停 API、`DATABASE_URL` 改回 SQLite、部署上一个版本
 
 ### 文件存储（MinIO）
 
@@ -112,7 +130,7 @@ docker compose -f deploy/docker-compose.infra.yml up -d minio
 1. 停止 API；备份 `BLOB_ROOT` 目录和数据库文件
 2. 在 `apps/api/.env` 配好 `S3_*`，并把 `BLOB_ROOT` 指向旧目录
 3. `npm run migrate:blobs --workspace @mss-claw/api`：输出「失败 0」才算完成，可重复执行，已复制的会跳过
-4. `npm run migrate:blob-refs --workspace @mss-claw/api`：把数据库里内嵌的图片（工具 Logo、Skill 图标、Agent 头像、案例封面等 data URL）上传到对象存储并替换成地址，同时把旧的 `/api/v1/workspaces/<ws>/blobs/<id>` 地址改写为 `/api/v1/blobs/<id>`；输出「失败 0」才算完成，可重复执行。SVG 和 HTML 正文里嵌着的图片保持原样
+4. `npm run migrate:blob-refs --workspace @mss-claw/api`（数据库已迁到 PG 之后）：把数据库里内嵌的图片（工具 Logo、Skill 图标、Agent 头像、案例封面等 data URL）上传到对象存储并替换成地址，同时把旧的 `/api/v1/workspaces/<ws>/blobs/<id>` 地址改写为 `/api/v1/blobs/<id>`；输出「失败 0」才算完成，可重复执行。SVG 和 HTML 正文里嵌着的图片保持原样
 5. 启动 API，抽查一个附件、一个能力包、一个工具 Logo 能正常显示或下载
 6. 旧目录保留到下个版本，确认无误后再删除
 
@@ -163,8 +181,7 @@ docker compose -f deploy/docker-compose.infra.yml up -d minio
 
 | 场景 | 建议 |
 |------|------|
-| 试点 / 部门内少人编辑 | SQLite + MinIO 文件存储可先上 |
-| 百人以上、多人同时改门户/货架 | **换 Postgres**；SQLite 单写者会锁等待 |
+| 数据库 | PostgreSQL；大部分业务数据仍是过渡表里的整份 JSON，同一文档并发写靠 revision 冲突提示，后续各期拆成正式表 |
 | 附件与能力包 | 普通附件仍默认 ≤12MB；用户侧 Skill / Agent 原始包默认 ≤200MiB；已鉴权的运营后台 Skill 原包流式上传不设体积上限；JSON 只存 `url`/`blobId` |
 | 限流 | 默认 6000/IP/分钟（应对公司 NAT）；过严会出现集体 429 |
 | How to | 部分仍偏本机 localStorage；核心案例 / 货架走共享 API |

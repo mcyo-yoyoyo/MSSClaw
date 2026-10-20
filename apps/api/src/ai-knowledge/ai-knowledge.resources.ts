@@ -71,7 +71,7 @@ export class AiKnowledgeResourceService {
   async searchCases(workspaceId: string, query: string, limit = 5): Promise<SolutionResource[]> {
     const [rows, localCases] = await Promise.all([
       this.prisma.centerRecord.findMany({
-        where: { workspaceId, kind: { in: ['case', 'ai-case'] } },
+        where: { kind: { in: ['case', 'ai-case'] } },
         orderBy: { updatedAt: 'desc' },
         take: 200,
       }),
@@ -297,9 +297,9 @@ export class AiKnowledgeResourceService {
   ): Promise<CatalogItem[]> {
     const row = await this.prisma.centerRecord.findUnique({
       where: { id: `marketplace-${workspaceId}` },
-      select: { workspaceId: true, payload: true },
+      select: { payload: true },
     });
-    if (!row || row.workspaceId !== workspaceId) return [];
+    if (!row) return [];
     const payload = row.payload as CatalogItem;
     const items = payload[key];
     if (!Array.isArray(items)) return [];

@@ -4,7 +4,7 @@
 # 推荐拓扑（64G / 2T 机器绰绰有余）：
 #   浏览器 → Nginx(TLS + 静态 apps/web/dist) → [可选] Nest API :3000
 #
-# 说明：内网多用户必须反代 /api；小团队可用 SQLite，≥50 并发写建议 Postgres。
+# 说明：内网多用户必须反代 /api；数据库为 PostgreSQL，文件在 MinIO。
 
 worker_processes auto;
 worker_rlimit_nofile 65535;

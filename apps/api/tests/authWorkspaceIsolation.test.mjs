@@ -20,9 +20,8 @@ const member = (email, role = 'super_admin') => ({
 /** 平台只有一个空间：mcyo 已设强密码，且关闭演示口令 */
 function build() {
   const rows = new Map();
-  const wsRows = new Map([[WS, { id: WS }]]);
   const put = (kind, payload) =>
-    rows.set(`doc-${kind}-${WS}`, { id: `doc-${kind}-${WS}`, workspaceId: WS, kind: `doc:${kind}`, payload });
+    rows.set(`doc-${kind}-${WS}`, { id: `doc-${kind}-${WS}`, kind: `doc:${kind}`, payload });
 
   put('members', { members: [member('mcyo@huawei.com')] });
   put('auth-credentials', {
@@ -32,13 +31,7 @@ function build() {
   });
 
   const prisma = {
-    workspace: {
-      findUnique: async ({ where }) => wsRows.get(where.id) ?? null,
-      create: async ({ data }) => {
-        wsRows.set(data.id, data);
-        return data;
-      },
-    },
+    appSetting: { findUnique: async () => ({ value: { catalog: {} } }) },
     centerRecord: {
       findUnique: async ({ where }) => rows.get(where.id) ?? null,
       findFirst: async () => null,
@@ -57,7 +50,7 @@ function build() {
         return rows.get(where.id);
       },
     },
-    $executeRaw: async (_s, json, _u, id, expected) => {
+    $executeRaw: async (_s, json, id, expected) => {
       const row = rows.get(id);
       const current = typeof row?.payload?.revision === 'number' ? row.payload.revision : 0;
       if (!row || current !== expected) return 0;
@@ -67,11 +60,11 @@ function build() {
   };
 
   const service = new PlatformDocsService(prisma, { recordDailyLogin: async () => {} });
-  return { service, rows, wsRows };
+  return { service, rows };
 }
 
 test('请求里编造的 workspaceId 被忽略：只能登录平台空间，也不会建出新空间', async () => {
-  const { service, rows, wsRows } = build();
+  const { service, rows } = build();
 
   const demo = await service.login({ email: 'mcyo@huawei.com', password: 'mssclaw', workspaceId: 'ws-attacker-1' });
   assert.equal(demo.ok, false, '平台空间已设强密码，演示口令不能借别的空间名登进来');
@@ -83,7 +76,6 @@ test('请求里编造的 workspaceId 被忽略：只能登录平台空间，也�
   });
   assert.equal(real.ok, true);
   assert.equal(real.user.workspaceId, WS);
-  assert.equal(wsRows.has('ws-attacker-1'), false);
   assert.equal(rows.has('doc-members-ws-attacker-1'), false);
 });
 

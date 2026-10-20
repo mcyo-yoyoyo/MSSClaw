@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { createHash, randomUUID } from 'crypto';
+import { findWorkspace, updateWorkspaceCatalog } from '../workspaces/workspace-setting';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   listMappedFromMarketplace,
@@ -513,36 +514,33 @@ function mergeExcelInternalTools(source: unknown[] | undefined): unknown[] {
 @Injectable()
 export class PersistenceService {
   private marketEngagementRetentionChecks = 0;
-  /** SQLite 只有一个写者；把行为写事务排队，避免并发 deferred transaction 锁升级超时。 */
+  /** 行为写事务按进程排队：上限检查是先计数再插入，排队后同一实例内的并发请求不会一起穿过上限。 */
   private marketEngagementWriteTail: Promise<void> = Promise.resolve();
 
   constructor(private readonly prisma: PrismaService) {}
 
   async getSessions(workspaceId: string) {
-    const row = await this.prisma.workspace.findUnique({ where: { id: workspaceId } });
+    const row = await findWorkspace(this.prisma);
     if (!row) throw new NotFoundException(`Workspace ${workspaceId} not found`);
     const catalog = row.catalogJson as Record<string, unknown>;
     return { chats: (catalog.chats as Record<string, unknown>) ?? {} };
   }
 
   async putSessions(workspaceId: string, chats: Record<string, unknown>) {
-    const row = await this.prisma.workspace.findUnique({ where: { id: workspaceId } });
+    const row = await findWorkspace(this.prisma);
     if (!row) throw new NotFoundException(`Workspace ${workspaceId} not found`);
     const catalog = { ...(row.catalogJson as Record<string, unknown>), chats };
-    await this.prisma.workspace.update({
-      where: { id: workspaceId },
-      data: { catalogJson: catalog as Prisma.InputJsonValue },
-    });
+    await updateWorkspaceCatalog(this.prisma, catalog as Prisma.InputJsonValue);
     return { chats };
   }
 
   async getInboxMessages(workspaceId: string, userId: string) {
     const [messages, states] = await Promise.all([
       this.prisma.inboxMessageRecord.findMany({
-        where: { workspaceId, toUserId: { in: [userId, '*'] } },
+        where: { toUserId: { in: [userId, '*'] } },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.inboxUserMessageState.findMany({ where: { workspaceId, userId } }),
+      this.prisma.inboxUserMessageState.findMany({ where: { userId } }),
     ]);
     const stateByMessage = new Map(states.map((state) => [state.messageId, state]));
     return {
@@ -558,9 +556,8 @@ export class PersistenceService {
 
   async createInboxMessage(workspaceId: string, input: InboxMessageInput) {
     const message = await this.prisma.inboxMessageRecord.upsert({
-      where: { workspaceId_id: { workspaceId, id: input.id } },
+      where: { id: input.id },
       create: {
-        workspaceId,
         id: input.id,
         kind: input.kind,
         title: input.title,
@@ -578,8 +575,8 @@ export class PersistenceService {
 
   async markInboxMessageRead(workspaceId: string, userId: string, messageId: string) {
     await this.prisma.inboxUserMessageState.upsert({
-      where: { workspaceId_userId_messageId: { workspaceId, userId, messageId } },
-      create: { workspaceId, userId, messageId, readAt: new Date() },
+      where: { userId_messageId: { userId, messageId } },
+      create: { userId, messageId, readAt: new Date() },
       update: { readAt: new Date(), deletedAt: null },
     });
     return { ok: true };
@@ -587,14 +584,14 @@ export class PersistenceService {
 
   async markAllInboxMessagesRead(workspaceId: string, userId: string) {
     const messages = await this.prisma.inboxMessageRecord.findMany({
-      where: { workspaceId, toUserId: { in: [userId, '*'] } },
+      where: { toUserId: { in: [userId, '*'] } },
       select: { id: true },
     });
     await this.prisma.$transaction(
       messages.map(({ id: messageId }) =>
         this.prisma.inboxUserMessageState.upsert({
-          where: { workspaceId_userId_messageId: { workspaceId, userId, messageId } },
-          create: { workspaceId, userId, messageId, readAt: new Date() },
+          where: { userId_messageId: { userId, messageId } },
+          create: { userId, messageId, readAt: new Date() },
           update: { readAt: new Date() },
         }),
       ),
@@ -604,8 +601,8 @@ export class PersistenceService {
 
   async deleteInboxMessageForUser(workspaceId: string, userId: string, messageId: string) {
     await this.prisma.inboxUserMessageState.upsert({
-      where: { workspaceId_userId_messageId: { workspaceId, userId, messageId } },
-      create: { workspaceId, userId, messageId, deletedAt: new Date() },
+      where: { userId_messageId: { userId, messageId } },
+      create: { userId, messageId, deletedAt: new Date() },
       update: { deletedAt: new Date() },
     });
     return { ok: true };
@@ -613,7 +610,7 @@ export class PersistenceService {
 
   async getMarketplace(workspaceId: string): Promise<MarketplacePayload | null> {
     const row = await this.prisma.centerRecord.findFirst({
-      where: { workspaceId, kind: 'marketplace' },
+      where: { kind: 'marketplace' },
     });
     if (row) {
       const current = row.payload as MarketplacePayload;
@@ -637,10 +634,7 @@ export class PersistenceService {
     // 没有任何旧中心记录时也创建完整的 canonical 目录，避免新工作区只能看到
     // 空货架；首次读取后前端始终只消费数据库 marketplace 快照。
     // 未知工作区不应因一次公开 GET 产生孤儿 CenterRecord。
-    const workspace = await this.prisma.workspace.findUnique({
-      where: { id: workspaceId },
-      select: { id: true },
-    });
+    const workspace = await findWorkspace(this.prisma);
     if (!workspace) return null;
     const built = await this.buildMarketplaceFromCenterRecords(workspaceId);
     const initialPayload: MarketplacePayload = built ?? {
@@ -655,7 +649,6 @@ export class PersistenceService {
       where: { id: `marketplace-${workspaceId}` },
       create: {
         id: `marketplace-${workspaceId}`,
-        workspaceId,
         kind: 'marketplace',
         payload: payload as Prisma.InputJsonValue,
       },
@@ -706,7 +699,6 @@ export class PersistenceService {
       where: { id: GLOBAL_TOOLS_RECORD_ID },
       create: {
         id: GLOBAL_TOOLS_RECORD_ID,
-        workspaceId: GLOBAL_TOOLS_SCOPE,
         kind: GLOBAL_TOOLS_RECORD_KIND,
         payload: toPrismaJson(payload as unknown as Record<string, unknown>),
       },
@@ -744,7 +736,6 @@ export class PersistenceService {
       where: { id: GLOBAL_TOOLS_RECORD_ID },
       create: {
         id: GLOBAL_TOOLS_RECORD_ID,
-        workspaceId: GLOBAL_TOOLS_SCOPE,
         kind: GLOBAL_TOOLS_RECORD_KIND,
         payload: toPrismaJson(payload as unknown as Record<string, unknown>),
       },
@@ -815,7 +806,6 @@ export class PersistenceService {
       where: { id },
       create: {
         id,
-        workspaceId,
         kind: 'marketplace',
         payload: payload as Prisma.InputJsonValue,
       },
@@ -831,9 +821,9 @@ export class PersistenceService {
   async getMarketEngagement(workspaceId: string, userId: string) {
     await this.ensureLegacyMarketEngagementMigrated(workspaceId);
     const [metrics, interactions] = await Promise.all([
-      this.prisma.marketEngagement.findMany({ where: { workspaceId } }),
+      this.prisma.marketEngagement.findMany(),
       userId
-        ? this.prisma.marketUserInteraction.findMany({ where: { workspaceId, userId } })
+        ? this.prisma.marketUserInteraction.findMany({ where: { userId } })
         : Promise.resolve([]),
     ]);
     return {
@@ -923,41 +913,46 @@ export class PersistenceService {
       const result = await this.prisma.$transaction(async (tx) => {
       let behaviorAction: MarketEngagementEventAction | null = null;
       let metric = await tx.marketEngagement.findUnique({
-        where: { workspaceId_contentId: { workspaceId, contentId } },
+        where: { contentId },
       });
       let interaction = userId
         ? await tx.marketUserInteraction.findUnique({
-            where: { workspaceId_userId_contentId: { workspaceId, userId, contentId } },
+            where: { userId_contentId: { userId, contentId } },
           })
         : null;
 
       const requestEventRowId = randomUUID();
       const requestAction = `request:${action}`;
       const rateWindowStart = new Date(occurredAt.getTime() - MARKET_ENGAGEMENT_RATE_WINDOW_MS);
-      // 唯一键与分钟/每日上限都放进同一条 SQLite 语句；并发重试无法同时穿过
-      // “先查再写”的窗口。旧事实没有 eventId，因此新增列保持 nullable。
-      const accepted = await tx.$executeRaw`
-        INSERT OR IGNORE INTO "MarketEngagementEvent"
-          ("id", "workspaceId", "eventId", "contentId", "action", "dateKey", "visitorHash", "occurredAt", "visitorType", "success", "durationMs", "inputTokens", "outputTokens", "errorCode", "assetType")
-        SELECT
-          ${requestEventRowId}, ${workspaceId}, ${eventId}, ${contentId}, ${requestAction}, ${dateKey}, ${visitorHash}, ${occurredAt}, ${visitorType}, ${input.success ?? null}, ${durationMs}, ${inputTokens}, ${outputTokens}, ${errorCode}, ${requestedAssetType}
-        WHERE ${visitorHash} IS NULL OR (
-          (
-            SELECT COUNT(*)
-            FROM "MarketEngagementEvent"
-            WHERE "workspaceId" = ${workspaceId}
-              AND "visitorHash" = ${visitorHash}
-              AND "occurredAt" >= ${rateWindowStart}
-          ) < ${MARKET_ENGAGEMENT_VISITOR_RATE_LIMIT}
-          AND (
-            SELECT COUNT(*)
-            FROM "MarketEngagementEvent"
-            WHERE "workspaceId" = ${workspaceId}
-              AND "dateKey" = ${dateKey}
-              AND "visitorHash" = ${visitorHash}
-          ) < ${MARKET_ENGAGEMENT_DAILY_VISITOR_LIMIT}
-        )
-      `;
+      // 写入已按进程排队；分钟/每日上限先计数再插入，多实例并发时最多多记几条。
+      // eventId 唯一键保证重试幂等（skipDuplicates = ON CONFLICT DO NOTHING）；旧事实没有 eventId，列保持 nullable。
+      const overLimit = visitorHash !== null && (
+        await tx.marketEngagementEvent.count({
+          where: { visitorHash, occurredAt: { gte: rateWindowStart } },
+        }) >= MARKET_ENGAGEMENT_VISITOR_RATE_LIMIT ||
+        await tx.marketEngagementEvent.count({
+          where: { dateKey, visitorHash },
+        }) >= MARKET_ENGAGEMENT_DAILY_VISITOR_LIMIT
+      );
+      const accepted = overLimit ? 0 : (await tx.marketEngagementEvent.createMany({
+        data: [{
+          id: requestEventRowId,
+          eventId,
+          contentId,
+          action: requestAction,
+          dateKey,
+          visitorHash,
+          occurredAt,
+          visitorType,
+          success: input.success ?? null,
+          durationMs,
+          inputTokens,
+          outputTokens,
+          errorCode,
+          assetType: requestedAssetType,
+        }],
+        skipDuplicates: true,
+      })).count;
 
       if (accepted === 0) {
         return this.marketEngagementStateFromRows(contentId, metric, interaction);
@@ -968,8 +963,8 @@ export class PersistenceService {
         // queryable in the event table while the aggregate stays an interaction metric.
         if (action !== 'exposure' && action !== 'call') {
           metric = await tx.marketEngagement.upsert({
-            where: { workspaceId_contentId: { workspaceId, contentId } },
-            create: { workspaceId, contentId },
+            where: { contentId },
+            create: { contentId },
             update: {},
           });
         }
@@ -990,7 +985,7 @@ export class PersistenceService {
           throw new BadRequestException('market_engagement_metric_unavailable');
         }
         metric = await tx.marketEngagement.update({
-          where: { workspaceId_contentId: { workspaceId, contentId } },
+          where: { contentId },
           data: { [field]: { increment: 1 } },
         });
         behaviorAction = action;
@@ -1001,7 +996,7 @@ export class PersistenceService {
         const previous = interaction?.favorited ?? false;
         if (next !== previous) {
           metric = await tx.marketEngagement.update({
-            where: { workspaceId_contentId: { workspaceId, contentId } },
+            where: { contentId },
             data: { favorites: { increment: next ? 1 : -1 } },
           });
           behaviorAction = next ? 'favorite' : explicitCancel ? 'favorite_cancel' : null;
@@ -1009,8 +1004,8 @@ export class PersistenceService {
           behaviorAction = 'favorite_cancel';
         }
         interaction = await tx.marketUserInteraction.upsert({
-          where: { workspaceId_userId_contentId: { workspaceId, userId, contentId } },
-          create: { workspaceId, userId, contentId, favorited: next },
+          where: { userId_contentId: { userId, contentId } },
+          create: { userId, contentId, favorited: next },
           update: { favorited: next },
         });
       } else if (
@@ -1042,7 +1037,7 @@ export class PersistenceService {
           (nextVote === 'dislike' ? 1 : 0) - (previousVote === 'dislike' ? 1 : 0);
         if (likeDelta || dislikeDelta) {
           metric = await tx.marketEngagement.update({
-            where: { workspaceId_contentId: { workspaceId, contentId } },
+            where: { contentId },
             data: {
               likes: { increment: likeDelta },
               dislikes: { increment: dislikeDelta },
@@ -1056,8 +1051,8 @@ export class PersistenceService {
           behaviorAction = requestedVote === 'like' ? 'like_cancel' : 'dislike_cancel';
         }
         interaction = await tx.marketUserInteraction.upsert({
-          where: { workspaceId_userId_contentId: { workspaceId, userId, contentId } },
-          create: { workspaceId, userId, contentId, vote: nextVote },
+          where: { userId_contentId: { userId, contentId } },
+          create: { userId, contentId, vote: nextVote },
           update: { vote: nextVote },
         });
       } else if (action === 'call') {
@@ -1066,7 +1061,7 @@ export class PersistenceService {
 
       if (behaviorAction) {
         await tx.marketEngagementEvent.updateMany({
-          where: { workspaceId, eventId },
+          where: { eventId },
           data: { action: behaviorAction },
         });
       }
@@ -1107,16 +1102,12 @@ export class PersistenceService {
   }
 
   private async knownMarketEngagementContentIds(workspaceId: string): Promise<Set<string>> {
-    const workspace = await this.prisma.workspace.findUnique({
-      where: { id: workspaceId },
-      select: { id: true },
-    });
+    const workspace = await findWorkspace(this.prisma);
     if (!workspace) throw new NotFoundException('market_engagement_workspace_not_found');
 
     const [rows, globalToolsRow] = await Promise.all([
       this.prisma.centerRecord.findMany({
         where: {
-          workspaceId,
           kind: { in: [...MARKET_ENGAGEMENT_CENTER_KINDS] },
         },
         select: { id: true, kind: true, payload: true },
@@ -1229,7 +1220,6 @@ export class PersistenceService {
   ): Promise<MarketplacePayload | null> {
     const rows = await this.prisma.centerRecord.findMany({
       where: {
-        workspaceId,
         kind: { in: ['agent', 'skill', 'tool', 'workflow', 'knowledge'] },
       },
       orderBy: { updatedAt: 'asc' },
@@ -1450,9 +1440,8 @@ export class PersistenceService {
           const parsedDate = value.updatedAt ? new Date(value.updatedAt) : new Date();
           const updatedAt = Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
           return this.prisma.marketEngagement.upsert({
-            where: { workspaceId_contentId: { workspaceId, contentId } },
+            where: { contentId },
             create: {
-              workspaceId,
               contentId,
               views: legacyEngagementCount(value.views ?? value.uses),
               uses: legacyEngagementCount(value.uses),
@@ -1499,7 +1488,6 @@ export class PersistenceService {
           where: { id },
           create: {
             id,
-            workspaceId,
             kind,
             payload: toPrismaJson(item),
           },
@@ -1522,7 +1510,6 @@ export class PersistenceService {
         if (removedIds.length) {
           await this.prisma.centerRecord.deleteMany({
             where: {
-              workspaceId,
               kind,
               id: { in: removedIds },
             },
@@ -1534,7 +1521,7 @@ export class PersistenceService {
 
   async getPortalContent(workspaceId: string): Promise<PortalContentPayload | null> {
     const row = await this.prisma.centerRecord.findFirst({
-      where: { workspaceId, kind: 'portal-content' },
+      where: { kind: 'portal-content' },
     });
     if (!row) return null;
     const payload = row.payload as PortalContentPayload;
@@ -1571,7 +1558,6 @@ export class PersistenceService {
       where: { id },
       create: {
         id,
-        workspaceId,
         kind: 'portal-content',
         payload: nextPayload as Prisma.InputJsonValue,
       },

@@ -7,7 +7,7 @@ import { PlatformDocsController } from '../dist/persistence/platform-docs.contro
 function fakePrisma(rows = {}) {
   const store = new Map(Object.entries(rows));
   return {
-    workspace: { findUnique: async () => ({ id: 'ws-cn-marketing' }) },
+    appSetting: { findUnique: async () => ({ value: { catalog: {} } }) },
     centerRecord: {
       findUnique: async ({ where }) => store.get(where.id) ?? null,
       findMany: async () => [...store.values()],
@@ -24,7 +24,7 @@ function fakePrisma(rows = {}) {
         return store.get(where.id);
       },
     },
-    $executeRaw: async (_strings, payloadJson, _updatedAt, id, expectedRevision) => {
+    $executeRaw: async (_strings, payloadJson, id, expectedRevision) => {
       const row = store.get(id);
       const current = typeof row?.payload?.revision === 'number' ? row.payload.revision : 0;
       if (!row || current !== expectedRevision) return 0;

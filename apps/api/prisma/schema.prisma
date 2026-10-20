@@ -3,217 +3,204 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-model Workspace {
-  id            String   @id
-  name          String
-  namespace     String
-  description   String
-  memberCount   Int      @default(0)
-  defaultChatId String
-  catalogJson   Json
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+// 表名、列名按 docs/database-design.sql 的下划线命名映射；代码里的模型名、字段名不变。
+
+/// 平台配置：整份 JSON 读写，revision 做乐观锁。第 2 期只有 workspace（原 Workspace 行），后续各期往里加键。
+model AppSetting {
+  settingKey        String   @id @map("setting_key")
+  value             Json
+  schemaVersion     Int?     @map("schema_version")
+  revision          Int      @default(0)
+  updatedByMemberId String?  @map("updated_by_member_id")
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("app_setting")
 }
 
+/// 过渡表：其余 JSON 文档，第 6 期结束后删除。记录 id 沿用旧值（如 marketplace-ws-cn-marketing）。
 model CenterRecord {
-  id          String   @id
-  workspaceId String
-  kind        String
-  payload     Json
-  updatedAt   DateTime @updatedAt
+  id        String   @id
+  kind      String
+  payload   Json
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  @@index([workspaceId, kind])
+  @@index([kind], map: "center_record_kind_idx")
+  @@map("center_record")
 }
 
 /// 市场内容的聚合互动指标。所有计数由后端原子更新，前端只读取结果。
 model MarketEngagement {
-  workspaceId String
-  contentId   String
-  views       Int      @default(0)
-  uses        Int      @default(0)
-  likes       Int      @default(0)
-  dislikes    Int      @default(0)
-  downloads   Int      @default(0)
-  favorites   Int      @default(0)
-  updatedAt   DateTime @updatedAt
+  contentId String   @id @map("content_id")
+  views     Int      @default(0)
+  uses      Int      @default(0)
+  likes     Int      @default(0)
+  dislikes  Int      @default(0)
+  downloads Int      @default(0)
+  favorites Int      @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  @@id([workspaceId, contentId])
-  @@index([workspaceId, updatedAt])
+  @@map("market_engagement_stat")
 }
 
-/// 用户对市场内容的状态，用于保证点赞/点踩/收藏幂等且按用户隔离。
+/// 过渡表：用户对市场内容的状态，第 5 期拆成 market_user_vote 与 market_favorite 后删除。
 model MarketUserInteraction {
-  workspaceId String
-  userId      String
-  contentId   String
-  vote        String?
-  favorited   Boolean  @default(false)
-  updatedAt   DateTime @updatedAt
+  userId    String   @map("member_id")
+  contentId String   @map("content_id")
+  vote      String?
+  favorited Boolean  @default(false)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  @@id([workspaceId, userId, contentId])
-  @@index([workspaceId, userId, favorited])
+  @@id([userId, contentId])
+  @@index([userId, favorited], map: "market_user_interaction_favorited_idx")
+  @@map("market_user_interaction")
 }
 
 /// 市场内容的行为事实。累计表只保存当前总量，本表用于按日期统计浏览、收藏、点赞、点踩与跳转趋势。
 model MarketEngagementEvent {
-  id            String   @id @default(uuid())
-  workspaceId   String
-  eventId       String?
-  contentId     String
-  assetType     String   @default("unknown")
-  action        String
-  dateKey       String
-  visitorHash   String?
-  visitorType   String   @default("user")
-  success       Boolean?
-  durationMs    Int?
-  inputTokens   Int?
-  outputTokens  Int?
-  errorCode     String?
-  occurredAt    DateTime @default(now())
+  id           String   @id @default(uuid())
+  eventId      String?  @unique @map("event_id")
+  contentId    String   @map("content_id")
+  assetType    String   @default("unknown") @map("asset_type")
+  action       String
+  dateKey      String   @map("date_key")
+  visitorHash  String?  @map("visitor_hash")
+  visitorType  String   @default("user") @map("visitor_type")
+  success      Boolean?
+  durationMs   Int?     @map("duration_ms")
+  inputTokens  Int?     @map("input_tokens")
+  outputTokens Int?     @map("output_tokens")
+  errorCode    String?  @map("error_code")
+  occurredAt   DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
 
-  @@unique([workspaceId, eventId])
-  @@index([workspaceId, dateKey, action])
-  @@index([workspaceId, dateKey, visitorHash])
-  @@index([workspaceId, visitorHash, occurredAt])
-  @@index([workspaceId, occurredAt])
-  @@index([workspaceId, contentId, occurredAt])
-  @@index([workspaceId, contentId, action, dateKey])
-  @@index([workspaceId, assetType, action, dateKey])
-  @@index([occurredAt])
+  @@index([dateKey, action], map: "market_engagement_event_date_action_idx")
+  @@index([occurredAt], map: "market_engagement_event_time_idx")
+  @@index([dateKey, visitorHash], map: "market_engagement_event_date_visitor_idx")
+  @@index([visitorHash, occurredAt], map: "market_engagement_event_visitor_time_idx")
+  @@map("market_engagement_event")
 }
 
 /// 门户页面访问事实。eventId 保证同一次上报幂等，PV/UV 均由事实记录实时聚合。
 model PortalPageView {
-  workspaceId String
-  eventId     String
-  dateKey     String
-  routeKey    String
-  visitorHash String
-  visitorType String   @default("user")
-  journeyHash String?
-  occurredAt  DateTime @default(now())
+  eventId     String   @id @map("event_id")
+  dateKey     String   @map("date_key")
+  routeKey    String   @map("route_key")
+  visitorHash String   @map("visitor_hash")
+  visitorType String   @default("user") @map("visitor_type")
+  journeyHash String?  @map("journey_hash")
+  occurredAt  DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
 
-  @@id([workspaceId, eventId])
-  @@index([workspaceId, dateKey])
-  @@index([workspaceId, dateKey, routeKey])
-  @@index([workspaceId, dateKey, visitorHash])
-  @@index([workspaceId, dateKey, visitorType])
-  @@index([workspaceId, dateKey, journeyHash])
+  @@index([dateKey, routeKey], map: "portal_page_view_route_idx")
+  @@index([dateKey, visitorHash], map: "portal_page_view_visitor_idx")
+  @@map("portal_page_view")
 }
 
 /// 每日成功登录账号。复合主键保证同一账号当天重复登录只计为一人。
 model PortalDailyLogin {
-  workspaceId  String
-  dateKey      String
-  visitorHash  String
-  firstLoginAt DateTime @default(now())
+  dateKey      String   @map("date_key")
+  visitorHash  String   @map("visitor_hash")
+  firstLoginAt DateTime @default(now()) @map("first_login_at") @db.Timestamptz(3)
 
-  @@id([workspaceId, dateKey, visitorHash])
-  @@index([workspaceId, dateKey])
+  @@id([dateKey, visitorHash])
+  @@map("portal_daily_login")
 }
 
 /// 游客登录墙与成功登录事件。journeyHash 关联同一浏览器，原始 visitorId 不落库。
 model PortalConversionEvent {
-  workspaceId String
-  eventId     String
-  dateKey     String
-  eventType   String
+  eventId     String   @id @map("event_id")
+  dateKey     String   @map("date_key")
+  eventType   String   @map("event_type")
   action      String?
-  routeKey    String?
-  journeyHash String
-  userHash    String?
-  occurredAt  DateTime @default(now())
+  routeKey    String?  @map("route_key")
+  journeyHash String   @map("journey_hash")
+  userHash    String?  @map("user_hash")
+  occurredAt  DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
 
-  @@id([workspaceId, eventId])
-  @@index([workspaceId, dateKey, eventType])
-  @@index([workspaceId, dateKey, journeyHash])
-  @@index([workspaceId, dateKey, action])
-  @@index([workspaceId, journeyHash, eventType, occurredAt])
+  @@index([dateKey, eventType], map: "portal_conversion_event_type_idx")
+  @@index([journeyHash, eventType, occurredAt], map: "portal_conversion_event_journey_idx")
+  @@map("portal_conversion_event")
 }
 
-/// AI 快讯邮件订阅。每个工作区内每位用户只有一条当前有效订阅。
+/// AI 快讯邮件订阅。每位用户只有一条当前有效订阅。
 model AiBriefEmailSubscription {
-  workspaceId  String
-  userId       String
-  userName     String
+  userId       String   @id @map("member_id")
+  userName     String   @map("member_name")
   email        String
-  subscribedAt DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  subscribedAt DateTime @default(now()) @map("subscribed_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  @@id([workspaceId, userId])
-  @@index([workspaceId, subscribedAt])
-  @@index([workspaceId, email])
+  @@index([subscribedAt], map: "ai_brief_email_subscription_time_idx")
+  @@index([email], map: "ai_brief_email_subscription_email_idx")
+  @@map("ai_brief_email_subscription")
 }
 
 /// 海外案例洞察：草稿与线上版本分开，未发布内容不得进入访客接口。
 model CaseInsightArticle {
-  id                 String   @id @default(uuid())
-  workspaceId        String
-  sourceCaseId       String?
-  title              String
-  summary            String   @default("")
-  company            String   @default("")
-  sourceUrl          String   @default("")
-  domainIds          Json
-  tags               Json
-  draftHtml          String   @default("")
-  publishedHtml      String?
-  draftCoverImage    String?
-  publishedCoverImage String?
-  deletedAt          DateTime?
-  deletedFromStatus  String?
-  draftMarkdown      String
-  publishedMarkdown  String?
-  publishedTitle     String?
-  publishedSummary   String?
-  publishedCompany   String?
-  publishedSourceUrl String?
-  publishedDomainIds Json?
-  publishedTags      Json?
-  status             String   @default("draft")
-  sortOrder          Int      @default(0)
-  version            Int      @default(1)
-  publishedVersion   Int?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  publishedAt        DateTime?
+  id                  String    @id @default(uuid())
+  sourceCaseId        String?   @unique @map("source_case_id")
+  title               String
+  summary             String    @default("")
+  company             String    @default("")
+  sourceUrl           String    @default("") @map("source_url")
+  domainIds           Json      @map("domain_ids")
+  tags                Json
+  draftHtml           String    @default("") @map("draft_html")
+  draftMarkdown       String    @map("draft_markdown")
+  draftCoverImage     String?   @map("draft_cover_image")
+  status              String    @default("draft")
+  sortOrder           Int       @default(0) @map("sort_order")
+  version             Int       @default(1)
+  publishedTitle      String?   @map("published_title")
+  publishedSummary    String?   @map("published_summary")
+  publishedCompany    String?   @map("published_company")
+  publishedSourceUrl  String?   @map("published_source_url")
+  publishedDomainIds  Json?     @map("published_domain_ids")
+  publishedTags       Json?     @map("published_tags")
+  publishedHtml       String?   @map("published_html")
+  publishedMarkdown   String?   @map("published_markdown")
+  publishedCoverImage String?   @map("published_cover_image")
+  publishedVersion    Int?      @map("published_version")
+  publishedAt         DateTime? @map("published_at") @db.Timestamptz(3)
+  deletedAt           DateTime? @map("deleted_at") @db.Timestamptz(3)
+  deletedFromStatus   String?   @map("deleted_from_status")
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  @@index([workspaceId, status, sortOrder])
-  @@index([workspaceId, updatedAt])
-  @@unique([workspaceId, sourceCaseId])
+  @@index([status, sortOrder], map: "case_insight_article_list_idx")
+  @@index([updatedAt], map: "case_insight_article_updated_idx")
+  @@map("case_insight_article")
 }
 
-/// 工作区消息正文。广播消息使用 toUserId="*"，定向消息保存具体用户 id。
+/// 站内信正文。广播消息使用 toUserId="*"，定向消息保存具体用户 id。
 model InboxMessageRecord {
-  workspaceId String
-  id          String
-  kind        String
-  title       String
-  body        String
-  fromUserId  String?
-  fromName    String
-  toUserId    String
-  meta        Json?
-  createdAt   DateTime @default(now())
+  id         String                  @id
+  kind       String
+  title      String
+  body       String
+  fromUserId String?                 @map("from_member_id")
+  fromName   String                  @map("from_name")
+  toUserId   String                  @map("to_member_id")
+  meta       Json?
+  createdAt  DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  states     InboxUserMessageState[]
 
-  @@id([workspaceId, id])
-  @@index([workspaceId, toUserId, createdAt])
+  @@index([toUserId, createdAt], map: "inbox_message_to_idx")
+  @@map("inbox_message")
 }
 
 /// 每个用户独立的消息状态，避免广播消息共享已读/删除状态。
 model InboxUserMessageState {
-  workspaceId String
-  userId      String
-  messageId   String
-  readAt      DateTime?
-  deletedAt   DateTime?
-  updatedAt   DateTime @updatedAt
+  userId    String             @map("member_id")
+  messageId String             @map("message_id")
+  readAt    DateTime?          @map("read_at") @db.Timestamptz(3)
+  deletedAt DateTime?          @map("deleted_at") @db.Timestamptz(3)
+  updatedAt DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  message   InboxMessageRecord @relation(fields: [messageId], references: [id], onDelete: Cascade, map: "inbox_message_state_message_id_fkey")
 
-  @@id([workspaceId, userId, messageId])
-  @@index([workspaceId, userId, deletedAt])
+  @@id([userId, messageId])
+  @@index([messageId], map: "inbox_message_state_message_idx")
+  @@map("inbox_message_state")
 }

@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { PlatformDocsService } from './platform-docs.service';
 import { AiBriefSubscriptionsService } from './ai-brief-subscriptions.service';
-// 单租户：原路由参数 workspaceId 固定为平台空间，方法体沿用这个名字（第 2 期随服务层一起去掉）
+// 单租户：原路由参数 workspaceId 固定为平台空间，方法体沿用这个名字（服务层还用它拼 center_record 的记录 id，对应文档迁到正式表时一起去掉）
 import { PLATFORM_WORKSPACE_ID as workspaceId } from '../common/platform-workspace';
 
 function sessionToken(authorization?: string, xSessionToken?: string): string | undefined {
@@ -32,7 +32,7 @@ export class AiBriefSubscriptionsController {
     @Headers('x-session-token') xSessionToken: string | undefined,
   ) {
     const user = await this.requireSession(workspaceId, authorization, xSessionToken);
-    return this.subscriptions.getMine(workspaceId, String(user.id));
+    return this.subscriptions.getMine(String(user.id));
   }
 
   @Post()
@@ -43,7 +43,6 @@ export class AiBriefSubscriptionsController {
   ) {
     const user = await this.requireSession(workspaceId, authorization, xSessionToken);
     return this.subscriptions.subscribe({
-      workspaceId,
       userId: String(user.id),
       userName: String(user.name ?? user.email ?? user.id),
       email: body?.email,
@@ -56,7 +55,7 @@ export class AiBriefSubscriptionsController {
     @Headers('x-session-token') xSessionToken: string | undefined,
   ) {
     const user = await this.requireSession(workspaceId, authorization, xSessionToken);
-    return this.subscriptions.unsubscribe(workspaceId, String(user.id));
+    return this.subscriptions.unsubscribe(String(user.id));
   }
 
   @Get()
@@ -68,7 +67,7 @@ export class AiBriefSubscriptionsController {
     if (String(user.platformRole ?? '') !== 'super_admin') {
       throw new ForbiddenException('ai_brief_subscriptions_admin_required');
     }
-    return this.subscriptions.list(workspaceId);
+    return this.subscriptions.list();
   }
 
   private async requireSession(

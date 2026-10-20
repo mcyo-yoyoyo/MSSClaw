@@ -1,10 +1,10 @@
 import { Body, Controller, Delete, ForbiddenException, Get, Headers, Param, Post, Put, Query, UnauthorizedException } from '@nestjs/common';
 import { PlatformDocsService } from './platform-docs.service';
 import { CaseInsightsService } from './case-insights.service';
-// 单租户：原路由参数 workspaceId 固定为平台空间，方法体沿用这个名字（第 2 期随服务层一起去掉）
+// 单租户：原路由参数 workspaceId 固定为平台空间，方法体沿用这个名字（服务层还用它拼 center_record 的记录 id，对应文档迁到正式表时一起去掉）
 import { PLATFORM_WORKSPACE_ID as workspaceId } from '../common/platform-workspace';
 
-type ArticleBody = Parameters<CaseInsightsService['create']>[1];
+type ArticleBody = Parameters<CaseInsightsService['create']>[0];
 
 @Controller('case-insights')
 export class CaseInsightsController {
@@ -12,7 +12,7 @@ export class CaseInsightsController {
 
   @Get()
   listPublished() {
-    return this.articles.listPublished(workspaceId);
+    return this.articles.listPublished();
   }
 
   @Get('ops')
@@ -22,7 +22,7 @@ export class CaseInsightsController {
     @Headers('x-session-token') sessionToken?: string,
   ) {
     await this.requireAdmin(workspaceId, authorization, sessionToken);
-    return this.articles.listForOps(workspaceId, view === 'trash');
+    return this.articles.listForOps(view === 'trash');
   }
 
   @Post()
@@ -32,7 +32,7 @@ export class CaseInsightsController {
     @Headers('x-session-token') sessionToken?: string,
   ) {
     await this.requireAdmin(workspaceId, authorization, sessionToken);
-    return this.articles.create(workspaceId, body ?? {});
+    return this.articles.create(body ?? {});
   }
 
   @Put(':id')
@@ -43,7 +43,7 @@ export class CaseInsightsController {
     @Headers('x-session-token') sessionToken?: string,
   ) {
     await this.requireAdmin(workspaceId, authorization, sessionToken);
-    return this.articles.update(workspaceId, id, body ?? {});
+    return this.articles.update(id, body ?? {});
   }
 
   @Post(':id/publish')
@@ -54,7 +54,7 @@ export class CaseInsightsController {
     @Headers('x-session-token') sessionToken?: string,
   ) {
     await this.requireAdmin(workspaceId, authorization, sessionToken);
-    return this.articles.setStatus(workspaceId, id, body?.version ?? 0, 'publish');
+    return this.articles.setStatus(id, body?.version ?? 0, 'publish');
   }
 
   @Post(':id/unpublish')
@@ -65,7 +65,7 @@ export class CaseInsightsController {
     @Headers('x-session-token') sessionToken?: string,
   ) {
     await this.requireAdmin(workspaceId, authorization, sessionToken);
-    return this.articles.setStatus(workspaceId, id, body?.version ?? 0, 'unpublish');
+    return this.articles.setStatus(id, body?.version ?? 0, 'unpublish');
   }
 
   @Delete(':id')
@@ -76,7 +76,7 @@ export class CaseInsightsController {
     @Headers('x-session-token') sessionToken?: string,
   ) {
     await this.requireAdmin(workspaceId, authorization, sessionToken);
-    return this.articles.delete(workspaceId, id, body?.version ?? 0);
+    return this.articles.delete(id, body?.version ?? 0);
   }
 
   @Post(':id/restore')
@@ -87,7 +87,7 @@ export class CaseInsightsController {
     @Headers('x-session-token') sessionToken?: string,
   ) {
     await this.requireAdmin(workspaceId, authorization, sessionToken);
-    return this.articles.restore(workspaceId, id, body?.version ?? 0);
+    return this.articles.restore(id, body?.version ?? 0);
   }
 
   private async requireAdmin(workspaceId: string, authorization?: string, sessionToken?: string) {

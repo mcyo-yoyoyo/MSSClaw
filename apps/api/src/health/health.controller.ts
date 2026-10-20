@@ -24,8 +24,6 @@ export class HealthController {
       },
       /** 部署级 LLM_*；工作区 llm-config 文档也可驱动执行，不在此探测以免泄露 */
       llmEnvConfigured: isNestLlmEnvConfigured(),
-      persistenceNote:
-        'SQLite is a demo stub; prefer static frontend or Postgres for multi-user shared writes',
     };
   }
 }

@@ -1,5 +1,4 @@
 export type AiBriefEmailRecipientRow = {
-  workspaceId: string;
   userId: string;
   userName: string;
   email: string;
@@ -21,7 +20,7 @@ function isNewerRecipient(
 }
 
 /**
- * 订阅记录仍按用户保留；实际收件名单按工作区和规范化邮箱去重。
+ * 订阅记录仍按用户保留；实际收件名单按规范化邮箱去重。
  * 同一邮箱对应多个用户时，使用最近更新的记录展示审计信息。
  */
 export function dedupeAiBriefEmailRecipients(
@@ -31,11 +30,10 @@ export function dedupeAiBriefEmailRecipients(
 
   for (const row of rows) {
     const normalizedEmail = row.email.trim().toLowerCase();
-    const key = `${row.workspaceId}\u0000${normalizedEmail}`;
     const candidate = { ...row, email: normalizedEmail };
-    const current = recipients.get(key);
+    const current = recipients.get(normalizedEmail);
     if (!current || isNewerRecipient(candidate, current)) {
-      recipients.set(key, candidate);
+      recipients.set(normalizedEmail, candidate);
     }
   }
 

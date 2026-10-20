@@ -10,7 +10,6 @@ function setup() {
       `marketplace-${WORKSPACE_ID}`,
       {
         id: `marketplace-${WORKSPACE_ID}`,
-        workspaceId: WORKSPACE_ID,
         kind: 'marketplace',
         payload: {
           agents: [
@@ -25,7 +24,7 @@ function setup() {
     ],
     ...['agent-keep', 'agent-drop'].map((id) => [
       id,
-      { id, workspaceId: WORKSPACE_ID, kind: 'agent', payload: { id, published: true } },
+      { id, kind: 'agent', payload: { id, published: true } },
     ]),
   ]);
   const prisma = {
@@ -33,11 +32,11 @@ function setup() {
       findUnique: async ({ where }) => rows.get(where.id) ?? null,
       findFirst: async ({ where }) =>
         [...rows.values()].find(
-          (row) => row.workspaceId === where.workspaceId && row.kind === where.kind,
+          (row) => row.kind === where.kind,
         ) ?? null,
       findMany: async ({ where }) =>
         [...rows.values()].filter(
-          (row) => row.workspaceId === where.workspaceId && row.kind === where.kind,
+          (row) => row.kind === where.kind,
         ),
       upsert: async ({ where, create, update }) => {
         const value = rows.has(where.id) ? { ...rows.get(where.id), ...update } : create;
@@ -47,7 +46,6 @@ function setup() {
       deleteMany: async ({ where }) => {
         for (const [id, row] of rows) {
           if (
-            row.workspaceId === where.workspaceId &&
             row.kind === where.kind &&
             where.id.in.includes(id)
           ) {

@@ -35,7 +35,7 @@ for (const row of rows) {
     m.enabled !== false && Boolean(m.baseUrl?.trim()) && Boolean(m.apiKey?.trim());
   const defaultEntry = catalog.find((m) => m.id === config.defaultModelId);
 
-  console.log(`\n=== ${row.workspaceId} ===`);
+  console.log(`\n=== ${row.id} ===`);
   console.log(`智库「帮找」  defaultModelId = ${config.defaultModelId || '(未设置)'}`);
   console.log(`对话窗口      model          = ${config.model || '(未设置)'}`);
   console.log(

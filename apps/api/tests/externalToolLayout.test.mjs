@@ -44,18 +44,15 @@ function fakePrisma(
   let findFirstCalls = 0;
 
   return {
-    workspace: {
-      findUnique: async () => (workspaceExists ? { id: 'ws-cn-marketing' } : null),
+    appSetting: {
+      findUnique: async () => (workspaceExists ? { value: { catalog: {} } } : null),
     },
     centerRecord: {
       findUnique: async () => row,
       findFirst: async ({ where }) => {
         findFirstCalls += 1;
         return (
-          auxiliaryRows.find(
-            (candidate) =>
-              candidate.workspaceId === where.workspaceId && candidate.kind === where.kind,
-          ) ?? null
+          auxiliaryRows.find((candidate) => candidate.kind === where.kind) ?? null
         );
       },
       findMany: async () => [],
@@ -78,7 +75,7 @@ function fakePrisma(
   };
 }
 
-test('GET does not materialize a marketplace for an unknown workspace', async () => {
+test('GET does not materialize a marketplace before the platform workspace exists', async () => {
   const prisma = fakePrisma(null, 1, [], false);
   const service = new PersistenceService(prisma);
 

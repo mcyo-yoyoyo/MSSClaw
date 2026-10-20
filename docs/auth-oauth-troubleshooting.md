@@ -12,7 +12,7 @@
 
 | 层级 | 命令 | 碰真实 IDaaS | 需要真人 | 验到什么 |
 |------|------|:---:|:---:|------|
-| **① 本平台全链路** | `npm run verify:oauth` | 否 | 否 | 启动真实 Nest + 真实 SQLite，用假 IDaaS 跑完整登录。验路由挂载、守卫、会话落库、令牌透传、密码通道已关、state 防重放、授权码一次性、登出失效 |
+| **① 本平台全链路** | `npm run verify:oauth` | 否 | 否 | 启动真实 Nest + 真实 PostgreSQL（临时 schema），用假 IDaaS 跑完整登录。验路由挂载、守卫、会话落库、令牌透传、密码通道已关、state 防重放、授权码一次性、登出失效 |
 | **② 上游配置预检** | `npm run preflight:oauth` | **是** | 否 | 网络连通、**client_id 是否注册**、**redirect_uri 是否匹配**、端点路径。每项都带"故意填错"的对照组，防止把"上游没校验"误判成"配置正确" |
 | **③ 字段实测** | `npm run probe:oauth -- --env=beta` | **是** | **是**（浏览器登录一次） | userinfo 实际返回哪些字段，以及 **client_secret 是否正确** |
 | **④ 已部署后端验收** | `npm run verify:oauth:deployed -- --api-base=https://域名` | **是** | **是**（浏览器登录一次） | 不依赖前端，验证部署环境的 authorize → callback → 平台会话 → `/auth/me` → logout |

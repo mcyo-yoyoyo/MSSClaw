@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
 import { Prisma } from '@prisma/client';
+import { ensureWorkspace, findWorkspace } from '../workspaces/workspace-setting';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   SEED_BUSINESS_SCENARIO_CATALOG,
@@ -1021,7 +1022,6 @@ export class PlatformDocsService {
       where: { id },
       create: {
         id,
-        workspaceId,
         kind: `doc:${kind}`,
         payload: (payload ?? {}) as Prisma.InputJsonValue,
       },
@@ -1050,8 +1050,7 @@ export class PlatformDocsService {
     const next = canonicalizeStationAnnouncements(saved.payload).items;
     try {
       await syncStationAnnouncementBroadcast(
-        this.prisma as unknown as Parameters<typeof syncStationAnnouncementBroadcast>[0],
-        workspaceId,
+        this.prisma,
         previous,
         next,
       );
@@ -1070,7 +1069,7 @@ export class PlatformDocsService {
   async listDocs(workspaceId: string) {
     await this.ensureWorkspace(workspaceId);
     const rows = await this.prisma.centerRecord.findMany({
-      where: { workspaceId, kind: { startsWith: 'doc:' } },
+      where: { kind: { startsWith: 'doc:' } },
     });
     const byKind: Record<string, unknown> = {};
     for (const kind of PLATFORM_DOC_KINDS) {
@@ -1132,7 +1131,6 @@ export class PlatformDocsService {
         await this.prisma.centerRecord.create({
           data: {
             id,
-            workspaceId,
             kind: `doc:${kind}`,
             payload: nextPayload as unknown as Prisma.InputJsonValue,
           },
@@ -1151,17 +1149,7 @@ export class PlatformDocsService {
       return { kind, payload: nextPayload };
     }
 
-    // revision 在 JSON payload 里，用条件更新完成 CAS，避免两个进程读到同一 revision 后互相覆盖。
-    const changed = await this.prisma.$executeRaw`
-      UPDATE "CenterRecord"
-      SET "payload" = ${JSON.stringify(nextPayload)}, "updatedAt" = ${Date.now()}
-      WHERE "id" = ${id}
-        AND CASE
-          WHEN json_type("payload", '$.revision') = 'integer'
-          THEN json_extract("payload", '$.revision')
-          ELSE 0
-        END = ${expectedRevision}
-    `;
+    const changed = await this.compareAndSwapPayload(id, JSON.stringify(nextPayload), expectedRevision);
 
     if (changed !== 1) {
       const raced = await this.prisma.centerRecord.findUnique({ where: { id } });
@@ -1245,7 +1233,6 @@ export class PlatformDocsService {
         await this.prisma.centerRecord.create({
           data: {
             id,
-            workspaceId,
             kind: 'doc:external-tool-layout',
             payload: nextPayload as unknown as Prisma.InputJsonValue,
           },
@@ -1265,16 +1252,7 @@ export class PlatformDocsService {
       return { kind: 'external-tool-layout', payload: nextPayload };
     }
 
-    const changed = await this.prisma.$executeRaw`
-      UPDATE "CenterRecord"
-      SET "payload" = ${JSON.stringify(nextPayload)}, "updatedAt" = ${Date.now()}
-      WHERE "id" = ${id}
-        AND CASE
-          WHEN json_type("payload", '$.revision') = 'integer'
-          THEN json_extract("payload", '$.revision')
-          ELSE 0
-        END = ${expectedRevision}
-    `;
+    const changed = await this.compareAndSwapPayload(id, JSON.stringify(nextPayload), expectedRevision);
 
     if (changed !== 1) {
       const raced = await this.prisma.centerRecord.findUnique({ where: { id } });
@@ -1313,7 +1291,6 @@ export class PlatformDocsService {
         await this.prisma.centerRecord.create({
           data: {
             id,
-            workspaceId,
             kind: 'doc:internal-office-scenes',
             payload: nextPayload as unknown as Prisma.InputJsonValue,
           },
@@ -1333,18 +1310,7 @@ export class PlatformDocsService {
       return { kind: 'internal-office-scenes', payload: nextPayload };
     }
 
-    // revision 位于 JSON payload 内。用数据库条件更新完成 compare-and-swap，避免两个进程
-    // 同时读到相同 revision 后彼此覆盖；无 revision 的旧记录在 SQL 中按 0 处理。
-    const changed = await this.prisma.$executeRaw`
-      UPDATE "CenterRecord"
-      SET "payload" = ${JSON.stringify(nextPayload)}, "updatedAt" = ${Date.now()}
-      WHERE "id" = ${id}
-        AND CASE
-          WHEN json_type("payload", '$.revision') = 'integer'
-          THEN json_extract("payload", '$.revision')
-          ELSE 0
-        END = ${expectedRevision}
-    `;
+    const changed = await this.compareAndSwapPayload(id, JSON.stringify(nextPayload), expectedRevision);
 
     if (changed !== 1) {
       const raced = await this.prisma.centerRecord.findUnique({ where: { id } });
@@ -1372,10 +1338,7 @@ export class PlatformDocsService {
     // 登录不得触发「工作区缺失即自动创建」：否则任意编造的 workspaceId 都会被建出来，
     // 并连带播种默认管理员，成为绕过真实空间口令的登录入口。
     if (!SEEDABLE_ACCOUNT_WORKSPACE_IDS.has(workspaceId)) {
-      const workspace = await this.prisma.workspace.findUnique({
-        where: { id: workspaceId },
-        select: { id: true },
-      });
+      const workspace = await findWorkspace(this.prisma);
       const membersRow = await this.prisma.centerRecord.findUnique({
         where: { id: docId(workspaceId, 'members') },
         select: { id: true },
@@ -1634,11 +1597,7 @@ export class PlatformDocsService {
     return { ok: true as const };
   }
 
-  /**
-   * 登录令牌属于平台账号而不是当前 UI 工作区。优先查当前工作区，再回查其它工作区，
-   * 使切换租户后无需保存或重放用户密码。me() 会再按目标工作区成员表重建身份与角色，
-   * 不会把令牌签发工作区的权限带到目标工作区。
-   */
+  /** 单租户：令牌只存在平台空间的 doc:auth-sessions 里。 */
   private async findSession(
     preferredWorkspaceId: string,
     token: string,
@@ -1646,22 +1605,8 @@ export class PlatformDocsService {
     workspaceId: string;
     session: { user: Record<string, unknown>; expiresAt: string };
   } | null> {
-    const preferred = await this.getSession(preferredWorkspaceId, token);
-    if (preferred) return { workspaceId: preferredWorkspaceId, session: preferred };
-
-    const rows = await this.prisma.centerRecord.findMany({
-      where: {
-        kind: 'doc:auth-sessions',
-        workspaceId: { not: preferredWorkspaceId },
-      },
-      select: { workspaceId: true, payload: true },
-    });
-    for (const row of rows) {
-      const sessions = authSessionsFromPayload(row.payload);
-      const session = sessions[token];
-      if (session) return { workspaceId: row.workspaceId, session };
-    }
-    return null;
+    const session = await this.getSession(preferredWorkspaceId, token);
+    return session ? { workspaceId: preferredWorkspaceId, session } : null;
   }
 
   private async getSession(
@@ -1720,10 +1665,7 @@ export class PlatformDocsService {
   ): Promise<Record<string, unknown> | null> {
     // 鉴权读取不能沿用 getDoc() 的“缺失即自动创建工作区”行为，否则任意 workspaceId
     // 都可能被请求侧创建。只有已存在工作区才能承接一个跨工作区会话。
-    const workspace = await this.prisma.workspace.findUnique({
-      where: { id: workspaceId },
-      select: { id: true },
-    });
+    const workspace = await findWorkspace(this.prisma);
     if (!workspace) return null;
 
     const membersRow = await this.prisma.centerRecord.findUnique({
@@ -1787,7 +1729,6 @@ export class PlatformDocsService {
           await this.prisma.centerRecord.create({
             data: {
               id,
-              workspaceId,
               kind: 'doc:auth-sessions',
               payload: { revision: 1, sessions } as unknown as Prisma.InputJsonValue,
             },
@@ -1805,49 +1746,42 @@ export class PlatformDocsService {
       const sessions = { ...authSessionsFromPayload(row.payload) };
       mutate(sessions);
       const nextPayload = JSON.stringify({ revision: expectedRevision + 1, sessions });
-      const changed = await this.prisma.$executeRaw`
-        UPDATE "CenterRecord"
-        SET "payload" = ${nextPayload}, "updatedAt" = ${Date.now()}
-        WHERE "id" = ${id}
-          AND CASE
-            WHEN json_type("payload", '$.revision') = 'integer'
-            THEN json_extract("payload", '$.revision')
-            ELSE 0
-          END = ${expectedRevision}
-      `;
+      const changed = await this.compareAndSwapPayload(id, nextPayload, expectedRevision);
       if (changed === 1) return;
     }
 
     throw new ConflictException('auth_sessions_revision_conflict');
   }
 
-  private async ensureWorkspace(workspaceId: string) {
-    const row = await this.prisma.workspace.findUnique({ where: { id: workspaceId } });
-    if (row) return;
+  /**
+   * revision 在 JSON payload 里：用条件更新完成 compare-and-swap，避免两个进程读到同一 revision 后互相覆盖。
+   * 没有整数 revision 的旧记录按 0 处理。返回更新行数（0 表示被别人抢先）。
+   */
+  private compareAndSwapPayload(id: string, payload: string, expectedRevision: number) {
+    return this.prisma.$executeRaw`
+      UPDATE "center_record"
+      SET "payload" = ${payload}::jsonb, "updated_at" = now()
+      WHERE "id" = ${id}
+        AND CASE
+          WHEN jsonb_typeof("payload" -> 'revision') = 'number' AND ("payload" ->> 'revision') ~ '^-?[0-9]+$'
+          THEN ("payload" ->> 'revision')::bigint
+          ELSE 0
+        END = ${expectedRevision}::bigint
+    `;
+  }
 
-    // 本地/首次启动：缺少工作区时自动补齐，避免 login/docs 直接 404
-
-    await this.prisma.workspace.create({
-      data: {
-        id: workspaceId,
-        name: workspaceId,
-        namespace: workspaceId,
-        description: 'Auto-provisioned workspace',
-        memberCount: 0,
-        defaultChatId: 'default',
-        catalogJson: {} as Prisma.InputJsonValue,
-      },
-    });
+  private async ensureWorkspace(_workspaceId: string) {
+    await ensureWorkspace(this.prisma);
   }
 
   private async initialExternalToolLayoutSeed(workspaceId: string) {
     const [marketFeatured, marketplace] = await Promise.all([
       this.prisma.centerRecord.findFirst({
-        where: { workspaceId, kind: 'doc:market-featured' },
+        where: { kind: 'doc:market-featured' },
         select: { payload: true },
       }),
       this.prisma.centerRecord.findFirst({
-        where: { workspaceId, kind: 'marketplace' },
+        where: { kind: 'marketplace' },
         select: { payload: true },
       }),
     ]);
@@ -1962,7 +1896,6 @@ export class PlatformDocsService {
       where: { id },
       create: {
         id,
-        workspaceId,
         kind: `doc:${kind}`,
         payload: payload as Prisma.InputJsonValue,
       },

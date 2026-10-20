@@ -3,7 +3,7 @@
  * 统一身份登录 · 本平台侧全链路验证（完全不碰真实 IDaaS）。
  *
  * 跟单元测试的区别：这里启动的是【真正的 Nest 进程】，打的是真正的 HTTP 接口，
- * 用的是真正的 SQLite。所以它能验到单测验不到的东西——全局前缀、路由挂载、
+ * 用的是真正的 PostgreSQL（临时 schema，跑完删掉）。所以它能验到单测验不到的东西——全局前缀、路由挂载、
  * 守卫、body 解析、会话落库、令牌透传。上游 IDaaS 由本地假服务顶替。
  *
  * 换句话说：跑通它 = "除了 IDaaS 那一端，我们这边都是对的"。
@@ -13,15 +13,16 @@
  *     node apps/api/scripts/e2e-oauth-login.mjs
  *     node apps/api/scripts/e2e-oauth-login.mjs --keep-logs   保留 Nest 日志输出
  *
- * 前置：先构建一次 npm run build:api（脚本会自动检查 dist 是否存在）
+ * 前置：先构建一次 npm run build:api（脚本会自动检查 dist 是否存在），本机 PG 已启动
+ *       （deploy/docker-compose.infra.yml，或用 TEST_DATABASE_URL 指定）
  */
 
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createTestDatabase } from '../tests/helpers/pgTestDatabase.mjs';
 
 const apiDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const keepLogs = process.argv.includes('--keep-logs');
@@ -108,14 +109,6 @@ async function waitForHealth(baseUrl, timeoutMs = 40_000) {
   throw new Error('Nest 在超时时间内没有就绪');
 }
 
-function run(command, args, options) {
-  return new Promise((resolveRun, rejectRun) => {
-    const child = spawn(command, args, { ...options, stdio: keepLogs ? 'inherit' : 'ignore' });
-    child.on('error', rejectRun);
-    child.on('exit', (code) => (code === 0 ? resolveRun() : rejectRun(new Error(`${command} 退出码 ${code}`))));
-  });
-}
-
 /* --------------------------------------------------------------- 主流程 */
 
 async function main() {
@@ -124,8 +117,7 @@ async function main() {
     process.exit(2);
   }
 
-  const workDir = mkdtempSync(join(tmpdir(), 'mssclaw-oauth-e2e-'));
-  const dbPath = join(workDir, 'e2e.db');
+  const database = await createTestDatabase('oauth_e2e');
   const stub = await startStubIdaas();
   const stubBase = `http://127.0.0.1:${stub.port}`;
   const port = 3100 + Math.floor(Math.random() * 400);
@@ -135,11 +127,11 @@ async function main() {
   console.log('\n统一身份登录 · 本平台侧全链路验证');
   console.log(`假 IDaaS : ${stubBase}`);
   console.log(`Nest     : ${baseUrl}`);
-  console.log(`临时库   : ${dbPath}\n`);
+  console.log(`临时库   : ${new URL(database.url).searchParams.get('schema')}\n`);
 
   const env = {
     ...process.env,
-    DATABASE_URL: `file:${dbPath}`,
+    DATABASE_URL: database.url,
     PORT: String(port),
     AUTH_MODE: 'oauth',
     OAUTH_ISSUER_BASE: stubBase,
@@ -159,8 +151,7 @@ async function main() {
 
   let nest;
   try {
-    console.log('[1/3] 准备临时数据库…');
-    await run('npx', ['prisma', 'migrate', 'deploy'], { cwd: apiDir, env });
+    console.log('[1/3] 临时数据库已迁移');
 
     console.log('[2/3] 启动真实 Nest 进程…');
     nest = spawn('node', ['dist/main'], { cwd: apiDir, env, stdio: keepLogs ? 'inherit' : 'ignore' });
@@ -319,7 +310,7 @@ async function main() {
     await new Promise((r) => setTimeout(r, 300));
     stub.server.close();
     try {
-      rmSync(workDir, { recursive: true, force: true });
+      await database.drop();
     } catch {
       /* ignore */
     }

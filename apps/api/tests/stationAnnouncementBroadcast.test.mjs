@@ -9,11 +9,10 @@ function fakePrisma(rows = {}) {
   const store = new Map(Object.entries(rows));
   const messages = new Map();
   const states = [];
-  const key = (workspaceId, id) => `${workspaceId}:${id}`;
   return {
     messages,
     states,
-    workspace: { findUnique: async () => ({ id: 'ws-test' }) },
+    appSetting: { findUnique: async () => ({ value: { catalog: {} } }) },
     centerRecord: {
       findUnique: async ({ where }) => store.get(where.id) ?? null,
       findMany: async () => [...store.values()],
@@ -32,27 +31,27 @@ function fakePrisma(rows = {}) {
     },
     inboxMessageRecord: {
       upsert: async ({ where, create, update }) => {
-        const id = key(where.workspaceId_id.workspaceId, where.workspaceId_id.id);
+        const id = where.id;
         const previous = messages.get(id);
         messages.set(id, previous ? { ...previous, ...update } : { ...create });
         return messages.get(id);
       },
       deleteMany: async ({ where }) => {
-        messages.delete(key(where.workspaceId, where.id));
+        messages.delete(where.id);
         return { count: 1 };
       },
     },
     inboxUserMessageState: {
       deleteMany: async ({ where }) => {
         for (let i = states.length - 1; i >= 0; i -= 1) {
-          if (states[i].workspaceId === where.workspaceId && states[i].messageId === where.messageId) {
+          if (states[i].messageId === where.messageId) {
             states.splice(i, 1);
           }
         }
         return { count: 1 };
       },
     },
-    $executeRaw: async (_strings, payloadJson, _updatedAt, id, expectedRevision) => {
+    $executeRaw: async (_strings, payloadJson, id, expectedRevision) => {
       const row = store.get(id);
       const current = typeof row?.payload?.revision === 'number' ? row.payload.revision : 0;
       if (!row || current !== expectedRevision) return 0;
@@ -104,27 +103,25 @@ test('公告首次发布：规范化落库并广播给全员', async () => {
   assert.equal(saved.payload.items.find((item) => item.id === 'ann-launch').badgeColor, '');
   assert.equal(saved.payload.items.find((item) => item.id === 'ann-launch').title, '功能上线：三货架');
 
-  const broadcast = prisma.messages.get('ws-test:ann-launch');
+  const broadcast = prisma.messages.get('ann-launch');
   assert.equal(broadcast.toUserId, '*');
   assert.equal(broadcast.kind, 'announce');
   assert.equal(broadcast.title, '功能上线：三货架');
   assert.equal(broadcast.body, '详情正文');
   assert.deepEqual(broadcast.meta, { announcementTag: 'AI上线' });
-  assert.equal(prisma.messages.has('ws-test:ann-free'), true);
-  assert.equal(prisma.messages.has('ws-test:ann-old'), false);
+  assert.equal(prisma.messages.has('ann-free'), true);
+  assert.equal(prisma.messages.has('ann-old'), false);
 });
 
 test('编辑已发布公告：广播消息的标题与正文跟着更新', async () => {
   const prisma = fakePrisma({
     [DOC_ID]: {
       id: DOC_ID,
-      workspaceId: 'ws-test',
       kind: 'doc:station-announcements',
       payload: { revision: 4, items: [announcement()] },
     },
   });
-  prisma.messages.set('ws-test:ann-launch', {
-    workspaceId: 'ws-test',
+  prisma.messages.set('ann-launch', {
     id: 'ann-launch',
     kind: 'announce',
     title: '功能上线：三货架',
@@ -138,7 +135,7 @@ test('编辑已发布公告：广播消息的标题与正文跟着更新', async
     items: [announcement({ title: '功能上线：三货架与集市', body: '改过的正文' })],
   });
 
-  const broadcast = prisma.messages.get('ws-test:ann-launch');
+  const broadcast = prisma.messages.get('ann-launch');
   assert.equal(broadcast.title, '功能上线：三货架与集市');
   assert.equal(broadcast.body, '改过的正文');
 });
@@ -147,24 +144,23 @@ test('下架只退出首页，消息保留；删除才撤回消息与各人已�
   const prisma = fakePrisma({
     [DOC_ID]: {
       id: DOC_ID,
-      workspaceId: 'ws-test',
       kind: 'doc:station-announcements',
       payload: { revision: 1, items: [announcement()] },
     },
   });
-  prisma.messages.set('ws-test:ann-launch', { workspaceId: 'ws-test', id: 'ann-launch', toUserId: '*' });
-  prisma.states.push({ workspaceId: 'ws-test', userId: 'u-1', messageId: 'ann-launch' });
+  prisma.messages.set('ann-launch', { id: 'ann-launch', toUserId: '*' });
+  prisma.states.push({ userId: 'u-1', messageId: 'ann-launch' });
   const service = new PlatformDocsService(prisma, {});
 
   await service.putDoc('ws-test', 'station-announcements', {
     revision: 1,
     items: [announcement({ published: false })],
   });
-  assert.equal(prisma.messages.has('ws-test:ann-launch'), true);
+  assert.equal(prisma.messages.has('ann-launch'), true);
   assert.equal(prisma.states.length, 1);
 
   await service.putDoc('ws-test', 'station-announcements', { revision: 2, items: [] });
-  assert.equal(prisma.messages.has('ws-test:ann-launch'), false);
+  assert.equal(prisma.messages.has('ann-launch'), false);
   assert.equal(prisma.states.length, 0);
 });
 
@@ -172,7 +168,6 @@ test('陈旧 revision 被拒绝，且不会误发广播', async () => {
   const prisma = fakePrisma({
     [DOC_ID]: {
       id: DOC_ID,
-      workspaceId: 'ws-test',
       kind: 'doc:station-announcements',
       payload: { revision: 3, items: [announcement()] },
     },

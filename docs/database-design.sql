@@ -11,16 +11,17 @@
 --   平台只有一个空间，库里不再有工作区表和 workspace_id 列，接口路径和前端也不再带工作区（第 1 期完成）。
 --   现有数据都属于原 ws-cn-marketing 空间；第 2 期换库前，后端读写旧表时把它当作固定值。
 --   统计里的 visitor_hash = sha256("mss-claw:portal-uv:v1:" + 工作区 id + ":account:" + 成员 id)：工作区 id 固定写 ws-cn-marketing，历史 UV 不断档。
---   数据迁移规则（待确认）：只迁 ws-cn-marketing 和全局数据；其他工作区的数据不迁，原 SQLite 文件留作备份。
---     每期迁移前从生产库输出各工作区数据量，确认其他工作区只是种子数据后再执行。
---     只在其他工作区出现的成员以 business_user 加入，不继承其他工作区的管理员角色。
+--   数据迁移规则（2026-10-20 确认）：文档与个人数据只迁 ws-cn-marketing 和全局数据，其他工作区不迁，原 SQLite 文件留作备份；
+--     统计（行为事件、页面访问、每日登录、转化事件）各工作区合并，互动累计值按内容求和。
+--     迁移脚本 apps/api/scripts/migrate-sqlite-to-pg.mjs 先只读输出各工作区数据量，确认后加 --apply 执行。
+--     只在其他工作区出现的成员以 business_user 加入，不继承其他工作区的管理员角色（第 4 期再确认一次）。
 --
 -- 分期（每期单独上线可用）
 --   第 1 期  去租户（代码层，库仍是 SQLite、表不动）：接口路径去掉 /workspaces/:workspaceId，前端去掉工作区和切换，
 --            删除其他工作区的种子目录；文件存储对象键改为不分工作区，已存的 /api/v1/workspaces/<ws>/blobs/<id> 地址改写为
 --            /api/v1/blobs/<id>，旧地址永久 301 跳转。
 --   第 2 期  换 PG：现有 12 张表按本文件迁过去（去掉 workspace_id），Workspace 表的内容存入 app_setting('workspace')，
---            其余 JSON 文档仍在过渡表 center_record，接口不变。
+--            其余 JSON 文档仍在过渡表 center_record，接口不变（2026-10-20 完成）。
 --   第 3 期  资产：tool / skill / skill_version / agent / agent_skill / automation / kb_document
 --   第 4 期  身份：member / member_credential / auth_session
 --   第 5 期  个人数据：market_favorite / market_user_vote / market_recent_view / market_hidden_item / skill_review
@@ -858,7 +859,7 @@ create index portal_conversion_event_journey_idx on portal_conversion_event (jou
 
 -- 通用 JSON 记录【第 2 期建，第 6 期结束后删除】来源：CenterRecord（只迁 ws-cn-marketing 与全局记录）
 --   记录 id 沿用旧值（如 marketplace-ws-cn-marketing），后端按固定工作区拼出，所以不需要 workspace_id 列。
---   各期把对应 kind 迁到正式表后删掉这里的对应行；kind=agent/skill/tool 投影行与各工作区 marketplace.tools 不迁移。
+--   各期把对应 kind 迁到正式表后删掉这里的对应行。kind=agent/skill/tool 投影行第 2 期照迁（中心 API 仍读它们），第 3 期资产表上线后删除。
 create table center_record (
   id         text primary key,
   kind       text not null,

@@ -168,7 +168,6 @@ async function main() {
     where: { id: `marketplace-${workspaceId}` },
     create: {
       id: `marketplace-${workspaceId}`,
-      workspaceId,
       kind: 'marketplace',
       payload: payload as Prisma.InputJsonValue,
     },

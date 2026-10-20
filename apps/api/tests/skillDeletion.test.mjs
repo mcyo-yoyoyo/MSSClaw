@@ -1,29 +1,27 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PrismaClient } from '@prisma/client';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { PersistenceService } from '../dist/persistence/persistence.service.js';
 import { CenterRecordService } from '../dist/centers/center-record.service.js';
+import { createTestDatabase } from './helpers/pgTestDatabase.mjs';
 
 function setup({ published = false, pending = false } = {}) {
   const workspaceId = 'ws-cn-marketing';
   const rows = new Map([
-    [`marketplace-${workspaceId}`, { id: `marketplace-${workspaceId}`, workspaceId, kind: 'marketplace', payload: {
+    [`marketplace-${workspaceId}`, { id: `marketplace-${workspaceId}`, kind: 'marketplace', payload: {
       skills: [{ id: 'skill-delete', name: '待删除', published }],
       agents: [{ id: 'agent-keep', name: '保留', skillIds: ['skill-delete', 'skill-other'] }],
       automations: [], kbDocs: [],
     } }],
-    ['skill-delete', { id: 'skill-delete', workspaceId, kind: 'skill', payload: { id: 'skill-delete' } }],
-    [`doc-asset-approvals-${workspaceId}`, { id: `doc-asset-approvals-${workspaceId}`, workspaceId, kind: 'asset-approvals', payload: {
+    ['skill-delete', { id: 'skill-delete', kind: 'skill', payload: { id: 'skill-delete' } }],
+    [`doc-asset-approvals-${workspaceId}`, { id: `doc-asset-approvals-${workspaceId}`, kind: 'asset-approvals', payload: {
       items: [{ kind: 'skill', assetId: 'skill-delete', status: pending ? 'pending' : 'approved' }],
     } }],
   ]);
   const prisma = { centerRecord: {
     findUnique: async ({ where }) => rows.get(where.id) ?? null,
-    findFirst: async ({ where }) => [...rows.values()].find((row) => row.workspaceId === where.workspaceId && row.kind === where.kind) ?? null,
-    findMany: async ({ where }) => [...rows.values()].filter((row) => row.workspaceId === where.workspaceId && row.kind === where.kind),
+    findFirst: async ({ where }) => [...rows.values()].find((row) => row.kind === where.kind) ?? null,
+    findMany: async ({ where }) => [...rows.values()].filter((row) => row.kind === where.kind),
     upsert: async ({ where, create, update }) => {
       const value = rows.has(where.id) ? { ...rows.get(where.id), ...update } : create;
       rows.set(where.id, value);
@@ -31,7 +29,7 @@ function setup({ published = false, pending = false } = {}) {
     },
     deleteMany: async ({ where }) => {
       for (const [id, row] of rows) {
-        if (row.workspaceId === where.workspaceId && row.kind === where.kind && where.id.in.includes(id)) rows.delete(id);
+        if (row.kind === where.kind && where.id.in.includes(id)) rows.delete(id);
       }
     },
   } };
@@ -41,14 +39,12 @@ function setup({ published = false, pending = false } = {}) {
   return { service, prisma, rows, workspaceId };
 }
 
-test('删除下架 Skill 后重新连接 SQLite，目录、投影和绑定仍已移除', async () => {
+test('删除下架 Skill 后重新连接数据库，目录、投影和绑定仍已移除', async () => {
   const { rows, workspaceId } = setup();
-  const dir = await mkdtemp(join(tmpdir(), 'mssclaw-skill-delete-'));
-  const datasourceUrl = `file:${join(dir, 'test.db')}`;
-  const prisma = new PrismaClient({ datasourceUrl });
-  const reopened = new PrismaClient({ datasourceUrl });
+  const database = await createTestDatabase('skill_deletion');
+  const prisma = new PrismaClient({ datasourceUrl: database.url });
+  const reopened = new PrismaClient({ datasourceUrl: database.url });
   try {
-    await prisma.$executeRawUnsafe('CREATE TABLE "CenterRecord" ("id" TEXT PRIMARY KEY, "workspaceId" TEXT NOT NULL, "kind" TEXT NOT NULL, "payload" JSONB NOT NULL, "updatedAt" DATETIME NOT NULL)');
     for (const row of rows.values()) await prisma.centerRecord.create({ data: row });
     await new PersistenceService(prisma).putMarketplace(workspaceId, { skills: [], automations: [], kbDocs: [] });
     await prisma.$disconnect();
@@ -64,7 +60,7 @@ test('删除下架 Skill 后重新连接 SQLite，目录、投影和绑定仍已
   } finally {
     await prisma.$disconnect();
     await reopened.$disconnect();
-    await rm(dir, { recursive: true, force: true });
+    await database.drop();
   }
 });
 

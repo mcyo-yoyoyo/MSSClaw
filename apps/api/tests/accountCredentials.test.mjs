@@ -17,7 +17,7 @@ function credentialFor(password) {
 function fakePrisma(rows = {}) {
   const store = new Map(Object.entries(rows));
   return {
-    workspace: { findUnique: async () => ({ id: 'ws-test' }) },
+    appSetting: { findUnique: async () => ({ value: { catalog: {} } }) },
     centerRecord: {
       findUnique: async ({ where }) => store.get(where.id) ?? null,
       findFirst: async () => null,
@@ -35,8 +35,8 @@ function fakePrisma(rows = {}) {
         return store.get(where.id);
       },
     },
-    // $executeRaw`UPDATE ... WHERE id = ${id} AND revision = ${expected}`
-    $executeRaw: async (_strings, payloadJson, _updatedAt, id, expectedRevision) => {
+    // $executeRaw`UPDATE ... SET payload = ${payload} WHERE id = ${id} AND revision = ${expected}`
+    $executeRaw: async (_strings, payloadJson, id, expectedRevision) => {
       const row = store.get(id);
       const current = typeof row?.payload?.revision === 'number' ? row.payload.revision : 0;
       if (!row || current !== expectedRevision) return 0;
@@ -51,7 +51,6 @@ const WS = 'ws-cn-marketing';
 
 const docRow = (kind, payload) => ({
   id: `doc-${kind}-${WS}`,
-  workspaceId: WS,
   kind: `doc:${kind}`,
   payload,
 });

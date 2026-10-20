@@ -30,7 +30,7 @@ export class CenterRecordService {
 
   async list(workspaceId: string, kind: CenterKind) {
     const rows = await this.prisma.centerRecord.findMany({
-      where: { workspaceId, kind },
+      where: { kind },
       orderBy: { updatedAt: 'desc' },
     });
 
@@ -47,7 +47,7 @@ export class CenterRecordService {
     // 「配置工具」和「工具运营」看到两份同名目录；内部连接器仍保留兼容读取。
     if (kind === 'agent' || kind === 'skill' || kind === 'tool') {
       const marketRow = await this.prisma.centerRecord.findFirst({
-        where: { workspaceId, kind: 'marketplace' },
+        where: { kind: 'marketplace' },
       });
       if (marketRow) {
         const mapped = listMappedFromMarketplace(
@@ -75,7 +75,7 @@ export class CenterRecordService {
     let hasMarketplaceTools = false;
     if (kind === 'tool') {
       const marketRow = await this.prisma.centerRecord.findFirst({
-        where: { workspaceId, kind: 'marketplace' },
+        where: { kind: 'marketplace' },
       });
       if (marketRow) {
         hasMarketplaceTools = true;
@@ -89,7 +89,7 @@ export class CenterRecordService {
     }
 
     const row = await this.prisma.centerRecord.findFirst({
-      where: { id, workspaceId, kind },
+      where: { id, kind },
     });
 
     if (row) {
@@ -119,7 +119,6 @@ export class CenterRecordService {
       where: { id },
       create: {
         id,
-        workspaceId,
         kind,
         payload: next as Prisma.InputJsonValue,
       },

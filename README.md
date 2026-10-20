@@ -16,7 +16,7 @@
 
 ## 运行方式
 
-MSSClaw 按“React 前端 + Nest API”运行。共享业务数据写入 SQLite，上传文件写入 Blob 文件目录。
+MSSClaw 按“React 前端 + Nest API”运行。共享业务数据写入 PostgreSQL，上传文件写入 S3 兼容对象存储（MinIO）。
 
 前端默认探测同源 `/api`。本地开发时，Vite 将 `/api` 代理到 `http://localhost:3000`。前端和后端需要同时启动；若健康检查失败、API 地址错误或响应格式不匹配，页面顶部会显示明确告警，相关共享数据可能无法加载或保存。
 
@@ -146,7 +146,7 @@ API 地址和密钥也可以在应用的运行时设置中覆盖。
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `DATABASE_URL` | 无 | Prisma SQLite 数据库地址，必须配置 |
+| `DATABASE_URL` | 无 | PostgreSQL 连接串，必须配置 |
 | `PORT` | `3000` | API 端口 |
 | `CORS_ORIGIN` | `http://localhost:5173` | 允许的前端 Origin，多个值用逗号分隔 |
 | `API_KEY` | 空 | 可选的全局 API 密钥 |
@@ -190,23 +190,26 @@ GET /api/v1/ai-daily-news
 
 ## 数据存储
 
-启用 Nest API 后，Prisma 使用 SQLite。默认开发配置通常为：
+数据库为 PostgreSQL 17（本机用 `deploy/docker-compose.infra.yml` 启动），开发配置为：
 
 ```env
-DATABASE_URL="file:./dev.db"
+DATABASE_URL="postgresql://mssclaw:mssclaw_dev@127.0.0.1:5432/mssclaw?schema=public"
 ```
 
-数据库文件位于 `apps/api/prisma/dev.db`。SQLite 当前只有 `Workspace` 和 `CenterRecord` 两张通用表：
+目标库表见 [`docs/database-design.sql`](./docs/database-design.sql)，分六期落地。当前（第 2 期）主要的表：
 
-| 存储范围 | 主要内容 |
+| 表 | 主要内容 |
 | --- | --- |
-| `Workspace` | 工作空间元数据、目录 JSON、部分任务会话 |
-| `CenterRecord` | Agent、Skill、工具、工作流、知识库配置、市场数据、门户内容、执行记录、成员权限、账号凭据、登录会话、审计和平台配置等 JSON 数据 |
+| `app_setting` | 平台配置；`workspace` 键存原工作空间元数据、目录 JSON 和任务会话 |
+| `center_record` | 过渡表：Agent、Skill、工具、工作流、知识库配置、市场数据、门户内容、执行记录、成员权限、账号凭据、登录会话、审计和平台配置等 JSON 数据，后续各期拆成正式表 |
+| 统计与消息 | 互动累计与行为事件、门户访问、每日登录、登录墙转化、站内信、快讯订阅、案例洞察 |
 
-不存入 SQLite 的内容：
+API 测试会在同一个库里建临时 schema 并在结束时删除；连接串取 `TEST_DATABASE_URL`，其次 `DATABASE_URL`。
 
-- AI 快讯正文实时从上游读取，SQLite 不保存快讯副本。
-- 上传附件和能力包保存在 S3 兼容对象存储（本机为 MinIO，见 `deploy/docker-compose.infra.yml`），对象键为 `<工作区>/<文件ID>.bin` 与 `.json` 元数据。
+不存入数据库的内容：
+
+- AI 快讯正文实时从上游读取，数据库只保存归档索引。
+- 上传附件和能力包保存在 S3 兼容对象存储（本机为 MinIO），对象键为 `<文件ID>.bin` 与 `.json` 元数据。
 - 登录令牌和部分本机偏好保存在浏览器 `localStorage`。
 - 模型本身及推理权重不保存在项目数据库中。
 
@@ -218,8 +221,8 @@ Browser
        ├─ localStorage（登录令牌与本机偏好）
        └─ /api/v1
             └─ NestJS 11
-                 ├─ Prisma + SQLite
-                 ├─ Blob 文件存储
+                 ├─ Prisma + PostgreSQL
+                 ├─ S3 / MinIO 对象存储
                  └─ OpenAI-compatible LLM
 ```
 
@@ -249,7 +252,7 @@ MSSClaw/
 │   │   ├── public/          # 品牌与静态资源
 │   │   └── src/             # 页面、组件、领域逻辑、Store 与 API 客户端
 │   └── api/                 # NestJS API
-│       ├── prisma/          # SQLite schema、迁移与 seed
+│       ├── prisma/          # PostgreSQL schema 与迁移
 │       └── src/             # 业务模块与控制器
 ├── api/                     # Vercel 边缘/函数入口
 ├── deploy/                  # 内网部署说明、Nginx 与环境变量示例
@@ -269,9 +272,7 @@ npm run build
 ```
 ### 内网部署
 
-共享 API 部署需要同时考虑数据库备份、Blob 持久化、反向代理、密钥管理和并发限制。操作步骤见 [`deploy/LAN-PRODUCTION.md`](./deploy/LAN-PRODUCTION.md)，容量边界见 [`docs/PERFORMANCE.md`](./docs/PERFORMANCE.md)。
-
-当前 Prisma schema 使用 SQLite。若要支持大量用户共享写入，不能只替换连接字符串；需要迁移 datasource、重新生成迁移并完成并发与一致性验证。
+共享 API 部署需要同时考虑数据库备份、对象存储持久化、反向代理、密钥管理和并发限制。操作步骤见 [`deploy/LAN-PRODUCTION.md`](./deploy/LAN-PRODUCTION.md)，容量边界见 [`docs/PERFORMANCE.md`](./docs/PERFORMANCE.md)。
 
 ## 文档
 
@@ -284,7 +285,7 @@ npm run build
 
 ## 当前边界
 
-- 默认数据库为 SQLite，适合开发和小规模试点，不适合高并发共享写入。
+- 大部分业务数据仍以整份 JSON 存在过渡表 `center_record`，同一文档的并发写入靠 revision 乐观锁，后续各期拆成正式表。
 - API Key 和当前会话认证用于演示级保护，不等同于完整的企业 SSO、JWT 与细粒度 RBAC。
 - LLM 执行使用 OpenAI 兼容接口；工作流编排和 Agent runtime 仍处于持续演进阶段。
 - 后端接口不可用时，部分页面仍可能展示本地兜底数据，但新增和修改不保证保存或跨设备同步。

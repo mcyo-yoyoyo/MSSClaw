@@ -187,7 +187,7 @@ export class ExecutionsService {
 
   async list(workspaceId: string, limit = 50) {
     const rows = await this.prisma.centerRecord.findMany({
-      where: { workspaceId, kind: 'execution' },
+      where: { kind: 'execution' },
       orderBy: { updatedAt: 'desc' },
       take: Math.min(Math.max(limit, 1), 200),
     });
@@ -654,7 +654,6 @@ export class ExecutionsService {
       where: { id: record.id },
       create: {
         id: record.id,
-        workspaceId: record.workspaceId,
         kind: 'execution',
         payload: publicRecord as unknown as Prisma.InputJsonValue,
       },
@@ -680,12 +679,25 @@ export class ExecutionsService {
     const eventId = `execution:${record.id}`;
     const visitorHash = record.userId ? this.accountVisitorHash(record.workspaceId, record.userId) : null;
     const visitorType = record.userId ? 'user' : 'guest';
-    await this.prisma.$executeRaw`
-      INSERT OR IGNORE INTO "MarketEngagementEvent"
-        ("id", "workspaceId", "eventId", "contentId", "assetType", "action", "dateKey", "visitorHash", "visitorType", "success", "durationMs", "inputTokens", "outputTokens", "errorCode", "occurredAt")
-      VALUES
-        (${randomUUID()}, ${record.workspaceId}, ${eventId}, ${contentId}, ${record.assetType}, ${'call'}, ${portalAnalyticsDateKey(finishedAt)}, ${visitorHash}, ${visitorType}, ${record.status === 'done'}, ${durationMs}, ${record.usage?.inputTokens ?? null}, ${record.usage?.outputTokens ?? null}, ${record.error?.slice(0, 200) ?? null}, ${finishedAt})
-    `;
+    await this.prisma.marketEngagementEvent.createMany({
+      data: [{
+        id: randomUUID(),
+        eventId,
+        contentId,
+        assetType: record.assetType,
+        action: 'call',
+        dateKey: portalAnalyticsDateKey(finishedAt),
+        visitorHash,
+        visitorType,
+        success: record.status === 'done',
+        durationMs,
+        inputTokens: record.usage?.inputTokens ?? null,
+        outputTokens: record.usage?.outputTokens ?? null,
+        errorCode: record.error?.slice(0, 200) ?? null,
+        occurredAt: finishedAt,
+      }],
+      skipDuplicates: true,
+    });
   }
 
   private accountVisitorHash(workspaceId: string, userId: string): string {

@@ -7,7 +7,6 @@ function engagementHarness(
   { metricExists = true, knownContent = true, workspaceExists = true, centerRows } = {},
 ) {
   let metric = metricExists ? {
-    workspaceId: 'ws-test',
     contentId: 'tool-1',
     views: 0,
     uses: 0,
@@ -58,23 +57,21 @@ function engagementHarness(
     },
     marketEngagementEvent: {
       updateMany: async ({ where, data }) => {
-        const event = events.find(
-          (item) => item.workspaceId === where.workspaceId && item.eventId === where.eventId,
-        );
+        const event = events.find((item) => item.eventId === where.eventId);
         if (event) Object.assign(event, data);
         return { count: event ? 1 : 0 };
       },
-    },
-    $executeRaw: async (_strings, ...values) => {
-      const [id, workspaceId, eventId, contentId, action, dateKey, visitorHash, occurredAt] = values;
-      if (eventIds.has(`${workspaceId}:${eventId}`)) return 0;
-      eventIds.add(`${workspaceId}:${eventId}`);
-      events.push({ id, workspaceId, eventId, contentId, action, dateKey, visitorHash, occurredAt });
-      return 1;
+      count: async ({ where }) => events.filter((item) => item.visitorHash === where.visitorHash).length,
+      createMany: async ({ data: [row] }) => {
+        if (eventIds.has(row.eventId)) return { count: 0 };
+        eventIds.add(row.eventId);
+        events.push({ ...row });
+        return { count: 1 };
+      },
     },
   };
   const prisma = {
-    workspace: { findUnique: async () => workspaceExists ? ({ id: 'ws-test' }) : null },
+    appSetting: { findUnique: async () => workspaceExists ? ({ value: { catalog: {} } }) : null },
     centerRecord: {
       findUnique: async () => null,
       findMany: async () => centerRows ?? (knownContent
@@ -94,7 +91,7 @@ function engagementHarness(
   };
 }
 
-test('view and use counters write matching behavior facts in the same workspace', async () => {
+test('view and use counters write matching behavior facts', async () => {
   const harness = engagementHarness();
   await harness.service.mutateMarketEngagement('ws-test', 'tool-1', {
     action: 'view',
@@ -112,7 +109,6 @@ test('view and use counters write matching behavior facts in the same workspace'
   assert.equal(harness.getMetric().views, 1);
   assert.equal(harness.getMetric().uses, 1);
   assert.deepEqual(harness.events.map((event) => event.action), ['view', 'use']);
-  assert.ok(harness.events.every((event) => event.workspaceId === 'ws-test'));
   assert.ok(harness.events.every((event) => event.contentId === 'tool-1'));
   assert.ok(harness.events.every((event) => /^\d{4}-\d{2}-\d{2}$/.test(event.dateKey)));
 });
@@ -288,7 +284,7 @@ test('legacy JSON migration imports only current catalog content and ignores for
     },
   };
   const prisma = {
-    workspace: { findUnique: async () => ({ id: 'ws-test' }) },
+    appSetting: { findUnique: async () => ({ value: { catalog: {} } }) },
     centerRecord: {
       findUnique: async () => legacyRow,
       findMany: async () => [

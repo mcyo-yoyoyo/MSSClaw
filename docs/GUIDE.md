@@ -26,13 +26,15 @@ npm run dev
 
 浏览器打开 **http://localhost:5173**。数据保存在浏览器 `localStorage`，Header 显示「本地 Demo · Mock」。
 
-### 2.2 前端 + 后端（SQLite 持久化）
+### 2.2 前端 + 后端（PostgreSQL 持久化）
+
+先启动本机 PostgreSQL 与 MinIO：`docker compose -f deploy/docker-compose.infra.yml up -d`。
 
 **终端 1 — 初始化并启动 API：**
 
 ```powershell
 cd "D:\Vibe Coding\MSSClaw\apps\api"
-copy .env.example .env
+copy ..\..\deploy\api.env.example .env
 npm run prisma:generate
 npx prisma migrate deploy
 
@@ -137,7 +139,7 @@ npm run dev
 MSSClaw/
 ├── apps/
 │   ├── web/          # React 19 + Vite 前端
-│   └── api/          # NestJS 11 + Prisma SQLite 后端
+│   └── api/          # NestJS 11 + Prisma PostgreSQL 后端
 ├── docs/             # 文档（本文件、MIGRATION.md）
 ├── index.html        # 静态设计稿 spec（dev:prototype）
 ├── README.md
@@ -196,7 +198,7 @@ hooks/             # 路由、Focus Trap 等
 | `KnowledgeRagModule` | 文档解析、检索、向量索引状态 |
 | `HealthController` | `GET /api/v1/health` |
 
-数据存 **SQLite**（`apps/api/dev.db`），Workspace catalog 与 Center 记录以 JSON 字段持久化。
+数据存 **PostgreSQL**，平台目录在 `app_setting`，其余 Center 记录暂以 JSON 存在过渡表 `center_record`（表结构见 `docs/database-design.sql`）。
 
 ### 4.5 数据流（重要原则）
 
@@ -246,7 +248,7 @@ Portal（单一平台空间）
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
-| `DATABASE_URL` | `file:./dev.db` | SQLite 路径 |
+| `DATABASE_URL` | `postgresql://mssclaw:mssclaw_dev@127.0.0.1:5432/mssclaw?schema=public` | PostgreSQL 连接串 |
 | `PORT` | `3000` | API 端口 |
 | `CORS_ORIGIN` | `http://localhost:5173` | 允许的前端 Origin |
 

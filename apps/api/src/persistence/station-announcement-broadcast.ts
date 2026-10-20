@@ -1,3 +1,5 @@
+import type { PrismaService } from '../prisma/prisma.service';
+
 /**
  * 站内公告：文档是权威源，发布时把已上架公告落成一条全员广播消息。
  *
@@ -36,15 +38,7 @@ export interface CanonicalStationAnnouncement {
   published: boolean;
 }
 
-interface BroadcastPrisma {
-  inboxMessageRecord: {
-    upsert(args: unknown): Promise<unknown>;
-    deleteMany(args: unknown): Promise<unknown>;
-  };
-  inboxUserMessageState: {
-    deleteMany(args: unknown): Promise<unknown>;
-  };
-}
+type BroadcastPrisma = Pick<PrismaService, 'inboxMessageRecord' | 'inboxUserMessageState'>;
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -122,15 +116,14 @@ export function canonicalizeStationAnnouncements(input: unknown): {
  */
 export async function syncStationAnnouncementBroadcast(
   prisma: BroadcastPrisma,
-  workspaceId: string,
   previous: readonly CanonicalStationAnnouncement[],
   next: readonly CanonicalStationAnnouncement[],
 ): Promise<{ delivered: number; retracted: number }> {
   const nextIds = new Set(next.map((item) => item.id));
   const retracted = previous.map((item) => item.id).filter((id) => !nextIds.has(id));
   for (const id of retracted) {
-    await prisma.inboxMessageRecord.deleteMany({ where: { workspaceId, id } });
-    await prisma.inboxUserMessageState.deleteMany({ where: { workspaceId, messageId: id } });
+    await prisma.inboxUserMessageState.deleteMany({ where: { messageId: id } });
+    await prisma.inboxMessageRecord.deleteMany({ where: { id } });
   }
 
   const published = next.filter((item) => item.published);
@@ -145,8 +138,8 @@ export async function syncStationAnnouncementBroadcast(
       meta: { announcementTag: item.badge },
     };
     await prisma.inboxMessageRecord.upsert({
-      where: { workspaceId_id: { workspaceId, id: item.id } },
-      create: { workspaceId, id: item.id, ...shared },
+      where: { id: item.id },
+      create: { id: item.id, ...shared },
       update: shared,
     });
   }

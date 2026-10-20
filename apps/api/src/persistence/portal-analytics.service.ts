@@ -504,24 +504,27 @@ export class PortalAnalyticsService {
     const firstLoginAt = new Date();
     const dateKey = portalAnalyticsDateKey(firstLoginAt);
     const visitorHash = this.accountVisitorHash(input.workspaceId, userId);
-    const inserted = await this.prisma.$executeRaw`
-      INSERT OR IGNORE INTO "PortalDailyLogin"
-        ("workspaceId", "dateKey", "visitorHash", "firstLoginAt")
-      VALUES
-        (${input.workspaceId}, ${dateKey}, ${visitorHash}, ${firstLoginAt})
-    `;
+    const { count: inserted } = await this.prisma.portalDailyLogin.createMany({
+      data: [{ dateKey, visitorHash, firstLoginAt }],
+      skipDuplicates: true,
+    });
 
     // Conversion metadata is optional and must not prevent the established daily-login fact.
     const journeyVisitorId = this.optionalJourneyVisitorId(input.visitorId);
     if (journeyVisitorId) {
       const journeyHash = this.journeyHash(input.workspaceId, journeyVisitorId);
       const conversionEventId = `login-${randomUUID()}`;
-      await this.prisma.$executeRaw`
-        INSERT OR IGNORE INTO "PortalConversionEvent"
-          ("workspaceId", "eventId", "dateKey", "eventType", "action", "routeKey", "journeyHash", "userHash", "occurredAt")
-        VALUES
-          (${input.workspaceId}, ${conversionEventId}, ${dateKey}, ${'login_success'}, ${null}, ${null}, ${journeyHash}, ${visitorHash}, ${firstLoginAt})
-      `;
+      await this.prisma.portalConversionEvent.createMany({
+        data: [{
+          eventId: conversionEventId,
+          dateKey,
+          eventType: 'login_success',
+          journeyHash,
+          userHash: visitorHash,
+          occurredAt: firstLoginAt,
+        }],
+        skipDuplicates: true,
+      });
     }
 
     return { accepted: true, duplicate: inserted === 0, date: dateKey };
@@ -573,20 +576,16 @@ export class PortalAnalyticsService {
       return { accepted: true, date: dateKey };
     }
 
-    await this.prisma.$executeRaw`
-      INSERT OR IGNORE INTO "PortalConversionEvent"
-        ("workspaceId", "eventId", "dateKey", "eventType", "action", "routeKey", "journeyHash", "userHash", "occurredAt")
-      SELECT
-        ${input.workspaceId}, ${eventId}, ${dateKey}, ${'guest_gate_hit'}, ${action}, ${routeKey}, ${journeyHash}, ${null}, ${occurredAt}
-      WHERE (
-        SELECT COUNT(*)
-        FROM "PortalConversionEvent"
-        WHERE "workspaceId" = ${input.workspaceId}
-          AND "dateKey" = ${dateKey}
-          AND "eventType" = ${'guest_gate_hit'}
-          AND "journeyHash" = ${journeyHash}
-      ) < ${PAGE_VIEW_DAILY_VISITOR_LIMIT}
-    `;
+    // 每日上限先计数再插入：并发时最多多记几条，对统计无影响；eventId 主键保证重试幂等。
+    const gateHitsToday = await this.prisma.portalConversionEvent.count({
+      where: { dateKey, eventType: 'guest_gate_hit', journeyHash },
+    });
+    if (gateHitsToday < PAGE_VIEW_DAILY_VISITOR_LIMIT) {
+      await this.prisma.portalConversionEvent.createMany({
+        data: [{ eventId, dateKey, eventType: 'guest_gate_hit', action, routeKey, journeyHash, occurredAt }],
+        skipDuplicates: true,
+      });
+    }
 
     return { accepted: true, date: dateKey };
   }
@@ -646,21 +645,14 @@ export class PortalAnalyticsService {
       }
     }
 
-    // The INSERT ... SELECT makes the daily cap part of the same SQLite statement as the
-    // write. Concurrent requests therefore cannot all pass a separate count-then-insert check.
-    await this.prisma.$executeRaw`
-      INSERT OR IGNORE INTO "PortalPageView"
-        ("workspaceId", "eventId", "dateKey", "routeKey", "visitorHash", "visitorType", "journeyHash", "occurredAt")
-      SELECT
-        ${input.workspaceId}, ${eventId}, ${dateKey}, ${routeKey}, ${visitorHash}, ${input.visitorType}, ${journeyHash}, ${occurredAt}
-      WHERE (
-        SELECT COUNT(*)
-        FROM "PortalPageView"
-        WHERE "workspaceId" = ${input.workspaceId}
-          AND "dateKey" = ${dateKey}
-          AND "visitorHash" = ${visitorHash}
-      ) < ${PAGE_VIEW_DAILY_VISITOR_LIMIT}
-    `;
+    // 每日上限先计数再插入：并发时最多多记几条，对统计无影响；eventId 主键保证重试幂等。
+    const viewsToday = await this.prisma.portalPageView.count({ where: { dateKey, visitorHash } });
+    if (viewsToday < PAGE_VIEW_DAILY_VISITOR_LIMIT) {
+      await this.prisma.portalPageView.createMany({
+        data: [{ eventId, dateKey, routeKey, visitorHash, visitorType: input.visitorType, journeyHash, occurredAt }],
+        skipDuplicates: true,
+      });
+    }
 
     // Duplicate event IDs, rate-limited requests and the daily cap deliberately share the
     // same response. Anonymous callers cannot probe which protection discarded an event.
@@ -700,200 +692,189 @@ export class PortalAnalyticsService {
         SELECT
           COUNT(*) AS "pv",
           COUNT(DISTINCT CASE
-            WHEN p."visitorType" = 'user' THEN p."visitorHash"
-            WHEN p."visitorType" = 'guest' THEN COALESCE(
+            WHEN p."visitor_type" = 'user' THEN p."visitor_hash"
+            WHEN p."visitor_type" = 'guest' THEN COALESCE(
               (
-                SELECT l."userHash"
-                FROM "PortalConversionEvent" AS l
-                WHERE l."workspaceId" = p."workspaceId"
-                  AND l."eventType" = 'login_success'
-                  AND l."journeyHash" = p."journeyHash"
-                  AND l."userHash" IS NOT NULL
-                  AND l."occurredAt" >= p."occurredAt"
-                ORDER BY l."occurredAt" ASC
+                SELECT l."user_hash"
+                FROM "portal_conversion_event" AS l
+                WHERE l."event_type" = 'login_success'
+                  AND l."journey_hash" = p."journey_hash"
+                  AND l."user_hash" IS NOT NULL
+                  AND l."occurred_at" >= p."occurred_at"
+                ORDER BY l."occurred_at" ASC
                 LIMIT 1
               ),
-              p."journeyHash",
-              p."visitorHash"
+              p."journey_hash",
+              p."visitor_hash"
             )
-            ELSE p."visitorHash"
+            ELSE p."visitor_hash"
           END) AS "uv",
-          SUM(CASE WHEN "visitorType" = 'guest' THEN 1 ELSE 0 END) AS "guestPv",
-          COUNT(DISTINCT CASE WHEN "visitorType" = 'guest' THEN "visitorHash" END) AS "guestUv",
-          SUM(CASE WHEN "visitorType" = 'user' THEN 1 ELSE 0 END) AS "userPv",
-          COUNT(DISTINCT CASE WHEN "visitorType" = 'user' THEN "visitorHash" END) AS "userUv",
-          MAX("occurredAt") AS "updatedAt"
-        FROM "PortalPageView" AS p
-        WHERE p."workspaceId" = ${workspaceId}
-          AND p."dateKey" BETWEEN ${from} AND ${to}
-          AND p."routeKey" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
+          SUM(CASE WHEN "visitor_type" = 'guest' THEN 1 ELSE 0 END) AS "guestPv",
+          COUNT(DISTINCT CASE WHEN "visitor_type" = 'guest' THEN "visitor_hash" END) AS "guestUv",
+          SUM(CASE WHEN "visitor_type" = 'user' THEN 1 ELSE 0 END) AS "userPv",
+          COUNT(DISTINCT CASE WHEN "visitor_type" = 'user' THEN "visitor_hash" END) AS "userUv",
+          MAX("occurred_at") AS "updatedAt"
+        FROM "portal_page_view" AS p
+        WHERE p."date_key" BETWEEN ${from} AND ${to}
+          AND p."route_key" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
       `,
       optionalRows(this.prisma.$queryRaw<Array<TrafficPeriodRow>>`
         SELECT 'today' AS "period",
           COUNT(*) AS "pv",
           COUNT(DISTINCT CASE
-            WHEN p."visitorType" = 'user' THEN p."visitorHash"
-            WHEN p."visitorType" = 'guest' THEN COALESCE(
-              (SELECT l."userHash" FROM "PortalConversionEvent" AS l
-               WHERE l."workspaceId" = p."workspaceId" AND l."eventType" = 'login_success'
-                 AND l."journeyHash" = p."journeyHash" AND l."userHash" IS NOT NULL
-                 AND l."occurredAt" >= p."occurredAt"
-               ORDER BY l."occurredAt" ASC LIMIT 1),
-              p."journeyHash", p."visitorHash")
-            ELSE p."visitorHash" END) AS "uv",
-          SUM(CASE WHEN p."visitorType" = 'guest' THEN 1 ELSE 0 END) AS "guestPv",
-          COUNT(DISTINCT CASE WHEN p."visitorType" = 'guest' THEN p."visitorHash" END) AS "guestUv",
-          SUM(CASE WHEN p."visitorType" = 'user' THEN 1 ELSE 0 END) AS "userPv",
-          COUNT(DISTINCT CASE WHEN p."visitorType" = 'user' THEN p."visitorHash" END) AS "userUv"
-        FROM "PortalPageView" AS p
-        WHERE p."workspaceId" = ${workspaceId} AND p."dateKey" = ${today}
-          AND p."routeKey" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
+            WHEN p."visitor_type" = 'user' THEN p."visitor_hash"
+            WHEN p."visitor_type" = 'guest' THEN COALESCE(
+              (SELECT l."user_hash" FROM "portal_conversion_event" AS l
+               WHERE l."event_type" = 'login_success'
+                 AND l."journey_hash" = p."journey_hash" AND l."user_hash" IS NOT NULL
+                 AND l."occurred_at" >= p."occurred_at"
+               ORDER BY l."occurred_at" ASC LIMIT 1),
+              p."journey_hash", p."visitor_hash")
+            ELSE p."visitor_hash" END) AS "uv",
+          SUM(CASE WHEN p."visitor_type" = 'guest' THEN 1 ELSE 0 END) AS "guestPv",
+          COUNT(DISTINCT CASE WHEN p."visitor_type" = 'guest' THEN p."visitor_hash" END) AS "guestUv",
+          SUM(CASE WHEN p."visitor_type" = 'user' THEN 1 ELSE 0 END) AS "userPv",
+          COUNT(DISTINCT CASE WHEN p."visitor_type" = 'user' THEN p."visitor_hash" END) AS "userUv"
+        FROM "portal_page_view" AS p
+        WHERE p."date_key" = ${today}
+          AND p."route_key" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
         UNION ALL
         SELECT 'last7Days' AS "period",
           COUNT(*) AS "pv",
           COUNT(DISTINCT CASE
-            WHEN p."visitorType" = 'user' THEN p."visitorHash"
-            WHEN p."visitorType" = 'guest' THEN COALESCE(
-              (SELECT l."userHash" FROM "PortalConversionEvent" AS l
-               WHERE l."workspaceId" = p."workspaceId" AND l."eventType" = 'login_success'
-                 AND l."journeyHash" = p."journeyHash" AND l."userHash" IS NOT NULL
-                 AND l."occurredAt" >= p."occurredAt"
-               ORDER BY l."occurredAt" ASC LIMIT 1),
-              p."journeyHash", p."visitorHash")
-            ELSE p."visitorHash" END) AS "uv",
-          SUM(CASE WHEN p."visitorType" = 'guest' THEN 1 ELSE 0 END) AS "guestPv",
-          COUNT(DISTINCT CASE WHEN p."visitorType" = 'guest' THEN p."visitorHash" END) AS "guestUv",
-          SUM(CASE WHEN p."visitorType" = 'user' THEN 1 ELSE 0 END) AS "userPv",
-          COUNT(DISTINCT CASE WHEN p."visitorType" = 'user' THEN p."visitorHash" END) AS "userUv"
-        FROM "PortalPageView" AS p
-        WHERE p."workspaceId" = ${workspaceId}
-          AND p."dateKey" BETWEEN ${shiftPortalAnalyticsDateKey(today, -6)} AND ${today}
-          AND p."routeKey" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
+            WHEN p."visitor_type" = 'user' THEN p."visitor_hash"
+            WHEN p."visitor_type" = 'guest' THEN COALESCE(
+              (SELECT l."user_hash" FROM "portal_conversion_event" AS l
+               WHERE l."event_type" = 'login_success'
+                 AND l."journey_hash" = p."journey_hash" AND l."user_hash" IS NOT NULL
+                 AND l."occurred_at" >= p."occurred_at"
+               ORDER BY l."occurred_at" ASC LIMIT 1),
+              p."journey_hash", p."visitor_hash")
+            ELSE p."visitor_hash" END) AS "uv",
+          SUM(CASE WHEN p."visitor_type" = 'guest' THEN 1 ELSE 0 END) AS "guestPv",
+          COUNT(DISTINCT CASE WHEN p."visitor_type" = 'guest' THEN p."visitor_hash" END) AS "guestUv",
+          SUM(CASE WHEN p."visitor_type" = 'user' THEN 1 ELSE 0 END) AS "userPv",
+          COUNT(DISTINCT CASE WHEN p."visitor_type" = 'user' THEN p."visitor_hash" END) AS "userUv"
+        FROM "portal_page_view" AS p
+        WHERE p."date_key" BETWEEN ${shiftPortalAnalyticsDateKey(today, -6)} AND ${today}
+          AND p."route_key" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
         UNION ALL
         SELECT 'last30Days' AS "period",
           COUNT(*) AS "pv",
           COUNT(DISTINCT CASE
-            WHEN p."visitorType" = 'user' THEN p."visitorHash"
-            WHEN p."visitorType" = 'guest' THEN COALESCE(
-              (SELECT l."userHash" FROM "PortalConversionEvent" AS l
-               WHERE l."workspaceId" = p."workspaceId" AND l."eventType" = 'login_success'
-                 AND l."journeyHash" = p."journeyHash" AND l."userHash" IS NOT NULL
-                 AND l."occurredAt" >= p."occurredAt"
-               ORDER BY l."occurredAt" ASC LIMIT 1),
-              p."journeyHash", p."visitorHash")
-            ELSE p."visitorHash" END) AS "uv",
-          SUM(CASE WHEN p."visitorType" = 'guest' THEN 1 ELSE 0 END) AS "guestPv",
-          COUNT(DISTINCT CASE WHEN p."visitorType" = 'guest' THEN p."visitorHash" END) AS "guestUv",
-          SUM(CASE WHEN p."visitorType" = 'user' THEN 1 ELSE 0 END) AS "userPv",
-          COUNT(DISTINCT CASE WHEN p."visitorType" = 'user' THEN p."visitorHash" END) AS "userUv"
-        FROM "PortalPageView" AS p
-        WHERE p."workspaceId" = ${workspaceId}
-          AND p."dateKey" BETWEEN ${shiftPortalAnalyticsDateKey(today, -29)} AND ${today}
-          AND p."routeKey" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
+            WHEN p."visitor_type" = 'user' THEN p."visitor_hash"
+            WHEN p."visitor_type" = 'guest' THEN COALESCE(
+              (SELECT l."user_hash" FROM "portal_conversion_event" AS l
+               WHERE l."event_type" = 'login_success'
+                 AND l."journey_hash" = p."journey_hash" AND l."user_hash" IS NOT NULL
+                 AND l."occurred_at" >= p."occurred_at"
+               ORDER BY l."occurred_at" ASC LIMIT 1),
+              p."journey_hash", p."visitor_hash")
+            ELSE p."visitor_hash" END) AS "uv",
+          SUM(CASE WHEN p."visitor_type" = 'guest' THEN 1 ELSE 0 END) AS "guestPv",
+          COUNT(DISTINCT CASE WHEN p."visitor_type" = 'guest' THEN p."visitor_hash" END) AS "guestUv",
+          SUM(CASE WHEN p."visitor_type" = 'user' THEN 1 ELSE 0 END) AS "userPv",
+          COUNT(DISTINCT CASE WHEN p."visitor_type" = 'user' THEN p."visitor_hash" END) AS "userUv"
+        FROM "portal_page_view" AS p
+        WHERE p."date_key" BETWEEN ${shiftPortalAnalyticsDateKey(today, -29)} AND ${today}
+          AND p."route_key" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
       `),
       this.prisma.$queryRaw<SeriesRow[]>`
         SELECT
-          p."dateKey" AS "date",
+          p."date_key" AS "date",
           COUNT(*) AS "pv",
           COUNT(DISTINCT CASE
-            WHEN p."visitorType" = 'user' THEN p."visitorHash"
-            WHEN p."visitorType" = 'guest' THEN COALESCE(
+            WHEN p."visitor_type" = 'user' THEN p."visitor_hash"
+            WHEN p."visitor_type" = 'guest' THEN COALESCE(
               (
-                SELECT l."userHash"
-                FROM "PortalConversionEvent" AS l
-                WHERE l."workspaceId" = p."workspaceId"
-                  AND l."eventType" = 'login_success'
-                  AND l."journeyHash" = p."journeyHash"
-                  AND l."userHash" IS NOT NULL
-                  AND l."occurredAt" >= p."occurredAt"
-                ORDER BY l."occurredAt" ASC
+                SELECT l."user_hash"
+                FROM "portal_conversion_event" AS l
+                WHERE l."event_type" = 'login_success'
+                  AND l."journey_hash" = p."journey_hash"
+                  AND l."user_hash" IS NOT NULL
+                  AND l."occurred_at" >= p."occurred_at"
+                ORDER BY l."occurred_at" ASC
                 LIMIT 1
               ),
-              p."journeyHash",
-              p."visitorHash"
+              p."journey_hash",
+              p."visitor_hash"
             )
-            ELSE p."visitorHash"
+            ELSE p."visitor_hash"
           END) AS "uv",
-          SUM(CASE WHEN "visitorType" = 'guest' THEN 1 ELSE 0 END) AS "guestPv",
-          COUNT(DISTINCT CASE WHEN "visitorType" = 'guest' THEN "visitorHash" END) AS "guestUv",
-          SUM(CASE WHEN "visitorType" = 'user' THEN 1 ELSE 0 END) AS "userPv",
-          COUNT(DISTINCT CASE WHEN "visitorType" = 'user' THEN "visitorHash" END) AS "userUv"
-        FROM "PortalPageView" AS p
-        WHERE p."workspaceId" = ${workspaceId}
-          AND p."dateKey" BETWEEN ${from} AND ${to}
-          AND p."routeKey" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
-        GROUP BY p."dateKey"
-        ORDER BY p."dateKey" ASC
+          SUM(CASE WHEN "visitor_type" = 'guest' THEN 1 ELSE 0 END) AS "guestPv",
+          COUNT(DISTINCT CASE WHEN "visitor_type" = 'guest' THEN "visitor_hash" END) AS "guestUv",
+          SUM(CASE WHEN "visitor_type" = 'user' THEN 1 ELSE 0 END) AS "userPv",
+          COUNT(DISTINCT CASE WHEN "visitor_type" = 'user' THEN "visitor_hash" END) AS "userUv"
+        FROM "portal_page_view" AS p
+        WHERE p."date_key" BETWEEN ${from} AND ${to}
+          AND p."route_key" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
+        GROUP BY p."date_key"
+        ORDER BY p."date_key" ASC
       `,
       this.prisma.$queryRaw<PageRow[]>`
         SELECT
-          p."routeKey",
+          p."route_key" AS "routeKey",
           COUNT(*) AS "pv",
           COUNT(DISTINCT CASE
-            WHEN p."visitorType" = 'user' THEN p."visitorHash"
-            WHEN p."visitorType" = 'guest' THEN COALESCE(
+            WHEN p."visitor_type" = 'user' THEN p."visitor_hash"
+            WHEN p."visitor_type" = 'guest' THEN COALESCE(
               (
-                SELECT l."userHash"
-                FROM "PortalConversionEvent" AS l
-                WHERE l."workspaceId" = p."workspaceId"
-                  AND l."eventType" = 'login_success'
-                  AND l."journeyHash" = p."journeyHash"
-                  AND l."userHash" IS NOT NULL
-                  AND l."occurredAt" >= p."occurredAt"
-                ORDER BY l."occurredAt" ASC
+                SELECT l."user_hash"
+                FROM "portal_conversion_event" AS l
+                WHERE l."event_type" = 'login_success'
+                  AND l."journey_hash" = p."journey_hash"
+                  AND l."user_hash" IS NOT NULL
+                  AND l."occurred_at" >= p."occurred_at"
+                ORDER BY l."occurred_at" ASC
                 LIMIT 1
               ),
-              p."journeyHash",
-              p."visitorHash"
+              p."journey_hash",
+              p."visitor_hash"
             )
-            ELSE p."visitorHash"
+            ELSE p."visitor_hash"
           END) AS "uv",
-          SUM(CASE WHEN "visitorType" = 'guest' THEN 1 ELSE 0 END) AS "guestPv",
-          COUNT(DISTINCT CASE WHEN "visitorType" = 'guest' THEN "visitorHash" END) AS "guestUv",
-          SUM(CASE WHEN "visitorType" = 'user' THEN 1 ELSE 0 END) AS "userPv",
-          COUNT(DISTINCT CASE WHEN "visitorType" = 'user' THEN "visitorHash" END) AS "userUv"
-        FROM "PortalPageView" AS p
-        WHERE p."workspaceId" = ${workspaceId}
-          AND p."dateKey" BETWEEN ${from} AND ${to}
-          AND p."routeKey" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
-        GROUP BY p."routeKey"
-        ORDER BY "pv" DESC, p."routeKey" ASC
+          SUM(CASE WHEN "visitor_type" = 'guest' THEN 1 ELSE 0 END) AS "guestPv",
+          COUNT(DISTINCT CASE WHEN "visitor_type" = 'guest' THEN "visitor_hash" END) AS "guestUv",
+          SUM(CASE WHEN "visitor_type" = 'user' THEN 1 ELSE 0 END) AS "userPv",
+          COUNT(DISTINCT CASE WHEN "visitor_type" = 'user' THEN "visitor_hash" END) AS "userUv"
+        FROM "portal_page_view" AS p
+        WHERE p."date_key" BETWEEN ${from} AND ${to}
+          AND p."route_key" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
+        GROUP BY p."route_key"
+        ORDER BY "pv" DESC, p."route_key" ASC
       `,
       this.prisma.$queryRaw<DailyLoginRow[]>`
         SELECT COUNT(*) AS "users"
-        FROM "PortalDailyLogin"
-        WHERE "workspaceId" = ${workspaceId}
-          AND "dateKey" = ${today}
+        FROM "portal_daily_login"
+        WHERE "date_key" = ${today}
       `,
       this.prisma.$queryRaw<FunnelRow[]>`
         SELECT
           g."action" AS "action",
           COUNT(*) AS "hits",
-          COUNT(DISTINCT g."journeyHash") AS "guestUv",
+          COUNT(DISTINCT g."journey_hash") AS "guestUv",
           COUNT(DISTINCT CASE
             WHEN EXISTS (
               SELECT 1
-              FROM "PortalConversionEvent" AS l
-              WHERE l."workspaceId" = g."workspaceId"
-                AND l."eventType" = 'login_success'
-                AND l."dateKey" BETWEEN ${from} AND ${to}
-                AND l."journeyHash" = g."journeyHash"
-                AND l."occurredAt" >= g."occurredAt"
-            ) THEN g."journeyHash"
+              FROM "portal_conversion_event" AS l
+              WHERE l."event_type" = 'login_success'
+                AND l."date_key" BETWEEN ${from} AND ${to}
+                AND l."journey_hash" = g."journey_hash"
+                AND l."occurred_at" >= g."occurred_at"
+            ) THEN g."journey_hash"
           END) AS "convertedUv"
-        FROM "PortalConversionEvent" AS g
-        WHERE g."workspaceId" = ${workspaceId}
-          AND g."eventType" = 'guest_gate_hit'
-          AND g."dateKey" BETWEEN ${from} AND ${to}
+        FROM "portal_conversion_event" AS g
+        WHERE g."event_type" = 'guest_gate_hit'
+          AND g."date_key" BETWEEN ${from} AND ${to}
           AND g."action" IS NOT NULL
         GROUP BY g."action"
         ORDER BY "hits" DESC, g."action" ASC
       `,
       this.prisma.$queryRaw<BehaviorSeriesRow[]>`
         SELECT
-          e."dateKey" AS "date",
-          e."contentId" AS "contentId",
-          e."assetType" AS "assetType",
+          e."date_key" AS "date",
+          e."content_id" AS "contentId",
+          e."asset_type" AS "assetType",
           SUM(CASE WHEN e."action" IN ('view', 'detail') THEN 1 ELSE 0 END) AS "views",
           SUM(CASE WHEN e."action" = 'favorite' THEN 1 ELSE 0 END) AS "favorites",
           SUM(CASE WHEN e."action" = 'like' THEN 1 ELSE 0 END) AS "likes",
@@ -901,11 +882,10 @@ export class PortalAnalyticsService {
           SUM(CASE WHEN e."action" = 'redirect' THEN 1 ELSE 0 END) AS "redirects",
           -- 旧版已落库的 request:download 是已完成下载的事实；新写入会在事务内改成 download。
           SUM(CASE WHEN e."action" IN ('download', 'request:download') THEN 1 ELSE 0 END) AS "downloads"
-        FROM "MarketEngagementEvent" AS e
-        WHERE e."workspaceId" = ${workspaceId}
-          AND e."dateKey" BETWEEN ${from} AND ${to}
-        GROUP BY e."dateKey", e."contentId", e."assetType"
-        ORDER BY e."dateKey" ASC, e."contentId" ASC
+        FROM "market_engagement_event" AS e
+        WHERE e."date_key" BETWEEN ${from} AND ${to}
+        GROUP BY e."date_key", e."content_id", e."asset_type"
+        ORDER BY e."date_key" ASC, e."content_id" ASC
       `,
       this.prisma.$queryRaw<BehaviorLifetimeRow[]>`
         SELECT
@@ -916,58 +896,52 @@ export class PortalAnalyticsService {
           COALESCE(SUM(m."uses"), 0) AS "redirects",
           COALESCE(SUM(m."downloads"), 0) AS "downloads",
           (
-            SELECT MIN(e."occurredAt")
-            FROM "MarketEngagementEvent" AS e
-            WHERE e."workspaceId" = ${workspaceId}
+            SELECT MIN(e."occurred_at")
+            FROM "market_engagement_event" AS e
           ) AS "trackingStartedAt",
           (
-            SELECT MAX(e."occurredAt")
-            FROM "MarketEngagementEvent" AS e
-            WHERE e."workspaceId" = ${workspaceId}
+            SELECT MAX(e."occurred_at")
+            FROM "market_engagement_event" AS e
           ) AS "updatedAt"
-        FROM "MarketEngagement" AS m
-        WHERE m."workspaceId" = ${workspaceId}
+        FROM "market_engagement_stat" AS m
       `,
       // The legacy aggregate table has no asset type.  Keep the old sum query
       // above for compatibility, but also fetch dimensions so portal-content
       // and unknown records can be excluded when the catalog is available.
       optionalRows(this.prisma.$queryRaw<BehaviorLifetimeRow[]>`
         SELECT
-          m."contentId" AS "contentId",
+          m."content_id" AS "contentId",
           m."views" AS "views",
           m."favorites" AS "favorites",
           m."likes" AS "likes",
           m."dislikes" AS "dislikes",
           m."uses" AS "redirects",
           m."downloads" AS "downloads",
-          m."updatedAt" AS "updatedAt"
-        FROM "MarketEngagement" AS m
-        WHERE m."workspaceId" = ${workspaceId}
+          m."updated_at" AS "updatedAt"
+        FROM "market_engagement_stat" AS m
       `),
       optionalRows(this.prisma.$queryRaw<BehaviorAssetEventRow[]>`
         SELECT
-          e."contentId" AS "contentId",
-          e."assetType" AS "assetType",
+          e."content_id" AS "contentId",
+          e."asset_type" AS "assetType",
           e."action" AS "action",
           COUNT(*) AS "events",
-          COUNT(DISTINCT e."visitorHash") AS "uv"
-        FROM "MarketEngagementEvent" AS e
-        WHERE e."workspaceId" = ${workspaceId}
-          AND e."dateKey" BETWEEN ${from} AND ${to}
+          COUNT(DISTINCT e."visitor_hash") AS "uv"
+        FROM "market_engagement_event" AS e
+        WHERE e."date_key" BETWEEN ${from} AND ${to}
           AND e."action" IN ('exposure', 'view', 'detail', 'download', 'request:download', 'like', 'dislike', 'favorite', 'redirect')
-        GROUP BY e."contentId", e."assetType", e."action"
+        GROUP BY e."content_id", e."asset_type", e."action"
       `),
       optionalRows(this.prisma.$queryRaw<BehaviorDownloadRow[]>`
         SELECT
-          e."contentId" AS "contentId",
-          e."assetType" AS "assetType",
-          e."visitorHash" AS "visitorHash",
+          e."content_id" AS "contentId",
+          e."asset_type" AS "assetType",
+          e."visitor_hash" AS "visitorHash",
           COUNT(*) AS "downloads"
-        FROM "MarketEngagementEvent" AS e
-        WHERE e."workspaceId" = ${workspaceId}
-          AND e."dateKey" BETWEEN ${from} AND ${to}
+        FROM "market_engagement_event" AS e
+        WHERE e."date_key" BETWEEN ${from} AND ${to}
           AND e."action" IN ('download', 'request:download')
-        GROUP BY e."contentId", e."assetType", e."visitorHash"
+        GROUP BY e."content_id", e."asset_type", e."visitor_hash"
       `),
       optionalRows(this.prisma.$queryRaw<Array<{
         contentId: string;
@@ -979,29 +953,27 @@ export class PortalAnalyticsService {
         favorites: number;
       }>>`
         SELECT
-          m."contentId" AS "contentId",
+          m."content_id" AS "contentId",
           COALESCE(m."views", 0) AS "views",
           COALESCE(m."uses", 0) AS "uses",
           COALESCE(m."likes", 0) AS "likes",
           COALESCE(m."dislikes", 0) AS "dislikes",
           COALESCE(m."downloads", 0) AS "downloads",
           COALESCE(m."favorites", 0) AS "favorites"
-        FROM "MarketEngagement" AS m
-        WHERE m."workspaceId" = ${workspaceId}
+        FROM "market_engagement_stat" AS m
       `),
       optionalRows(this.prisma.$queryRaw<UserIdentityRow[]>`
         -- Account cohorts are defined by successful login facts. Page views and
         -- engagement events still feed active-day metrics below, but an anonymous
         -- or pre-login visit must not become a registered/new user.
-        SELECT "visitorHash", MIN("dateKey") AS "firstDate", MIN("eventAt") AS "firstAt", MAX("eventAt") AS "lastAt"
+        SELECT "visitor_hash" AS "visitorHash", MIN("date_key") AS "firstDate", MIN("eventAt") AS "firstAt", MAX("eventAt") AS "lastAt"
         FROM (
-          SELECT "visitorHash", "dateKey", "firstLoginAt" AS "eventAt"
-          FROM "PortalDailyLogin"
-          WHERE "workspaceId" = ${workspaceId}
-            AND "dateKey" >= ${USER_STATS_START_DATE}
-            AND "visitorHash" IS NOT NULL
+          SELECT "visitor_hash", "date_key", "first_login_at" AS "eventAt"
+          FROM "portal_daily_login"
+          WHERE "date_key" >= ${USER_STATS_START_DATE}
+            AND "visitor_hash" IS NOT NULL
         ) AS users
-        GROUP BY "visitorHash"
+        GROUP BY "visitor_hash"
       `),
       optionalRows(this.prisma.$queryRaw<UserActivityRow[]>`
         -- Keep the full selected cohort window through today. D30 cohorts in a
@@ -1009,41 +981,37 @@ export class PortalAnalyticsService {
         -- A market event counts as an active-day fact only when it represents an
         -- actual execution. Exposure, detail views and reactions are not DAU
         -- operations under the metric definition.
-        SELECT "dateKey", "visitorHash", COUNT(*) AS "events", MAX("eventAt") AS "lastAt"
+        SELECT "date_key" AS "dateKey", "visitor_hash" AS "visitorHash", COUNT(*) AS "events", MAX("eventAt") AS "lastAt"
         FROM (
-          SELECT "dateKey", "visitorHash", "firstLoginAt" AS "eventAt"
-          FROM "PortalDailyLogin"
-          WHERE "workspaceId" = ${workspaceId}
-            AND "dateKey" >= ${USER_STATS_START_DATE}
-            AND "dateKey" BETWEEN ${activityFrom} AND ${today}
-            AND "visitorHash" IS NOT NULL
+          SELECT "date_key", "visitor_hash", "first_login_at" AS "eventAt"
+          FROM "portal_daily_login"
+          WHERE "date_key" >= ${USER_STATS_START_DATE}
+            AND "date_key" BETWEEN ${activityFrom} AND ${today}
+            AND "visitor_hash" IS NOT NULL
           UNION ALL
-          SELECT "dateKey", "visitorHash", "occurredAt" AS "eventAt"
-          FROM "PortalPageView"
-          WHERE "workspaceId" = ${workspaceId}
-            AND "visitorType" = 'user'
-            AND "routeKey" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
-            AND "dateKey" >= ${USER_STATS_START_DATE}
-            AND "dateKey" BETWEEN ${activityFrom} AND ${today}
-            AND "visitorHash" IS NOT NULL
+          SELECT "date_key", "visitor_hash", "occurred_at" AS "eventAt"
+          FROM "portal_page_view"
+          WHERE "visitor_type" = 'user'
+            AND "route_key" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
+            AND "date_key" >= ${USER_STATS_START_DATE}
+            AND "date_key" BETWEEN ${activityFrom} AND ${today}
+            AND "visitor_hash" IS NOT NULL
           UNION ALL
-          SELECT "dateKey", "visitorHash", "occurredAt" AS "eventAt"
-          FROM "MarketEngagementEvent"
-          WHERE "workspaceId" = ${workspaceId}
-            AND "visitorType" = 'user'
+          SELECT "date_key", "visitor_hash", "occurred_at" AS "eventAt"
+          FROM "market_engagement_event"
+          WHERE "visitor_type" = 'user'
             AND "action" IN ('call', 'use')
-            AND "dateKey" >= ${USER_STATS_START_DATE}
-            AND "dateKey" BETWEEN ${activityFrom} AND ${today}
-            AND "visitorHash" IS NOT NULL
+            AND "date_key" >= ${USER_STATS_START_DATE}
+            AND "date_key" BETWEEN ${activityFrom} AND ${today}
+            AND "visitor_hash" IS NOT NULL
         ) AS activity
-        GROUP BY "dateKey", "visitorHash"
+        GROUP BY "date_key", "visitor_hash"
       `),
       optionalRows(this.prisma.$queryRaw<CallFactRow[]>`
-        SELECT "contentId", "assetType", "visitorHash", "success", "durationMs", "inputTokens", "outputTokens"
-        FROM "MarketEngagementEvent"
-        WHERE "workspaceId" = ${workspaceId}
-          AND "action" = 'call'
-          AND "dateKey" BETWEEN ${from} AND ${to}
+        SELECT "content_id" AS "contentId", "asset_type" AS "assetType", "visitor_hash" AS "visitorHash", "success", "duration_ms" AS "durationMs", "input_tokens" AS "inputTokens", "output_tokens" AS "outputTokens"
+        FROM "market_engagement_event"
+        WHERE "action" = 'call'
+          AND "date_key" BETWEEN ${from} AND ${to}
       `),
     ]);
 
@@ -1728,7 +1696,6 @@ export class PortalAnalyticsService {
     if (!client?.findMany) return [];
     const rows = await client.findMany({
       where: {
-        workspaceId,
         kind: {
           in: [
             'marketplace',

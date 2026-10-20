@@ -329,7 +329,6 @@ export class AiNewsArchiveService implements OnModuleInit {
       where: { id: ARCHIVE_ID },
       create: {
         id: ARCHIVE_ID,
-        workspaceId: ARCHIVE_WORKSPACE,
         kind: ARCHIVE_KIND,
         payload: payload as unknown as Prisma.InputJsonValue,
       },
