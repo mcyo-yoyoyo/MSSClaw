@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { formatToolInvokes } from '@/domain/aiToolCategories';
 import { GuestGateLock } from '@/components/auth/GuestGateLock';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { CenterModal } from '@/components/center/CenterShell';
@@ -34,9 +35,11 @@ function pickWhatItIs(tool: PrototypeToolSeed): string {
   );
 }
 
-function SectionTitle({ children }: { children: string }) {
+function SectionTitle({ children, large = false }: { children: string; large?: boolean }) {
   return (
-    <p className="mb-2 text-[11px] font-semibold tracking-wide text-zinc-400">{children}</p>
+    <p className={cn('font-semibold tracking-wide text-zinc-400', large ? 'mb-2.5 text-[12px]' : 'mb-2 text-[11px]')}>
+      {children}
+    </p>
   );
 }
 
@@ -45,11 +48,14 @@ export function MarketToolDetailModal({
   onClose,
   interactionMode = 'user',
   asPage = false,
+  pageHeaderAction,
 }: {
   toolId: string;
   onClose: () => void;
   /** 资产详情页整页呈现：去掉遮罩和关闭按钮，返回由页面顶栏负责 */
   asPage?: boolean;
+  /** 整页呈现时放在标题区右上角（原关闭按钮的位置），如分享按钮 */
+  pageHeaderAction?: ReactNode;
   /** 运营侧只读详情：保留内容与文档链接，不写入收藏、使用或最近访问。 */
   interactionMode?: 'user' | 'preview';
 }) {
@@ -58,6 +64,8 @@ export function MarketToolDetailModal({
   const bumpToolInvokes = useMarketplaceStore((s) => s.bumpToolInvokes);
   const bumpDetail = useContentEngagementStore((s) => s.bumpDetail);
   const bumpRedirect = useContentEngagementStore((s) => s.bumpRedirect);
+  // 与货架卡片同一来源，详情里的计数和卡片一致
+  const engagement = useContentEngagementStore((s) => s.byId[toolId]);
   const pushRecent = useRecentMarketStore((s) => s.push);
   const favItems = useMarketFavoriteStore((s) => s.items);
   const toggleFavorite = useMarketFavoriteStore((s) => s.toggle);
@@ -145,6 +153,9 @@ export function MarketToolDetailModal({
   }
 
   const whatItIs = pickWhatItIs(tool);
+  // 详情页卡片撑满整屏：正文、标签字号和段落间距放大一档，把内容铺开
+  const bodyText = asPage ? 'text-[15px] leading-[1.8] text-pretty' : 'text-[13px] leading-relaxed';
+  const chipText = asPage ? 'text-[12px]' : 'text-[11px]';
   const kindLabel = kind === 'internal' ? '公司工具' : '外部工具';
   const hasHome = Boolean(tool.homepageUrl && tool.homepageUrl !== '#');
   const hasDocs = Boolean(tool.docsUrl?.trim());
@@ -220,8 +231,14 @@ export function MarketToolDetailModal({
                           ? `${regionLabel}第三方工具`
                           : '第三方工具'}
                     </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] tabular-nums text-zinc-500">
+                      <span title="浏览量"><i className="fa-regular fa-eye mr-1" />{formatToolInvokes(engagement?.views ?? 0)}</span>
+                      <span title="收藏量"><i className="fa-regular fa-star mr-1" />{formatToolInvokes(engagement?.favorites ?? 0)}</span>
+                      <span title="点赞量"><i className="fa-solid fa-thumbs-up mr-1" />{formatToolInvokes(engagement?.likes ?? 0)}</span>
+                      <span title="点踩量"><i className="fa-solid fa-thumbs-down mr-1" />{formatToolInvokes(engagement?.dislikes ?? 0)}</span>
+                    </div>
                   </div>
-                  {asPage ? null : (
+                  {asPage ? pageHeaderAction : (
                     <button
                       type="button"
                       onClick={onClose}
@@ -294,22 +311,22 @@ export function MarketToolDetailModal({
           </div>
         }
       >
-        <div className="space-y-6 px-5 py-5 md:px-6">
+        <div className={cn('px-5 py-5 md:px-6', asPage ? 'space-y-8' : 'space-y-6')}>
           <section>
-            <SectionTitle>产品详细介绍</SectionTitle>
-            <p className="whitespace-pre-line text-[13px] leading-relaxed text-zinc-600">
+            <SectionTitle large={asPage}>产品详细介绍</SectionTitle>
+            <p className={cn('whitespace-pre-line text-zinc-600', bodyText)}>
               {whatItIs || `${tool.name} 是一款${kindLabel}。`}
             </p>
           </section>
 
           {tool.toolTypeLabels?.length ? (
             <section>
-              <SectionTitle>工具类型</SectionTitle>
+              <SectionTitle large={asPage}>工具类型</SectionTitle>
               <div className="flex flex-wrap gap-1.5">
                 {tool.toolTypeLabels.map((label) => (
                   <span
                     key={label}
-                    className="rounded-lg bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-800"
+                    className={cn('rounded-lg bg-sky-50 px-2 py-1 font-medium text-sky-800', chipText)}
                   >
                     {label}
                   </span>
@@ -320,19 +337,19 @@ export function MarketToolDetailModal({
 
           {tool.bestFor?.trim() ? (
             <section>
-              <SectionTitle>最适合</SectionTitle>
-              <p className="text-[13px] leading-relaxed text-zinc-600">{tool.bestFor}</p>
+              <SectionTitle large={asPage}>最适合</SectionTitle>
+              <p className={cn('text-zinc-600', bodyText)}>{tool.bestFor}</p>
             </section>
           ) : null}
 
           {tool.coreCapabilities?.length ? (
             <section>
-              <SectionTitle>核心能力</SectionTitle>
+              <SectionTitle large={asPage}>核心能力</SectionTitle>
               <div className="flex flex-wrap gap-1.5">
                 {tool.coreCapabilities.map((capability) => (
                   <span
                     key={capability}
-                    className="rounded-lg bg-zinc-100 px-2 py-1 text-[11px] font-medium text-zinc-700"
+                    className={cn('rounded-lg bg-zinc-100 px-2 py-1 font-medium text-zinc-700', chipText)}
                   >
                     {capability}
                   </span>

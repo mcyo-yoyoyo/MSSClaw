@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { MssZhishuMark } from '@/components/brand/MssZhishuMark';
+import { ToolLogo } from '@/components/brand/ToolLogo';
 import {
   assetDetailUrl,
+  openAssetDetail,
   readAppRouteFromLocation,
   type AppRouteParams,
   type DetailAssetType,
@@ -14,6 +16,9 @@ import { prepareCaseArticleHtml } from '@/domain/caseArticleHtml';
 import { takeDetailAction } from '@/domain/directEntry';
 import { allowsMarketScenarioRun } from '@/domain/marketRunCapability';
 import { canExecuteChat } from '@/domain/permissions';
+import type { PrototypeToolSeed } from '@/domain/prototype/types';
+import { relatedTools } from '@/domain/relatedTools';
+import { resolveToolLogoUrl } from '@/domain/toolLogo';
 import type { AppViewRouterHandlers } from '@/features/AppViewRouter';
 import { CaseHtml } from '@/features/ai-brief/CaseHtml';
 import { useCaseInsightArticle } from '@/features/ai-brief/useCaseInsightArticle';
@@ -46,6 +51,36 @@ function useDetailRoute(): AppRouteParams {
 }
 
 type Access = 'loading' | 'missing' | 'login' | 'forbidden' | 'ok';
+
+/** 工具详情右栏：同货架的相关工具，点开在当前页进入详情（计站内点击） */
+function RelatedToolsPanel({ tools }: { tools: PrototypeToolSeed[] }) {
+  return (
+    <aside className="flex w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-black/5 bg-white shadow-apple-lg lg:max-h-full lg:w-[30%] lg:min-w-[280px] lg:max-w-[360px] lg:self-start">
+      <h2 className="shrink-0 border-b border-zinc-100 px-5 py-4 text-[14px] font-semibold text-zinc-900">相关推荐</h2>
+      <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
+        {tools.map((tool) => (
+          <li key={tool.id}>
+            <button
+              type="button"
+              onClick={() => openAssetDetail('tool', tool.id)}
+              className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-zinc-50 active:scale-[0.98]"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white ring-1 ring-zinc-100">
+                <ToolLogo name={tool.name} logoUrl={resolveToolLogoUrl(tool)} icon={tool.icon} size={32} className="rounded-md" />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-[14px] font-semibold text-zinc-900">{tool.name}</span>
+                <span className="mt-0.5 line-clamp-2 text-[12px] leading-relaxed text-zinc-500">
+                  {tool.cardSummary || tool.desc}
+                </span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  );
+}
 
 function StatePanel({ icon, title, children }: { icon: string; title: string; children?: ReactNode }) {
   return (
@@ -153,6 +188,18 @@ export function AssetDetailPage({ handlers }: { handlers: AppViewRouterHandlers 
       )
     : [];
 
+  // 分享放在详情卡片标题区右上角，紧挨着内容
+  const shareButton = (
+    <button
+      type="button"
+      onClick={() => void share()}
+      className="flex shrink-0 items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-[12px] font-medium text-zinc-700 transition hover:bg-zinc-50 active:scale-[0.97]"
+    >
+      <i className="fa-solid fa-share-nodes text-[12px]" />
+      分享
+    </button>
+  );
+
   let body: ReactNode;
   if (access === 'loading') {
     body = <StatePanel icon="fa-spinner fa-spin" title="正在加载…" />;
@@ -183,7 +230,17 @@ export function AssetDetailPage({ handlers }: { handlers: AppViewRouterHandlers 
   } else if (access === 'forbidden') {
     body = <StatePanel icon="fa-ban" title="暂无权限查看" />;
   } else if (tool) {
-    body = <MarketToolDetailModal toolId={tool.id} onClose={goBack} asPage />;
+    const related = relatedTools(tool, tools, (item) => canViewAsset(item, viewer));
+    const detail = <MarketToolDetailModal toolId={tool.id} onClose={goBack} asPage pageHeaderAction={shareButton} />;
+    // 左详情、右推荐（右栏窄一些）；窄屏时推荐排到详情下方，整页滚动；没有可推荐的工具时只显示详情
+    body = related.length ? (
+      <div className="mx-auto flex h-full max-w-6xl flex-col gap-4 overflow-y-auto lg:flex-row lg:overflow-visible">
+        <div className="h-full min-w-0 shrink-0 lg:flex-1 lg:shrink">{detail}</div>
+        <RelatedToolsPanel tools={related} />
+      </div>
+    ) : (
+      detail
+    );
   } else if (skill) {
     body = (
       <MarketSkillDetailModal
@@ -193,6 +250,7 @@ export function AssetDetailPage({ handlers }: { handlers: AppViewRouterHandlers 
         onRun={handlers.onInvokeSkill}
         onToast={showToast}
         asPage
+        pageHeaderAction={shareButton}
       />
     );
   } else if (agent) {
@@ -205,17 +263,21 @@ export function AssetDetailPage({ handlers }: { handlers: AppViewRouterHandlers 
         onRun={(item) => handlers.onInvokeAgent(item)}
         onToast={showToast}
         asPage
+        pageHeaderAction={shareButton}
       />
     );
   } else if (caseState.status === 'ready') {
     body = (
-      <div className="mx-auto h-full w-full max-w-6xl overflow-hidden rounded-2xl border border-black/5 bg-white shadow-apple-lg">
-        <CaseHtml
-          html={prepareCaseArticleHtml(caseState.html, caseState.article.sourceUrl)}
-          title={caseState.article.title}
-          baseHref={new URL(`${CASEBOOK_BASE}cases/`, window.location.origin).href}
-          standalone
-        />
+      <div className="mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-black/5 bg-white shadow-apple-lg">
+        <div className="flex shrink-0 justify-end border-b border-zinc-100 px-4 py-2.5">{shareButton}</div>
+        <div className="min-h-0 flex-1">
+          <CaseHtml
+            html={prepareCaseArticleHtml(caseState.html, caseState.article.sourceUrl)}
+            title={caseState.article.title}
+            baseHref={new URL(`${CASEBOOK_BASE}cases/`, window.location.origin).href}
+            standalone
+          />
+        </div>
       </div>
     );
   }
@@ -241,16 +303,6 @@ export function AssetDetailPage({ handlers }: { handlers: AppViewRouterHandlers 
           <span className="hidden text-[14px] font-semibold text-zinc-900 sm:inline">MSS AI提效平台</span>
         </button>
         <div className="ml-auto flex items-center gap-2">
-          {access === 'ok' ? (
-            <button
-              type="button"
-              onClick={() => void share()}
-              className="flex items-center gap-1.5 rounded-xl border border-zinc-200 px-3 py-1.5 text-[12px] font-medium text-zinc-700 transition hover:bg-zinc-50"
-            >
-              <i className="fa-solid fa-share-nodes text-[12px]" />
-              分享
-            </button>
-          ) : null}
           {user ? null : (
             <button
               type="button"

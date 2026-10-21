@@ -322,6 +322,7 @@ export function CatalogAgentDetailModal({
   onToast,
   adminActions,
   asPage = false,
+  pageHeaderAction,
 }: {
   agent: PrototypeAgentSeed;
   submittedCases?: PortalContentItem[];
@@ -334,6 +335,8 @@ export function CatalogAgentDetailModal({
   };
   /** 资产详情页整页呈现：去掉遮罩和关闭按钮，返回由页面顶栏负责 */
   asPage?: boolean;
+  /** 整页呈现时放在标题区右上角（原关闭按钮的位置），如分享按钮 */
+  pageHeaderAction?: ReactNode;
 }) {
   const [tab, setTab] = useState<DetailTab>('overview');
   const skills = useMarketplaceStore((state) => state.skills);
@@ -579,7 +582,7 @@ export function CatalogAgentDetailModal({
                     {valueProposition || agent.desc || '暂无功能简介'}
                   </p>
                 </div>
-                {asPage ? null : (
+                {asPage ? pageHeaderAction : (
                   <button
                     type="button"
                     onClick={onClose}

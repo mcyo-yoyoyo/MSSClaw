@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { GuestGateLock } from '@/components/auth/GuestGateLock';
 import { SkillAvatar } from '@/components/brand/SkillAvatar';
@@ -263,12 +263,15 @@ export function MarketSkillDetailModal({
   onToast,
   adminActions,
   asPage = false,
+  pageHeaderAction,
 }: {
   skill: PrototypeSkillSeed;
   canRun: boolean;
   onClose: () => void;
   /** 资产详情页整页呈现：去掉遮罩和关闭按钮，返回由页面顶栏负责 */
   asPage?: boolean;
+  /** 整页呈现时放在标题区右上角（原关闭按钮的位置），如分享按钮 */
+  pageHeaderAction?: ReactNode;
   onRun: (skill: PrototypeSkillSeed) => void;
   onToast: (msg: string) => void;
   /** 配置 Skill 后台：更新 / 下架申请入口 */
@@ -514,7 +517,7 @@ export function MarketSkillDetailModal({
                     {nameEn ? <span className="truncate">{nameEn}</span> : null}
                   </div>
                 </div>
-                {asPage ? null : (
+                {asPage ? pageHeaderAction : (
                   <button
                     type="button"
                     onClick={onClose}
