@@ -7,6 +7,7 @@ import {
   HQ_DEPTS,
   REGIONS,
 } from '@/domain/orgTaxonomy';
+import { assetCreatorName } from '@/domain/assetCreator';
 import { SKILL_VISIBILITY_SCOPE_OPTIONS } from '@/domain/assetFilters';
 import {
   resolveSkillLifecycleStatus,
@@ -240,6 +241,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
           kind: 'projects',
           assetType: 'skill',
           title: skillDisplayName(s),
+          creator: assetCreatorName(s),
           description: skillDisplayDesc(s).replace(/^【[^】]+】/, '').trim() || '暂无描述',
           outcomeHint: skillDisplayDesc(s).replace(/^【[^】]+】/, '').trim() || skillDisplayName(s),
           sceneTags: bizLabel ? [bizLabel] : undefined,

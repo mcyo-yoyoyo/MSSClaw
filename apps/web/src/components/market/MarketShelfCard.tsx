@@ -290,6 +290,11 @@ export function MarketShelfCard({
             >
               {outcomeLine}
             </p>
+            {card.creator ? (
+              <p className="mt-1 truncate text-[11px] text-[#86868b]" title={`创建人：${card.creator}`}>
+                创建人：{card.creator}
+              </p>
+            ) : null}
           </div>
         </div>
         {!compact && showTags ? (

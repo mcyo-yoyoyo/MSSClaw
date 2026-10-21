@@ -8,6 +8,7 @@ import {
   CaseDocumentPreviewList,
 } from '@/components/content/CaseDocumentPreview';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
+import { assetCreatorName } from '@/domain/assetCreator';
 import {
   buildAgentDemoPrompt,
   buildAgentOrchestrationSteps,
@@ -1167,6 +1168,7 @@ export function CatalogAgentDetailModal({
                 <MetaRow label="创建时间" value={createdAt} />
                 <MetaRow label="适配平台" value={platforms.join('、')} />
                 <MetaRow label="开放范围" value={scopeLabel} />
+                <MetaRow label="创建人" value={assetCreatorName(agent)} />
                 <MetaRow label="维护团队" value={maintainer} />
               </dl>
               {agent.versionSummary?.trim() ? (

@@ -82,6 +82,8 @@ export type MarketShelfCard = {
   description: string;
   /** 外部工具：厂商名（弱化展示在产品名下） */
   productName?: string;
+  /** Skill / Agent：创建人（assetCreatorName），没有时不显示 */
+  creator?: string;
   /**
    * 「能帮我做什么」结果导向短句（优先于 description 作副文案）
    * 来自 bestFor / cardSummary 首句

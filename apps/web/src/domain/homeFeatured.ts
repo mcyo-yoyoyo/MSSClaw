@@ -1,5 +1,6 @@
 import type { AssetViewerContext } from '@/domain/assetVisibility';
 import { canViewAsset } from '@/domain/assetVisibility';
+import { assetCreatorName } from '@/domain/assetCreator';
 import {
   resolveAgentBusinessScenario,
   resolveAgentFeaturedInDoTask,
@@ -90,6 +91,7 @@ function skillCard(skill: PrototypeSkillSeed, ctx: HomeChannelCardContext): Mark
     kind: 'projects',
     assetType: 'skill',
     title: skillDisplayName(skill),
+    creator: assetCreatorName(skill),
     description,
     outcomeHint: description,
     sceneTags: ['Skill', ...(scenarioLabel ? [scenarioLabel] : [])],
@@ -129,6 +131,7 @@ function agentCard(agent: PrototypeAgentSeed, ctx: HomeChannelCardContext): Mark
     kind: 'projects',
     assetType: 'agent',
     title: agent.name,
+    creator: assetCreatorName(agent),
     description: agent.desc,
     outcomeHint: agent.desc,
     sceneTags: ['Agent', ...(scenarioLabel ? [scenarioLabel] : [])],

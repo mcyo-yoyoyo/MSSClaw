@@ -53,6 +53,7 @@ import {
   getRegionLabel,
 } from '@/domain/orgTaxonomy';
 import { openAssetDetail } from '@/domain/appRoute';
+import { assetCreatorName } from '@/domain/assetCreator';
 import { canViewAsset } from '@/domain/assetVisibility';
 import { MarketAgentDetailModal } from '@/features/market/MarketAgentDetailModal';
 import { useMssBuildStatsCopyStore } from '@/stores/mssBuildStatsCopyStore';
@@ -523,6 +524,7 @@ export function MarketShelfPage({
           ...resolveAgentCapabilityTypes(agent).map(getAgentCapabilityTypeLabel),
           ...(agent.targetUsers ?? []),
           ...(agent.environment?.platforms ?? []),
+          assetCreatorName(agent),
         ].filter(Boolean);
         return matchesAgentHubSearch(
           { title: agent.name, description: agent.desc, tags: tagLabels },
@@ -603,7 +605,8 @@ export function MarketShelfPage({
             title: [skillDisplayName(s), s.name, s.nameZh, s.nameEn]
               .filter(Boolean)
               .join(' '),
-            description: [skillDisplayDesc(s), s.desc, s.descZh, s.descEn]
+            // 创建人也参与匹配：搜人名能找到他贡献的 Skill
+            description: [skillDisplayDesc(s), s.desc, s.descZh, s.descEn, assetCreatorName(s)]
               .filter(Boolean)
               .join(' '),
             instructions: s.instructions,
@@ -669,6 +672,7 @@ export function MarketShelfPage({
         kind: 'projects' as const,
         assetType: 'skill' as const,
         title: skillDisplayName(s),
+        creator: assetCreatorName(s),
         description: (s.desc || '').replace(/^【[^】]+】/, '').trim(),
         outcomeHint: (s.desc || '').replace(/^【[^】]+】/, '').trim() || skillDisplayName(s),
         sceneTags: bizLabel ? [bizLabel] : undefined,
@@ -722,6 +726,7 @@ export function MarketShelfPage({
         kind: 'projects' as const,
         assetType: 'agent' as const,
         title: agent.name,
+        creator: assetCreatorName(agent),
         description: agent.desc,
         outcomeHint: agent.desc,
         sceneTags: bizLabel ? [bizLabel] : agent.scenarioTags?.slice(0, 3),

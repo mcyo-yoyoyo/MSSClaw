@@ -645,7 +645,7 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
         homeTag: prev?.homeTag ?? 'mkt',
         chatId: chatIdForBusinessScenario(businessScenarioId),
         businessScenarioId,
-        author: prev?.author ?? (getCurrentUserName() || 'Mcyo'),
+        author: form.author?.trim() || getCurrentUserName() || 'Mcyo',
         publisher: form.publisher || getCurrentUserName() || 'Mcyo',
         publisherUserId: form.publisherUserId || getCurrentUserId() || undefined,
         invokes: prev?.invokes ?? 0,
@@ -1308,6 +1308,13 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
                   value={form.version ?? ''}
                   placeholder="V1.0"
                   onChange={(e) => setForm({ ...form, version: e.target.value })}
+                />
+              </FormField>
+              <FormField label="创建人">
+                <FormInput
+                  value={form.author ?? ''}
+                  placeholder={getCurrentUserName() || '当前用户'}
+                  onChange={(e) => setForm({ ...form, author: e.target.value })}
                 />
               </FormField>
               <FormField label="维护团队">

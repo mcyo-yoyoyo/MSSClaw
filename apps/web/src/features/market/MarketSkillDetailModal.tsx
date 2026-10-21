@@ -7,6 +7,7 @@ import { CaseDocumentPreviewList } from '@/components/content/CaseDocumentPrevie
 import { PackageFileTree } from '@/components/market/PackageFileTree';
 import { downloadPackageBlob } from '@/api/blobApi';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
+import { assetCreatorName } from '@/domain/assetCreator';
 import type { PrototypeSkillSeed, SkillEvaluationReport, SkillVersionRecord } from '@/domain/prototype/types';
 import { getSkillBusinessLabel } from '@/domain/skillBusinessScenarios';
 import { skillDisplayDesc, skillDisplayName } from '@/domain/skillDisplay';
@@ -919,7 +920,7 @@ export function MarketSkillDetailModal({
           <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-3">
             <p className="mb-2 text-[11px] font-semibold text-zinc-500">相关信息</p>
             <dl className="divide-y divide-zinc-50">
-              <MetaRow label="创建人" value={skill.author || skill.publisher || '未知'} />
+              <MetaRow label="创建人" value={assetCreatorName(skill)} />
               <MetaRow label="创建时间" value={createdAt} />
               <MetaRow label="更新者" value={updatedBy} />
               <MetaRow label="更新时间" value={updatedAt} />
