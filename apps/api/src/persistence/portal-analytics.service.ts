@@ -299,6 +299,8 @@ export interface PortalAnalyticsReport {
       tool?: number;
       skill?: number;
       agent?: number;
+      /** 已发布、未删除的案例洞察 */
+      case?: number;
       externalOverseas?: number;
       externalDomestic?: number;
       tools: number;
@@ -1410,8 +1412,11 @@ export class PortalAnalyticsService {
     const toolInventory = catalog.filter((row) => row.assetType === 'tool' && !row.officeScene);
     const assetSummary = catalog.reduce(
       (summary, row) => {
-        // 资产数以货架为准，案例不计入
-        if (row.assetType === 'case') return summary;
+        // 案例单独计数，不混进货架资产的 total / published
+        if (row.assetType === 'case') {
+          summary.case += 1;
+          return summary;
+        }
         summary.total += 1;
         if (row.published) summary.published += 1;
         else summary.unpublished += 1;
@@ -1431,6 +1436,7 @@ export class PortalAnalyticsService {
         tool: 0,
         skill: 0,
         agent: 0,
+        case: 0,
         overseas: 0,
         domestic: 0,
         unknown: 0,

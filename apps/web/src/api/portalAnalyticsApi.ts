@@ -62,6 +62,8 @@ export interface PortalAnalyticsAssetSummary {
   tool?: number;
   skill?: number;
   agent?: number;
+  /** 已发布、未删除的案例洞察（不含在 total / published 里） */
+  case?: number;
   external: number;
   externalOverseas?: number;
   externalDomestic?: number;

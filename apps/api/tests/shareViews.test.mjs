@@ -101,7 +101,8 @@ test('看板资产明细：详情浏览数 = detail + detail_direct，分享浏�
   assert.equal(row(CASE_PUBLISHED).sharePv, 1);
   assert.equal(row(CASE_DRAFT), undefined);
   assert.equal(row(CASE_DELETED), undefined);
-  // 资产数以货架为准，不含案例；总览趋势照旧只算工具 / Skill / Agent，直达计入浏览
+  // 货架资产的 total 不含案例；案例单独计 case（只算已发布、未删除的），看板「资产总数」再把它加上
   assert.equal(report.assets.summary.total, 1);
+  assert.equal(report.assets.summary.case, 1);
   assert.equal(report.behavior.totals.views, 3);
 });

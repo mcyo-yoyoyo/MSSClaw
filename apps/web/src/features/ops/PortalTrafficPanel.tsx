@@ -430,10 +430,13 @@ function Module({
   range,
   today,
   onRangeChange,
+  scope,
   children,
 }: {
   id: ModuleId;
   title: string;
+  /** 整个模块共用的统计范围，写一次，不在每张卡下重复 */
+  scope?: string;
   range: RangeSpec;
   today: string;
   onRangeChange: (next: RangeSpec) => void;
@@ -446,9 +449,12 @@ function Module({
       className="scroll-mt-20 rounded-[20px] border border-zinc-200/70 bg-zinc-50/70 p-4 sm:p-5"
     >
       <header className="mb-4 flex flex-wrap items-center justify-between gap-x-5 gap-y-3 border-b border-zinc-200/80 pb-3.5">
-        <h3 id={`dashboard-heading-${id}`} className="text-[17px] font-semibold tracking-tight text-zinc-900">
-          {title}
-        </h3>
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h3 id={`dashboard-heading-${id}`} className="text-[17px] font-semibold tracking-tight text-zinc-900">
+            {title}
+          </h3>
+          {scope ? <p className="text-[11px] text-zinc-400">{scope}</p> : null}
+        </div>
         <RangePicker value={range} today={today} onChange={onRangeChange} />
       </header>
       <div className="space-y-3.5">{children}</div>
@@ -460,19 +466,19 @@ function Module({
 function HeroStat({ label, value, note }: { label: string; value: string; note?: string }) {
   const missing = value === NOT_COLLECTED;
   return (
-    <div className="rounded-2xl border border-zinc-200/60 bg-white px-5 py-4 shadow-apple">
+    <div className="rounded-2xl border border-zinc-200/60 bg-white px-4 py-3 shadow-apple">
       <p className="text-[11.5px] font-medium text-zinc-500">{label}</p>
       <p
         className={cn(
-          'mt-2.5 tabular-nums',
+          'mt-1.5 tabular-nums',
           missing
             ? 'text-[13px] font-medium text-zinc-400'
-            : 'text-[30px] font-semibold leading-none tracking-[-0.025em] text-zinc-900',
+            : 'text-[24px] font-semibold leading-none tracking-[-0.02em] text-zinc-900',
         )}
       >
         {value}
       </p>
-      {note ? <p className="mt-2.5 text-[10.5px] leading-snug text-zinc-400">{note}</p> : null}
+      {note ? <p className="mt-1.5 text-[10.5px] leading-snug text-zinc-400">{note}</p> : null}
     </div>
   );
 }
@@ -492,19 +498,19 @@ function StatBand({ columns, children }: { columns: string; children: ReactNode 
 function BandItem({ label, value, note }: { label: string; value: string; note?: string }) {
   const missing = value === NOT_COLLECTED;
   return (
-    <div className="rounded-2xl border border-zinc-200/60 bg-white px-5 py-4 shadow-apple">
+    <div className="rounded-2xl border border-zinc-200/60 bg-white px-4 py-3 shadow-apple">
       <p className="text-[11.5px] font-medium text-zinc-500">{label}</p>
       <p
         className={cn(
-          'mt-2.5 tabular-nums',
+          'mt-1.5 tabular-nums',
           missing
             ? 'text-[13px] font-medium text-zinc-400'
-            : 'text-[30px] font-semibold leading-none tracking-[-0.025em] text-zinc-900',
+            : 'text-[24px] font-semibold leading-none tracking-[-0.02em] text-zinc-900',
         )}
       >
         {value}
       </p>
-      {note ? <p className="mt-2.5 text-[10.5px] leading-snug text-zinc-400">{note}</p> : null}
+      {note ? <p className="mt-1.5 text-[10.5px] leading-snug text-zinc-400">{note}</p> : null}
     </div>
   );
 }
@@ -1463,7 +1469,8 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
   const assetsSummary = assetsState.report?.assets?.summary ?? EMPTY_ASSET_SUMMARY;
   const assetsHasFacts = Boolean(assetsState.report?.assets);
   const assetsToolTotal = assetsSummary.tool ?? assetsSummary.external + assetsSummary.company;
-  const assetsDisplayTotal = assetsToolTotal + (assetsSummary.skill ?? 0) + (assetsSummary.agent ?? 0);
+  const assetsDisplayTotal =
+    assetsToolTotal + (assetsSummary.skill ?? 0) + (assetsSummary.agent ?? 0) + (assetsSummary.case ?? 0);
   const allAssetRows = useMemo(() => assetsState.report?.assets?.rows ?? [], [assetsState.report?.assets?.rows]);
   const assetRows = useMemo(
     () => allAssetRows.filter((row) => matchesAssetTab(row, assetTab)),
@@ -1511,6 +1518,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
       '资产名称',
       '资产 ID',
       '地区',
+      '浏览总数',
       '站内点击浏览数',
       '分享链接浏览数',
       '收藏数',
@@ -1525,6 +1533,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
       row.name || row.contentId,
       row.contentId,
       regionLabel(row.region),
+      String(row.detailPv),
       String(inAppDetailPv(row)),
       String(row.sharePv),
       String(row.favorites),
@@ -1547,7 +1556,8 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
 
   return (
     <div className="space-y-5 pb-6">
-      <div className="sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-zinc-200/70 bg-white/90 px-1 py-2.5 backdrop-blur-md">
+      {/* 滚动容器有上内边距（20/24px），吸顶后这段会露出底下滚过的内容：用 before 往上补一块白底盖住 */}
+      <div className="sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-zinc-200/70 bg-white/90 px-1 py-2.5 backdrop-blur-md before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-5 before:bg-white md:before:h-6">
         <nav aria-label="看板模块" className="flex flex-wrap items-center gap-0.5">
           {MODULES.map((module) => (
             <button
@@ -1586,7 +1596,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
         {renderRangeIssue('overview', overviewState)}
 
         {overviewState.loading ? (
-          <Skeleton className="h-[116px]" />
+          <Skeleton className="h-[86px]" />
         ) : (
           <HeroRow>
             <HeroStat label="页面浏览数 PV" value={formatCount(overviewTraffic.pv)} note="含游客与登录用户，不去重" />
@@ -1633,7 +1643,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
         {renderRangeIssue('users', usersState)}
 
         {usersState.loading ? (
-          <Skeleton className="h-[116px]" />
+          <Skeleton className="h-[86px]" />
         ) : (
           <HeroRow>
             <HeroStat
@@ -1644,12 +1654,10 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
             <HeroStat
               label="登录用户页面浏览数 PV"
               value={formatCount(usersTraffic.userPv)}
-              note="登录用户浏览数"
             />
             <HeroStat
               label="游客页面浏览数 PV"
               value={formatCount(usersTraffic.guestPv)}
-              note="游客浏览数"
             />
           </HeroRow>
         )}
@@ -1780,13 +1788,13 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
         {inventoryError ? <Notice tone="error">{inventoryError}</Notice> : null}
 
         {inventoryLoading || assetsState.loading ? (
-          <Skeleton className="h-[116px]" />
+          <Skeleton className="h-[86px]" />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <HeroStat
               label="资产总数"
               value={formatOptionalCount(assetsHasFacts ? assetsDisplayTotal : null)}
-              note="外部工具 + 公司工具 + Skill + Agent"
+              note="外部工具 + 公司工具 + Skill + Agent + 案例"
             />
             <HeroStat label="Skill 数" value={formatOptionalCount(assetsSummary.skill)} note="已上架 Skill" />
             <HeroStat label="Agent 数" value={formatOptionalCount(assetsSummary.agent)} note="已上架 Agent" />
@@ -1794,7 +1802,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
         )}
 
         {inventoryLoading || assetsState.loading ? (
-          <Skeleton className="h-[116px]" />
+          <Skeleton className="h-[86px]" />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <HeroStat
@@ -1825,6 +1833,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                 { key: 'company', label: '公司工具', value: assetsSummary.company },
                 { key: 'skill', label: 'Skill', value: assetsSummary.skill ?? 0 },
                 { key: 'agent', label: 'Agent', value: assetsSummary.agent ?? 0 },
+                { key: 'case', label: '案例', value: assetsSummary.case ?? 0 },
               ]}
               emptyLabel="资产库存未采集"
             />
@@ -1858,11 +1867,12 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
             />
           }
         >
-          <table className="w-full min-w-[720px] text-left">
+          <table className="w-full min-w-[800px] text-left">
             <thead>
               <tr>
                 <Th>名称</Th>
                 {assetTab === 'externalTool' ? <Th>海外 / 国内</Th> : null}
+                <Th align="right">浏览总数</Th>
                 <Th align="right">站内点击浏览数</Th>
                 <Th align="right">分享链接浏览数</Th>
                 {/* 案例没有收藏、点赞、下载，只看浏览 */}
@@ -1888,12 +1898,12 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                         </span>
                       </Td>
                     ) : null}
+                    {/* 浏览总数 = 站内点击 + 分享链接 */}
                     <Td align="right" className="font-semibold text-zinc-900">
-                      {formatCount(inAppDetailPv(row))}
+                      {formatCount(row.detailPv)}
                     </Td>
-                    <Td align="right" className="font-semibold text-zinc-900">
-                      {formatCount(row.sharePv)}
-                    </Td>
+                    <Td align="right">{formatCount(inAppDetailPv(row))}</Td>
+                    <Td align="right">{formatCount(row.sharePv)}</Td>
                     {assetTab === 'case' ? null : (
                       <>
                         <Td align="right">{formatCount(row.favorites)}</Td>
@@ -1908,7 +1918,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                 ))
               ) : (
                 <EmptyRow
-                  colSpan={assetTab === 'externalTool' ? 8 : assetTab === 'case' ? 3 : 7}
+                  colSpan={assetTab === 'externalTool' ? 9 : assetTab === 'case' ? 4 : 8}
                   label={assetsState.loading ? '读取中' : assetsHasFacts ? '当前类型暂无资产事实' : '资产明细未采集'}
                 />
               )}
@@ -1921,6 +1931,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
       <Module
         id="behavior"
         title="交互行为"
+        scope="统计范围：外部工具、公司工具、Skill、Agent"
         range={ranges.behavior}
         onRangeChange={(next) => setRange('behavior', next, behaviorState)}
         today={today}
@@ -1934,7 +1945,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
         ) : null}
 
         {assetsState.loading ? (
-          <Skeleton className="h-[116px]" />
+          <Skeleton className="h-[86px]" />
         ) : (
           <div className="space-y-3">
             {/* 8 张卡片：上下两排各 4 张 */}
@@ -1952,17 +1963,14 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
               <HeroStat
                 label="资产收藏数"
                 value={formatCount(behavior.total.favorites)}
-                note="外部工具 + 公司工具 + Skill + Agent"
               />
               <HeroStat
                 label="资产点赞数"
                 value={formatCount(behavior.total.likes)}
-                note="外部工具 + 公司工具 + Skill + Agent"
               />
               <HeroStat
                 label="资产点踩数"
                 value={formatCount(behavior.total.dislikes)}
-                note="外部工具 + 公司工具 + Skill + Agent"
               />
               <HeroStat
                 label="工具跳转数"
