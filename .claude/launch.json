@@ -10,9 +10,9 @@
     {
       "name": "mssclaw-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--workspace", "@mss-claw/web", "--", "--port", "5174", "--strictPort"],
+      "runtimeArgs": ["run", "dev", "--workspace", "@mss-claw/web", "--", "--port", "5173", "--strictPort"],
       "env": { "BROWSER": "none" },
-      "port": 5174
+      "port": 5173
     }
   ]
 }
