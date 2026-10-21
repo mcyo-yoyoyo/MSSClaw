@@ -55,7 +55,10 @@ interface PortalTrafficPanelProps {
 }
 
 interface BehaviorCounts {
+  /** 详情浏览总数（站内点击 + 分享链接） */
   views: number;
+  /** 其中通过分享链接直达的 */
+  shareViews: number;
   favorites: number;
   likes: number;
   dislikes: number;
@@ -76,6 +79,15 @@ const RANGE_OPTIONS: Array<{ value: RangeKey; label: string; days?: number }> = 
   { value: 'last30Days', label: '近 30 天', days: 30 },
   { value: 'custom', label: '自定义' },
 ];
+
+/** 站内点击进详情的浏览数：后端 detailPv 含分享进入，减去分享浏览数得到，两列互不包含 */
+function inAppDetailPv(row: { detailPv: number; sharePv: number }): number {
+  return Math.max(0, row.detailPv - row.sharePv);
+}
+
+function inAppViews(counts: { views: number; shareViews: number }): number {
+  return Math.max(0, counts.views - counts.shareViews);
+}
 
 const ASSET_TABS: Array<{ value: AssetTab; label: string }> = [
   { value: 'externalTool', label: '外部工具' },
@@ -127,6 +139,7 @@ const EMPTY_TRAFFIC: PortalAnalyticsTrafficCounts = {
 
 const EMPTY_BEHAVIOR: BehaviorCounts = {
   views: 0,
+  shareViews: 0,
   favorites: 0,
   likes: 0,
   dislikes: 0,
@@ -268,6 +281,7 @@ function classifyAsset(row: PortalAnalyticsAssetRow): AssetClass | null {
 function addBehavior(target: BehaviorCounts, row: PortalAnalyticsAssetRow): BehaviorCounts {
   return {
     views: target.views + row.detailPv,
+    shareViews: target.shareViews + row.sharePv,
     favorites: target.favorites + row.favorites,
     likes: target.likes + row.likes,
     dislikes: target.dislikes + row.dislikes,
@@ -1497,8 +1511,8 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
       '资产名称',
       '资产 ID',
       '地区',
-      '详情浏览数',
-      '分享浏览数',
+      '站内点击浏览数',
+      '分享链接浏览数',
       '收藏数',
       '点赞数',
       '点踩数',
@@ -1511,7 +1525,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
       row.name || row.contentId,
       row.contentId,
       regionLabel(row.region),
-      String(row.detailPv),
+      String(inAppDetailPv(row)),
       String(row.sharePv),
       String(row.favorites),
       String(row.likes),
@@ -1849,8 +1863,8 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
               <tr>
                 <Th>名称</Th>
                 {assetTab === 'externalTool' ? <Th>海外 / 国内</Th> : null}
-                <Th align="right">详情浏览数</Th>
-                <Th align="right">分享浏览数</Th>
+                <Th align="right">站内点击浏览数</Th>
+                <Th align="right">分享链接浏览数</Th>
                 {/* 案例没有收藏、点赞、下载，只看浏览 */}
                 {assetTab === 'case' ? null : (
                   <>
@@ -1875,9 +1889,11 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                       </Td>
                     ) : null}
                     <Td align="right" className="font-semibold text-zinc-900">
-                      {formatCount(row.detailPv)}
+                      {formatCount(inAppDetailPv(row))}
                     </Td>
-                    <Td align="right">{formatCount(row.sharePv)}</Td>
+                    <Td align="right" className="font-semibold text-zinc-900">
+                      {formatCount(row.sharePv)}
+                    </Td>
                     {assetTab === 'case' ? null : (
                       <>
                         <Td align="right">{formatCount(row.favorites)}</Td>
@@ -1921,11 +1937,17 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
           <Skeleton className="h-[116px]" />
         ) : (
           <div className="space-y-3">
+            {/* 8 张卡片：上下两排各 4 张 */}
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <HeroStat
                 label="资产浏览总数"
-                value={formatCount(behavior.total.views)}
-                note="外部工具 + 公司工具 + Skill + Agent"
+                value={formatCount(inAppViews(behavior.total))}
+                note="平台内点击进入详情，不含分享链接进入"
+              />
+              <HeroStat
+                label="资产分享总数"
+                value={formatCount(behavior.total.shareViews)}
+                note="打开分享链接进入详情"
               />
               <HeroStat
                 label="资产收藏数"
@@ -1942,8 +1964,6 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                 value={formatCount(behavior.total.dislikes)}
                 note="外部工具 + 公司工具 + Skill + Agent"
               />
-            </div>
-            <HeroRow>
               <HeroStat
                 label="工具跳转数"
                 value={formatCount(toolRedirects)}
@@ -1951,16 +1971,17 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
               />
               <HeroStat label="Skill 下载数" value={formatCount(behavior.byClass.skill.downloads)} note="用户点击下载" />
               <HeroStat label="Agent 下载数" value={formatCount(behavior.byClass.agent.downloads)} note="用户点击下载" />
-            </HeroRow>
+            </div>
           </div>
         )}
 
         <TableShell title="资产行为分类统计" subtitle={behaviorRangeLabel}>
-          <table className="w-full min-w-[560px] text-left">
+          <table className="w-full min-w-[640px] text-left">
             <thead>
               <tr>
                 <Th>资产类型</Th>
                 <Th align="right">资产浏览数</Th>
+                <Th align="right">资产分享数</Th>
                 <Th align="right">资产收藏数</Th>
                 <Th align="right">资产点赞数</Th>
                 <Th align="right">资产点踩数</Th>
@@ -1973,8 +1994,9 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                     <Row key={row.key}>
                       <Td className={cn('font-medium', row.muted ? 'text-zinc-500' : 'text-zinc-900')}>{row.label}</Td>
                       <Td align="right" className="font-semibold text-zinc-900">
-                        {formatCount(row.counts.views)}
+                        {formatCount(inAppViews(row.counts))}
                       </Td>
+                      <Td align="right">{formatCount(row.counts.shareViews)}</Td>
                       <Td align="right">{formatCount(row.counts.favorites)}</Td>
                       <Td align="right">{formatCount(row.counts.likes)}</Td>
                       <Td align="right">{formatCount(row.counts.dislikes)}</Td>
@@ -1983,7 +2005,10 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                   <tr className="bg-zinc-50/80">
                     <Td className="font-semibold text-zinc-900">合计</Td>
                     <Td align="right" className="font-semibold text-zinc-900">
-                      {formatCount(behavior.total.views)}
+                      {formatCount(inAppViews(behavior.total))}
+                    </Td>
+                    <Td align="right" className="font-semibold text-zinc-900">
+                      {formatCount(behavior.total.shareViews)}
                     </Td>
                     <Td align="right" className="font-semibold text-zinc-900">
                       {formatCount(behavior.total.favorites)}
@@ -1997,7 +2022,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                   </tr>
                 </>
               ) : (
-                <EmptyRow colSpan={5} label={assetsState.loading ? '读取中' : '资产行为事实未采集'} />
+                <EmptyRow colSpan={6} label={assetsState.loading ? '读取中' : '资产行为事实未采集'} />
               )}
             </tbody>
           </table>
