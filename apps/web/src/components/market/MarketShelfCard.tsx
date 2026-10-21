@@ -290,7 +290,8 @@ export function MarketShelfCard({
             >
               {outcomeLine}
             </p>
-            {card.creator ? (
+            {/* 有标签行时创建人放在标签行右侧；紧凑卡片没有标签行，放在简介下 */}
+            {card.creator && (compact || !showTags) ? (
               <p className="mt-1 truncate text-[11px] text-[#86868b]" title={`创建人：${card.creator}`}>
                 创建人：{card.creator}
               </p>
@@ -342,6 +343,14 @@ export function MarketShelfCard({
                   {b.label}
                 </span>
               ))}
+            {card.creator ? (
+              <span
+                className="ml-auto max-w-[50%] truncate text-[11px] text-[#86868b]"
+                title={`创建人：${card.creator}`}
+              >
+                创建人：{card.creator}
+              </span>
+            ) : null}
           </div>
         ) : null}
       </button>
