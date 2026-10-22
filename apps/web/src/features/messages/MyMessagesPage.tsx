@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { AnnouncementBody } from '@/components/common/AnnouncementBody';
 import {
   CenterPageHeader,
   CenterSearchInput,
@@ -206,9 +207,14 @@ export function MyMessagesPage() {
                     </p>
                   </div>
                 </div>
-                <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-zinc-700">
-                  {selected.body}
-                </p>
+                {/* 公告正文可带图片，其它消息仍是纯文本 */}
+                {selected.kind === 'announce' ? (
+                  <AnnouncementBody body={selected.body} />
+                ) : (
+                  <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-zinc-700">
+                    {selected.body}
+                  </p>
+                )}
                 {selected.meta?.warroomTitle || selected.meta?.query ? (
                   <div className="rounded-xl border border-zinc-100 bg-zinc-50/80 px-3 py-2.5 text-[11px] text-zinc-500">
                     {selected.meta.warroomTitle ? (
