@@ -64,7 +64,7 @@ export function MarketShelfCard({
   const featured = variant === 'featured';
   const compact = variant === 'compact';
   const homeDense = Boolean(className?.includes('home-channel-card'));
-  const stackedFooter = card.kind === 'projects' && !homeDense;
+  const projectFooter = card.kind === 'projects' && !homeDense;
   const primaryLabel = primaryLabelOverride ?? '详情';
   const previewOnly = interactionMode === 'preview';
   const showEngagementOnlyStats = previewOnly || showEngagementOnly;
@@ -359,16 +359,13 @@ export function MarketShelfCard({
         <div
           className={cn(
             'flex flex-wrap items-center gap-2 border-t border-black/[0.04]',
-            stackedFooter && (inlineAction
-              ? 'grid grid-cols-[auto_1fr_auto_auto]'
-              : 'grid grid-cols-[auto_1fr_auto]'),
             compact ? 'mt-2.5 pt-2.5' : homeDense ? 'mt-2.5 pt-2.5' : 'mt-3.5 pt-3',
           )}
         >
         <div
           className={cn(
             'mr-auto inline-flex flex-wrap items-center gap-0.5 text-[10px] tabular-nums',
-            stackedFooter && 'col-span-full w-full flex-nowrap whitespace-nowrap [&>*]:flex-1 [&>*]:justify-center [&>*]:px-0',
+            projectFooter && 'mr-0 flex-nowrap whitespace-nowrap',
           )}
         >
           <span
@@ -476,6 +473,7 @@ export function MarketShelfCard({
             </button>
           ) : null}
         </div>
+        <div className={projectFooter ? 'flex flex-1 items-center justify-end gap-2' : 'contents'}>
         {enableCompare && !showEngagementOnlyStats ? (
           <button
             type="button"
@@ -486,7 +484,6 @@ export function MarketShelfCard({
             className={cn(
               'inline-flex shrink-0 items-center justify-center rounded-lg transition',
               compact ? 'h-7 w-7' : 'h-8 w-8',
-              stackedFooter && 'col-start-1 row-start-2',
               compareSelected
                 ? 'bg-sky-50 text-sky-700 hover:bg-sky-100'
                 : 'bg-black/[0.04] text-zinc-400 hover:bg-black/[0.07] hover:text-zinc-600',
@@ -509,8 +506,8 @@ export function MarketShelfCard({
               'ml-0.5 shrink-0 rounded-lg bg-zinc-100 px-3 py-1.5 text-[11px] font-medium text-zinc-500 transition',
               'hover:bg-zinc-200/80 hover:text-zinc-600',
               compact ? 'px-2.5 py-1 text-[10px]' : null,
-              stackedFooter && 'col-start-3 row-start-2 inline-flex items-center justify-center whitespace-nowrap',
-              stackedFooter && (compact ? 'h-7' : 'h-8'),
+              projectFooter && 'ml-0 inline-flex items-center justify-center whitespace-nowrap',
+              projectFooter && (compact ? 'h-7' : 'h-8'),
             )}
           >
             {primaryLabel}
@@ -520,14 +517,15 @@ export function MarketShelfCard({
           <div
             className={cn(
               'shrink-0',
-              stackedFooter && 'col-start-4 row-start-2 whitespace-nowrap',
-              stackedFooter && (compact ? '[&>button]:h-7' : '[&>button]:h-8'),
+              projectFooter && 'whitespace-nowrap',
+              projectFooter && (compact ? '[&>button]:h-7' : '[&>button]:h-8'),
             )}
             onClick={(event) => event.stopPropagation()}
           >
             {inlineAction}
           </div>
         ) : null}
+        </div>
         </div>
       ) : null}
       {footerActions ? (
