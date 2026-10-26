@@ -73,3 +73,16 @@ export async function deleteCaseInsight(id: string, version: number) {
 export async function restoreCaseInsight(id: string, version: number) {
   return request<{ id: string; version: number; status: string }>(route(`/${encodeURIComponent(id)}/restore`), 'POST', { version });
 }
+
+export type ArticleReadPoint = { date: string; pv: number; uv: number };
+export type ArticleReadRow = { id: string; pv: number; uv: number; lifetime: { pv: number; uv: number }; series: ArticleReadPoint[] };
+export type ArticleReadReport = {
+  from: string; to: string; timezone: 'Asia/Shanghai'; updatedAt: string; trackingStartedAt: string | null;
+  totals: { pv: number; uv: number; articles: number }; series: ArticleReadPoint[]; items: ArticleReadRow[];
+};
+export function fetchArticleReadReport(from: string, to: string) {
+  return request<ArticleReadReport>(route('/reads?' + new URLSearchParams({ from, to })));
+}
+export function recordArticleRead(id: string, eventId: string) {
+  return request(route(`/${encodeURIComponent(id)}/read`), 'POST', { eventId });
+}

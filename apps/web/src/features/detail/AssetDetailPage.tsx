@@ -12,7 +12,6 @@ import type { AppView } from '@/domain/appView';
 import { setAiBriefContentMode } from '@/domain/aiBriefContentMode';
 import { copyText } from '@/domain/assetShare';
 import { canViewAsset } from '@/domain/assetVisibility';
-import { prepareCaseArticleHtml } from '@/domain/caseArticleHtml';
 import { takeDetailAction } from '@/domain/directEntry';
 import { allowsMarketScenarioRun } from '@/domain/marketRunCapability';
 import { canExecuteChat } from '@/domain/permissions';
@@ -20,7 +19,7 @@ import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import { relatedTools } from '@/domain/relatedTools';
 import { resolveToolLogoUrl } from '@/domain/toolLogo';
 import type { AppViewRouterHandlers } from '@/features/AppViewRouter';
-import { CaseHtml } from '@/features/ai-brief/CaseHtml';
+import { CaseInsightBody } from '@/features/ai-brief/CaseInsightBody';
 import { useCaseInsightArticle } from '@/features/ai-brief/useCaseInsightArticle';
 import { CatalogAgentDetailModal } from '@/features/market/CatalogAgentDetailModal';
 import { MarketSkillDetailModal } from '@/features/market/MarketSkillDetailModal';
@@ -32,8 +31,6 @@ import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { usePortalContentStore } from '@/stores/portalContentStore';
 import { useSessionStore } from '@/stores/sessionStore';
-
-const CASEBOOK_BASE = `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}casebook/`;
 
 /** 详情页的地址可能被平台内跳转、前进后退改掉：跟着 history 走，而不是只读一次 */
 function useDetailRoute(): AppRouteParams {
@@ -271,12 +268,7 @@ export function AssetDetailPage({ handlers }: { handlers: AppViewRouterHandlers 
       <div className="mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-black/5 bg-white shadow-apple-lg">
         <div className="flex shrink-0 justify-end border-b border-zinc-100 px-4 py-2.5">{shareButton}</div>
         <div className="min-h-0 flex-1">
-          <CaseHtml
-            html={prepareCaseArticleHtml(caseState.html, caseState.article.sourceUrl)}
-            title={caseState.article.title}
-            baseHref={new URL(`${CASEBOOK_BASE}cases/`, window.location.origin).href}
-            standalone
-          />
+          <CaseInsightBody key={caseState.article.id} html={caseState.html} article={caseState.article} />
         </div>
       </div>
     );
