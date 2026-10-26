@@ -4,6 +4,7 @@ import { after, before, test } from 'node:test';
 import { PersistenceController } from '../dist/persistence/persistence.controller.js';
 import { PersistenceService } from '../dist/persistence/persistence.service.js';
 import { PortalAnalyticsService } from '../dist/persistence/portal-analytics.service.js';
+import { CaseInsightsService } from '../dist/persistence/case-insights.service.js';
 import { PrismaService } from '../dist/prisma/prisma.service.js';
 import { replaceAssets } from '../dist/persistence/asset-catalog.js';
 import { portalAnalyticsDateKey, shiftPortalAnalyticsDateKey } from '../dist/persistence/portal-analytics-time.js';
@@ -43,6 +44,35 @@ before(async () => {
   });
   // 游客：会话校验一律未登录
   controller = new PersistenceController(new PersistenceService(prisma), {}, { me: async () => ({ ok: false }) });
+});
+
+test('same guest using both case entry paths has two PV but one UV in both reports', async () => {
+  const date = portalAnalyticsDateKey();
+  const id = '44444444-4444-4444-8444-444444444444';
+  await prisma.caseInsightArticle.create({ data: {
+    id, title: 'Case UV', publishedTitle: 'Case UV', status: 'published', domainIds: [], tags: [], draftMarkdown: '',
+    publishedHtml: '<article>Case</article>', publishedAt: new Date(),
+  } });
+  try {
+    const body = { assetType: 'case', visitorId: 'guest:44444444-4444-4444-8444-444444444444' };
+    const eventId = 'case-uv-44444444-4444-4444-8444-444444444444';
+    await controller.mutateMarketEngagement(id, { ...body, action: 'detail', eventId });
+    await controller.mutateMarketEngagement(id, { ...body, action: 'detail', eventId });
+    await controller.mutateMarketEngagement(id, { ...body, action: 'detail_direct', eventId: eventId + '-direct' });
+    const dashboard = await new PortalAnalyticsService(prisma).getReport(WS, 7);
+    const dashboardRow = dashboard.assets.rows.find(row => row.contentId === id);
+    const caseReport = await new CaseInsightsService(prisma, new PersistenceService(prisma)).readReport(date, date);
+    const caseRow = caseReport.items.find(row => row.id === id);
+    assert.equal(dashboardRow.detailPv, 2);
+    assert.equal(dashboardRow.detailUv, 1);
+    assert.equal(dashboardRow.sharePv, 1);
+    assert.equal(caseRow.pv, dashboardRow.detailPv);
+    assert.equal(caseRow.uv, dashboardRow.detailUv);
+  } finally {
+    await prisma.marketEngagementEvent.deleteMany({ where: { contentId: id } });
+    await prisma.marketEngagement.deleteMany({ where: { contentId: id } });
+    await prisma.caseInsightArticle.delete({ where: { id } });
+  }
 });
 
 after(async () => {

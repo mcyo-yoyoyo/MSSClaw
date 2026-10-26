@@ -1,8 +1,8 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { createHash } from 'node:crypto';
 import { PLATFORM_WORKSPACE_ID } from '../common/platform-workspace';
+import { PersistenceService } from './persistence.service';
 import { portalAnalyticsDateKey, shiftPortalAnalyticsDateKey } from './portal-analytics-time';
 
 type ArticleInput = {
@@ -81,7 +81,7 @@ function asList(value: Prisma.JsonValue | null): string[] {
 
 @Injectable()
 export class CaseInsightsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly persistence: PersistenceService) {}
 
   async recordRead(id: string, userId: string, eventId: string) {
     if (!/^[A-Za-z0-9._:-]{8,128}$/.test(eventId)) throw new BadRequestException('invalid_read_event');
@@ -90,16 +90,10 @@ export class CaseInsightsService {
       select: { publishedHtml: true, publishedMarkdown: true },
     });
     if (!article || (!article.publishedHtml && !article.publishedMarkdown)) throw new NotFoundException('article_not_published');
-    // Retain the reader identity format so migrated historical events keep their UV identity.
-    const visitorHash = createHash('sha256').update(`${PLATFORM_WORKSPACE_ID}:case-reader:${userId}`).digest('hex');
-    try {
-      await this.prisma.marketEngagementEvent.create({ data: {
-        eventId: `case-read:${eventId}`, contentId: id, assetType: 'case-insight', action: 'case_read',
-        dateKey: portalAnalyticsDateKey(), visitorHash, visitorType: 'user',
-      } });
-    } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error;
-    }
+    // Compatibility for old clients only. New clients use the platform detail endpoint.
+    await this.persistence.mutateMarketEngagement(PLATFORM_WORKSPACE_ID, id, {
+      eventId: `case-read:${eventId}`, assetType: 'case', action: 'detail', userId,
+    });
     return { ok: true };
   }
 
@@ -112,7 +106,13 @@ export class CaseInsightsService {
       && new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) === value;
     if (!validDate(start) || !validDate(end) || start > end || end > today
       || (Date.parse(end) - Date.parse(start)) / 86400000 > 89) throw new BadRequestException('invalid_read_date_range');
-    const where = { assetType: 'case-insight', action: 'case_read' };
+    const articlesInCatalog = await this.prisma.caseInsightArticle.findMany({ select: { id: true } });
+    // Include archived/trash article history, but never mix the old parallel case_read stream.
+    const where = {
+      contentId: { in: articlesInCatalog.map(article => article.id) },
+      assetType: { in: ['case', 'unknown', ''] },
+      action: { in: ['view', 'detail', 'detail_direct'] },
+    };
     const [groups, first] = await Promise.all([
       this.prisma.marketEngagementEvent.groupBy({ by: ['contentId', 'dateKey', 'visitorHash'], where, _count: { _all: true } }),
       this.prisma.marketEngagementEvent.findFirst({ where, orderBy: { occurredAt: 'asc' }, select: { occurredAt: true } }),
@@ -140,7 +140,7 @@ export class CaseInsightsService {
     }
     const counts = (value: Counts) => ({ pv: value.pv, uv: value.readers.size });
     const series = (values: Map<string, Counts>) => [...daily.keys()].map(date => ({ date, ...counts(values.get(date) || make()) }));
-    return { from: start, to: end, timezone: 'Asia/Shanghai', updatedAt: new Date().toISOString(),
+    return { from: start, to: end, timezone: 'Asia/Shanghai', source: 'platform-case-views', updatedAt: new Date().toISOString(),
       trackingStartedAt: first?.occurredAt.toISOString() || null,
       totals: { ...counts(totals), articles: [...articles.values()].filter(row => row.period.pv > 0).length },
       series: series(daily), items: [...articles].map(([id, row]) => ({ id, ...counts(row.period), lifetime: counts(row.lifetime), series: series(row.daily) })) };

@@ -1,31 +1,29 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Prisma } from '@prisma/client';
 import { CaseInsightsService } from '../dist/persistence/case-insights.service.js';
 import { CaseInsightsController } from '../dist/persistence/case-insights.controller.js';
 import { portalAnalyticsDateKey, shiftPortalAnalyticsDateKey } from '../dist/persistence/portal-analytics-time.js';
 
-test('published case reads use the single-platform event shape and retain idempotency', async () => {
-  const events = new Map();
+test('old read endpoint delegates to platform detail collection with a stable idempotency key', async () => {
+  const calls = [];
   const service = new CaseInsightsService({
     caseInsightArticle: { findFirst: async () => ({ publishedHtml: '<article>Case</article>' }) },
-    marketEngagementEvent: { create: async ({ data }) => {
-      if (events.has(data.eventId)) throw new Prisma.PrismaClientKnownRequestError('duplicate', { code: 'P2002', clientVersion: 'test' });
-      events.set(data.eventId, data);
-    } },
+  }, {
+    mutateMarketEngagement: async (workspace, id, input) => { calls.push({ workspace, id, input }); return {}; },
   });
   await service.recordRead('article-a', 'reader-a', 'event-0001');
   await service.recordRead('article-a', 'reader-a', 'event-0001');
   await service.recordRead('article-a', 'reader-a', 'event-0002');
-  assert.equal(events.size, 2);
-  const event = events.get('case-read:event-0001');
-  assert.equal(event.contentId, 'article-a');
-  assert.equal(event.assetType, 'case-insight');
-  assert.equal(event.action, 'case_read');
-  assert.equal(event.dateKey, portalAnalyticsDateKey());
-  assert.equal(event.visitorHash.length, 64);
-  assert.equal('workspaceId' in event, false);
-  assert.equal(event.visitorHash, events.get('case-read:event-0002').visitorHash);
+  assert.equal(calls.length, 3);
+  const event = calls[0].input;
+  assert.equal(calls[0].id, 'article-a');
+  assert.equal(calls[0].workspace, 'ws-cn-marketing');
+  assert.equal(event.assetType, 'case');
+  assert.equal(event.action, 'detail');
+  assert.equal(event.userId, 'reader-a');
+  assert.equal(event.eventId, 'case-read:event-0001');
+  assert.equal(event.eventId, calls[1].input.eventId);
+  assert.notEqual(event.eventId, calls[2].input.eventId);
 });
 
 test('invalid events and unavailable articles cannot create read events', async () => {
@@ -53,16 +51,22 @@ test('read report deduplicates readers, preserves lifetime counts, and fills emp
     { contentId: 'b', dateKey: end, visitorHash: 'u1', _count: { _all: 1 } },
     { contentId: 'b', dateKey: end, visitorHash: 'u2', _count: { _all: 1 } },
   ];
-  const service = new CaseInsightsService({ marketEngagementEvent: {
-    groupBy: async ({ where }) => {
-      assert.deepEqual(where, { assetType: 'case-insight', action: 'case_read' });
-      return groups;
-    },
-    findFirst: async () => ({ occurredAt: new Date(old + 'T00:00:00Z') }),
+  const service = new CaseInsightsService({
+    caseInsightArticle: { findMany: async () => [{ id: 'a' }, { id: 'b' }] },
+    marketEngagementEvent: {
+      groupBy: async ({ where }) => {
+        assert.deepEqual(where, {
+          contentId: { in: ['a', 'b'] }, assetType: { in: ['case', 'unknown', ''] },
+          action: { in: ['view', 'detail', 'detail_direct'] },
+        });
+        return groups;
+      },
+      findFirst: async () => ({ occurredAt: new Date(old + 'T00:00:00Z') }),
   } });
   const report = await service.readReport(start, end);
   assert.deepEqual(report.totals, { pv: 5, uv: 2, articles: 2 });
   assert.equal(report.timezone, 'Asia/Shanghai');
+  assert.equal(report.source, 'platform-case-views');
   assert.equal(report.series.length, 3);
   assert.deepEqual(report.series[1], { date: shiftPortalAnalyticsDateKey(start, 1), pv: 0, uv: 0 });
   const article = report.items.find(item => item.id === 'a');

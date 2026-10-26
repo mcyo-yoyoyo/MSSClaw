@@ -77,12 +77,13 @@ export async function restoreCaseInsight(id: string, version: number) {
 export type ArticleReadPoint = { date: string; pv: number; uv: number };
 export type ArticleReadRow = { id: string; pv: number; uv: number; lifetime: { pv: number; uv: number }; series: ArticleReadPoint[] };
 export type ArticleReadReport = {
-  from: string; to: string; timezone: 'Asia/Shanghai'; updatedAt: string; trackingStartedAt: string | null;
+  from: string; to: string; timezone: 'Asia/Shanghai'; source: 'platform-case-views'; updatedAt: string; trackingStartedAt: string | null;
   totals: { pv: number; uv: number; articles: number }; series: ArticleReadPoint[]; items: ArticleReadRow[];
 };
 export function fetchArticleReadReport(from: string, to: string) {
   return request<ArticleReadReport>(route('/reads?' + new URLSearchParams({ from, to })));
 }
 export function recordArticleRead(id: string, eventId: string) {
+  // Legacy compatibility only; normal detail pages use the shared market-engagement endpoint.
   return request(route(`/${encodeURIComponent(id)}/read`), 'POST', { eventId });
 }

@@ -295,7 +295,7 @@ export function PortalCaseInsightsPanel() {
       setQueue(next);
       setDraft(updated.draft);
       setMessage(action === 'publish'
-        ? '已发布，用户现在可以在 AI 快讯阅读'
+        ? '已发布，用户现在可以在 AI 快讯浏览'
         : updated.existing?.status === 'published'
           ? '运营信息和正文已保存；线上版本未改变，点击“直接发布”后更新'
           : '已保存为草稿');
@@ -423,7 +423,7 @@ export function PortalCaseInsightsPanel() {
           </div>
           <div className="flex flex-wrap gap-2">
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索案例" aria-label="搜索案例" className="h-9 w-48 rounded border border-zinc-200 px-3 text-xs outline-none focus:border-blue-500" />
-            <select aria-label="文章排序" value={readSort} onChange={event => setReadSort(event.target.value)} className="h-9 rounded border border-zinc-200 bg-white px-2 text-xs"><option value="default">默认顺序</option><option value="pv">阅读次数从高到低</option></select>
+            <select aria-label="文章排序" value={readSort} onChange={event => setReadSort(event.target.value)} className="h-9 rounded border border-zinc-200 bg-white px-2 text-xs"><option value="default">默认顺序</option><option value="pv">浏览次数从高到低</option></select>
             <select value={domainFilter} onChange={(event) => setDomainFilter(event.target.value)} aria-label="按领域筛选" className="h-9 rounded border border-zinc-200 bg-white px-2 text-xs">
               <option value="">全部领域</option>
               {HQ_DEPTS.map((dept) => <option key={dept.id} value={dept.id}>{dept.label}</option>)}
@@ -451,7 +451,7 @@ export function PortalCaseInsightsPanel() {
                 {item.summary ? <p className="mt-1 line-clamp-1 max-w-4xl text-xs text-zinc-500">{item.summary}</p> : null}
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-2">
-                <div className="flex gap-4 px-3 text-center text-xs"><div className="text-zinc-500">阅读次数<strong className="mt-1 block text-sm text-zinc-900">{readAnalytics.report ? (readRows.get(item.id)?.pv || 0).toLocaleString('zh-CN') : '—'}</strong></div><div className="text-zinc-500">阅读人数<strong className="mt-1 block text-sm text-zinc-900">{readAnalytics.report ? (readRows.get(item.id)?.uv || 0).toLocaleString('zh-CN') : '—'}</strong></div></div>
+                <div className="flex gap-4 px-3 text-center text-xs"><div className="text-zinc-500">浏览次数<strong className="mt-1 block text-sm text-zinc-900">{readAnalytics.report ? (readRows.get(item.id)?.pv || 0).toLocaleString('zh-CN') : '—'}</strong></div><div className="text-zinc-500">浏览人数<strong className="mt-1 block text-sm text-zinc-900">{readAnalytics.report ? (readRows.get(item.id)?.uv || 0).toLocaleString('zh-CN') : '—'}</strong></div></div>
                 <button type="button" onClick={() => setReadArticle(item)} className="apple-btn-secondary px-2.5 py-1.5 text-xs">数据</button>
                 {item.deletedAt ? <button type="button" disabled={busy} onClick={() => void restoreFromTrash(item)} className="apple-btn-secondary px-2.5 py-1.5 text-xs">恢复</button> : <>
                   <button type="button" disabled={busy} onClick={() => stageExisting(item)} className="apple-btn-secondary px-2.5 py-1.5 text-xs">预览与编辑</button>

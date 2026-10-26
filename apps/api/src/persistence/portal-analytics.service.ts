@@ -1347,6 +1347,20 @@ export class PortalAnalyticsService {
       }
       assetMap.set(contentId, asset);
     }
+    // Case UV must be distinct across dates and entry actions, not a sum of per-action UVs.
+    const caseVisitorRows = catalog.some(row => row.assetType === 'case')
+      ? await this.prisma.$queryRaw<Array<{ contentId: string; uv: number }>>`
+        SELECT "content_id" AS "contentId", COUNT(DISTINCT "visitor_hash") AS "uv"
+        FROM "market_engagement_event"
+        WHERE "date_key" BETWEEN ${from} AND ${to}
+          AND "action" IN ('view', 'detail', 'detail_direct')
+          AND "asset_type" IN ('case', 'unknown', '')
+        GROUP BY "content_id"
+      ` : [];
+    const caseVisitors = new Map(caseVisitorRows.map(row => [row.contentId, count(row.uv)]));
+    for (const asset of assetMap.values()) {
+      if (asset.assetType === 'case') asset.detailUv = caseVisitors.get(asset.contentId) ?? 0;
+    }
     for (const row of marketEngagementRows) {
       const contentId = stringValue(row.contentId);
       if (!contentId || !isBlackCatalogAsset(contentId)) continue;
