@@ -48,7 +48,7 @@ export function MarketShelfCard({
   enableCompare?: boolean;
   /** 是否展示场景、区域、类型等标签；首页三栏关闭。 */
   showTags?: boolean;
-  /** 紧邻“详情”左侧的轻量操作。 */
+  /** 与“详情”成组的轻量操作。 */
   inlineAction?: ReactNode;
   /** 管理后台专用：将操作集中收纳到卡片内部。 */
   footerActions?: ReactNode;
@@ -64,6 +64,7 @@ export function MarketShelfCard({
   const featured = variant === 'featured';
   const compact = variant === 'compact';
   const homeDense = Boolean(className?.includes('home-channel-card'));
+  const stackedFooter = card.kind === 'projects' && !homeDense;
   const primaryLabel = primaryLabelOverride ?? '详情';
   const previewOnly = interactionMode === 'preview';
   const showEngagementOnlyStats = previewOnly || showEngagementOnly;
@@ -358,10 +359,18 @@ export function MarketShelfCard({
         <div
           className={cn(
             'flex flex-wrap items-center gap-2 border-t border-black/[0.04]',
+            stackedFooter && (inlineAction
+              ? 'grid grid-cols-[auto_1fr_auto_auto]'
+              : 'grid grid-cols-[auto_1fr_auto]'),
             compact ? 'mt-2.5 pt-2.5' : homeDense ? 'mt-2.5 pt-2.5' : 'mt-3.5 pt-3',
           )}
         >
-        <div className="mr-auto inline-flex flex-wrap items-center gap-0.5 text-[10px] tabular-nums">
+        <div
+          className={cn(
+            'mr-auto inline-flex flex-wrap items-center gap-0.5 text-[10px] tabular-nums',
+            stackedFooter && 'col-span-full w-full flex-nowrap whitespace-nowrap [&>*]:flex-1 [&>*]:justify-center [&>*]:px-0',
+          )}
+        >
           <span
             className="inline-flex items-center gap-0.5 px-1 py-0.5 text-[#86868b]"
             title="查看"
@@ -477,6 +486,7 @@ export function MarketShelfCard({
             className={cn(
               'inline-flex shrink-0 items-center justify-center rounded-lg transition',
               compact ? 'h-7 w-7' : 'h-8 w-8',
+              stackedFooter && 'col-start-1 row-start-2',
               compareSelected
                 ? 'bg-sky-50 text-sky-700 hover:bg-sky-100'
                 : 'bg-black/[0.04] text-zinc-400 hover:bg-black/[0.07] hover:text-zinc-600',
@@ -491,11 +501,6 @@ export function MarketShelfCard({
             />
           </button>
         ) : null}
-        {inlineAction ? (
-          <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
-            {inlineAction}
-          </div>
-        ) : null}
         {!showEngagementOnlyStats ? (
           <button
             type="button"
@@ -504,10 +509,24 @@ export function MarketShelfCard({
               'ml-0.5 shrink-0 rounded-lg bg-zinc-100 px-3 py-1.5 text-[11px] font-medium text-zinc-500 transition',
               'hover:bg-zinc-200/80 hover:text-zinc-600',
               compact ? 'px-2.5 py-1 text-[10px]' : null,
+              stackedFooter && 'col-start-3 row-start-2 inline-flex items-center justify-center whitespace-nowrap',
+              stackedFooter && (compact ? 'h-7' : 'h-8'),
             )}
           >
             {primaryLabel}
           </button>
+        ) : null}
+        {inlineAction ? (
+          <div
+            className={cn(
+              'shrink-0',
+              stackedFooter && 'col-start-4 row-start-2 whitespace-nowrap',
+              stackedFooter && (compact ? '[&>button]:h-7' : '[&>button]:h-8'),
+            )}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {inlineAction}
+          </div>
         ) : null}
         </div>
       ) : null}

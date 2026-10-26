@@ -63,7 +63,7 @@ test('Skill Hub 仅在当前方案开放执行且 Skill 可调用时展示调用
   assert.equal(
     skillHubSource.match(/inlineAction=\{renderSkillInvokeAction\(skill\)\}/g)?.length,
     2,
-    '精选和更多 Skill 卡片都必须在详情左侧复用同一套调用门禁',
+    '精选和更多 Skill 卡片都必须在操作区复用同一套调用门禁',
   );
 });
 
