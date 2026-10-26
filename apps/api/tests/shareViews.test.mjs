@@ -75,6 +75,34 @@ test('same guest using both case entry paths has two PV but one UV in both repor
   }
 });
 
+test('legacy retries preserve events older than 180 days and count a long event ID once', async () => {
+  const id = '66666666-6666-4666-8666-666666666666';
+  const old = new Date(Date.now() - 181 * 86400000);
+  await prisma.caseInsightArticle.create({ data: {
+    id, title: 'Retained Case', status: 'published', domainIds: [], tags: [], draftMarkdown: '', publishedHtml: '<p>Case</p>',
+  } });
+  try {
+    await prisma.marketEngagementEvent.create({ data: {
+      contentId: id, assetType: 'case', action: 'detail', dateKey: portalAnalyticsDateKey(old),
+      visitorHash: 'old-reader', visitorType: 'user', occurredAt: old,
+    } });
+    await prisma.marketEngagement.create({ data: { contentId: id, views: 1 } });
+    const cases = new CaseInsightsService(prisma, new PersistenceService(prisma));
+    for (let i = 0; i < 256; i++) await cases.recordRead(id, 'legacy-reader', 'a'.repeat(128));
+    const date = portalAnalyticsDateKey();
+    const report = await cases.readReport(date, date);
+    const row = report.items.find(item => item.id === id);
+    assert.deepEqual(row.lifetime, { pv: 2, uv: 2 });
+    assert.equal(row.pv, 1);
+    assert.equal(await prisma.marketEngagementEvent.count({ where: { contentId: id } }), 2);
+    assert.equal((await prisma.marketEngagement.findUnique({ where: { contentId: id } })).views, 2);
+  } finally {
+    await prisma.marketEngagementEvent.deleteMany({ where: { contentId: id } });
+    await prisma.marketEngagement.deleteMany({ where: { contentId: id } });
+    await prisma.caseInsightArticle.delete({ where: { id } });
+  }
+});
+
 after(async () => {
   await prisma?.$disconnect().catch(() => undefined);
   if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;

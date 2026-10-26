@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { createHash } from 'crypto';
 import { PLATFORM_WORKSPACE_ID } from '../common/platform-workspace';
 import { PersistenceService } from './persistence.service';
 import { portalAnalyticsDateKey, shiftPortalAnalyticsDateKey } from './portal-analytics-time';
@@ -91,8 +92,11 @@ export class CaseInsightsService {
     });
     if (!article || (!article.publishedHtml && !article.publishedMarkdown)) throw new NotFoundException('article_not_published');
     // Compatibility for old clients only. New clients use the platform detail endpoint.
+    const prefixedEventId = `case-read:${eventId}`;
     await this.persistence.mutateMarketEngagement(PLATFORM_WORKSPACE_ID, id, {
-      eventId: `case-read:${eventId}`, assetType: 'case', action: 'detail', userId,
+      // Preserve existing retry keys; hash only IDs that exceed the platform limit after prefixing.
+      eventId: prefixedEventId.length <= 128 ? prefixedEventId : `case-read:sha256:${createHash('sha256').update(eventId).digest('hex')}`,
+      assetType: 'case', action: 'detail', userId,
     });
     return { ok: true };
   }

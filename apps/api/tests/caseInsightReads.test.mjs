@@ -40,6 +40,28 @@ test('invalid events and unavailable articles cannot create read events', async 
   assert.equal(created, 0);
 });
 
+test('legacy event IDs stay valid at prefix boundaries and keep stable, distinct retry keys', async () => {
+  const keys = [];
+  const service = new CaseInsightsService({
+    caseInsightArticle: { findFirst: async () => ({ publishedHtml: '<p>Case</p>' }) },
+  }, {
+    mutateMarketEngagement: async (_workspace, _id, input) => {
+      assert.match(input.eventId, /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/);
+      keys.push(input.eventId);
+    },
+  });
+  for (const length of [8, 118, 119, 128]) {
+    const id = 'a'.repeat(length);
+    await service.recordRead('article-a', 'reader-a', id);
+    await service.recordRead('article-a', 'reader-a', id);
+    assert.equal(keys.at(-1), keys.at(-2));
+    if (length <= 118) assert.equal(keys.at(-1), `case-read:${id}`);
+    else assert.match(keys.at(-1), /^case-read:sha256:[a-f0-9]{64}$/);
+  }
+  assert.equal(new Set(keys).size, 4);
+  await assert.rejects(service.recordRead('article-a', 'reader-a', 'a'.repeat(129)), error => error.getStatus() === 400);
+});
+
 test('read report deduplicates readers, preserves lifetime counts, and fills empty days', async () => {
   const end = portalAnalyticsDateKey();
   const start = shiftPortalAnalyticsDateKey(end, -2);
