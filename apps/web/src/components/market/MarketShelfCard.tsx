@@ -7,6 +7,7 @@ import {
   type MarketShelfCard as MarketShelfCardModel,
 } from '@/domain/marketShelf';
 import { EXECUTION_TRUST_META } from '@/domain/executionTrust';
+import { isNewAsset } from '@/domain/contentBadges';
 import { downloadSkillFile } from '@/domain/skillExport';
 import { requireLogin } from '@/stores/authGateStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
@@ -71,6 +72,8 @@ export function MarketShelfCard({
   const assetType =
     card.assetType ??
     (card.kind === 'external' || card.kind === 'internal' ? ('tool' as const) : undefined);
+  const showNew = card.kind === 'projects' &&
+    (assetType === 'skill' || assetType === 'agent') && isNewAsset(card);
 
   const regionTone =
     card.kind === 'external' && card.region === 'overseas'
@@ -192,30 +195,32 @@ export function MarketShelfCard({
         className,
       )}
     >
-      {showHot ? (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute -right-1 -top-1 z-10 inline-flex items-center gap-0.5 rounded-md bg-gradient-to-br from-[#E11D48] via-[#F43F5E] to-[#FB923C] px-1.5 py-[3px] text-[9px] font-extrabold tracking-[0.08em] text-white shadow-[0_4px_10px_-3px_rgba(225,29,72,0.55)] ring-1 ring-white/70"
-        >
-          HOT
-        </span>
+      {showHot || showNew ? (
+        <div className="absolute -right-1 -top-1 z-10 flex gap-1">
+          {showNew ? (
+            <span
+              aria-label="最近 14 天内创建或更新"
+              title="最近 14 天内创建或更新"
+              className="inline-flex items-center rounded-md bg-gradient-to-br from-blue-600 to-blue-500 px-1.5 py-[3px] text-[9px] font-extrabold tracking-[0.08em] text-white shadow-[0_4px_10px_-3px_rgba(37,99,235,0.55)] ring-1 ring-white/70"
+            >
+              NEW
+            </span>
+          ) : null}
+          {showHot ? (
+            <span
+              aria-hidden
+              className="pointer-events-none inline-flex items-center gap-0.5 rounded-md bg-gradient-to-br from-[#E11D48] via-[#F43F5E] to-[#FB923C] px-1.5 py-[3px] text-[9px] font-extrabold tracking-[0.08em] text-white shadow-[0_4px_10px_-3px_rgba(225,29,72,0.55)] ring-1 ring-white/70"
+            >
+              HOT
+            </span>
+          ) : null}
+        </div>
       ) : null}
-      {card.scopeBadge && !showHot ? (
+      {card.scopeBadge ? (
         <span
           className={cn(
-            'absolute right-3 top-3 z-10 rounded-md px-1.5 py-0.5 text-[9px] font-semibold',
-            card.scopeBadge === 'public'
-              ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100'
-              : 'bg-sky-50 text-sky-800 ring-1 ring-sky-100',
-          )}
-        >
-          {card.scopeBadge === 'public' ? '公开' : '领域'}
-        </span>
-      ) : null}
-      {card.scopeBadge && showHot ? (
-        <span
-          className={cn(
-            'absolute right-3 top-7 z-10 rounded-md px-1.5 py-0.5 text-[9px] font-semibold',
+            'absolute right-3 z-10 rounded-md px-1.5 py-0.5 text-[9px] font-semibold',
+            showHot || showNew ? 'top-7' : 'top-3',
             card.scopeBadge === 'public'
               ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100'
               : 'bg-sky-50 text-sky-800 ring-1 ring-sky-100',

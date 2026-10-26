@@ -124,7 +124,8 @@ export type MarketShelfCard = {
    * 仅 MSS Skill·Agent 卡使用
    */
   executionTrust?: ExecutionTrustTier;
-  /** 展示用更新时间（YYYY-MM-DD） */
+  /** 资产业务时间（ISO 日期或 YYYY-MM-DD），用于 NEW 标签与更新时间排序。 */
+  createdAt?: string;
   updatedAt?: string;
   primaryAction: MarketPrimaryAction;
   /** 外部目录：海外 / 国内 */

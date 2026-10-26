@@ -694,6 +694,8 @@ export function MarketShelfPage({
         scenarioId: biz ?? undefined,
         ownerDeptIds: s.ownerDeptIds,
         ownerRegionId: s.ownerRegionId,
+        createdAt: s.createdAt,
+        updatedAt: s.updatedAt,
         sourceOrder,
       };
     });
@@ -750,6 +752,7 @@ export function MarketShelfPage({
         }),
         primaryAction: 'detail' as const,
         ownerDeptIds: agent.ownerDeptIds,
+        createdAt: agent.createdAt,
         updatedAt: agent.updatedAt,
         sourceOrder,
       };

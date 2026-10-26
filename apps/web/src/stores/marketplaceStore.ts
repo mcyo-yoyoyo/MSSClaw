@@ -352,6 +352,10 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   },
 
   upsertAgent: (agent, isNew = false) => {
+    if (isNew) {
+      const now = new Date().toISOString();
+      agent = { ...agent, createdAt: agent.createdAt || now, updatedAt: agent.updatedAt || now };
+    }
     set((s) => ({
       agents: isNew ? [agent, ...s.agents] : s.agents.map((a) => (a.id === agent.id ? agent : a)),
     }));
@@ -359,6 +363,10 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   },
 
   upsertSkill: (skill, isNew = false) => {
+    if (isNew) {
+      const now = new Date().toISOString();
+      skill = { ...skill, createdAt: skill.createdAt || now, updatedAt: skill.updatedAt || now };
+    }
     set((s) => ({
       skills: isNew ? [skill, ...s.skills] : s.skills.map((sk) => (sk.id === skill.id ? skill : sk)),
     }));

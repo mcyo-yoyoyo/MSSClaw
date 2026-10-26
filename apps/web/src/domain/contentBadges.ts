@@ -3,6 +3,16 @@ import {
   isDiscoverScenarioId,
 } from '@/domain/scenarioCapabilities';
 
+export function isNewAsset(
+  asset: { createdAt?: string; updatedAt?: string },
+  now = Date.now(),
+): boolean {
+  return [asset.createdAt, asset.updatedAt].some((value) => {
+    const timestamp = Date.parse(value ?? '');
+    return timestamp <= now && timestamp >= now - 14 * 24 * 60 * 60 * 1000;
+  });
+}
+
 /** 推荐专家 · 运营打标 New（演示种子） */
 export const NEW_AGENT_IDS = [
   'agent-price-monitor',

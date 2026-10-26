@@ -34,8 +34,8 @@ type WorkspaceStoreModule = {
 };
 
 type MarketplaceStoreState = {
-  agents: unknown[];
-  skills: unknown[];
+  agents: Array<Record<string, unknown>>;
+  skills: Array<Record<string, unknown>>;
   tools: Array<Record<string, unknown>>;
   automations: unknown[];
   kbDocs: unknown[];
@@ -46,6 +46,10 @@ type MarketplaceStoreState = {
   deleteSkillNow: (id: string) => Promise<MarketplaceSaveResult>;
   deleteToolNow: (id: string) => Promise<MarketplaceSaveResult>;
   persist: () => void;
+  upsertAgent: (agent: Record<string, unknown>, isNew?: boolean) => void;
+  upsertSkill: (skill: Record<string, unknown>, isNew?: boolean) => void;
+  bumpAgentInvokes: (id: string) => void;
+  bumpSkillInvokes: (id: string) => void;
   bumpToolInvokes: (id: string) => void;
 };
 
@@ -135,6 +139,42 @@ function enableRemoteApi() {
   workspaceStore.setState({
     apiConnected: true,
     apiStatus: 'connected',
+  });
+}
+
+for (const [collection, upsert, bumpInvokes] of [
+  ['agents', 'upsertAgent', 'bumpAgentInvokes'],
+  ['skills', 'upsertSkill', 'bumpSkillInvokes'],
+] as const) {
+  test(`${collection}: 新建补齐缺省时间，保留导入时间，更新与调用不伪造业务时间`, () => {
+    const previous = marketplaceStore.getState();
+    marketplaceStore.setState({ agents: [], skills: [], persist: () => undefined });
+    try {
+      const before = Date.now();
+      marketplaceStore.getState()[upsert]({ id: 'new', invokes: 0 }, true);
+      const created = marketplaceStore.getState()[collection][0]!;
+      assert.equal(typeof created.createdAt, 'string');
+      assert.equal(created.createdAt, created.updatedAt);
+      assert.ok(Date.parse(String(created.createdAt)) >= before);
+      assert.ok(Date.parse(String(created.createdAt)) <= Date.now());
+
+      const imported = { id: 'imported', invokes: 0, createdAt: '2026-01-01', updatedAt: '2026-01-02' };
+      marketplaceStore.getState()[upsert](imported, true);
+      assert.deepEqual(marketplaceStore.getState()[collection][0], imported);
+
+      const edited = { ...imported, updatedAt: '2026-02-01' };
+      marketplaceStore.getState()[upsert](edited);
+      marketplaceStore.getState()[bumpInvokes](edited.id);
+      assert.deepEqual(marketplaceStore.getState()[collection][0], { ...edited, invokes: 1 });
+
+      marketplaceStore.setState({ [collection]: [{ id: 'legacy' }] });
+      marketplaceStore.getState()[upsert]({ id: 'legacy', desc: 'changed' });
+      const legacy = marketplaceStore.getState()[collection][0]!;
+      assert.equal(legacy.createdAt, undefined);
+      assert.equal(legacy.updatedAt, undefined);
+    } finally {
+      marketplaceStore.setState(previous);
+    }
   });
 }
 
