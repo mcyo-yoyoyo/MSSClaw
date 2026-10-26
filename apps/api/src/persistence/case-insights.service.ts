@@ -1,6 +1,10 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { createHash } from 'crypto';
+import { PLATFORM_WORKSPACE_ID } from '../common/platform-workspace';
+import { PersistenceService } from './persistence.service';
+import { portalAnalyticsDateKey, shiftPortalAnalyticsDateKey } from './portal-analytics-time';
 
 type ArticleInput = {
   sourceCaseId?: string | null;
@@ -78,7 +82,73 @@ function asList(value: Prisma.JsonValue | null): string[] {
 
 @Injectable()
 export class CaseInsightsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly persistence: PersistenceService) {}
+
+  async recordRead(id: string, userId: string, eventId: string) {
+    if (!/^[A-Za-z0-9._:-]{8,128}$/.test(eventId)) throw new BadRequestException('invalid_read_event');
+    const article = await this.prisma.caseInsightArticle.findFirst({
+      where: { id, status: 'published', deletedAt: null },
+      select: { publishedHtml: true, publishedMarkdown: true },
+    });
+    if (!article || (!article.publishedHtml && !article.publishedMarkdown)) throw new NotFoundException('article_not_published');
+    // Compatibility for old clients only. New clients use the platform detail endpoint.
+    const prefixedEventId = `case-read:${eventId}`;
+    await this.persistence.mutateMarketEngagement(PLATFORM_WORKSPACE_ID, id, {
+      // Preserve existing retry keys; hash only IDs that exceed the platform limit after prefixing.
+      eventId: prefixedEventId.length <= 128 ? prefixedEventId : `case-read:sha256:${createHash('sha256').update(eventId).digest('hex')}`,
+      assetType: 'case', action: 'detail', userId,
+    });
+    return { ok: true };
+  }
+
+  async readReport(from?: string, to?: string) {
+    const today = portalAnalyticsDateKey();
+    const end = to || today;
+    const start = from || shiftPortalAnalyticsDateKey(today, -6);
+    const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value)
+      && Number.isFinite(Date.parse(value + 'T00:00:00Z'))
+      && new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) === value;
+    if (!validDate(start) || !validDate(end) || start > end || end > today
+      || (Date.parse(end) - Date.parse(start)) / 86400000 > 89) throw new BadRequestException('invalid_read_date_range');
+    const articlesInCatalog = await this.prisma.caseInsightArticle.findMany({ select: { id: true } });
+    // Include archived/trash article history, but never mix the old parallel case_read stream.
+    const where = {
+      contentId: { in: articlesInCatalog.map(article => article.id) },
+      assetType: { in: ['case', 'unknown', ''] },
+      action: { in: ['view', 'detail', 'detail_direct'] },
+    };
+    const [groups, first] = await Promise.all([
+      this.prisma.marketEngagementEvent.groupBy({ by: ['contentId', 'dateKey', 'visitorHash'], where, _count: { _all: true } }),
+      this.prisma.marketEngagementEvent.findFirst({ where, orderBy: { occurredAt: 'asc' }, select: { occurredAt: true } }),
+    ]);
+    type Counts = { pv: number; readers: Set<string> };
+    const make = (): Counts => ({ pv: 0, readers: new Set() });
+    const totals = make();
+    const articles = new Map<string, { period: Counts; lifetime: Counts; daily: Map<string, Counts> }>();
+    const daily = new Map<string, Counts>();
+    for (let date = start; date <= end; date = shiftPortalAnalyticsDateKey(date, 1)) daily.set(date, make());
+    const add = (counter: Counts, count: number, visitor: string | null) => {
+      counter.pv += count;
+      if (visitor) counter.readers.add(visitor);
+    };
+    for (const group of groups) {
+      if (!articles.has(group.contentId)) articles.set(group.contentId, { period: make(), lifetime: make(), daily: new Map() });
+      const row = articles.get(group.contentId)!;
+      add(row.lifetime, group._count._all, group.visitorHash);
+      if (group.dateKey < start || group.dateKey > end) continue;
+      add(row.period, group._count._all, group.visitorHash);
+      add(totals, group._count._all, group.visitorHash);
+      add(daily.get(group.dateKey)!, group._count._all, group.visitorHash);
+      if (!row.daily.has(group.dateKey)) row.daily.set(group.dateKey, make());
+      add(row.daily.get(group.dateKey)!, group._count._all, group.visitorHash);
+    }
+    const counts = (value: Counts) => ({ pv: value.pv, uv: value.readers.size });
+    const series = (values: Map<string, Counts>) => [...daily.keys()].map(date => ({ date, ...counts(values.get(date) || make()) }));
+    return { from: start, to: end, timezone: 'Asia/Shanghai', source: 'platform-case-views', updatedAt: new Date().toISOString(),
+      trackingStartedAt: first?.occurredAt.toISOString() || null,
+      totals: { ...counts(totals), articles: [...articles.values()].filter(row => row.period.pv > 0).length },
+      series: series(daily), items: [...articles].map(([id, row]) => ({ id, ...counts(row.period), lifetime: counts(row.lifetime), series: series(row.daily) })) };
+  }
 
   async listPublished() {
     const rows = await this.prisma.caseInsightArticle.findMany({

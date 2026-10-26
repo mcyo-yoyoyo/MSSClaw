@@ -15,6 +15,7 @@ import { CaseMarkdown } from '@/features/ai-brief/CaseMarkdown';
 import { emptyCaseDraft, parseCaseHtml, type ParsedCaseHtmlArticle } from '@/domain/caseInsightImport';
 import { HQ_DEPTS } from '@/domain/orgTaxonomy';
 import { storeImageDataUrl } from '@/api/blobApi';
+import { CaseReadOverview, CaseReadDrawer, useCaseReadAnalytics } from './CaseReadAnalytics';
 
 type StatusTab = 'all' | 'draft' | 'published' | 'archived' | 'trash';
 type StagedCase = {
@@ -66,6 +67,10 @@ function validOptionalSourceUrl(value: string) {
 }
 
 export function PortalCaseInsightsPanel() {
+  const readAnalytics = useCaseReadAnalytics();
+  const [readArticle, setReadArticle] = useState<CaseInsightArticle | null>(null);
+  const [readSort, setReadSort] = useState('default');
+  const readRows = useMemo(() => new Map(readAnalytics.report?.items.map(row => [row.id, row]) || []), [readAnalytics.report]);
   const [items, setItems] = useState<CaseInsightArticle[]>([]);
   const [trashItems, setTrashItems] = useState<CaseInsightArticle[]>([]);
   const [statusTab, setStatusTab] = useState<StatusTab>('all');
@@ -113,8 +118,8 @@ export function PortalCaseInsightsPanel() {
     return source.filter((item) => {
       if (domainFilter && !item.domainIds.includes(domainFilter)) return false;
       return !text || [item.title, item.company, item.summary, ...item.tags].some((value) => value.toLocaleLowerCase().includes(text));
-    }).sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0) || (right.updatedAt ?? '').localeCompare(left.updatedAt ?? ''));
-  }, [domainFilter, items, query, statusTab, trashItems]);
+    }).sort((left, right) => (readSort === 'pv' ? (readRows.get(right.id)?.pv || 0) - (readRows.get(left.id)?.pv || 0) : 0) || (left.sortOrder ?? 0) - (right.sortOrder ?? 0) || (right.updatedAt ?? '').localeCompare(left.updatedAt ?? ''));
+  }, [domainFilter, items, query, statusTab, trashItems, readRows, readSort]);
 
   const openQueue = (staged: StagedCase[]) => {
     if (!staged.length) return;
@@ -290,7 +295,7 @@ export function PortalCaseInsightsPanel() {
       setQueue(next);
       setDraft(updated.draft);
       setMessage(action === 'publish'
-        ? '已发布，用户现在可以在 AI 快讯阅读'
+        ? '已发布，用户现在可以在 AI 快讯浏览'
         : updated.existing?.status === 'published'
           ? '运营信息和正文已保存；线上版本未改变，点击“直接发布”后更新'
           : '已保存为草稿');
@@ -389,8 +394,10 @@ export function PortalCaseInsightsPanel() {
 
   return (
     <div className="space-y-4 pb-8">
+      <CaseReadDrawer article={readArticle} report={readAnalytics.report} onClose={() => setReadArticle(null)} />
       {message ? <p role="status" className="border-l-2 border-blue-500 pl-3 text-xs text-zinc-700">{message}</p> : null}
       {!editorOpen ? <>
+        <CaseReadOverview analytics={readAnalytics} />
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 pb-3">
           <div>
             <h3 className="text-base font-semibold text-zinc-900">案例洞察</h3>
@@ -416,6 +423,7 @@ export function PortalCaseInsightsPanel() {
           </div>
           <div className="flex flex-wrap gap-2">
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索案例" aria-label="搜索案例" className="h-9 w-48 rounded border border-zinc-200 px-3 text-xs outline-none focus:border-blue-500" />
+            <select aria-label="文章排序" value={readSort} onChange={event => setReadSort(event.target.value)} className="h-9 rounded border border-zinc-200 bg-white px-2 text-xs"><option value="default">默认顺序</option><option value="pv">浏览次数从高到低</option></select>
             <select value={domainFilter} onChange={(event) => setDomainFilter(event.target.value)} aria-label="按领域筛选" className="h-9 rounded border border-zinc-200 bg-white px-2 text-xs">
               <option value="">全部领域</option>
               {HQ_DEPTS.map((dept) => <option key={dept.id} value={dept.id}>{dept.label}</option>)}
@@ -443,6 +451,8 @@ export function PortalCaseInsightsPanel() {
                 {item.summary ? <p className="mt-1 line-clamp-1 max-w-4xl text-xs text-zinc-500">{item.summary}</p> : null}
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-2">
+                <div className="flex gap-4 px-3 text-center text-xs"><div className="text-zinc-500">浏览次数<strong className="mt-1 block text-sm text-zinc-900">{readAnalytics.report ? (readRows.get(item.id)?.pv || 0).toLocaleString('zh-CN') : '—'}</strong></div><div className="text-zinc-500">浏览人数<strong className="mt-1 block text-sm text-zinc-900">{readAnalytics.report ? (readRows.get(item.id)?.uv || 0).toLocaleString('zh-CN') : '—'}</strong></div></div>
+                <button type="button" onClick={() => setReadArticle(item)} className="apple-btn-secondary px-2.5 py-1.5 text-xs">数据</button>
                 {item.deletedAt ? <button type="button" disabled={busy} onClick={() => void restoreFromTrash(item)} className="apple-btn-secondary px-2.5 py-1.5 text-xs">恢复</button> : <>
                   <button type="button" disabled={busy} onClick={() => stageExisting(item)} className="apple-btn-secondary px-2.5 py-1.5 text-xs">预览与编辑</button>
                   {item.status === 'published'

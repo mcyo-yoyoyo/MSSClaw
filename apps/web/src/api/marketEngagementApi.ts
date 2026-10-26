@@ -1,4 +1,4 @@
-import { apiAuthHeaders, apiUrl } from '@/api/client';
+import { apiAuthHeaders, apiUrl, fetchWithTimeout } from '@/api/client';
 import type { ContentEngagement } from '@/domain/contentEngagement';
 
 export type MarketUserVote = 'like' | 'dislike' | null;
@@ -49,7 +49,7 @@ export async function mutateMarketEngagementApi(
     assetType?: MarketAssetType;
   },
 ): Promise<MarketEngagementMutation> {
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     apiUrl(
       `/api/v1/market-engagement/${encodeURIComponent(contentId)}/actions`,
     ),
@@ -62,6 +62,7 @@ export async function mutateMarketEngagementApi(
       },
       body: JSON.stringify(input),
     },
+    20_000,
   );
   if (!res.ok) throw new Error(`market_engagement_mutate_${res.status}`);
   return (await res.json()) as MarketEngagementMutation;

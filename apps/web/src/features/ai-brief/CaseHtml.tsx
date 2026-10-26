@@ -2,10 +2,11 @@ import type { SyntheticEvent } from 'react';
 
 type CasebookTab = 'cases' | 'topics';
 
-export function CaseHtml({ html, title, onNavigate, baseHref, simplifyCasebookNavigation = false, standalone = false }: {
+export function CaseHtml({ html, title, onNavigate, onReady, baseHref, simplifyCasebookNavigation = false, standalone = false }: {
   html: string;
   title: string;
   onNavigate?: (tab: CasebookTab) => void;
+  onReady?: () => void;
   baseHref?: string;
   simplifyCasebookNavigation?: boolean;
   /** 资产详情页：撑满父容器（父容器负责高度） */
@@ -19,6 +20,7 @@ export function CaseHtml({ html, title, onNavigate, baseHref, simplifyCasebookNa
     const frame = event.currentTarget;
     const document = frame.contentDocument;
     if (!document) return;
+    onReady?.();
     if (simplifyCasebookNavigation) {
       document.querySelectorAll<HTMLAnchorElement>('a').forEach((anchor) => {
         const href = anchor.getAttribute('href') ?? '';

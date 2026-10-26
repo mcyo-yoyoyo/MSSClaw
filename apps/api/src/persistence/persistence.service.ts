@@ -149,8 +149,6 @@ const UUID_V4_RE =
 const MARKET_ENGAGEMENT_RATE_WINDOW_MS = 60_000;
 const MARKET_ENGAGEMENT_VISITOR_RATE_LIMIT = 60;
 const MARKET_ENGAGEMENT_DAILY_VISITOR_LIMIT = 500;
-const MARKET_ENGAGEMENT_RETENTION_DAYS = 180;
-const MARKET_ENGAGEMENT_RETENTION_CHECK_INTERVAL = 256;
 const MARKET_ENGAGEMENT_STATIC_CONTENT_IDS = new Set<string>(
   SEED_MARKET_ENGAGEMENT_STATIC_CONTENT_IDS,
 );
@@ -496,7 +494,6 @@ async function evictOldFavorites(
 
 @Injectable()
 export class PersistenceService {
-  private marketEngagementRetentionChecks = 0;
   /** 行为写事务按进程排队：上限检查是先计数再插入，排队后同一实例内的并发请求不会一起穿过上限。 */
   private marketEngagementWriteTail: Promise<void> = Promise.resolve();
 
@@ -964,7 +961,6 @@ export class PersistenceService {
         timeout: 15_000,
       });
 
-      await this.maybePruneMarketEngagementEvents();
       return result;
     });
   }
@@ -1048,22 +1044,6 @@ export class PersistenceService {
           : null,
       favorited: state.favorited,
     };
-  }
-
-  private async maybePruneMarketEngagementEvents(): Promise<void> {
-    this.marketEngagementRetentionChecks += 1;
-    if (
-      this.marketEngagementRetentionChecks % MARKET_ENGAGEMENT_RETENTION_CHECK_INTERVAL !==
-      0
-    ) {
-      return;
-    }
-    const cutoff = new Date(
-      Date.now() - MARKET_ENGAGEMENT_RETENTION_DAYS * 24 * 60 * 60 * 1000,
-    );
-    await this.prisma.marketEngagementEvent
-      .deleteMany({ where: { occurredAt: { lt: cutoff } } })
-      .catch(() => undefined);
   }
 
   private toEngagement(row: {

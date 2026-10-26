@@ -25,6 +25,30 @@ export class CaseInsightsController {
     return this.articles.listForOps(view === 'trash');
   }
 
+  @Get('reads')
+  async reads(
+    @Query('from') from: string | undefined,
+    @Query('to') to: string | undefined,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') sessionToken?: string,
+  ) {
+    await this.requireAdmin(workspaceId, authorization, sessionToken);
+    return this.articles.readReport(from, to);
+  }
+
+  @Post(':id/read')
+  async recordRead(
+    @Param('id') id: string,
+    @Body() body: { eventId?: string },
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') sessionToken?: string,
+  ) {
+    const bearer = authorization?.toLowerCase().startsWith('bearer ') ? authorization.slice(7).trim() : sessionToken;
+    const session = await this.docs.me(bearer, workspaceId);
+    if (!session.ok) throw new UnauthorizedException('case_insight_login_required');
+    return this.articles.recordRead(id, String(session.user.id), typeof body?.eventId === 'string' ? body.eventId : '');
+  }
+
   @Post()
   async create(
     @Body() body: ArticleBody,

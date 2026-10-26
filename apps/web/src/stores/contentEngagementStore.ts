@@ -14,6 +14,9 @@ import {
   type MarketUserVote,
 } from '@/api/marketEngagementApi';
 import { guestVisitorRef } from '@/domain/visitorIdentity';
+import { isApiEnabled, readSessionToken } from '@/api/client';
+import { createDetailEventQueue, createMarketEngagementEventId } from '@/domain/detailEventQueue';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 type UserVote = MarketUserVote;
 
@@ -44,12 +47,25 @@ type StoreSet = (
     | ((state: ContentEngagementState) => Partial<ContentEngagementState>),
 ) => void;
 
-function createMarketEngagementEventId(): string {
-  if (typeof globalThis.crypto?.randomUUID === 'function') {
-    return globalThis.crypto.randomUUID();
-  }
-  return `eng-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-}
+type DetailMutation = {
+  set: StoreSet;
+  id: string;
+  input: Parameters<typeof mutateMarketEngagementApi>[1];
+};
+const detailQueue = createDetailEventQueue({
+  // Wait for initial bootstrap, but do not let a stale "unreachable" flag suppress real retries.
+  ready: () => isApiEnabled() && useWorkspaceStore.getState().apiStatus !== 'unknown',
+  identity: readSessionToken,
+  send: (value: DetailMutation) => mutateMarketEngagementApi(value.id, value.input),
+  success: ({ set, id }, result) => {
+    const engagement = normalizeEngagement(result.engagement);
+    set(state => ({ byId: { ...state.byId, [id]: engagement }, userVotes: { ...state.userVotes, [id]: result.userVote } }));
+  },
+});
+useWorkspaceStore.subscribe((state, previous) => {
+  if (state.apiStatus !== previous.apiStatus || (state.apiConnected && !previous.apiConnected)) detailQueue.flush();
+});
+if (typeof window !== 'undefined') window.addEventListener('online', detailQueue.flush);
 
 function runMutation(
   set: StoreSet,
@@ -58,7 +74,8 @@ function runMutation(
   active?: boolean,
   assetType?: MarketAssetType,
 ) {
-  if (!canUsePlatformDocsApi()) return;
+  const isDetail = action === 'detail' || action === 'detail_direct';
+  if (isDetail ? !isApiEnabled() : !canUsePlatformDocsApi()) return;
   const input = {
     action,
     active,
@@ -66,6 +83,10 @@ function runMutation(
     visitorId: guestVisitorRef(),
     ...(assetType ? { assetType } : {}),
   };
+  if (isDetail) {
+    detailQueue.enqueue(input.eventId, { set, id, input });
+    return;
+  }
   void mutateMarketEngagementApi(id, input)
     .then((result) => {
       const engagement = normalizeEngagement(result.engagement);
