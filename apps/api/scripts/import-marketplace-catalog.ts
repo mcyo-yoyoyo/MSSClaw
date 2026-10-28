@@ -1,15 +1,7 @@
 import { PrismaClient } from '@prisma/client';
-import { readAssets, readToolCatalogMeta, replaceAssets, writeToolCatalogMeta } from '../src/persistence/asset-catalog';
+import { readAssets, replaceAssets } from '../src/persistence/asset-catalog';
 import * as path from 'path';
 import * as XLSX from 'xlsx';
-import {
-  EXTERNAL_TOOLS_EXCEL,
-  EXTERNAL_TOOLS_EXCEL_VERSION,
-} from '../src/data/external-tools-excel-v1-0-5';
-import {
-  INTERNAL_TOOLS_EXCEL,
-  INTERNAL_TOOLS_EXCEL_VERSION,
-} from '../src/data/internal-tools-excel-v1-0-5';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -77,60 +69,6 @@ function importPublished(
     .map((item) => ({ ...item, published: true }));
 }
 
-function externalToolId(name: string): string {
-  const stable: Record<string, string> = {
-    chatgpt: 'tool-saas-chatgpt',
-    claude: 'tool-saas-claude',
-    gemini: 'tool-saas-gemini',
-    perplexity: 'tool-saas-perplexity',
-    '豆包': 'tool-saas-doubao',
-    deepseek: 'tool-saas-deepseek',
-    kimi: 'tool-saas-kimi',
-    qwen: 'tool-saas-tongyi',
-  };
-  const key = name.trim().toLowerCase();
-  if (stable[key]) return stable[key];
-  const slug = name
-    .normalize('NFKD')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return `tool-excel-${slug || Buffer.from(name).toString('hex').slice(0, 20)}`;
-}
-
-function toolsFromCatalog(): JsonRecord[] {
-  const external = EXTERNAL_TOOLS_EXCEL.map((record) => ({
-    ...record,
-    id: externalToolId(record.name),
-    desc: record.cardSummary,
-    category: 'external',
-    author: record.company,
-    published: true,
-    invokes: 0,
-    tags: ['ai-saas', ...record.toolTypeLabels],
-    sourceType: 'external',
-    visibility: 'public',
-    ownerDeptIds: [],
-    ownerRegionId: null,
-    marketShelf: 'external',
-  }));
-  const internal = INTERNAL_TOOLS_EXCEL.map((record) => ({
-    ...record,
-    desc: record.cardSummary,
-    category: 'platform',
-    author: '华为内部',
-    published: true,
-    invokes: 0,
-    tags: ['hw-internal'],
-    sourceType: 'internal',
-    visibility: 'public',
-    ownerDeptIds: [],
-    ownerRegionId: null,
-    marketShelf: 'internal',
-  }));
-  return [...external, ...internal];
-}
-
 function mergeById(imported: JsonRecord[], existing: unknown): JsonRecord[] {
   const result = new Map<string, JsonRecord>();
   for (const item of imported) result.set(normalized(item.id), item);
@@ -149,33 +87,22 @@ async function main() {
   const workbook = XLSX.readFile(workbookPath);
   const importedSkills = importPublished(workbook, 'Skill清单', 'Skill配置', 'Skill ID');
   const importedAgents = importPublished(workbook, 'Agent清单', 'Agent配置', 'Agent ID');
-  const importedTools = toolsFromCatalog();
   // 第 3 期起资产在资产表里：已有记录的字段优先，清单只补新资产，写入在一个事务里。
-  const [existingAgents, existingSkills, existingTools, meta] = await Promise.all([
+  const [existingAgents, existingSkills] = await Promise.all([
     readAssets(prisma, 'agent'),
     readAssets(prisma, 'skill'),
-    readAssets(prisma, 'tool'),
-    readToolCatalogMeta(prisma),
   ]);
   const payload = {
     agents: mergeById(importedAgents, existingAgents),
     skills: mergeById(importedSkills, existingSkills),
-    tools: mergeById(importedTools, existingTools),
   };
   await prisma.$transaction(async (tx) => {
     await replaceAssets(tx, 'agent', payload.agents);
     await replaceAssets(tx, 'skill', payload.skills);
-    await replaceAssets(tx, 'tool', payload.tools);
-    await writeToolCatalogMeta(tx, {
-      ...meta,
-      externalCatalogVersion: EXTERNAL_TOOLS_EXCEL_VERSION,
-      internalCatalogVersion: INTERNAL_TOOLS_EXCEL_VERSION,
-    });
   }, { timeout: 120_000 });
 
   console.log(JSON.stringify({
     workspaceId,
-    tools: payload.tools.length,
     skills: payload.skills.length,
     agents: payload.agents.length,
     excluded: [...excludedIds],

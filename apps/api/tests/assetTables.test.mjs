@@ -156,14 +156,15 @@ test('旧版 Agent Studio：改人设写回系统提示词，推进状态提示�
   await assert.rejects(centers.advanceAgentStatus(WS, 'agent-1'), /货架运营/);
 });
 
-test('全新库第一次读取工具目录：用内置清单播种，且每条都通过资产表校验', async () => {
+test('全新库读取工具目录返回空列表，不写入种子或目录元数据', async () => {
   const service = new PersistenceService(prisma);
   const catalog = await service.getGlobalTools();
-  assert.ok(catalog.tools.length > 50);
+  assert.deepEqual(catalog.tools, []);
   assert.equal(catalog.initialized, false);
-  assert.ok(catalog.externalCatalogVersion);
-  // 再读一次不重复播种
-  assert.equal((await service.getGlobalTools()).tools.length, catalog.tools.length);
+  assert.equal(await prisma.tool.count(), 0);
+  assert.equal(await prisma.appSetting.findUnique({ where: { settingKey: 'tool-catalog.meta' } }), null);
+  await replaceAssets(prisma, 'tool', [tool('imported-tool')]);
+  assert.equal((await service.getGlobalTools()).tools[0].id, 'imported-tool');
 });
 
 test('PUT /tools 整份替换并标记已初始化，GET /marketplace 的 tools 来自工具表', async () => {

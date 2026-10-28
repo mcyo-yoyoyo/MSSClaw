@@ -16,7 +16,7 @@ function howtoSeeds(): PlazaToolGuideRecord[] {
   return demoDefaults(flattenPlazaToolGuideSeeds());
 }
 
-/** 种子优先补齐新 catalog 指导；同 id 以运营修改为准 */
+/** 合并默认指南；同 id 以运营修改为准 */
 function mergeGuideCatalog(
   seeds: PlazaToolGuideRecord[],
   saved: PlazaToolGuideRecord[],

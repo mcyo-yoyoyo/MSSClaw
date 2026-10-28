@@ -5,7 +5,6 @@
  */
 
 // Retained only to provide legacy static How-to copy; it is never used to build tool cards.
-import { EXTERNAL_TOOLS_CATALOG } from '@/domain/externalToolsCatalog';
 
 export type PlazaGuideType = 'image' | 'pdf' | 'ppt' | 'video' | 'link' | 'text';
 
@@ -193,31 +192,7 @@ const LEGACY_PLAZA_TOOL_GUIDES: Record<string, PlazaToolGuide[]> = {
   ],
 };
 
-/** 合并 CSV 快速上手：catalog 全文指导插到最前 */
-function mergeGuideMaps(): Record<string, PlazaToolGuide[]> {
-  const out: Record<string, PlazaToolGuide[]> = { ...LEGACY_PLAZA_TOOL_GUIDES };
-  for (const entry of EXTERNAL_TOOLS_CATALOG) {
-    const body = entry.guideBody?.trim();
-    if (!body) continue;
-    const id = `g-catalog-${entry.id}`;
-    const list = out[entry.id] ?? [];
-    if (list.some((g) => g.id === id)) continue;
-    out[entry.id] = [
-      {
-        id,
-        title: `${entry.name} 快速上手`,
-        type: 'text',
-        url: '#',
-        blurb: entry.cardSummary?.slice(0, 48) || '站内快速上手',
-        body,
-      },
-      ...list,
-    ];
-  }
-  return out;
-}
-
-export const PLAZA_TOOL_GUIDES: Record<string, PlazaToolGuide[]> = mergeGuideMaps();
+export const PLAZA_TOOL_GUIDES: Record<string, PlazaToolGuide[]> = LEGACY_PLAZA_TOOL_GUIDES;
 
 export function flattenPlazaToolGuideSeeds(): PlazaToolGuideRecord[] {
   const out: PlazaToolGuideRecord[] = [];

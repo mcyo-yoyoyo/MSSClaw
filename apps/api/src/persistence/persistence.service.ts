@@ -25,14 +25,6 @@ import {
   MARKET_SKILL_BUSINESS_SCENARIO,
   SEED_MARKET_ENGAGEMENT_STATIC_CONTENT_IDS,
 } from '../data/market-doc-seeds';
-import {
-  EXTERNAL_TOOLS_EXCEL,
-  EXTERNAL_TOOLS_EXCEL_VERSION,
-} from '../data/external-tools-excel-v1-0-5';
-import {
-  INTERNAL_TOOLS_EXCEL,
-  INTERNAL_TOOLS_EXCEL_VERSION,
-} from '../data/internal-tools-excel-v1-0-5';
 import { portalAnalyticsDateKey } from './portal-analytics-time';
 
 export type { MarketplacePayload };
@@ -159,64 +151,6 @@ function optionalTrimmedString(value: unknown, errorCode: string): string {
   return value.trim();
 }
 
-function normalizeExternalToolName(value: unknown): string {
-  return String(value ?? '').trim().toLocaleLowerCase();
-}
-
-function normalizeExternalToolUrl(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .replace(/\/+$/, '')
-    .toLocaleLowerCase();
-}
-
-/**
- * 首版目录已被精选、互动数据和运营配置引用的稳定 ID。
- * 名称允许后台修改，但这些 ID 不能再随 Excel 导入重新生成。
- */
-const LEGACY_STABLE_EXTERNAL_IDS: Record<string, string> = {
-  chatgpt: 'tool-saas-chatgpt',
-  claude: 'tool-saas-claude',
-  gemini: 'tool-saas-gemini',
-  perplexity: 'tool-saas-perplexity',
-  豆包: 'tool-saas-doubao',
-  deepseek: 'tool-saas-deepseek',
-  kimi: 'tool-saas-kimi',
-  qwen: 'tool-saas-tongyi',
-};
-
-function externalToolId(name: string): string {
-  const slug = name
-    .normalize('NFKD')
-    .toLocaleLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return `tool-excel-${slug || Buffer.from(name).toString('hex').slice(0, 20)}`;
-}
-
-/**
- * marketplace 是工具的权威快照；中心里的 tool 记录只是兼容投影。
- * 旧数据有时没有 sourceType，但带有 ai-saas / external 标记，不能把它误归为内部连接器。
- */
-function isExternalToolRecord(raw: unknown): raw is Record<string, unknown> {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
-  const tool = raw as Record<string, unknown>;
-  const tags = Array.isArray(tool.tags) ? tool.tags.map(String) : [];
-  return (
-    tool.sourceType === 'external' ||
-    tool.marketShelf === 'external' ||
-    tool.category === 'external' ||
-    tags.includes('ai-saas') ||
-    tags.includes('external')
-  );
-}
-
-export function existingMarketShelf(value: unknown): 'external' | 'internal' | 'none' | undefined {
-  return value === 'external' || value === 'internal' || value === 'none'
-    ? value
-    : undefined;
-}
-
 export function dedupeMarketplaceTools(source: unknown[] | undefined): {
   tools: unknown[];
   changed: boolean;
@@ -238,174 +172,6 @@ export function dedupeMarketplaceTools(source: unknown[] | undefined): {
     return true;
   });
   return { tools: deduped, changed };
-}
-
-function mergeExcelExternalTools(source: unknown[] | undefined): unknown[] {
-  const tools = Array.isArray(source) ? source : [];
-  const existingExternal = tools.filter(isExternalToolRecord);
-  const internal = tools.filter((raw) => !isExternalToolRecord(raw));
-  const existingByName = new Map(
-    existingExternal.map((tool) => [normalizeExternalToolName(tool.name), tool]),
-  );
-  const existingById = new Map(
-    existingExternal
-      .filter((tool) => typeof tool.id === 'string')
-      .map((tool) => [String(tool.id), tool]),
-  );
-  const existingByHomepage = new Map(
-    existingExternal
-      .map((tool) => [normalizeExternalToolUrl(tool.homepageUrl), tool] as const)
-      .filter(([url]) => Boolean(url)),
-  );
-  const existingByDocs = new Map(
-    existingExternal
-      .map((tool) => [normalizeExternalToolUrl(tool.docsUrl), tool] as const)
-      .filter(([url]) => Boolean(url)),
-  );
-  const matchedExisting = new Set<Record<string, unknown>>();
-  const matchedExternalIds = new Set<string>();
-  const matchedExternalNames = new Set<string>();
-  const matchedExternalHomepages = new Set<string>();
-  const matchedExternalDocs = new Set<string>();
-
-  const external = EXTERNAL_TOOLS_EXCEL.map((record) => {
-    const normalizedName = normalizeExternalToolName(record.name);
-    const stableId = LEGACY_STABLE_EXTERNAL_IDS[normalizedName];
-    const recordId = (record as { id?: unknown }).id;
-    const catalogId = typeof recordId === 'string' && recordId ? recordId : undefined;
-    const recordDocsUrl = 'docsUrl' in record ? record.docsUrl : undefined;
-    const existing =
-      (stableId ? existingById.get(stableId) : undefined) ??
-      existingByName.get(normalizedName) ??
-      existingByHomepage.get(normalizeExternalToolUrl(record.homepageUrl)) ??
-      existingByDocs.get(normalizeExternalToolUrl(recordDocsUrl)) ??
-      (catalogId ? existingById.get(catalogId) : undefined);
-    if (existing) {
-      matchedExisting.add(existing);
-      if (typeof existing.id === 'string' && existing.id.trim()) {
-        matchedExternalIds.add(existing.id.trim());
-      }
-      const existingNameKey = normalizeExternalToolName(existing.name);
-      const existingHomepageKey = normalizeExternalToolUrl(existing.homepageUrl);
-      const existingDocsKey = normalizeExternalToolUrl(existing.docsUrl);
-      if (existingNameKey) matchedExternalNames.add(existingNameKey);
-      if (existingHomepageKey) matchedExternalHomepages.add(existingHomepageKey);
-      if (existingDocsKey) matchedExternalDocs.add(existingDocsKey);
-    }
-    const existingName =
-      typeof existing?.name === 'string' && existing.name.trim() ? existing.name.trim() : '';
-    const existingTags = Array.isArray(existing?.tags) ? existing.tags.map(String) : [];
-    const existingShelf = existingMarketShelf(existing?.marketShelf);
-    const existingCategoryRanks = existing?.externalCategoryRanks;
-    const existingSortOrder = existing?.externalSortOrder;
-    const existingSortRank = existing?.externalSortRank;
-    return {
-      ...existing,
-      ...record,
-      id:
-        stableId ||
-        (typeof existing?.id === 'string' && existing.id
-          ? existing.id
-          : catalogId || externalToolId(record.name)),
-      // URL / ID 命中说明只是运营改了展示名，应保留后台名称。
-      name: existingName || record.name,
-      desc: record.cardSummary,
-      category: 'external',
-      author: record.company,
-      // 目录迁移不能把管理员已经下架的工具重新发布。
-      published: typeof existing?.published === 'boolean' ? existing.published : true,
-      invokes: typeof existing?.invokes === 'number' ? existing.invokes : 0,
-      icon: typeof existing?.icon === 'string' && existing.icon ? existing.icon : record.icon,
-      tags: [...new Set(['ai-saas', ...existingTags, ...(record.toolTypeLabels ?? [])])],
-      // 运营排序字段已经被工具运营使用时，目录迁移只补缺不覆盖。
-      externalCategoryRanks:
-        existingCategoryRanks && typeof existingCategoryRanks === 'object'
-          ? existingCategoryRanks
-          : record.externalCategoryRanks,
-      externalSortOrder:
-        typeof existingSortOrder === 'number' ? existingSortOrder : record.externalSortOrder,
-      externalSortRank:
-        typeof existingSortRank === 'number' ? existingSortRank : record.externalSortRank,
-      sourceType: 'external',
-      visibility: existing?.visibility ?? 'public',
-      ownerDeptIds: Array.isArray(existing?.ownerDeptIds) ? existing.ownerDeptIds : [],
-      ownerRegionId: existing?.ownerRegionId ?? null,
-      // 保留运营已选的目标货架；新目录条目默认进入外部货架候选。
-      marketShelf: existingShelf ?? 'external',
-    };
-  });
-
-  // 目录迁移只补齐/更新目录条目，不删除管理员后来新增的外部工具；
-  // 但旧快照中的重复目录项不能继续进入统一 marketplace 快照。
-  const extraIds = new Set<string>();
-  const extraNames = new Set<string>();
-  const extraHomepages = new Set<string>();
-  const extraDocs = new Set<string>();
-  const extras = existingExternal.filter((tool) => {
-    if (matchedExisting.has(tool)) return false;
-    const id = typeof tool.id === 'string' ? tool.id.trim() : '';
-    const name = normalizeExternalToolName(tool.name);
-    const homepage = normalizeExternalToolUrl(tool.homepageUrl);
-    const docs = normalizeExternalToolUrl(tool.docsUrl);
-    if (
-      (id && matchedExternalIds.has(id)) ||
-      (name && matchedExternalNames.has(name)) ||
-      (homepage && matchedExternalHomepages.has(homepage)) ||
-      (docs && matchedExternalDocs.has(docs))
-    ) {
-      return false;
-    }
-    if (
-      (id && extraIds.has(id)) ||
-      (name && extraNames.has(name)) ||
-      (homepage && extraHomepages.has(homepage)) ||
-      (docs && extraDocs.has(docs))
-    ) {
-      return false;
-    }
-    if (id) extraIds.add(id);
-    if (name) extraNames.add(name);
-    if (homepage) extraHomepages.add(homepage);
-    if (docs) extraDocs.add(docs);
-    return true;
-  });
-  return [...internal, ...external, ...extras];
-}
-
-function mergeExcelInternalTools(source: unknown[] | undefined): unknown[] {
-  const tools = Array.isArray(source) ? source : [];
-  const byId = new Map(
-    tools
-      .filter((raw): raw is Record<string, unknown> => Boolean(raw && typeof raw === 'object' && !Array.isArray(raw)))
-      .map((tool) => [String(tool.id ?? ''), tool]),
-  );
-  const updatedIds = new Set<string>();
-  const updated = INTERNAL_TOOLS_EXCEL.map((record) => {
-    updatedIds.add(record.id);
-    const existing = byId.get(record.id) ?? {};
-    const existingShelf = existingMarketShelf(existing.marketShelf);
-    return {
-      ...existing,
-      ...record,
-      desc: record.cardSummary,
-      category: 'platform',
-      author: '华为内部',
-      // 目录迁移不能把管理员已经下架的内部工具重新发布。
-      published: typeof existing.published === 'boolean' ? existing.published : true,
-      invokes: typeof existing.invokes === 'number' ? existing.invokes : 0,
-      icon: typeof existing.icon === 'string' && existing.icon ? existing.icon : record.icon,
-      tags: Array.isArray(existing.tags) ? existing.tags : ['hw-internal'],
-      sourceType: 'internal',
-      visibility: typeof existing.visibility === 'string' ? existing.visibility : 'public',
-      ownerDeptIds: Array.isArray(existing.ownerDeptIds) ? existing.ownerDeptIds : [],
-      ownerRegionId: existing.ownerRegionId ?? null,
-      marketShelf: existingShelf ?? 'internal',
-    };
-  });
-  return [...tools.filter((raw) => {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return true;
-    return !updatedIds.has(String((raw as Record<string, unknown>).id ?? ''));
-  }), ...updated];
 }
 
 type FavoriteTx = Prisma.TransactionClient;
@@ -608,35 +374,14 @@ export class PersistenceService {
     };
   }
 
-  /** 部署级工具目录：tool 表 + app_setting('tool-catalog.meta')。全新库第一次读取时用内置清单播种。 */
+  /** 部署级工具目录只读取数据库；空库通过导入或后台维护建立目录。 */
   async getGlobalTools(): Promise<GlobalToolsPayload> {
-    const meta = (await readToolCatalogMeta(this.prisma)) ?? (await this.seedToolCatalog());
+    const meta = (await readToolCatalogMeta(this.prisma)) ?? {};
     const tools = await readAssets(this.prisma, 'tool');
     return { ...meta, tools, initialized: meta.initialized === true || Boolean(meta.initializedAt) };
   }
 
-  private async seedToolCatalog(): Promise<ToolCatalogMeta> {
-    const meta: ToolCatalogMeta = { initialized: false, migratedAt: new Date().toISOString() };
-    try {
-      await this.prisma.$transaction(async (tx) => {
-        if (!(await readAssetIds(tx, 'tool')).length) {
-          const seeded = mergeExcelInternalTools(mergeExcelExternalTools([]));
-          await replaceAssets(tx, 'tool', dedupeMarketplaceTools(seeded).tools);
-          meta.externalCatalogVersion = EXTERNAL_TOOLS_EXCEL_VERSION;
-          meta.internalCatalogVersion = INTERNAL_TOOLS_EXCEL_VERSION;
-        }
-        await writeToolCatalogMeta(tx, meta);
-      });
-    } catch (error) {
-      // 两个首次请求同时播种时，后到的那个撞唯一键；以先写进去的为准。
-      const stored = await readToolCatalogMeta(this.prisma);
-      if (!stored) throw error;
-      return stored;
-    }
-    return meta;
-  }
-
-  /** 写入部署级工具目录；PUT 是一次完整快照替换，之后不再回灌 Excel。 */
+  /** 写入部署级工具目录；PUT 是一次完整快照替换。 */
   async putGlobalTools(input: unknown): Promise<GlobalToolsPayload> {
     if (!input || typeof input !== 'object' || Array.isArray(input)) {
       throw new BadRequestException('tools_payload_required');
@@ -1068,14 +813,8 @@ export class PersistenceService {
     };
   }
 
-  /**
-   * @param seedCatalogs 是否用 Excel 清单播种工具目录。
-   *   仅首次生成 marketplace 快照时为 true——初始化完成后数据库即唯一真相源，
-   *   运营的增删改不应被清单回灌覆盖（历史上每次读写都合并，导致下架等改动被打回）。
-   */
   private enrichMarketplaceMetadata(
     payload: MarketplacePayload,
-    seedCatalogs = false,
   ): {
     payload: MarketplacePayload;
     changed: boolean;
@@ -1116,18 +855,8 @@ export class PersistenceService {
     const agents = enrich(payload.agents, MARKET_AGENT_BUSINESS_SCENARIO, false);
     const skills = enrich(payload.skills, MARKET_SKILL_BUSINESS_SCENARIO, true);
     const dedupedTools = dedupeMarketplaceTools(payload.tools);
-    let tools = dedupedTools.tools;
+    const tools = dedupedTools.tools;
     if (dedupedTools.changed) changed = true;
-    if (seedCatalogs) {
-      if (payload.externalCatalogVersion !== EXTERNAL_TOOLS_EXCEL_VERSION) {
-        tools = mergeExcelExternalTools(tools);
-        changed = true;
-      }
-      if (payload.internalCatalogVersion !== INTERNAL_TOOLS_EXCEL_VERSION) {
-        tools = mergeExcelInternalTools(tools);
-        changed = true;
-      }
-    }
     return {
       payload: {
         ...payload,
@@ -1136,12 +865,6 @@ export class PersistenceService {
         tools,
         automations: Array.isArray(payload.automations) ? payload.automations : [],
         kbDocs: Array.isArray(payload.kbDocs) ? payload.kbDocs : [],
-        externalCatalogVersion: seedCatalogs
-          ? EXTERNAL_TOOLS_EXCEL_VERSION
-          : payload.externalCatalogVersion,
-        internalCatalogVersion: seedCatalogs
-          ? INTERNAL_TOOLS_EXCEL_VERSION
-          : payload.internalCatalogVersion,
       },
       changed,
     };
