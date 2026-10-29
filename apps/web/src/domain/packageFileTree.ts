@@ -1,6 +1,7 @@
 import { strFromU8, unzipSync } from 'fflate';
 import {
   extractInspectedZipEntries,
+  fixMojibakeName,
   inspectPackageZip,
   PACKAGE_ZIP_LIMITS,
   type PackageArchiveInspectionOptions,
@@ -69,7 +70,7 @@ export function buildPackageFileTree(bytes: Uint8Array): {
   const entries = unzipSync(bytes);
   return buildTree(
     Object.entries(entries).map(([path, data]) => ({
-      path: path.replace(/\\/g, '/'),
+      path: fixMojibakeName(path).replace(/\\/g, '/'),
       size: data.length,
       isDirectory: path.endsWith('/'),
       data,

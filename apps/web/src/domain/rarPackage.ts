@@ -5,6 +5,7 @@ import { PACKAGE_UPLOAD_MAX_BYTES } from '@/domain/packageUpload';
 import { RAR_UNAVAILABLE_MESSAGE } from '@/domain/rarUpload';
 import {
   assertSafeArchivePath,
+  fixMojibakeName,
   PACKAGE_ZIP_LIMITS,
   PackageZipError,
   type PackageArchiveInspectionOptions,
@@ -95,7 +96,7 @@ function inspectRar(
       if (maxEntries !== null && entries > maxEntries) {
         throw limitError(`目录条目超过 ${maxEntries} 个`, 'too_many_entries');
       }
-      const path = header.name.replace(/\\/g, '/').replace(/\/+$/, '');
+      const path = fixMojibakeName(header.name).replace(/\\/g, '/').replace(/\/+$/, '');
       assertSafeArchivePath(path, 'RAR');
       if (seen.has(path)) {
         throw new PackageZipError('duplicate_path', `RAR 包含重复路径：${path}`);
@@ -143,7 +144,7 @@ function readRarFiles(extractor: RarExtractor): AsyncZippable {
   const files: AsyncZippable = {};
   for (const { fileHeader, extraction } of extractor.extract().files) {
     if (fileHeader.flags.directory || !extraction) continue;
-    files[fileHeader.name.replace(/\\/g, '/')] = extraction;
+    files[fixMojibakeName(fileHeader.name).replace(/\\/g, '/')] = extraction;
   }
   return files;
 }

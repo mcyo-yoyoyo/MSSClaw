@@ -1,3 +1,10 @@
+// 内网 HTTPS 代理做 MITM，证书自签；NODE_TLS_REJECT_UNAUTHORIZED=0 必须在
+// undici 等 TLS 模块加载前设置，ConfigModule 运行时加载 .env 已经太晚。
+// .env 里已配了该变量，但 shell 启动时未设置的话这里兜底，避免 ProxyAgent 拒绝自签证书。
+if (!process.env.NODE_TLS_REJECT_UNAUTHORIZED) {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
+
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';

@@ -1,6 +1,59 @@
 import { unzip, type Unzipped, type UnzipFileInfo } from 'fflate';
 import { PACKAGE_UPLOAD_MAX_BYTES } from '@/domain/packageUpload';
 
+/**
+ * 修复 ZIP 包内中文文件名/文件夹名乱码。
+ *
+ * Windows 压缩工具（资源管理器"发送到 > 压缩文件夹"、旧版 WinRAR/7-Zip）
+ * 经常将 ZIP entry name 以 GBK/CP936 编码且不设置 UTF-8 flag（bit 11）。
+ * fflate 在 flag 未设置时按 Latin-1 解码，中文字符变成 Mojibake。
+ *
+ * 本函数检测 Latin-1 解码后的字符串是否包含高位字符（>127），
+ * 若包含则还原原始字节并用 GBK 重新解码。
+ */
+let gbkDecoder: TextDecoder | null | undefined;
+
+export function fixMojibakeName(name: string): string {
+  // 纯 ASCII 无需处理
+  if (!name || !/[\x80-\xff]/.test(name)) return name;
+
+  // 还原 Latin-1 → 原始字节
+  const bytes = new Uint8Array(name.length);
+  let hasHigh = false;
+  for (let i = 0; i < name.length; i++) {
+    const code = name.charCodeAt(i);
+    bytes[i] = code & 0xff;
+    if (code > 0x7f) hasHigh = true;
+  }
+  if (!hasHigh) return name;
+
+  // 先尝 UTF-8：如果原始字节恰好是合法 UTF-8（UTF-8 flag 漏设的情况），优先用 UTF-8
+  try {
+    const utf8Name = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return utf8Name;
+  } catch {
+    // not valid UTF-8, fall through to GBK
+  }
+
+  // 尝试 GBK 解码
+  if (gbkDecoder === undefined) {
+    try {
+      gbkDecoder = new TextDecoder('gbk');
+    } catch {
+      gbkDecoder = null; // 浏览器不支持 GBK
+    }
+  }
+  if (gbkDecoder) {
+    try {
+      return gbkDecoder.decode(bytes);
+    } catch {
+      // GBK 解码也失败，返回原始 Latin-1 字符串
+    }
+  }
+
+  return name;
+}
+
 const MIB = 1024 * 1024;
 
 /**
@@ -78,9 +131,10 @@ function zipBomb(message: string, code: PackageZipErrorCode): PackageZipError {
 }
 
 function normalizeEntry(info: UnzipFileInfo): SafeZipEntry {
-  const path = info.name.replace(/\\/g, '/');
+  const fixedName = fixMojibakeName(info.name);
+  const path = fixedName.replace(/\\/g, '/');
   return {
-    rawName: info.name,
+    rawName: fixedName,
     path,
     compressedSize: info.size,
     uncompressedSize: info.originalSize,
@@ -221,7 +275,7 @@ export function extractInspectedZipEntries(
   selectedPaths: ReadonlySet<string>,
   options: SafeZipExtractionOptions,
 ): Promise<Record<string, Uint8Array>> {
-  const selectedRawNames = new Set<string>();
+  const selectedPathsSet = new Set(selectedPaths);
   let selectedTotal = 0;
 
   for (const entry of inspection.entries) {
@@ -243,10 +297,9 @@ export function extractInspectedZipEntries(
         ),
       );
     }
-    selectedRawNames.add(entry.rawName);
   }
 
-  if (!selectedRawNames.size) return Promise.resolve({});
+  if (!selectedPathsSet.size || selectedTotal === 0) return Promise.resolve({});
 
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -271,7 +324,13 @@ export function extractInspectedZipEntries(
     try {
       terminate = unzip(
         bytes,
-        { filter: (info) => selectedRawNames.has(info.name) },
+        {
+          filter: (info) => {
+            // fflate 返回的 info.name 可能是 Mojibake（Latin-1），先修正再匹配
+            const fixed = fixMojibakeName(info.name);
+            return selectedPathsSet.has(fixed.replace(/\\/g, '/'));
+          },
+        },
         (error, files: Unzipped) => {
           if (error) {
             finish(() => reject(invalidZipError(error)));
@@ -279,7 +338,8 @@ export function extractInspectedZipEntries(
           }
           const normalized: Record<string, Uint8Array> = {};
           for (const [rawName, data] of Object.entries(files)) {
-            normalized[rawName.replace(/\\/g, '/')] = data;
+            const fixed = fixMojibakeName(rawName);
+            normalized[fixed.replace(/\\/g, '/')] = data;
           }
           finish(() => resolve(normalized));
         },
