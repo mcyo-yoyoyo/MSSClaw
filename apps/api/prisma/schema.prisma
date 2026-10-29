@@ -694,6 +694,8 @@ model StationAnnouncement {
   badge       String
   badgeColor  String?  @map("badge_color")
   pinned      Boolean  @default(false)
+  /// false 表示已下架：首页和我的消息不展示，记录仍保留
+  listed      Boolean  @default(true)
   publishedAt String   @map("published_at")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)

@@ -33,6 +33,7 @@ function normalize(list: readonly StationAnnouncement[]): StationAnnouncement[] 
       badgeColor: normalizeAnnouncementColor(a.badgeColor) || undefined,
       publishedAt: a.publishedAt || new Date().toISOString(),
       pinned: a.pinned === true,
+      listed: a.listed !== false,
     }))
     .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.publishedAt.localeCompare(a.publishedAt));
 }
@@ -59,6 +60,7 @@ interface StationAnnouncementState {
   upsert: (item: StationAnnouncement, isNew?: boolean) => void;
   remove: (id: string) => void;
   togglePinned: (id: string) => void;
+  toggleListed: (id: string) => void;
   dismissToast: () => void;
 }
 
@@ -120,6 +122,17 @@ export const useStationAnnouncementStore = create<StationAnnouncementState>((set
       get,
       next,
       willPin ? '已置顶公告' : '已取消置顶',
+    );
+  },
+
+  toggleListed: (id) => {
+    const next = get().items.map((a) => (a.id === id ? { ...a, listed: !a.listed } : a));
+    const willList = next.find((a) => a.id === id)?.listed;
+    commit(
+      set,
+      get,
+      next,
+      willList ? '已重新上架' : '已下架，首页和我的消息不再展示',
     );
   },
 

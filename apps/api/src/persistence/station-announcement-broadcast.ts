@@ -36,6 +36,8 @@ export interface CanonicalStationAnnouncement {
   badgeColor: string;
   publishedAt: string;
   pinned: boolean;
+  /** false 表示已下架。缺省按在架处理，避免旧数据被藏起来。 */
+  listed: boolean;
 }
 
 type BroadcastPrisma = Pick<PrismaService, 'inboxMessageRecord' | 'inboxUserMessageState'>;
@@ -99,6 +101,7 @@ export function canonicalizeStationAnnouncements(input: unknown): {
       badgeColor: normalizeAnnouncementColor(entry.badgeColor),
       publishedAt: isoDate(entry.publishedAt),
       pinned: entry.pinned === true,
+      listed: entry.listed !== false,
     });
   }
   return {
@@ -110,8 +113,9 @@ export function canonicalizeStationAnnouncements(input: unknown): {
 
 /**
  * 把公告文档的变更同步到广播消息：
- * - 保存 → upsert 一条广播消息，标题/正文改动跟着更新，保留各人已读态
- * - 删除 → 撤回消息及各人已读态，用于运营误发
+ * - 在架 → upsert 一条广播消息，标题/正文改动跟着更新，保留各人已读态
+ * - 下架 → 撤回消息。已读态挂在消息上，会一并清掉；重新上架会再次通知所有人
+ * - 删除 → 撤回消息及各人已读态，公告记录也不保留，用于运营误发
  */
 export async function syncStationAnnouncementBroadcast(
   prisma: BroadcastPrisma,
@@ -119,13 +123,19 @@ export async function syncStationAnnouncementBroadcast(
   next: readonly CanonicalStationAnnouncement[],
 ): Promise<{ delivered: number; retracted: number }> {
   const nextIds = new Set(next.map((item) => item.id));
-  const retracted = previous.map((item) => item.id).filter((id) => !nextIds.has(id));
-  for (const id of retracted) {
+  const removed = previous.map((item) => item.id).filter((id) => !nextIds.has(id));
+  for (const id of removed) {
     await prisma.inboxUserMessageState.deleteMany({ where: { messageId: id } });
     await prisma.inboxMessageRecord.deleteMany({ where: { id } });
   }
 
-  for (const item of next) {
+  const unlisted = next.filter((item) => !item.listed);
+  for (const item of unlisted) {
+    await prisma.inboxMessageRecord.deleteMany({ where: { id: item.id } });
+  }
+
+  const listed = next.filter((item) => item.listed);
+  for (const item of listed) {
     const shared = {
       kind: ANNOUNCEMENT_BROADCAST_KIND,
       title: item.title,
@@ -142,5 +152,5 @@ export async function syncStationAnnouncementBroadcast(
     });
   }
 
-  return { delivered: next.length, retracted: retracted.length };
+  return { delivered: listed.length, retracted: removed.length + unlisted.length };
 }

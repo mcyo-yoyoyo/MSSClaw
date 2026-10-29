@@ -48,9 +48,9 @@ function rememberDismissed(id: string) {
   }
 }
 
-/** 首页公告条 / 消息同步：置顶优先，同组按创建时间倒序 */
+/** 首页公告条 / 消息同步：只含在架公告，置顶优先，同组按创建时间倒序 */
 export function getStationAnnouncements(): StationAnnouncement[] {
-  return useStationAnnouncementStore.getState().items;
+  return useStationAnnouncementStore.getState().items.filter((item) => item.listed !== false);
 }
 
 /** 首页公告条的数据源：当前用户未读、未擦掉 */
@@ -74,9 +74,15 @@ export function listUnreadStationAnnouncements(): StationAnnouncement[] {
 export function ensureStationAnnouncementInbox() {
   if (canUseInboxApi()) return;
   const announcements = getStationAnnouncements();
-  if (!announcements.length) return;
+  const unlisted = new Set(
+    useStationAnnouncementStore
+      .getState()
+      .items.filter((item) => item.listed === false)
+      .map((item) => item.id),
+  );
   const { messages } = useInboxStore.getState();
-  const existing = new Set(messages.map((m) => m.id));
+  const kept = messages.filter((message) => !unlisted.has(message.id));
+  const existing = new Set(kept.map((m) => m.id));
   const toAdd: InboxMessage[] = announcements
     .filter((a) => !existing.has(a.id))
     .map((a) => ({
@@ -90,8 +96,8 @@ export function ensureStationAnnouncementInbox() {
       read: false,
       meta: { announcementTag: a.badge },
     }));
-  if (!toAdd.length) return;
-  useInboxStore.setState((s) => ({ messages: [...toAdd, ...s.messages] }));
+  if (!toAdd.length && kept.length === messages.length) return;
+  useInboxStore.setState({ messages: [...toAdd, ...kept] });
   useInboxStore.getState().persist();
 }
 

@@ -251,6 +251,40 @@ test('支持多条置顶，按创建时间倒序，编辑和置顶时间不改�
   assert.equal(saved.items.find((a) => a.id === 'ann-pin')?.pinned, false);
 });
 
+test('下架后不进首页公告条，重新上架后恢复', async () => {
+  let saved = {
+    revision: 1,
+    items: [announcement({ id: 'ann-live', title: '在架公告' })],
+  };
+  globalThis.fetch = (async (input, init) => {
+    if (String(input).includes('/docs/station-announcements')) {
+      if (init?.method === 'PUT') {
+        const { payload } = JSON.parse(String(init.body));
+        saved = { items: payload.items, revision: saved.revision + 1 };
+      }
+      return jsonResponse({ payload: saved });
+    }
+    return jsonResponse({});
+  }) as typeof fetch;
+
+  connect();
+  inboxStore.setState({ messages: [] });
+  announcementStore.getState().hydrate();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(announcements.listUnreadStationAnnouncements().map((a) => a.id), ['ann-live']);
+
+  announcementStore.getState().toggleListed('ann-live');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(saved.items[0]?.listed, false);
+  assert.equal(announcementStore.getState().items[0]?.listed, false);
+  assert.deepEqual(announcements.listUnreadStationAnnouncements(), []);
+
+  announcementStore.getState().toggleListed('ann-live');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(saved.items[0]?.listed, true);
+  assert.deepEqual(announcements.listUnreadStationAnnouncements().map((a) => a.id), ['ann-live']);
+});
+
 test('另一个运营先提交时拉回最新公告，不覆盖对方内容', async () => {
   globalThis.fetch = (async (input, init) => {
     const url = String(input);

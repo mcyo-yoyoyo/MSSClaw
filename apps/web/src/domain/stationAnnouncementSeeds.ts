@@ -16,6 +16,8 @@ export type StationAnnouncement = {
   /** 公告创建时的 ISO 时间；沿用 publishedAt 字段，编辑和置顶不更新 */
   publishedAt: string;
   pinned: boolean;
+  /** false 表示已下架。缺省按在架处理。 */
+  listed: boolean;
 };
 
 /** 系统自带示例公告（演示种子 / 运营「恢复默认」） */
@@ -27,6 +29,7 @@ export const STATION_ANNOUNCEMENT_SEEDS: StationAnnouncement[] = [
     badge: 'AI上线',
     publishedAt: '2026-07-22T09:00:00.000Z',
     pinned: false,
+    listed: true,
   },
   {
     id: 'ann-ops-training-academy',
@@ -35,5 +38,6 @@ export const STATION_ANNOUNCEMENT_SEEDS: StationAnnouncement[] = [
     badge: 'AI培训',
     publishedAt: '2026-07-21T10:30:00.000Z',
     pinned: false,
+    listed: true,
   },
 ];

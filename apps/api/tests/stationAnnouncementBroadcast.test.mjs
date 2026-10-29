@@ -47,6 +47,7 @@ function announcement(overrides = {}) {
     badge: 'AI上线',
     publishedAt: '2026-09-01T09:00:00.000Z',
     pinned: false,
+    listed: true,
     ...overrides,
   };
 }
@@ -128,6 +129,30 @@ test('置顶及取消置顶保留已读态，删除才撤回消息与各人已�
 
   await service.putDoc('ws-test', 'station-announcements', { revision: 3, items: [] });
   assert.equal(await message('ann-launch'), null);
+  assert.equal(await prisma.inboxUserMessageState.count(), 0);
+});
+
+test('下架撤回消息和已读态但保留公告，重新上架后再次广播', async () => {
+  await seedAnnouncements(1, [announcement()]);
+  await broadcastMessage('ann-launch');
+  const readAt = new Date('2026-09-02T10:00:00.000Z');
+  await prisma.inboxUserMessageState.create({ data: { userId: 'u-1', messageId: 'ann-launch', readAt } });
+  const service = new PlatformDocsService(prisma, {});
+
+  const hidden = await service.putDoc('ws-test', 'station-announcements', {
+    revision: 1,
+    items: [announcement({ listed: false })],
+  });
+  assert.equal(hidden.payload.items[0].listed, false);
+  assert.equal(await message('ann-launch'), null);
+  assert.equal(await prisma.inboxUserMessageState.count(), 0);
+  assert.equal((await prisma.stationAnnouncement.findUnique({ where: { id: 'ann-launch' } })).listed, false);
+
+  await service.putDoc('ws-test', 'station-announcements', {
+    revision: 2,
+    items: [announcement({ listed: true })],
+  });
+  assert.equal((await message('ann-launch')).title, '功能上线：三货架');
   assert.equal(await prisma.inboxUserMessageState.count(), 0);
 });
 

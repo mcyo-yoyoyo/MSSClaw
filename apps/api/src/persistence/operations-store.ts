@@ -115,6 +115,7 @@ const STATION_ANNOUNCEMENT: TableSpec = {
     badgeColor: { type: 'string' },
     publishedAt: { type: 'string', required: true },
     pinned: { type: 'bool', required: true },
+    listed: { type: 'bool', required: true },
   },
 };
 

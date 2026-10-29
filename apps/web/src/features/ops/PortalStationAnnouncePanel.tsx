@@ -28,6 +28,7 @@ function newDraft(): StationAnnouncement {
     badge: '',
     publishedAt: new Date().toISOString(),
     pinned: false,
+    listed: true,
   };
 }
 
@@ -85,6 +86,7 @@ export function PortalStationAnnouncePanel() {
   const upsert = useStationAnnouncementStore((s) => s.upsert);
   const remove = useStationAnnouncementStore((s) => s.remove);
   const togglePinned = useStationAnnouncementStore((s) => s.togglePinned);
+  const toggleListed = useStationAnnouncementStore((s) => s.toggleListed);
   const listTags = useStationAnnouncementStore((s) => s.listTags);
 
   const [draft, setDraft] = useState<StationAnnouncement | null>(null);
@@ -362,7 +364,9 @@ export function PortalStationAnnouncePanel() {
           可见：首页一次滚动一条标题，点标题进「我的消息」看全文；用户点 ×
           擦掉即视为已读，之后不再滚动。
           可同时<strong className="font-semibold text-zinc-700">置顶</strong>
-          多条公告，置顶公告优先展示；置顶组和普通组内均按创建时间倒序，最新创建的排在最前；
+          多条公告，置顶公告优先展示；置顶组和普通组内均按创建时间倒序，最新创建的排在最前。
+          <strong className="font-semibold text-zinc-700">下架</strong>
+          后首页和「我的消息」不再展示，记录仍留在这里，可重新上架；重新上架会再次通知所有人。
           <strong className="font-semibold text-zinc-700">删除</strong>
           会一并撤回消息，用于误发。
         </p>
@@ -382,7 +386,10 @@ export function PortalStationAnnouncePanel() {
           items.map((a) => (
             <article
               key={a.id}
-              className="flex flex-col gap-2 rounded-2xl border border-zinc-200/90 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+              className={cn(
+                'flex flex-col gap-2 rounded-2xl border border-zinc-200/90 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between',
+                a.listed === false && 'bg-zinc-50/80',
+              )}
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -402,6 +409,11 @@ export function PortalStationAnnouncePanel() {
                       置顶
                     </span>
                   ) : null}
+                  {a.listed === false ? (
+                    <span className="rounded-full bg-zinc-200 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600">
+                      已下架
+                    </span>
+                  ) : null}
                 </div>
                 <p className="mt-1 line-clamp-2 text-[12px] text-zinc-500">{announcementSummary(a.body)}</p>
                 <p className="mt-1 text-[10px] text-zinc-400">
@@ -416,6 +428,14 @@ export function PortalStationAnnouncePanel() {
                   className="rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"
                 >
                   {a.pinned ? '取消置顶' : '置顶'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleListed(a.id)}
+                  aria-pressed={a.listed !== false}
+                  className="rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"
+                >
+                  {a.listed === false ? '重新上架' : '下架'}
                 </button>
                 <button
                   type="button"
