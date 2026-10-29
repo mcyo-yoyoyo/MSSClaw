@@ -752,7 +752,7 @@ created_at 取 at（毫秒）。收藏数改为从本表统计，或只由一条
 | title | VARCHAR(255) | | | |
 | body | TEXT | | | |
 | badge | VARCHAR(16) | | | `AI上线` / `AI培训` |
-| published | TINYINT(1) | | 0 | 是否在首页跑马灯露出 |
+| pinned | TINYINT(1) | | 0 | 置顶优先，同组按发布时间倒序 |
 | published_at | DATETIME(3) | | | |
 
 主键：`(workspace_id, id)`。

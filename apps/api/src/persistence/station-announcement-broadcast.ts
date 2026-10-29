@@ -1,7 +1,7 @@
 import type { PrismaService } from '../prisma/prisma.service';
 
 /**
- * 站内公告：文档是权威源，发布时把已上架公告落成一条全员广播消息。
+ * 站内公告：文档是权威源，保存时把公告落成一条全员广播消息。
  *
  * 首页公告条按「未读」过滤，而未读态挂在 InboxUserMessageState 上（每人一行），
  * 所以公告必须先有 InboxMessageRecord 才能记住「擦掉=已读」。这一步放在服务端，
@@ -35,7 +35,7 @@ export interface CanonicalStationAnnouncement {
   /** 运营选定的标签色 #rrggbb；空串表示按标签文字自动取色 */
   badgeColor: string;
   publishedAt: string;
-  published: boolean;
+  pinned: boolean;
 }
 
 type BroadcastPrisma = Pick<PrismaService, 'inboxMessageRecord' | 'inboxUserMessageState'>;
@@ -98,20 +98,19 @@ export function canonicalizeStationAnnouncements(input: unknown): {
       badge: normalizeAnnouncementTag(entry.badge ?? entry.tag),
       badgeColor: normalizeAnnouncementColor(entry.badgeColor),
       publishedAt: isoDate(entry.publishedAt),
-      published: entry.published !== false,
+      pinned: entry.pinned === true,
     });
   }
   return {
     items: [...byId.values()]
-      .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
+      .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.publishedAt.localeCompare(a.publishedAt))
       .slice(0, LIMITS.items),
   };
 }
 
 /**
  * 把公告文档的变更同步到广播消息：
- * - 已上架 → upsert 一条广播消息，标题/正文改动跟着更新
- * - 下架 → 保留消息（已经通知过的不追回），只退出首页公告条
+ * - 保存 → upsert 一条广播消息，标题/正文改动跟着更新，保留各人已读态
  * - 删除 → 撤回消息及各人已读态，用于运营误发
  */
 export async function syncStationAnnouncementBroadcast(
@@ -126,8 +125,7 @@ export async function syncStationAnnouncementBroadcast(
     await prisma.inboxMessageRecord.deleteMany({ where: { id } });
   }
 
-  const published = next.filter((item) => item.published);
-  for (const item of published) {
+  for (const item of next) {
     const shared = {
       kind: ANNOUNCEMENT_BROADCAST_KIND,
       title: item.title,
@@ -144,5 +142,5 @@ export async function syncStationAnnouncementBroadcast(
     });
   }
 
-  return { delivered: published.length, retracted: retracted.length };
+  return { delivered: next.length, retracted: retracted.length };
 }

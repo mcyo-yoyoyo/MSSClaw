@@ -610,7 +610,7 @@ create table station_announcement (
   title        text not null,
   body         text not null,
   badge        text not null,                                   -- AI上线 / AI培训
-  published    boolean not null default false,                  -- 是否在首页跑马灯露出
+  pinned       boolean not null default false,                  -- 置顶优先，同组按发布时间倒序
   published_at timestamptz(3) not null,
   created_at   timestamptz(3) not null default now(),
   updated_at   timestamptz(3) not null

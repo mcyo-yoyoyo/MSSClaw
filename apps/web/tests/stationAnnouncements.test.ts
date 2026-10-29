@@ -128,7 +128,7 @@ function announcement(overrides: Record<string, unknown> = {}) {
     body: '本周六 22:00 起停机 2 小时。',
     badge: '维护',
     publishedAt: '2026-09-10T02:00:00.000Z',
-    published: true,
+    pinned: false,
     ...overrides,
   };
 }
@@ -195,6 +195,60 @@ test('连了后端就以库为准：空文档不再灌演示种子', async () =>
   assert.deepEqual(announcementStore.getState().items, []);
   assert.equal(announcementStore.getState().revision, 7);
   assert.equal(announcementStore.getState().loaded, true);
+});
+
+test('支持多条置顶，按创建时间倒序，编辑和置顶时间不改变排序', async () => {
+  let saved = {
+    revision: 1,
+    items: [
+      announcement({ id: 'ann-new', publishedAt: '2026-09-12T02:00:00.000Z' }),
+      announcement({ id: 'ann-old', publishedAt: '2026-09-08T02:00:00.000Z', published: false }),
+      announcement({ id: 'ann-pin', pinned: true }),
+      announcement({ id: 'ann-invalid-pin', pinned: 'true', publishedAt: '2026-09-07T02:00:00.000Z' }),
+    ],
+  };
+  globalThis.fetch = (async (input, init) => {
+    if (String(input).includes('/docs/station-announcements')) {
+      if (init?.method === 'PUT') {
+        const { payload } = JSON.parse(String(init.body));
+        assert.equal(payload.revision, saved.revision);
+        assert.ok(payload.items.every((item: any) => !('published' in item)));
+        saved = { items: payload.items, revision: saved.revision + 1 };
+      }
+      return jsonResponse({ payload: saved });
+    }
+    return jsonResponse({});
+  }) as typeof fetch;
+
+  connect();
+  inboxStore.setState({ messages: [] });
+  announcementStore.getState().hydrate();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const ids = () => announcements.listUnreadStationAnnouncements().map((a) => a.id);
+  assert.deepEqual(ids(), ['ann-pin', 'ann-new', 'ann-old', 'ann-invalid-pin']);
+  assert.equal(announcementStore.getState().items.find((a: any) => a.id === 'ann-invalid-pin').pinned, false);
+
+  announcementStore.getState().togglePinned('ann-old');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(ids(), ['ann-pin', 'ann-old', 'ann-new', 'ann-invalid-pin']);
+  assert.equal(saved.items.find((a) => a.id === 'ann-old')?.pinned, true);
+  assert.equal(saved.items.filter((a) => a.pinned).length, 2);
+
+  const olderPinned = announcementStore.getState().items.find((a: any) => a.id === 'ann-old');
+  announcementStore.getState().upsert({ ...olderPinned, title: '编辑旧的置顶公告' });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(ids(), ['ann-pin', 'ann-old', 'ann-new', 'ann-invalid-pin']);
+  assert.equal(saved.items.find((a) => a.id === 'ann-old')?.publishedAt, '2026-09-08T02:00:00.000Z');
+
+  connect();
+  announcementStore.getState().hydrate();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(ids(), ['ann-pin', 'ann-old', 'ann-new', 'ann-invalid-pin']);
+
+  announcementStore.getState().togglePinned('ann-pin');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(ids(), ['ann-old', 'ann-new', 'ann-pin', 'ann-invalid-pin']);
+  assert.equal(saved.items.find((a) => a.id === 'ann-pin')?.pinned, false);
 });
 
 test('另一个运营先提交时拉回最新公告，不覆盖对方内容', async () => {
@@ -267,11 +321,11 @@ test('擦掉公告即标已读：写回服务端，且不再进入首页公告�
   assert.deepEqual(announcements.listUnreadStationAnnouncements(), []);
 });
 
-test('服务端已记为已读的公告不会再出现在首页公告条', async () => {
+test('服务端已记为已读的公告即使置顶也不会再出现在首页公告条', async () => {
   globalThis.fetch = (async (input) => {
     const url = String(input);
     if (url.includes('/docs/station-announcements')) {
-      return jsonResponse({ payload: { items: [announcement()], revision: 1 } });
+      return jsonResponse({ payload: { items: [announcement({ pinned: true })], revision: 1 } });
     }
     if (url.includes('/inbox/messages')) {
       return jsonResponse({

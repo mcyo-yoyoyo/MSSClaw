@@ -693,7 +693,7 @@ model StationAnnouncement {
   body        String
   badge       String
   badgeColor  String?  @map("badge_color")
-  published   Boolean
+  pinned      Boolean  @default(false)
   publishedAt String   @map("published_at")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)

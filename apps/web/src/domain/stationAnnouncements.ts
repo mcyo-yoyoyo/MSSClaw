@@ -48,12 +48,12 @@ function rememberDismissed(id: string) {
   }
 }
 
-/** 首页公告条 / 消息同步：仅已上架公告 */
+/** 首页公告条 / 消息同步：置顶优先，同组按创建时间倒序 */
 export function getStationAnnouncements(): StationAnnouncement[] {
-  return useStationAnnouncementStore.getState().listPublished();
+  return useStationAnnouncementStore.getState().items;
 }
 
-/** 首页公告条的数据源：已上架且当前用户未读、未擦掉 */
+/** 首页公告条的数据源：当前用户未读、未擦掉 */
 export function listUnreadStationAnnouncements(): StationAnnouncement[] {
   const dismissed = sessionDismissed();
   const readIds = new Set(

@@ -21,6 +21,9 @@ const SLIDE_MS = 380;
 function AnnounceLine({ announcement }: { announcement: StationAnnouncement }) {
   return (
     <>
+      {announcement.pinned ? (
+        <span className="shrink-0 text-[10px] font-semibold text-amber-700">置顶</span>
+      ) : null}
       {announcement.badge ? (
         <span
           className="shrink-0 text-[10px] font-semibold"
@@ -67,7 +70,7 @@ export function StationAnnounceBanner({ className }: { className?: string }) {
   }, [announcements]);
 
   const items = useMemo(
-    // 已读态来自 inbox，上架列表来自公告文档，两边任一变化都要重算。
+    // 已读态来自 inbox，公告列表来自公告文档，两边任一变化都要重算。
     () => listUnreadStationAnnouncements(),
     [announcements, inboxMessages, dismissTick],
   );

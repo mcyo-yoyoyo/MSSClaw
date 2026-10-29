@@ -291,7 +291,7 @@ export function PortalContentOpsPage() {
               </>
             ) : opsSurface === 'announce' ? (
               <>
-                维护首页横向站内公告。关闭演示内容后仍可配置真实公告；仅上架项对业务用户露出。
+                公告保存后对全部用户生效，置顶公告优先展示。
               </>
             ) : opsSurface === 'ainews' ? (
               <>

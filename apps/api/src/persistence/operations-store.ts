@@ -114,7 +114,7 @@ const STATION_ANNOUNCEMENT: TableSpec = {
     badge: { type: 'string', required: true },
     badgeColor: { type: 'string' },
     publishedAt: { type: 'string', required: true },
-    published: { type: 'bool', required: true },
+    pinned: { type: 'bool', required: true },
   },
 };
 
@@ -124,8 +124,9 @@ export async function readStationAnnouncements(prisma: Db) {
     readRevision(prisma, 'station-announcements'),
   ]);
   // badgeColor 空串也要原样返回（表示按标签文字取色）
+  const announcements = items.map((item) => ({ badgeColor: '', ...item })) as unknown as CanonicalStationAnnouncement[];
   return {
-    items: items.map((item) => ({ badgeColor: '', ...item })) as unknown as CanonicalStationAnnouncement[],
+    items: announcements.sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.publishedAt.localeCompare(a.publishedAt)),
     revision,
   };
 }

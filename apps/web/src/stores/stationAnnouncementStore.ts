@@ -15,19 +15,14 @@ import {
   savePlatformDoc,
 } from '@/api/platformDocsApi';
 
-export type StationAnnouncementRecord = StationAnnouncement & {
-  /** 是否在首页公告条露出 */
-  published: boolean;
-};
-
 const DOC_KIND = 'station-announcements' as const;
 
 interface AnnouncementDoc {
-  items?: StationAnnouncementRecord[];
+  items?: StationAnnouncement[];
   revision?: number;
 }
 
-function normalize(list: readonly StationAnnouncementRecord[]): StationAnnouncementRecord[] {
+function normalize(list: readonly StationAnnouncement[]): StationAnnouncement[] {
   return [...list]
     .filter((a) => a?.id && a?.title?.trim())
     .map((a) => ({
@@ -37,14 +32,14 @@ function normalize(list: readonly StationAnnouncementRecord[]): StationAnnouncem
       badge: normalizeAnnouncementTag(a.badge),
       badgeColor: normalizeAnnouncementColor(a.badgeColor) || undefined,
       publishedAt: a.publishedAt || new Date().toISOString(),
-      published: a.published !== false,
+      pinned: a.pinned === true,
     }))
-    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+    .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.publishedAt.localeCompare(a.publishedAt));
 }
 
-function seedItems(): StationAnnouncementRecord[] {
+function seedItems(): StationAnnouncement[] {
   if (!isDemoContentEnabled()) return [];
-  return normalize(STATION_ANNOUNCEMENT_SEEDS.map((a) => ({ ...a, published: true })));
+  return normalize(STATION_ANNOUNCEMENT_SEEDS);
 }
 
 function docRevision(value: unknown): number {
@@ -52,19 +47,18 @@ function docRevision(value: unknown): number {
 }
 
 interface StationAnnouncementState {
-  items: StationAnnouncementRecord[];
+  items: StationAnnouncement[];
   /** 服务端乐观锁版本；0 表示还没有落过库 */
   revision: number;
   /** hydrate 是否跑完：没跑完之前首页不渲染，避免闪一条库里没有的种子公告 */
   loaded: boolean;
   toast: string | null;
   hydrate: () => void;
-  listPublished: () => StationAnnouncement[];
   /** 运营已填过的标签，供输入框做候选 */
   listTags: () => string[];
-  upsert: (item: StationAnnouncementRecord, isNew?: boolean) => void;
+  upsert: (item: StationAnnouncement, isNew?: boolean) => void;
   remove: (id: string) => void;
-  togglePublished: (id: string) => void;
+  togglePinned: (id: string) => void;
   dismissToast: () => void;
 }
 
@@ -85,18 +79,13 @@ export const useStationAnnouncementStore = create<StationAnnouncementState>((set
         const remote = await fetchPlatformDoc<AnnouncementDoc>(DOC_KIND);
         const list = Array.isArray(remote?.items) ? remote.items : [];
         // 连了后端就以库为准：空文档就是「还没有公告」。再灌种子会让首页出现
-        // 库里不存在的公告，点开也没有对应的消息详情。运营要示例可以点「恢复默认示例」。
+        // 库里不存在的公告，点开也没有对应的消息详情。
         set({ items: normalize(list), revision: docRevision(remote?.revision), loaded: true });
       } catch {
         set({ items: [], revision: 0, loaded: true });
       }
     })();
   },
-
-  listPublished: () =>
-    get()
-      .items.filter((a) => a.published)
-      .map(({ published: _p, ...rest }) => rest),
 
   listTags: () => [...new Set(get().items.map((a) => a.badge).filter(Boolean))].sort(),
 
@@ -123,14 +112,14 @@ export const useStationAnnouncementStore = create<StationAnnouncementState>((set
     );
   },
 
-  togglePublished: (id) => {
-    const next = get().items.map((a) => (a.id === id ? { ...a, published: !a.published } : a));
-    const willPublish = next.find((a) => a.id === id)?.published;
+  togglePinned: (id) => {
+    const next = get().items.map((a) => (a.id === id ? { ...a, pinned: !a.pinned } : a));
+    const willPin = next.find((a) => a.id === id)?.pinned;
     commit(
       set,
       get,
       next,
-      willPublish ? '已上架到首页公告条' : '已从首页公告条下架，我的消息中保留该通知',
+      willPin ? '已置顶公告' : '已取消置顶',
     );
   },
 
@@ -138,13 +127,13 @@ export const useStationAnnouncementStore = create<StationAnnouncementState>((set
 }));
 
 /**
- * 本地先更新、再落库。服务端会规范化并把已上架公告广播成站内消息，
+ * 本地先更新、再落库。服务端会规范化并把公告广播成站内消息，
  * 所以写入成功后以服务端返回的 payload 为准（含新的 revision）。
  */
 function commit(
   set: (partial: Partial<StationAnnouncementState>) => void,
   get: () => StationAnnouncementState,
-  nextItems: readonly StationAnnouncementRecord[],
+  nextItems: readonly StationAnnouncement[],
   toast: string,
 ) {
   const normalized = normalize(nextItems);

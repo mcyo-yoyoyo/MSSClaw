@@ -35,7 +35,7 @@ import {
   writeStationAnnouncements,
 } from '../dist/persistence/operations-store.js';
 import { PersistenceService } from '../dist/persistence/persistence.service.js';
-import { canonicalizeStationAnnouncements } from '../dist/persistence/station-announcement-broadcast.js';
+import { canonicalizeStationAnnouncements, syncStationAnnouncementBroadcast } from '../dist/persistence/station-announcement-broadcast.js';
 import { executionFromRow, executionToRow } from '../dist/executions/executions.service.js';
 import { draftFromRow, draftToRow, solutionFromRow, solutionToRow } from '../dist/ai-knowledge/ai-knowledge.service.js';
 
@@ -150,6 +150,7 @@ async function migrate(tx, source, report) {
     const doc = payload('station-announcements');
     const items = canonicalizeStationAnnouncements(doc).items;
     await writeStationAnnouncements(tx, 0, items);
+    await syncStationAnnouncementBroadcast(tx, [], items);
     await restoreRevision('station-announcements', doc?.revision);
     check('站内公告', diffById(items, (await readStationAnnouncements(tx)).items));
   }

@@ -13,25 +13,21 @@ import {
 } from '@/domain/announcementBody';
 import {
   ANNOUNCEMENT_TAG_MAX_LENGTH,
-  ANNOUNCEMENT_TAG_PRESET_COLORS,
   ANNOUNCEMENT_TITLE_SOFT_LIMIT,
   announcementTagChipStyle,
   announcementTagColor,
-  normalizeAnnouncementColor,
 } from '@/domain/stationAnnouncementTags';
-import {
-  useStationAnnouncementStore,
-  type StationAnnouncementRecord,
-} from '@/stores/stationAnnouncementStore';
+import { useStationAnnouncementStore } from '@/stores/stationAnnouncementStore';
+import type { StationAnnouncement } from '@/domain/stationAnnouncementSeeds';
 
-function newDraft(): StationAnnouncementRecord {
+function newDraft(): StationAnnouncement {
   return {
     id: `ann-${Date.now().toString(36)}`,
     title: '',
     body: '',
     badge: '',
     publishedAt: new Date().toISOString(),
-    published: true,
+    pinned: false,
   };
 }
 
@@ -49,10 +45,12 @@ function HomeLinePreview({
   badge,
   badgeColor,
   title,
+  pinned,
 }: {
   badge: string;
   badgeColor?: string;
   title: string;
+  pinned: boolean;
 }) {
   return (
     <div className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50/70 px-3 py-2">
@@ -60,6 +58,9 @@ function HomeLinePreview({
         站内公告
       </span>
       <div className="flex h-5 min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+        {pinned ? (
+          <span className="shrink-0 text-[10px] font-semibold text-amber-700">置顶</span>
+        ) : null}
         {badge ? (
           <span
             className="shrink-0 text-[10px] font-semibold"
@@ -83,17 +84,17 @@ export function PortalStationAnnouncePanel() {
   const hydrate = useStationAnnouncementStore((s) => s.hydrate);
   const upsert = useStationAnnouncementStore((s) => s.upsert);
   const remove = useStationAnnouncementStore((s) => s.remove);
-  const togglePublished = useStationAnnouncementStore((s) => s.togglePublished);
+  const togglePinned = useStationAnnouncementStore((s) => s.togglePinned);
   const listTags = useStationAnnouncementStore((s) => s.listTags);
 
-  const [draft, setDraft] = useState<StationAnnouncementRecord | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<StationAnnouncementRecord | null>(null);
+  const [draft, setDraft] = useState<StationAnnouncement | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<StationAnnouncement | null>(null);
   const [uploadingImages, setUploadingImages] = useState(0);
   const [imageError, setImageError] = useState('');
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // 上传是异步的：插入时以当下的正文为准，免得覆盖上传期间运营新打的字
-  const draftRef = useRef<StationAnnouncementRecord | null>(draft);
+  const draftRef = useRef<StationAnnouncement | null>(draft);
   draftRef.current = draft;
   const knownTags = useMemo(() => listTags(), [items, listTags]);
 
@@ -131,7 +132,7 @@ export function PortalStationAnnouncePanel() {
     setImageError('');
     let cursor = bodyRef.current?.selectionStart ?? draftRef.current.body.length;
     for (const file of images) {
-      const current: StationAnnouncementRecord | null = draftRef.current;
+      const current: StationAnnouncement | null = draftRef.current;
       if (!current) return;
       if (!(ANNOUNCEMENT_IMAGE_TYPES as readonly string[]).includes(file.type)) {
         setImageError(`${file.name}：只支持 PNG / JPG / WebP / GIF`);
@@ -152,7 +153,7 @@ export function PortalStationAnnouncePanel() {
           mimeType: file.type,
           dataUrl: await readFileAsDataUrl(file),
         });
-        const latest: StationAnnouncementRecord | null = draftRef.current;
+        const latest: StationAnnouncement | null = draftRef.current;
         if (!latest) return;
         const next = insertImageLine(latest.body, cursor, announcementImageMarkdown(file.name, uploaded.id));
         cursor = next.cursor;
@@ -315,66 +316,11 @@ export function PortalStationAnnouncePanel() {
               <label className="inline-flex items-center gap-2 self-center text-[12px] text-zinc-600">
                 <input
                   type="checkbox"
-                  checked={draft.published}
-                  onChange={(e) => setDraft({ ...draft, published: e.target.checked })}
+                  checked={draft.pinned}
+                  onChange={(e) => setDraft({ ...draft, pinned: e.target.checked })}
                 />
-                上架到首页公告条
+                置顶公告
               </label>
-            </div>
-
-            <div className="text-[12px] font-medium text-zinc-600">
-              标签颜色
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setDraft({ ...draft, badgeColor: undefined })}
-                  aria-pressed={!draft.badgeColor}
-                  className={cn(
-                    'rounded-lg border px-2 py-1 text-[11px] font-medium transition',
-                    draft.badgeColor
-                      ? 'border-zinc-200 text-zinc-500 hover:bg-zinc-50'
-                      : 'border-zinc-900 text-zinc-900',
-                  )}
-                >
-                  自动
-                </button>
-                {ANNOUNCEMENT_TAG_PRESET_COLORS.map((preset) => {
-                  const active = normalizeAnnouncementColor(draft.badgeColor) === preset.value;
-                  return (
-                    <button
-                      key={preset.value}
-                      type="button"
-                      onClick={() => setDraft({ ...draft, badgeColor: preset.value })}
-                      aria-label={`标签颜色 ${preset.label}`}
-                      aria-pressed={active}
-                      title={preset.label}
-                      className={cn(
-                        'h-6 w-6 rounded-full border-2 transition',
-                        active ? 'border-zinc-900' : 'border-transparent hover:border-zinc-300',
-                      )}
-                      style={{ backgroundColor: preset.value }}
-                    />
-                  );
-                })}
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-zinc-200 px-2 py-1 text-[11px] font-medium text-zinc-500 transition hover:bg-zinc-50">
-                  自定义
-                  <input
-                    type="color"
-                    value={announcementTagColor(draft.badge, draft.badgeColor)}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        badgeColor: normalizeAnnouncementColor(e.target.value) || undefined,
-                      })
-                    }
-                    aria-label="自定义标签颜色"
-                    className="h-5 w-6 cursor-pointer border-0 bg-transparent p-0"
-                  />
-                </label>
-              </div>
-              <span className="mt-1.5 block text-[11px] font-normal text-zinc-400">
-                「自动」按标签文字取色，同一个标签在所有页面同色；选定颜色只影响这条公告。
-              </span>
             </div>
           </section>
 
@@ -385,6 +331,7 @@ export function PortalStationAnnouncePanel() {
                 badge={draft.badge}
                 badgeColor={draft.badgeColor}
                 title={draft.title}
+                pinned={draft.pinned}
               />
             </div>
             <div>
@@ -410,12 +357,12 @@ export function PortalStationAnnouncePanel() {
     <div className="space-y-4">
       <div className="rounded-2xl border border-zinc-200/90 bg-white p-4">
         <p className="text-[12px] leading-relaxed text-zinc-500">
-          配置首页「站内公告」。已上架公告对
+          配置首页「站内公告」。公告保存后对
           <strong className="font-semibold text-zinc-700">全部用户</strong>
           可见：首页一次滚动一条标题，点标题进「我的消息」看全文；用户点 ×
           擦掉即视为已读，之后不再滚动。
-          <strong className="font-semibold text-zinc-700">下架</strong>
-          只退出首页滚动，已发出的消息保留；
+          可同时<strong className="font-semibold text-zinc-700">置顶</strong>
+          多条公告，置顶公告优先展示；置顶组和普通组内均按创建时间倒序，最新创建的排在最前；
           <strong className="font-semibold text-zinc-700">删除</strong>
           会一并撤回消息，用于误发。
         </p>
@@ -450,14 +397,11 @@ export function PortalStationAnnouncePanel() {
                     </span>
                   ) : null}
                   <h4 className="truncate text-[13px] font-semibold text-zinc-900">{a.title}</h4>
-                  <span
-                    className={cn(
-                      'rounded-full px-1.5 py-0.5 text-[10px] font-medium',
-                      a.published ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-400',
-                    )}
-                  >
-                    {a.published ? '已上架' : '未上架'}
-                  </span>
+                  {a.pinned ? (
+                    <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                      置顶
+                    </span>
+                  ) : null}
                 </div>
                 <p className="mt-1 line-clamp-2 text-[12px] text-zinc-500">{announcementSummary(a.body)}</p>
                 <p className="mt-1 text-[10px] text-zinc-400">
@@ -467,10 +411,11 @@ export function PortalStationAnnouncePanel() {
               <div className="flex shrink-0 flex-wrap gap-1.5">
                 <button
                   type="button"
-                  onClick={() => togglePublished(a.id)}
+                  onClick={() => togglePinned(a.id)}
+                  aria-pressed={a.pinned}
                   className="rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"
                 >
-                  {a.published ? '下架' : '上架'}
+                  {a.pinned ? '取消置顶' : '置顶'}
                 </button>
                 <button
                   type="button"
@@ -513,7 +458,7 @@ export function PortalStationAnnouncePanel() {
               <ul className="mt-2 space-y-1 text-[12px] leading-relaxed text-zinc-500">
                 <li>· 从首页公告条移除</li>
                 <li>· 所有用户「我的消息」里的这条通知一并撤回</li>
-                <li>· 删除后不可恢复；只是想停止滚动请用「下架」</li>
+                <li>· 删除后不可恢复</li>
               </ul>
             </div>
             <div className="flex justify-end gap-2 border-t border-black/[0.06] px-5 py-3">
