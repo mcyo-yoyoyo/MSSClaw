@@ -41,9 +41,9 @@ export const PLAZA_GUIDE_TYPE_LABEL: Record<PlazaGuideType, string> = {
 
 export const PLAZA_GUIDE_TYPE_HINT: Record<PlazaGuideType, string> = {
   image: '可上传图片，或填图片 URL；用户侧可预览',
-  pdf: '可上传 PDF（≤3MB），或填在线预览 / 下载链接',
-  ppt: '可上传 PPT（≤3MB），或填网盘 / 在线演示链接',
-  video: '短视频可上传（≤3MB）；较长请用点播页 / 外链',
+  pdf: '可上传 PDF（≤100MB），或填在线预览 / 下载链接',
+  ppt: '可上传 PPT（≤100MB），或填网盘 / 在线演示链接',
+  video: '短视频可上传（≤100MB）；较长请用点播页 / 外链',
   link: '任意网页、文档站、知识库外链（本类型仅填 URL）',
   text: '撰写操作步骤；可选上传附件或填下载链接',
 };

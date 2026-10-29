@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { appendAttachmentReference } from '@/lib/attachment';
 import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
-import { getHomeRegionSuggestion, getHomeSuggestion } from '@/domain/prototype/home';
+import { getHomeSuggestion } from '@/domain/prototype/home';
 import type { HomeCategory } from '@/domain/prototype/types';
 import { getAgentById } from '@/domain/plan';
 import { getSlashQuery, useHomeStore } from '@/stores/homeStore';
@@ -190,10 +190,7 @@ export function SharedComposer({
         return;
       }
     }
-    const { expertAxis, category, regionId } = useHomeStore.getState();
-    onChange(
-      expertAxis === 'region' ? getHomeRegionSuggestion(regionId) : getHomeSuggestion(category),
-    );
+    onChange(getHomeSuggestion('ecommerce'));
     notify('已填入智能建议');
     textareaRef.current?.focus();
   };

@@ -8,7 +8,6 @@ import { useAppViewStore } from '@/stores/appViewStore';
 /** 首页 Hero 右侧：扁平板化 AI 快讯露出 */
 export function HomeAiBriefTeaser() {
   const payload = useAiBotDailyNewsStore((s) => s.payload);
-  const loading = useAiBotDailyNewsStore((s) => s.loading);
   const hydrate = useAiBotDailyNewsStore((s) => s.hydrate);
   const pref = useAiNewsPreferenceStore((s) => s.pref);
   const hydratePref = useAiNewsPreferenceStore((s) => s.hydrate);
@@ -57,13 +56,11 @@ export function HomeAiBriefTeaser() {
       </div>
 
       <div className="home-brief-teaser__list">
-        {loading && !items.length ? (
+        {!items.length ? (
           <p className="py-2 text-[11px] text-[#86868b]">
             <i className="fa-solid fa-spinner fa-spin mr-1 text-[10px]" />
             加载中…
           </p>
-        ) : !items.length ? (
-          <p className="py-2 text-[11px] text-[#86868b]">暂无快讯</p>
         ) : (
           items.map((item, i) => (
             <a key={item.id} href={item.url} target="_blank" rel="noreferrer" className="home-brief-teaser__row">

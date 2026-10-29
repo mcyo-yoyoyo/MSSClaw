@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { uploadWorkspaceBlob } from '@/api/blobApi';
+import { canUsePlatformDocsApi } from '@/api/platformDocsApi';
 import {
   guideNeedsUrl,
   PLAZA_GUIDE_TYPE_HINT,
@@ -92,9 +94,12 @@ export function PortalHowToOpsPanel() {
     setUploading(true);
     try {
       const { dataUrl, fileName, size } = await readHowtoUploadFile(file, draft.type);
+      const url = canUsePlatformDocsApi()
+        ? (await uploadWorkspaceBlob({ name: fileName, mimeType: file.type, dataUrl })).url
+        : dataUrl;
       setDraft({
         ...draft,
-        url: dataUrl,
+        url,
         fileName,
       });
       showToast(`已上传 ${fileName}（${formatHowtoFileSize(size)}）`);

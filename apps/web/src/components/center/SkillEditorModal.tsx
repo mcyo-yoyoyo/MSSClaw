@@ -63,7 +63,7 @@ import { useTemporaryWorkspaceBlobs } from '@/hooks/useTemporaryWorkspaceBlobs';
 import { evaluateAndPersistSkill } from '@/domain/skillEvaluation';
 
 const ICON_MAX_BYTES = 512 * 1024;
-const CASE_ATTACHMENT_MAX_BYTES = 12 * 1024 * 1024;
+const CASE_ATTACHMENT_MAX_BYTES = 100 * 1024 * 1024;
 const PDF_MIME_TYPE = 'application/pdf';
 const PPTX_MIME_TYPE =
   'application/vnd.openxmlformats-officedocument.presentationml.presentation';
@@ -1029,7 +1029,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                         return;
                       }
                       if (file.size > CASE_ATTACHMENT_MAX_BYTES) {
-                        showToast('样例附件请控制在 12MB 以内');
+                        showToast('样例附件请控制在 100MB 以内');
                         return;
                       }
                       const generation = caseUploadGenerationRef.current;

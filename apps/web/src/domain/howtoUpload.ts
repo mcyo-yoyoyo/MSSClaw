@@ -1,7 +1,7 @@
 import type { PlazaGuideType, PlazaToolGuide } from '@/domain/plazaToolGuides';
 
-/** 本地演示：文件转 data URL 存 localStorage；大视频请用外链 */
-export const HOWTO_UPLOAD_MAX_MB = 3;
+/** 文件读取上限；在线上传后仅保存对象存储链接 */
+export const HOWTO_UPLOAD_MAX_MB = 100;
 const MAX_BYTES = HOWTO_UPLOAD_MAX_MB * 1024 * 1024;
 
 const ACCEPT_BY_TYPE: Partial<Record<PlazaGuideType, string>> = {

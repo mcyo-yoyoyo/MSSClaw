@@ -3,7 +3,6 @@
  * 浏览器侧走同源 `/api/ai-daily-news`（Vite 中间件 / Vercel Function）规避 CORS。
  */
 
-import { AI_BOT_DAILY_NEWS_FALLBACK as FALLBACK_SEED } from '@/domain/aiBotDailyNewsFallback';
 import { apiAuthHeaders, apiUrl, fetchWithTimeout } from '@/api/client';
 
 export const AI_BOT_DAILY_NEWS_URL = 'https://aihot.virxact.com';
@@ -34,7 +33,7 @@ export type AiBotDailyNewsPayload = {
   fetchedAt: string;
   sourceName?: string;
   groups: AiBotNewsGroup[];
-  /** true 表示接口失败后使用本地兜底 / 运营缓存 */
+  /** @deprecated 已不再使用内置快照；保留字段以免旧响应解析报错 */
   fromFallback?: boolean;
 };
 
@@ -120,9 +119,13 @@ function withStableDateKeys(payload: AiBotDailyNewsPayload): AiBotDailyNewsPaylo
   };
 }
 
-/** 离线兜底（接口不可用时仍可演示）；由 scripts/refresh-ai-bot-fallback.mjs 刷新 */
-export const AI_BOT_DAILY_NEWS_FALLBACK: AiBotDailyNewsPayload =
-  withStableDateKeys(FALLBACK_SEED as AiBotDailyNewsPayload);
+export function emptyAiBotDailyNews(): AiBotDailyNewsPayload {
+  return {
+    sourceUrl: AI_BOT_DAILY_NEWS_URL,
+    fetchedAt: '',
+    groups: [],
+  };
+}
 
 function stripTags(html: string): string {
   return html
@@ -205,7 +208,7 @@ export function writeCachedAiBotDailyNews(_payload: AiBotDailyNewsPayload): void
   /* no-op：快讯不再写入浏览器缓存 */
 }
 
-/** 优先 Nest /api/v1；兼容 Vercel /api；失败回退内置兜底 */
+/** 优先 Nest /api/v1；兼容 Vercel /api。没有快讯分组时返回空列表，不使用内置快照。 */
 export async function fetchAiBotDailyNews(signal?: AbortSignal): Promise<AiBotDailyNewsPayload> {
   for (const path of [apiAiDailyNewsPath(), legacyAiDailyNewsPath()]) {
     try {
@@ -222,7 +225,7 @@ export async function fetchAiBotDailyNews(signal?: AbortSignal): Promise<AiBotDa
       /* try next */
     }
   }
-  return { ...AI_BOT_DAILY_NEWS_FALLBACK, fetchedAt: new Date().toISOString(), fromFallback: true };
+  return emptyAiBotDailyNews();
 }
 
 async function readSyncFailure(res: Response): Promise<string> {

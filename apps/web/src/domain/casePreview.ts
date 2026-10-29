@@ -4,8 +4,8 @@ import type {
 } from '@/domain/prototype/portalContent';
 import { apiUrl } from '@/api/client';
 
-const MAX_BYTES_LOCAL = 3 * 1024 * 1024;
-const MAX_BYTES_BLOB = 12 * 1024 * 1024;
+const MAX_BYTES_LOCAL = 100 * 1024 * 1024;
+const MAX_BYTES_BLOB = 100 * 1024 * 1024;
 
 const ACCEPT =
   '.pdf,.pptx,.ppt,.docx,.doc,.xlsx,.xls,.png,.jpg,.jpeg,.webp,.gif,.mp4,.webm,.mov,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*,video/*';
@@ -16,9 +16,9 @@ const LAYOUT_ACCEPT =
 
 export const CASE_PREVIEW_ACCEPT = ACCEPT;
 export const CASE_LAYOUT_PREVIEW_ACCEPT = LAYOUT_ACCEPT;
-/** 离线 localStorage 上限说明；API 在线外提 blob 时可到 12MB */
-export const CASE_PREVIEW_MAX_MB = 3;
-export const CASE_PREVIEW_BLOB_MAX_MB = 12;
+/** 单文件校验上限；离线保存仍受浏览器存储配额约束 */
+export const CASE_PREVIEW_MAX_MB = 100;
+export const CASE_PREVIEW_BLOB_MAX_MB = 100;
 
 export function detectPreviewKind(file: File): PortalCasePreviewFile['kind'] {
   const name = file.name.toLowerCase();

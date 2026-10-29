@@ -80,7 +80,7 @@ http {
 
     # 反代后端。注意：不能让 /api 落到下面 SPA 的 try_files 里。
     location /api/ {
-      # 用户侧 Skill / Agent 包最大 200 MiB，留协议余量；普通附件由后端限制在 12 MiB。
+      # 用户侧 Skill / Agent 包最大 200 MiB，留协议余量；普通附件由后端限制在 100 MiB。
       # 默认值只有 1m，2MB 的附件就会被拦成 413。
       client_max_body_size 210m;
       proxy_request_buffering off;

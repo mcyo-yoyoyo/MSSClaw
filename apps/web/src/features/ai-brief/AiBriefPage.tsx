@@ -300,7 +300,6 @@ function DateCalendarFilter({
 
 export function AiBriefPage() {
   const payload = useAiBotDailyNewsStore((s) => s.payload);
-  const loading = useAiBotDailyNewsStore((s) => s.loading);
   const hydrate = useAiBotDailyNewsStore((s) => s.hydrate);
   const consumeAiNewsOverview = useNavigationIntentStore((s) => s.consumeAiNewsOverview);
   const pref = useAiNewsPreferenceStore((s) => s.pref);
@@ -324,7 +323,7 @@ export function AiBriefPage() {
   };
 
   useEffect(() => {
-    // 每次进入快讯页主动同步，避免开发热更新或上游短暂失败后长期停留在兜底内容。
+    // 每次进入快讯页重新拉取。没有接口数据时保持加载，不展示内置快照。
     void hydrate(true);
     void hydratePref();
     hydrateEmailCopy();
@@ -420,7 +419,7 @@ export function AiBriefPage() {
           className="mb-4 shrink-0"
           tone="brief"
           title="AI快讯"
-          subtitle={`${payload.fromFallback ? '本地兜底 · ' : ''}精选动态 · 按类速读 · 单独标出适合 MSS 业务的条目`}
+          subtitle="精选动态 · 按类速读 · 单独标出适合 MSS 业务的条目"
         >
           <div className="ai-brief-subscribe">
             <button
@@ -581,14 +580,10 @@ export function AiBriefPage() {
         {contentMode === 'cases' ? <CaseInsightsView /> : (
         <div className="min-h-0 flex-1">
           <main className="min-h-0 flex-1">
-            {loading && !flat.length ? (
+            {!flat.length ? (
               <div className="flex h-full items-center justify-center px-4 py-16 text-[13px] text-[#6e6e73]">
                 <i className="fa-solid fa-spinner fa-spin mr-2 text-[12px]" />
                 正在加载 AI 快讯…
-              </div>
-            ) : !flat.length ? (
-              <div className="flex h-full items-center justify-center px-4 py-16 text-[13px] text-[#86868b]">
-                暂无内容
               </div>
             ) : !visibleGroups.length ? (
               <div className="rounded-2xl border border-dashed border-zinc-200 bg-white/70 px-4 py-16 text-center text-[13px] text-zinc-400">

@@ -15,8 +15,10 @@ type NewsPayload = {
 
 type NewsStoreState = {
   payload: NewsPayload;
+  loading: boolean;
   syncing: boolean;
   error: string | null;
+  hydrate: (force?: boolean) => Promise<void>;
   syncFromSource: () => Promise<{
     ok: boolean;
     message: string;
@@ -36,6 +38,14 @@ type WorkspaceStore = {
 
 const panelSource = readFileSync(
   new URL('../src/features/ops/PortalAiNewsPanel.tsx', import.meta.url),
+  'utf8',
+);
+const briefPageSource = readFileSync(
+  new URL('../src/features/ai-brief/AiBriefPage.tsx', import.meta.url),
+  'utf8',
+);
+const newsDomainSource = readFileSync(
+  new URL('../src/domain/aiBotDailyNews.ts', import.meta.url),
   'utf8',
 );
 
@@ -212,6 +222,44 @@ test('并发触发复用同一次同步，不重复请求上游', async () => {
   assert.equal((await first).ok, true);
   assert.equal((await second).ok, true);
   assert.equal(postCalls, 1);
+});
+
+test('接口没有快讯时保持加载，不写入内置快照', async () => {
+  newsStore.setState({
+    payload: { sourceUrl: '', fetchedAt: '', groups: [] },
+    loading: true,
+    syncing: false,
+    error: null,
+  });
+  globalThis.fetch = (async () => jsonResponse({ message: 'empty' }, 503)) as typeof fetch;
+
+  await newsStore.getState().hydrate(true);
+
+  assert.equal(newsStore.getState().loading, true);
+  assert.equal(newsStore.getState().payload.groups.length, 0);
+});
+
+test('接口返回快讯后结束加载', async () => {
+  newsStore.setState({
+    payload: { sourceUrl: '', fetchedAt: '', groups: [] },
+    loading: true,
+    syncing: false,
+    error: null,
+  });
+  globalThis.fetch = (async () => jsonResponse(payload('接口快讯'))) as typeof fetch;
+
+  await newsStore.getState().hydrate(true);
+
+  assert.equal(newsStore.getState().loading, false);
+  assert.equal(newsStore.getState().payload.groups[0]?.items[0]?.title, '接口快讯');
+});
+
+test('快讯页在没有数据时展示加载，并且不再引用内置快照', () => {
+  assert.match(briefPageSource, /正在加载 AI 快讯/);
+  assert.doesNotMatch(briefPageSource, /本地兜底/);
+  assert.doesNotMatch(briefPageSource, /暂无内容/);
+  assert.doesNotMatch(newsDomainSource, /aiBotDailyNewsFallback/);
+  assert.doesNotMatch(newsDomainSource, /AI_BOT_DAILY_NEWS_FALLBACK/);
 });
 
 test('AI 新闻运营面板提供带加载态的拉取按钮和结果提示', () => {

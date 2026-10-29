@@ -1,7 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { canExecuteChat } from '@/domain/permissions';
 import { PageStageHero } from '@/components/layout/PageStageHero';
-import { useHomeStore } from '@/stores/homeStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useSessionStore } from '@/stores/sessionStore';
@@ -55,7 +54,6 @@ export function HomePage({
   onInvokeAgent?: (agent: PrototypeAgentSeed, prompt?: string) => void;
   onInvokeSkill?: (skill: PrototypeSkillSeed) => void;
 }) {
-  const { applyUserOrgDefaults } = useHomeStore();
   const agents = useMarketplaceStore((s) => s.agents);
   const skills = useMarketplaceStore((s) => s.skills);
   const user = useSessionStore((s) => s.user);
@@ -106,14 +104,6 @@ export function HomePage({
     hydrateExternalToolLayout,
     apiConnected,
   ]);
-
-  useEffect(() => {
-    if (!user) return;
-    applyUserOrgDefaults(
-      { deptIds: user.deptIds ?? [], regionId: user.regionId ?? null },
-      user.platformRole,
-    );
-  }, [user, applyUserOrgDefaults]);
 
   useEffect(() => {
     if (!pendingBusinessScenario) return;

@@ -1,9 +1,8 @@
 import { create } from 'zustand';
 import {
-  AI_BOT_DAILY_NEWS_FALLBACK,
+  emptyAiBotDailyNews,
   fetchAiBotDailyNews,
   flattenAiBotNews,
-  readCachedAiBotDailyNews,
   syncAiBotDailyNews,
   type AiBotDailyNewsPayload,
   type AiBotNewsItem,
@@ -33,24 +32,19 @@ let syncInflight: Promise<SyncResult> | null = null;
 let lastHydratedAt = 0;
 const TTL_MS = 10 * 60 * 1000;
 
-function initialPayload(): AiBotDailyNewsPayload {
-  return readCachedAiBotDailyNews() ?? AI_BOT_DAILY_NEWS_FALLBACK;
+function hasNews(payload: AiBotDailyNewsPayload): boolean {
+  return payload.groups.some((group) => group.items.length > 0);
 }
 
 export const useAiBotDailyNewsStore = create<State>((set, get) => ({
-  payload: initialPayload(),
-  loading: false,
+  payload: emptyAiBotDailyNews(),
+  loading: true,
   syncing: false,
   error: null,
-  lastSyncedAt: readCachedAiBotDailyNews()?.fetchedAt ?? null,
+  lastSyncedAt: null,
 
   hydrate: async (force = false) => {
-    if (
-      !force &&
-      !get().payload.fromFallback &&
-      Date.now() - lastHydratedAt < TTL_MS &&
-      get().payload.groups.length
-    ) {
+    if (!force && hasNews(get().payload) && Date.now() - lastHydratedAt < TTL_MS) {
       return;
     }
     if (inflight) return inflight;
@@ -58,20 +52,19 @@ export const useAiBotDailyNewsStore = create<State>((set, get) => ({
     inflight = (async () => {
       try {
         const payload = await fetchAiBotDailyNews();
-        // 只有真实上游响应才进入 TTL；兜底结果应允许用户下次进入页面时立即重试。
-        if (!payload.fromFallback) lastHydratedAt = Date.now();
+        if (!hasNews(payload)) {
+          set({ loading: !hasNews(get().payload), error: null });
+          return;
+        }
+        lastHydratedAt = Date.now();
         set({
           payload,
           loading: false,
           error: null,
-          lastSyncedAt: payload.fromFallback ? get().lastSyncedAt : payload.fetchedAt,
+          lastSyncedAt: payload.fetchedAt,
         });
       } catch {
-        set({
-          loading: false,
-          error: null,
-          payload: readCachedAiBotDailyNews() ?? AI_BOT_DAILY_NEWS_FALLBACK,
-        });
+        set({ loading: !hasNews(get().payload), error: null });
       } finally {
         inflight = null;
       }
@@ -98,7 +91,7 @@ export const useAiBotDailyNewsStore = create<State>((set, get) => ({
         }
 
         const payload = await fetchAiBotDailyNews();
-        if (payload.fromFallback || !payload.groups.length) {
+        if (!hasNews(payload)) {
           const message = '快讯已拉取，但页面未能读取最新内容';
           set({ syncing: false, error: message });
           return {
@@ -111,6 +104,7 @@ export const useAiBotDailyNewsStore = create<State>((set, get) => ({
         lastHydratedAt = Date.now();
         set({
           payload,
+          loading: false,
           syncing: false,
           error: null,
           lastSyncedAt: payload.fetchedAt,

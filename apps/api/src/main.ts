@@ -35,7 +35,7 @@ async function bootstrap() {
   });
 
   // 大 JSON（会话 / Marketplace）默认 Express 100kb 会静默失败
-  const bodyLimit = process.env.JSON_BODY_LIMIT ?? '20mb';
+  const bodyLimit = process.env.JSON_BODY_LIMIT ?? '150mb';
   app.use(json({ limit: bodyLimit }));
   app.use(urlencoded({ extended: true, limit: bodyLimit }));
   app.use(compression());

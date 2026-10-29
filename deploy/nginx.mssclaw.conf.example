@@ -94,7 +94,7 @@ http {
     # 健康检查须返回 JSON：GET /api/v1/health → {"status":"ok","service":"mss-claw-api",...}
     location /api/ {
       limit_req zone=mss_api burst=40 nodelay;
-      # 用户侧 Skill / Agent 包允许 200 MiB；留出少量协议余量。普通附件仍由 API 限制为 12 MiB。
+      # 用户侧 Skill / Agent 包允许 200 MiB；留出少量协议余量。普通附件仍由 API 限制为 100 MiB。
       client_max_body_size 210m;
       proxy_request_buffering off; # 大包直接流向 Nest，避免 Nginx 先完整落临时文件
       proxy_http_version 1.1;

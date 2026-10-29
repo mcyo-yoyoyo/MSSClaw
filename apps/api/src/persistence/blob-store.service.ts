@@ -24,7 +24,7 @@ export type UploadedBlob = Omit<BlobMeta, 'deleteCapabilityHash'> & { url: strin
 export type UploadedDeletableBlob = UploadedBlob & { deleteToken: string };
 export type UploadedPackageBlob = UploadedDeletableBlob;
 
-const DEFAULT_BLOB_MAX_BYTES = 12 * 1024 * 1024;
+const DEFAULT_BLOB_MAX_BYTES = 100 * 1024 * 1024;
 const DEFAULT_PACKAGE_BLOB_MAX_BYTES = 200 * 1024 * 1024;
 const GENERATED_BLOB_ID = /^[0-9a-f]{32}$/;
 const GENERATED_DELETE_TOKEN = /^[A-Za-z0-9_-]{43}$/;
