@@ -11,6 +11,9 @@ const ITEMS_API = `${AI_NEWS_SOURCE}/api/v1/items?mode=selected&window=7d&limit=
 /** 归档保留半年；超期条目在每次归档后滚动淘汰 */
 const RETENTION_DAYS = 180;
 
+/** 页面查询只返回最近三个上海自然日（含今天） */
+export const AI_NEWS_QUERY_DAYS = 3;
+
 /** 启动时距上次成功同步超过该小时数即补拉；取 12h 可覆盖"错过当天 08:00"的情形 */
 const STALE_AFTER_HOURS = 12;
 
@@ -114,6 +117,26 @@ function dateLabel(value?: string): string {
   })
     .format(date)
     .replace(/日周/, '·周');
+}
+
+function shiftDateKey(key: string, days: number): string {
+  const [year, month, day] = key.split('-').map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  const y = shifted.getUTCFullYear();
+  const m = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(shifted.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/** 最近三天窗口的起始日（含），按 Asia/Shanghai 自然日计算。 */
+export function recentNewsCutoffKey(now = new Date(), days = AI_NEWS_QUERY_DAYS): string {
+  return shiftDateKey(dateKey(now.toISOString()), -(days - 1));
+}
+
+/** 该起始日的上海零点，用于按 publishedAt 字符串做范围查询。 */
+export function recentNewsSinceIso(now = new Date(), days = AI_NEWS_QUERY_DAYS): string {
+  const [year, month, day] = recentNewsCutoffKey(now, days).split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day, -8, 0, 0, 0)).toISOString();
 }
 
 /** 稳定的上海自然日键，供日历筛选使用；dateLabel 仅用于展示。 */
@@ -328,16 +351,37 @@ export class AiNewsArchiveService implements OnModuleInit {
     return { ok: true, added, total: items.length };
   }
 
-  /** 供接口读取：按日期分组，结构与原实时代理保持一致 */
+  /** 供接口读取：只查最近三个上海自然日，再按日期分组。 */
   async readGrouped() {
-    const archive = await this.readArchive();
+    const cutoff = recentNewsCutoffKey();
+    const [rows, setting] = await Promise.all([
+      this.prisma.aiNewsFeedItem.findMany({
+        where: { publishedAt: { gte: recentNewsSinceIso() } },
+        orderBy: { publishedAt: 'desc' },
+      }),
+      this.prisma.appSetting.findUnique({ where: { settingKey: SYNC_SETTING_KEY } }),
+    ]);
+    const sync = (setting?.value ?? {}) as Omit<ArchivePayload, 'items'>;
     const grouped = new Map<
       string,
       { dateLabel: string; items: ArchivedNewsItem[] }
     >();
-    for (const item of archive.items) {
-      // 旧归档没有 dateKey；读取时由 publishedAt 现算，无需数据迁移。
-      const key = dateKey(item.publishedAt);
+    for (const row of rows) {
+      const key = dateKey(row.publishedAt);
+      if (!key || key < cutoff) continue;
+      const item: ArchivedNewsItem = {
+        id: row.id,
+        publishedAt: row.publishedAt,
+        dateLabel: row.dateLabel,
+        title: row.title,
+        summary: row.summary,
+        url: row.url,
+        source: row.source ?? undefined,
+        category: row.category ?? undefined,
+        reason: row.reason ?? undefined,
+        score: row.score ?? undefined,
+        aihotUrl: row.aihotUrl ?? undefined,
+      };
       const group = grouped.get(key);
       if (group) group.items.push(item);
       else grouped.set(key, { dateLabel: item.dateLabel, items: [item] });
@@ -345,9 +389,9 @@ export class AiNewsArchiveService implements OnModuleInit {
     return {
       sourceUrl: AI_NEWS_SOURCE,
       sourceName: 'AIHOT',
-      fetchedAt: archive.updatedAt,
-      lastSyncAt: archive.lastSyncAt,
-      lastSyncError: archive.lastSyncError,
+      fetchedAt: sync.updatedAt ?? new Date(0).toISOString(),
+      lastSyncAt: sync.lastSyncAt,
+      lastSyncError: sync.lastSyncError,
       groups: [...grouped].map(([key, group]) => ({
         dateKey: key,
         dateLabel: group.dateLabel,

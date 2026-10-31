@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AiDailyNewsController } from '../dist/persistence/ai-daily-news.controller.js';
-import { aihotProxyUrlFromEnv } from '../dist/persistence/ai-news-archive.service.js';
+import {
+  aihotProxyUrlFromEnv,
+  AI_NEWS_QUERY_DAYS,
+  recentNewsCutoffKey,
+  recentNewsSinceIso,
+} from '../dist/persistence/ai-news-archive.service.js';
 
 function createController(role) {
   let syncCalls = 0;
@@ -63,6 +68,14 @@ test('manual AI news sync lets a super admin trigger the archive refresh', async
   assert.equal(state().syncCalls, 1);
   assert.equal(state().receivedToken, 'admin-session-token');
   assert.equal(state().receivedWorkspace, 'ws-cn-marketing');
+});
+
+test('AI news query window is the last three Shanghai calendar days', () => {
+  assert.equal(AI_NEWS_QUERY_DAYS, 3);
+  const now = new Date('2026-10-30T16:00:00.000Z');
+  assert.equal(recentNewsCutoffKey(now), '2026-10-29');
+  assert.equal(recentNewsSinceIso(now), '2026-10-28T16:00:00.000Z');
+  assert.equal(recentNewsCutoffKey(new Date('2026-10-30T15:59:00.000Z')), '2026-10-28');
 });
 
 test('AIHOT proxy is opt-in for test and production startup', () => {

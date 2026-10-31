@@ -31,6 +31,15 @@ function aihotDateLabel(value?: string): string {
     .replace(/日周/, '·周');
 }
 
+function shiftAihotDateKey(key: string, days: number): string {
+  const [year, month, day] = key.split('-').map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  const y = shifted.getUTCFullYear();
+  const m = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(shifted.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 function aihotDateKey(value?: string): string {
   const date = value ? new Date(value) : new Date();
   if (Number.isNaN(date.getTime())) return '';
@@ -47,6 +56,7 @@ function aihotDateKey(value?: string): string {
 }
 
 function mapAihotDevPayload(items: AihotDevItem[]) {
+  const cutoff = shiftAihotDateKey(aihotDateKey(new Date().toISOString()), -2);
   const grouped = new Map<
     string,
     { dateLabel: string; items: Array<Record<string, unknown>> }
@@ -69,6 +79,7 @@ function mapAihotDevPayload(items: AihotDevItem[]) {
       score: typeof item.score === 'number' ? item.score : undefined,
       aihotUrl: item.links?.aihot || undefined,
     };
+    if (!dateKey || dateKey < cutoff) continue;
     const group = grouped.get(dateKey);
     if (group) group.items.push(mapped);
     else grouped.set(dateKey, { dateLabel, items: [mapped] });

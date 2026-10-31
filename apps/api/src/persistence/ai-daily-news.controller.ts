@@ -12,7 +12,7 @@ import { PlatformDocsService } from './platform-docs.service';
 import { PLATFORM_WORKSPACE_ID } from '../common/platform-workspace';
 
 /**
- * AI 快讯：读数据库归档，不再每次访问都代理上游。
+ * AI 快讯：只读数据库里最近三个上海自然日，不再每次访问都代理上游。
  * 上游拉取由 AiNewsArchiveService 每天 08:00 定时执行。
  */
 @Controller('ai-daily-news')

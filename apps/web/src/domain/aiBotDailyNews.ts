@@ -188,6 +188,35 @@ export function flattenAiBotNews(payload: AiBotDailyNewsPayload): AiBotNewsItem[
   return payload.groups.flatMap((g) => g.items);
 }
 
+/** 页面只保留最近三个上海自然日（含今天）。 */
+export const AI_NEWS_VISIBLE_DAYS = 3;
+
+function shiftDateKey(key: string, days: number): string {
+  const [year, month, day] = key.split('-').map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  const y = shifted.getUTCFullYear();
+  const m = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(shifted.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function keepRecentAiBotNews(
+  payload: AiBotDailyNewsPayload,
+  now = new Date(),
+): AiBotDailyNewsPayload {
+  const today = shanghaiDateKey(now.toISOString());
+  if (!today) return payload;
+  const cutoff = shiftDateKey(today, -(AI_NEWS_VISIBLE_DAYS - 1));
+  return {
+    ...payload,
+    groups: payload.groups.filter((group) => {
+      const key =
+        normalizeDateKey(group.dateKey) || shanghaiDateKey(group.items[0]?.publishedAt);
+      return Boolean(key && key >= cutoff && key <= today);
+    }),
+  };
+}
+
 export function apiAiDailyNewsPath(): string {
   return apiUrl('/api/v1/ai-daily-news');
 }
@@ -220,7 +249,9 @@ export async function fetchAiBotDailyNews(signal?: AbortSignal): Promise<AiBotDa
       if (!res.ok) continue;
       const data = (await res.json()) as AiBotDailyNewsPayload;
       if (!data?.groups?.length) continue;
-      return withStableDateKeys({ ...data, fromFallback: false });
+      const recent = keepRecentAiBotNews(withStableDateKeys({ ...data, fromFallback: false }));
+      if (!recent.groups.length) continue;
+      return recent;
     } catch {
       /* try next */
     }
