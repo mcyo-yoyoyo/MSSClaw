@@ -99,7 +99,7 @@ export function matchesAssetOrgFilters(asset: OwnableAsset, input: AssetFilterIn
         : asset.ownerRegionId
           ? [asset.ownerRegionId]
           : [];
-    if (regions.length > 0 && !regions.includes(regionFilter)) return false;
+    if (!regions.includes(regionFilter)) return false;
   }
 
   return true;
