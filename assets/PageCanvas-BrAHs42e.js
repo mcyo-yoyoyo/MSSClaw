@@ -1,0 +1,1 @@
+import{j as n}from"./vendor-react-IHhJoXif.js";import{a9 as o}from"./artifact-DPMuVYH0.js";function m({children:a,className:s,as:r="div"}){return n.jsx(r,{className:o("page-canvas",s),children:a})}export{m as P};
