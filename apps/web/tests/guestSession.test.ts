@@ -166,6 +166,12 @@ before(async () => {
   });
   globalThis.fetch = jsonFetch;
   globalThis.window = globalThis as unknown as Window & typeof globalThis;
+  // Node 的 globalThis 没有事件方法，而部分 store 一加载就注册 online 等监听
+  Object.assign(globalThis, {
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent: () => true,
+  });
   sessionStore = (
     (await vite.ssrLoadModule('/src/stores/sessionStore.ts')) as {
       useSessionStore: Store<SessionState>;
