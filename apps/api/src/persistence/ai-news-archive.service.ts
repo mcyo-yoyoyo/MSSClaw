@@ -5,7 +5,7 @@ import { ProxyAgent, fetch as undiciFetch } from 'undici';
 import { PrismaService } from '../prisma/prisma.service';
 import { inTransaction, readRows, replaceRows, type Db, type TableSpec } from './json-table';
 
-export const AI_NEWS_SOURCE = 'https://aihot.virxact.com';
+export const AI_NEWS_SOURCE = 'https://aihot.news';
 const ITEMS_API = `${AI_NEWS_SOURCE}/api/v1/items?mode=selected&window=7d&limit=100`;
 
 /** 归档保留半年；超期条目在每次归档后滚动淘汰 */
@@ -246,6 +246,7 @@ export class AiNewsArchiveService implements OnModuleInit {
       const upstream = await undiciFetch(ITEMS_API, {
         dispatcher,
         signal: AbortSignal.timeout(timeoutMs),
+        redirect: 'follow',
         headers: {
           'User-Agent': 'mssclaw-ai-brief/1.0',
           Accept: 'application/json',
