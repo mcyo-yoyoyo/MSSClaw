@@ -28,6 +28,9 @@ export interface CallbackSuccess {
   ok: true;
   token: string;
   expiresAt: string;
+  /** 控制器写进 httpOnly Cookie 后从响应体去掉 */
+  refreshToken: string;
+  refreshExpiresAt: Date;
   user: Record<string, unknown>;
   traceId: string;
   provisioned: boolean;
@@ -108,6 +111,7 @@ export class AuthOAuthService {
     code: string;
     state: string;
     visitorId?: string;
+    userAgent?: string;
   }): Promise<CallbackSuccess | CallbackFailure> {
     const config = oauthConfig();
     const trace = new OAuthTrace(this.logger);
@@ -199,6 +203,7 @@ export class AuthOAuthService {
       postName: identity.postName,
       orgPath: identity.orgPath,
       visitorId: input.visitorId,
+      userAgent: input.userAgent,
       jitProvision: config.jitProvision,
       allowedEmailDomains: config.allowedEmailDomains,
       sessionTtlHours: config.sessionTtlHours,
@@ -223,6 +228,8 @@ export class AuthOAuthService {
       ok: true,
       token: result.token,
       expiresAt: result.expiresAt,
+      refreshToken: result.refreshToken,
+      refreshExpiresAt: result.refreshExpiresAt,
       user: result.user,
       traceId: trace.id,
       provisioned: result.provisioned,

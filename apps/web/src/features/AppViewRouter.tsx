@@ -15,14 +15,16 @@ import {
   LazyMarketShelfPage,
   LazyAssetDetailPage,
   LazyMemoryCenterPage,
-  LazyPresentationConfigPage,
+  LazyOrgAuditPage,
+  LazyOrgDeptsPage,
+  LazyOrgMembersPage,
+  LazyOrgRolesPage,
   LazyPortalContentOpsPage,
   LazyPortalDataDashboardPage,
   LazyModelCatalogOpsPage,
   LazyExecutionHistoryPage,
   LazyApprovalCenterPage,
   LazyPromptCenterPage,
-  LazySettingsPage,
   LazySkillCenterPage,
   LazyTaskCenterPage,
   LazyMyMessagesPage,
@@ -72,7 +74,10 @@ const VIEW_LABELS: Partial<Record<AppView, string>> = {
   memory: '管理记忆',
   prompts: '提示词',
   admin: '组织权限',
-  presentation: '展示配置',
+  'org-members': '成员',
+  'org-roles': '角色',
+  'org-depts': '部门',
+  'org-audit': '操作日志',
   'portal-ops': '门户运营',
   'portal-dashboard': '数据看板',
   'model-ops': '模型配置',
@@ -250,15 +255,28 @@ function AppViewRouterContent({ appView, handlers }: AppViewRouterProps) {
         </LazyView>
       );
     case 'admin':
+    case 'org-members':
       return (
         <LazyView label={label}>
-          <LazySettingsPage />
+          <LazyOrgMembersPage />
         </LazyView>
       );
-    case 'presentation':
+    case 'org-roles':
       return (
         <LazyView label={label}>
-          <LazyPresentationConfigPage />
+          <LazyOrgRolesPage />
+        </LazyView>
+      );
+    case 'org-depts':
+      return (
+        <LazyView label={label}>
+          <LazyOrgDeptsPage />
+        </LazyView>
+      );
+    case 'org-audit':
+      return (
+        <LazyView label={label}>
+          <LazyOrgAuditPage />
         </LazyView>
       );
     case 'portal-ops':

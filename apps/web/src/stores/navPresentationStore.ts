@@ -3,270 +3,77 @@ import type { AppView } from '@/domain/appView';
 import { isGuestLoginGatedView } from '@/domain/guestAccess';
 import {
   buildRoleNavPreset,
-  clampBusinessShellSlots,
-  CONFIGURABLE_ROLES,
-  isBusinessShellRole,
-  isBusinessShellSlot,
-  isSlotConfiguredOn,
-  migrateLegacyEnabled,
   NAV_FALLBACK_ORDER,
   NAV_PRESENTATION_META,
-  NAV_SLOT_IDS,
-  PRESENTATION_CONFIG_VIEW,
-  type NavPresetId,
   type NavSlotId,
   type RoleNavMatrix,
 } from '@/domain/navPresentation';
-import { listConfigurableSidebarSlots } from '@/domain/navPresetMatrix';
-import { isSystemAdmin } from '@/domain/currentUser';
 import { canRoleAccessView } from '@/domain/navRbac';
 import type { PlatformRole } from '@/domain/rbac';
 import { useSessionStore } from '@/stores/sessionStore';
-import {
-  canUsePlatformDocsApi,
-  fetchPlatformDoc,
-  scheduleSavePlatformDoc,
-} from '@/api/platformDocsApi';
 
-interface PersistedNavPresentation {
-  preset: NavPresetId;
-  roleEnabled: RoleNavMatrix;
+/** 菜单别名：并入别的页面的旧视图跟着目标菜单走 */
+const MENU_ALIASES: Partial<Record<NavSlotId, string>> = {
+  'agent-studio': 'agents',
+  cases: 'ai-map',
+};
+
+/** 组织权限旧入口：有成员 / 角色 / 部门任一项即可 */
+const ADMIN_ALIAS_MENUS = ['org-members', 'org-roles', 'org-depts', 'org-audit'];
+
+function serverMenuAllows(menus: readonly string[], slot: NavSlotId): boolean {
+  if (slot === 'admin') return ADMIN_ALIAS_MENUS.some((id) => menus.includes(id));
+  return menus.includes(MENU_ALIASES[slot] ?? slot);
 }
 
-function defaultState(): PersistedNavPresentation {
-  return { preset: 'customer', roleEnabled: buildRoleNavPreset('customer') };
-}
-
-function mergeRoleEnabled(parsed: Partial<RoleNavMatrix> | undefined): RoleNavMatrix {
-  const base = buildRoleNavPreset('customer');
-  if (!parsed) return base;
-  for (const role of CONFIGURABLE_ROLES) {
-    const row = parsed[role];
-    if (!row) continue;
-    for (const id of NAV_SLOT_IDS) {
-      if (typeof row[id] === 'boolean') base[role][id] = row[id]!;
-    }
-  }
-  return base;
-}
-
-function normalizePersisted(preset: NavPresetId, roleEnabled: RoleNavMatrix): PersistedNavPresentation {
-  // 命名预设以代码矩阵为准（避免旧配置卡住超管精简菜单）
-  if (preset === 'customer' || preset === 'standard' || preset === 'full') {
-    return { preset, roleEnabled: buildRoleNavPreset(preset) };
-  }
-  // custom：保留勾选；业务壳永远只保留工作平台槽位
-  return { preset, roleEnabled: clampBusinessShellSlots(roleEnabled) };
-}
-
-function fromRemote(remote: Partial<PersistedNavPresentation> | null): PersistedNavPresentation {
-  if (!remote) return defaultState();
-  const preset =
-    remote.preset === 'customer' ||
-    remote.preset === 'standard' ||
-    remote.preset === 'custom' ||
-    remote.preset === 'full'
-      ? remote.preset
-      : 'customer';
-  return normalizePersisted(preset, mergeRoleEnabled(remote.roleEnabled));
-}
-
-function persist(state: PersistedNavPresentation) {
-  if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc('nav-presentation', state);
-}
+/** 没有服务端菜单时（游客、离线演示登录）用的内置矩阵 */
+const FALLBACK_MATRIX: RoleNavMatrix = buildRoleNavPreset('customer');
 
 function currentRole(): PlatformRole {
   return useSessionStore.getState().user?.platformRole ?? 'viewer';
 }
 
-interface NavPresentationState extends PersistedNavPresentation {
-  editingRole: PlatformRole;
-  hydrate: () => void;
-  setEditingRole: (role: PlatformRole) => void;
+interface NavPresentationState {
+  /** 登录用户按服务端菜单；没有服务端菜单时按内置角色矩阵 */
   isSlotEnabled: (slot: NavSlotId, role?: PlatformRole) => boolean;
   isViewEnabled: (view: AppView) => boolean;
+  /** 页面里的新增 / 修改 / 删除按钮是否可用 */
+  isViewEditable: (view: AppView) => boolean;
   getFallbackView: (requested?: AppView) => AppView;
-  applyPreset: (preset: Exclude<NavPresetId, 'custom'>) => void;
-  setSlotEnabled: (role: PlatformRole, slot: NavSlotId, enabled: boolean) => void;
-  setViewEnabled: (view: AppView, enabled: boolean) => void;
-  resetToFull: () => void;
-  exportConfig: () => string;
-  importConfig: (json: string) => boolean;
-  enabledCount: (role?: PlatformRole) => number;
 }
 
-export const useNavPresentationStore = create<NavPresentationState>((set, get) => {
-  const initial = defaultState();
+export const useNavPresentationStore = create<NavPresentationState>((_set, get) => ({
+  isSlotEnabled: (slot, roleArg) => {
+    const { menus } = useSessionStore.getState();
+    if (menus && !roleArg) return serverMenuAllows(menus, slot);
 
-  return {
-    ...initial,
-    editingRole: 'business_user',
+    const role = roleArg ?? currentRole();
+    const meta = NAV_PRESENTATION_META.find((m) => m.id === slot);
+    if (meta?.adminOnly) return role === 'super_admin';
+    if (FALLBACK_MATRIX[role]?.[slot] !== true) return false;
+    if (slot !== 'warroom' && !canRoleAccessView(slot, role)) return false;
+    return true;
+  },
 
-    hydrate: () => {
-      void (async () => {
-        if (!canUsePlatformDocsApi()) {
-          set(defaultState());
-          return;
-        }
-        try {
-          const remote = await fetchPlatformDoc<Partial<PersistedNavPresentation>>('nav-presentation',
-          );
-          set(fromRemote(remote));
-        } catch {
-          set(defaultState());
-        }
-      })();
-    },
+  isViewEnabled: (view) => {
+    // 游客的 task / ai-tasks 是“可浏览、执行时登录”，不能沿用 viewer
+    // 在展示矩阵中的隐藏配置，否则路由会在登录墙之前先回退到首页。
+    if (useSessionStore.getState().isGuest && isGuestLoginGatedView(view)) return true;
+    return get().isSlotEnabled(view);
+  },
 
-    setEditingRole: (editingRole) => set({ editingRole }),
+  isViewEditable: (view) => {
+    const { menus, editableMenus } = useSessionStore.getState();
+    if (!menus) return get().isViewEnabled(view);
+    return serverMenuAllows(editableMenus, view);
+  },
 
-    isSlotEnabled: (slot, roleArg) => {
-      const role = roleArg ?? currentRole();
-      const meta = NAV_PRESENTATION_META.find((m) => m.id === slot);
-
-      if (meta?.adminOnly) {
-        return role === 'super_admin';
-      }
-
-      if (get().roleEnabled[role]?.[slot] !== true) return false;
-
-      if (slot !== 'warroom') {
-        if (!canRoleAccessView(slot, role)) return false;
-      }
-      return true;
-    },
-
-    isViewEnabled: (view) => {
-      // 游客的 task / ai-tasks 是“可浏览、执行时登录”，不能沿用 viewer
-      // 在展示矩阵中的隐藏配置，否则路由会在登录墙之前先回退到首页。
-      if (useSessionStore.getState().isGuest && isGuestLoginGatedView(view)) return true;
-      return get().isSlotEnabled(view);
-    },
-
-    getFallbackView: (requested) => {
-      const { isViewEnabled } = get();
-      if (requested && isViewEnabled(requested)) return requested;
-      for (const view of NAV_FALLBACK_ORDER) {
-        if (isViewEnabled(view)) return view;
-      }
-      return 'home';
-    },
-
-    applyPreset: (preset) => {
-      if (!isSystemAdmin()) return;
-      const next = { preset, roleEnabled: buildRoleNavPreset(preset) };
-      persist(next);
-      set(next);
-    },
-
-    setSlotEnabled: (role, slot, on) => {
-      if (!isSystemAdmin()) return;
-      const meta = NAV_PRESENTATION_META.find((m) => m.id === slot);
-      // locked 治理项不可关闭
-      if (meta?.locked && !on) return;
-      if (meta?.adminOnly && role !== 'super_admin') return;
-      // 业务壳只能配工作平台；能力配置请改「能力运营/超管」
-      if (isBusinessShellRole(role) && !isBusinessShellSlot(slot) && on) {
-        return;
-      }
-      // 业务壳首页为三货架流量入口，不可关
-      if (isBusinessShellRole(role) && slot === 'home' && !on) {
-        return;
-      }
-      if (role === 'viewer' && (slot === 'task' || slot === 'warroom') && on) {
-        return;
-      }
-
-      const roleEnabled: RoleNavMatrix = {
-        ...get().roleEnabled,
-        [role]: {
-          ...get().roleEnabled[role],
-          [slot]: on,
-        },
-      };
-      if (role !== 'super_admin') {
-        for (const m of NAV_PRESENTATION_META) {
-          if (m.adminOnly) roleEnabled[role][m.id] = false;
-        }
-      } else {
-        // 超管 locked 治理项保持开启
-        for (const m of NAV_PRESENTATION_META) {
-          if (m.locked && m.adminOnly) roleEnabled.super_admin[m.id] = true;
-        }
-        roleEnabled.super_admin[PRESENTATION_CONFIG_VIEW] = true;
-      }
-
-      const next = {
-        preset: 'custom' as NavPresetId,
-        roleEnabled: clampBusinessShellSlots(roleEnabled),
-      };
-      persist(next);
-      set(next);
-    },
-
-    setViewEnabled: (view, on) => {
-      get().setSlotEnabled(get().editingRole, view, on);
-    },
-
-    resetToFull: () => {
-      if (!isSystemAdmin()) return;
-      const next = { preset: 'full' as NavPresetId, roleEnabled: buildRoleNavPreset('full') };
-      persist(next);
-      set(next);
-    },
-
-    exportConfig: () => {
-      const { preset, roleEnabled } = get();
-      return JSON.stringify({ version: 5, preset, roleEnabled }, null, 2);
-    },
-
-    importConfig: (json) => {
-      if (!isSystemAdmin()) return false;
-      try {
-        const parsed = JSON.parse(json) as {
-          preset?: NavPresetId;
-          roleEnabled?: RoleNavMatrix;
-          enabled?: Record<string, boolean>;
-        };
-        let roleEnabled: RoleNavMatrix;
-        if (parsed.roleEnabled) {
-          roleEnabled = buildRoleNavPreset('customer');
-          for (const role of CONFIGURABLE_ROLES) {
-            const row = parsed.roleEnabled[role];
-            if (!row) continue;
-            for (const id of NAV_SLOT_IDS) {
-              if (typeof row[id] === 'boolean') roleEnabled[role][id] = row[id]!;
-            }
-          }
-        } else if (parsed.enabled) {
-          roleEnabled = migrateLegacyEnabled(parsed.enabled);
-        } else {
-          return false;
-        }
-        roleEnabled.super_admin[PRESENTATION_CONFIG_VIEW] = true;
-        const preset =
-          parsed.preset === 'customer' ||
-          parsed.preset === 'standard' ||
-          parsed.preset === 'custom' ||
-          parsed.preset === 'full'
-            ? parsed.preset
-            : 'custom';
-        const next = normalizePersisted(preset, roleEnabled);
-        persist(next);
-        set(next);
-        return true;
-      } catch {
-        return false;
-      }
-    },
-
-    enabledCount: (roleArg) => {
-      const role = roleArg ?? get().editingRole;
-      const matrix = get().roleEnabled;
-      return listConfigurableSidebarSlots(role).filter((id) =>
-        isSlotConfiguredOn(matrix, role, id),
-      ).length;
-    },
-  };
-});
+  getFallbackView: (requested) => {
+    const { isViewEnabled } = get();
+    if (requested && isViewEnabled(requested)) return requested;
+    for (const view of NAV_FALLBACK_ORDER) {
+      if (isViewEnabled(view)) return view;
+    }
+    return 'home';
+  },
+}));

@@ -21,7 +21,6 @@ export async function hydrateAllPlatformDocs(): Promise<void> {
   const { useSettingsStore } = await import('@/stores/settingsStore');
   useSettingsStore.setState({ members });
 
-  const { useNavPresentationStore } = await import('@/stores/navPresentationStore');
   const { useStationAnnouncementStore } = await import('@/stores/stationAnnouncementStore');
   const { usePlazaToolGuideStore } = await import('@/stores/plazaToolGuideStore');
   const { useMssBuildStatsCopyStore } = await import('@/stores/mssBuildStatsCopyStore');
@@ -47,7 +46,6 @@ export async function hydrateAllPlatformDocs(): Promise<void> {
   const { useLlmConfigStore } = await import('@/stores/llmConfigStore');
   const { useAssetApprovalStore } = await import('@/stores/assetApprovalStore');
 
-  useNavPresentationStore.getState().hydrate();
   useStationAnnouncementStore.getState().hydrate();
   usePlazaToolGuideStore.getState().bootstrap();
   useMssBuildStatsCopyStore.getState().hydrate();

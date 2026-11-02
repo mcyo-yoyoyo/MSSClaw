@@ -22,7 +22,8 @@ import {
 import { DEFAULT_SKILL_ACCENT } from '@/domain/skillAccent';
 import { skillDisplayName, syncSkillZhPrimary } from '@/domain/skillDisplay';
 import { parseSkillUpload } from '@/domain/skillExport';
-import { suggestSkillSearchKeywords } from '@/domain/skillKeywords';
+import { requestSkillHubTags } from '@/api/skillHubTagApi';
+import { skillHubSearchTerms, type SkillHubTags } from '@/domain/skillHubTags';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { useAssetApprovalStore } from '@/stores/assetApprovalStore';
@@ -223,6 +224,17 @@ export function MarketSkillSubmitModal({
       }
     }
 
+    let hubTags: SkillHubTags | undefined;
+    try {
+      hubTags = await requestSkillHubTags({
+        name: nameZh,
+        description: [descZh, parsedExtra?.descEn].filter(Boolean).join('\n'),
+        instructions,
+      });
+    } catch (error) {
+      showToast(error instanceof Error && error.message ? error.message : '模型未能提炼标签，提报不带自动标签');
+    }
+
     try {
       let draft = syncSkillZhPrimary({
         id,
@@ -244,14 +256,8 @@ export function MarketSkillSubmitModal({
         icon: parsedExtra?.icon || 'fa-cube',
         accentColor: parsedExtra?.accentColor || DEFAULT_SKILL_ACCENT,
         tags: [...(parsedExtra?.tags ?? []), '提报'].filter(Boolean),
-        searchKeywords: parsedExtra?.searchKeywords?.length
-          ? parsedExtra.searchKeywords
-          : suggestSkillSearchKeywords({
-              nameZh,
-              descZh,
-              instructions,
-              command: cmd,
-            }),
+        hubTags,
+        searchKeywords: skillHubSearchTerms(hubTags),
         instructions: instructions.trim() || undefined,
         planSteps: parsedExtra?.planSteps ?? [],
         packageBlob,

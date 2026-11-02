@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { SkillHubTagEditor } from '@/components/center/SkillHubTagFields';
 import { CenterModal } from '@/components/center/CenterShell';
 import {
   FormField,
@@ -44,7 +45,14 @@ import {
 } from '@/domain/currentUser';
 import { getVisibleHomeDepts, getVisibleHomeRegions } from '@/domain/rolePerspective';
 import { parseSkillUpload } from '@/domain/skillExport';
-import { suggestSkillSearchKeywords } from '@/domain/skillKeywords';
+import { requestSkillHubTags } from '@/api/skillHubTagApi';
+import {
+  readSkillHubTags,
+  skillHubSearchTerms,
+  toggleSkillHubTag,
+  type SkillHubTagField,
+  type SkillHubTags,
+} from '@/domain/skillHubTags';
 import { skillDisplayName, syncSkillZhPrimary } from '@/domain/skillDisplay';
 import type { AssetApprovalReason } from '@/domain/assetApproval';
 import { assertSkillScanAllowsApproval } from '@/domain/skillSecurityScan';
@@ -153,6 +161,7 @@ function normalizeSkillForm(skill: PrototypeSkillSeed): PrototypeSkillSeed {
     descEn: skill.descEn || '',
     tags: Array.isArray(skill.tags) ? skill.tags : [],
     searchKeywords: Array.isArray(skill.searchKeywords) ? skill.searchKeywords : [],
+    hubTags: readSkillHubTags(skill.hubTags),
     instructions: skill.instructions ?? '',
     planSteps: Array.isArray(skill.planSteps) ? skill.planSteps : [],
     usageNotes: skill.usageNotes ?? '',
@@ -208,6 +217,9 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   const [packName, setPackName] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showSecondaryTags, setShowSecondaryTags] = useState(false);
+  const [recognizingTags, setRecognizingTags] = useState(false);
+  const tagRequestRef = useRef(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const isNew = target === 'new';
@@ -242,6 +254,9 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
 
   useEffect(() => {
     if (!target) return;
+    tagRequestRef.current += 1;
+    setRecognizingTags(false);
+    setShowSecondaryTags(false);
     if (target === 'new') {
       setForm(emptySkill());
       setStep(0);
@@ -274,19 +289,11 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       publisher: getCurrentUserName() || parsed.publisher,
       publisherUserId: getCurrentUserId() || undefined,
     });
-    const keywords = suggestSkillSearchKeywords({
-      nameZh: merged.nameZh,
-      nameEn: merged.nameEn,
-      descZh: merged.descZh,
-      descEn: merged.descEn,
-      instructions: merged.instructions,
-      command: merged.command,
-      existingTags: merged.tags,
-    });
-    setForm({ ...merged, searchKeywords: keywords });
+    setForm({ ...merged, hubTags: undefined, searchKeywords: [] });
     setPackName(fileLabel);
     setStep(1);
-    showToast(`已解析 Skill 包「${fileLabel}」，请确认信息与范围`);
+    showToast(`已解析 Skill 包「${fileLabel}」，正在用模型提炼标签`);
+    void runModelTags(merged);
   };
 
   /**
@@ -371,18 +378,36 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     }
   };
 
+  const runModelTags = async (skill: PrototypeSkillSeed, previous?: SkillHubTags) => {
+    const generation = ++tagRequestRef.current;
+    setRecognizingTags(true);
+    try {
+      const hubTags = await requestSkillHubTags({
+        name: skill.nameZh || skill.name,
+        description: skill.descZh || skill.desc,
+        instructions: skill.instructions,
+        previous,
+      });
+      if (generation !== tagRequestRef.current) return;
+      setForm((current) => ({ ...current, hubTags, searchKeywords: skillHubSearchTerms(hubTags) }));
+      setShowSecondaryTags(false);
+      showToast('已用模型从 Skill.md 提炼标签');
+    } catch (error) {
+      if (generation !== tagRequestRef.current) return;
+      showToast(error instanceof Error && error.message ? error.message : '模型未能提炼标签');
+    } finally {
+      if (generation === tagRequestRef.current) setRecognizingTags(false);
+    }
+  };
+
   const refreshKeywords = () => {
-    const keywords = suggestSkillSearchKeywords({
-      nameZh: form.nameZh,
-      nameEn: form.nameEn,
-      descZh: form.descZh,
-      descEn: form.descEn,
-      instructions: form.instructions,
-      command: form.command,
-      existingTags: form.tags,
-    });
-    setForm({ ...form, searchKeywords: keywords });
-    showToast('已根据名称与正文生成搜索关键词');
+    if (recognizingTags) return;
+    void runModelTags(form, form.hubTags);
+  };
+
+  const toggleHubTag = (field: SkillHubTagField, label: string) => {
+    const hubTags = toggleSkillHubTag(form.hubTags, field, label, getCurrentUserName() || '创建人');
+    setForm({ ...form, hubTags, searchKeywords: skillHubSearchTerms(hubTags) });
   };
 
   const handleClose = () => {
@@ -446,8 +471,8 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   };
 
   const handleSave = () => {
-    if (uploadingPackage || uploadingCase || parsing) {
-      showToast(uploadingCase ? '样例附件正在上传，请稍候' : '技能包正在解析或上传，请稍候');
+    if (uploadingPackage || uploadingCase || parsing || recognizingTags) {
+      showToast(recognizingTags ? '标签还在用模型提炼，请稍候' : uploadingCase ? '样例附件正在上传，请稍候' : '技能包正在解析或上传，请稍候');
       return;
     }
     const attachedBlobIds = new Set(
@@ -573,20 +598,10 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       updatedBy: userName,
     });
 
-    if (!draft.searchKeywords?.length) {
-      draft = {
-        ...draft,
-        searchKeywords: suggestSkillSearchKeywords({
-          nameZh: draft.nameZh,
-          nameEn: draft.nameEn,
-          descZh: draft.descZh,
-          descEn: draft.descEn,
-          instructions: draft.instructions,
-          command: draft.command,
-          existingTags: draft.tags,
-        }),
-      };
-    }
+    draft = {
+      ...draft,
+      searchKeywords: draft.hubTags ? skillHubSearchTerms(draft.hubTags) : (draft.searchKeywords ?? []),
+    };
 
     upsertSkill(draft, isNew);
     void evaluateAndPersistSkill(draft, (status, report) => {
@@ -1273,34 +1288,14 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
               />
             </FormField>
 
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2.5">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-[13px] font-semibold text-zinc-800">搜索关键词（模型识别）</p>
-                  <p className="text-[11px] text-zinc-500">1.0 本地识别名称与正文；可手动增删</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={refreshKeywords}
-                  className="shrink-0 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-700 hover:bg-zinc-100"
-                >
-                  重新识别
-                </button>
-              </div>
-              <FormInput
-                value={(form.searchKeywords ?? []).join(', ')}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    searchKeywords: e.target.value
-                      .split(',')
-                      .map((t) => t.trim())
-                      .filter(Boolean),
-                  })
-                }
-                placeholder="点击「重新识别」或手动输入"
-              />
-            </div>
+            <SkillHubTagEditor
+              tags={form.hubTags}
+              showSecondary={showSecondaryTags}
+              onToggle={toggleHubTag}
+              recognizing={recognizingTags}
+              onRecognize={refreshKeywords}
+              onShowSecondary={() => setShowSecondaryTags(true)}
+            />
 
             <div className="rounded-xl border border-zinc-200 px-3 py-2.5 space-y-2">
               <p className="text-[13px] font-semibold text-zinc-800">发布权限范围</p>

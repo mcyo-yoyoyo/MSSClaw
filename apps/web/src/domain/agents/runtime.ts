@@ -1,5 +1,4 @@
 import type { PrototypeAgentSeed, PrototypeSkillSeed } from '@/domain/prototype/types';
-import { PROTOTYPE_SKILLS } from '@/domain/prototype/skills';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { getAgentPack } from '@/domain/agents/catalog';
 import { getSkillPack } from '@/domain/skills/catalog';
@@ -52,7 +51,7 @@ export function buildAgentOrchestrationSteps(
 
   const marketSkills = useMarketplaceStore.getState().skills;
   const resolveSkill = (id: string) =>
-    marketSkills.find((s) => s.id === id) ?? PROTOTYPE_SKILLS.find((s) => s.id === id);
+    marketSkills.find((s) => s.id === id);
   const resolveName = (id: string) => {
     const hit = resolveSkill(id);
     return hit ? skillDisplayName(hit) : id;

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { AppView, NavSection } from '@/domain/appView';
-import { NAV_SECTIONS } from '@/domain/appView';
+import { NAV_SECTIONS, ORG_VIEWS } from '@/domain/appView';
 import { getNavMetaLabel } from '@/domain/navPresentation';
 import { opsBlockedToast, roleNavDisabledToast } from '@/domain/permissions';
 import { isOpsOnlyView } from '@/domain/shellPerspective';
@@ -24,7 +24,6 @@ interface AppViewState {
   blockedOpsView: string | null;
   sidebarCollapsed: boolean;
   navSectionsCollapsed: Record<NavSection, boolean>;
-  settingsOpen: boolean;
   setAppView: (view: AppView) => void;
   clearBlockedOpsView: () => void;
   toggleSidebar: () => void;
@@ -32,8 +31,6 @@ interface AppViewState {
   setNavSectionCollapsed: (section: NavSection, collapsed: boolean) => void;
   /** 进入管理后台：展开侧栏并摊开各配置分组 */
   expandAdminNav: () => void;
-  openSettings: () => void;
-  closeSettings: () => void;
 }
 
 export const useAppViewStore = create<AppViewState>((set, get) => ({
@@ -41,7 +38,6 @@ export const useAppViewStore = create<AppViewState>((set, get) => ({
   blockedOpsView: null,
   sidebarCollapsed: false,
   navSectionsCollapsed: loadNavSections(),
-  settingsOpen: false,
 
   setAppView: (view) => {
     if (get().appView !== view) {
@@ -59,9 +55,15 @@ export const useAppViewStore = create<AppViewState>((set, get) => ({
       get().setAppView('agents');
       return;
     }
+    if (view === 'admin') {
+      const nav = useNavPresentationStore.getState();
+      get().setAppView(ORG_VIEWS.find((v) => nav.isViewEnabled(v)) ?? 'org-members');
+      return;
+    }
 
     // Gate by login role, not stale default `business` before sidebar hydrate.
-    useShellPerspectiveStore.getState().hydrate(useSessionStore.getState().user?.platformRole);
+    const session = useSessionStore.getState();
+    useShellPerspectiveStore.getState().hydrate(session.user?.platformRole, session.menus);
     const perspective = useShellPerspectiveStore.getState().perspective;
     if (perspective === 'business' && isOpsOnlyView(view)) {
       set({ appView: 'home', blockedOpsView: view });
@@ -126,7 +128,4 @@ export const useAppViewStore = create<AppViewState>((set, get) => ({
       ) as Record<NavSection, boolean>,
     });
   },
-
-  openSettings: () => set({ settingsOpen: true }),
-  closeSettings: () => set({ settingsOpen: false }),
 }));

@@ -12,14 +12,22 @@ import type { MarketplacePayload } from './marketplace-center-sync';
 import { readChats, writeChats } from './chat-session-store';
 import { hasPendingApproval, readPortalContent, writePortalContent } from './operations-store';
 import {
+  createAsset,
+  deleteAsset,
+  readAsset,
   readAssetIds,
+  orgScopeWhere,
   readAssets,
   readToolCatalogMeta,
   replaceAssets,
+  updateAsset,
   writeToolCatalogMeta,
   type AssetKind,
+  type OrgScopeWhere,
   type ToolCatalogMeta,
 } from './asset-catalog';
+import { SUPER_ADMIN_ROLE } from './identity-store';
+import { appendOperationLogs, type OperationActor } from './operation-log';
 import {
   MARKET_AGENT_BUSINESS_SCENARIO,
   MARKET_SKILL_BUSINESS_SCENARIO,
@@ -43,6 +51,30 @@ const MARKETPLACE_ASSET_LISTS = [
   ['automations', 'automation'],
   ['kbDocs', 'kbDoc'],
 ] as const satisfies ReadonlyArray<readonly [keyof MarketplacePayload, AssetKind]>;
+
+/** 目录单条接口的路径段。字段形状与货架快照里的同一类资产相同。writeMenu 是新建、修改、删除要求的菜单权限。 */
+const CATALOG_RESOURCES = {
+  agents: { kind: 'agent', listKey: 'agents', writeMenu: 'agents' },
+  skills: { kind: 'skill', listKey: 'skills', writeMenu: 'skills' },
+  tools: { kind: 'tool', listKey: 'tools', writeMenu: 'tools' },
+  'kb-docs': { kind: 'kbDoc', listKey: 'kbDocs', writeMenu: 'kb' },
+  automations: { kind: 'automation', listKey: 'automations', writeMenu: 'automation' },
+} as const satisfies Record<string, { kind: AssetKind; listKey: string; writeMenu: string }>;
+
+export type CatalogViewer = { id: string; platformRole: string; regionId: string | null; deptIds: string[] } | null;
+
+/** Skill / Agent 按查看人的区域、领域过滤；超管和其他资产类型不过滤 */
+function catalogScope(kind: AssetKind, viewer: CatalogViewer): OrgScopeWhere | undefined {
+  if (kind !== 'skill' && kind !== 'agent') return undefined;
+  if (viewer?.platformRole === SUPER_ADMIN_ROLE) return undefined;
+  return orgScopeWhere(viewer && { id: viewer.id, regionId: viewer.regionId, domainIds: viewer.deptIds });
+}
+
+export function catalogResource(segment: string): { kind: AssetKind; listKey: string; writeMenu: string } {
+  const spec = CATALOG_RESOURCES[segment as keyof typeof CATALOG_RESOURCES];
+  if (!spec) throw new NotFoundException('catalog_resource_not_found');
+  return spec;
+}
 
 export interface GlobalToolsPayload {
   tools: unknown[];
@@ -92,8 +124,10 @@ export interface InboxMessageInput {
 export type MarketEngagementAction =
   | 'exposure'
   | 'detail'
-  /** 详情页直达（页面新打开就落在详情页，多为分享链接）；看板「分享浏览数」只数它 */
+  /** 打开带有效分享编号的链接；看板「分享链接进入浏览数」只数它 */
   | 'detail_direct'
+  /** 点击详情页的分享按钮；只记事件，不进 market_engagement_stat */
+  | 'share'
   | 'view'
   | 'use'
   | 'redirect'
@@ -119,6 +153,7 @@ export const MARKET_ENGAGEMENT_EVENT_ACTIONS = new Set<MarketEngagementEventActi
   'exposure',
   'detail',
   'detail_direct',
+  'share',
   'view',
   'use',
   'redirect',
@@ -136,6 +171,7 @@ export const MARKET_ENGAGEMENT_EVENT_ACTIONS = new Set<MarketEngagementEventActi
 ]);
 
 const MARKET_ENGAGEMENT_EVENT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
+const MARKET_SHARE_CODE_RE = /^[a-f0-9]{16}$/;
 const UUID_V4_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MARKET_ENGAGEMENT_RATE_WINDOW_MS = 60_000;
@@ -382,7 +418,7 @@ export class PersistenceService {
   }
 
   /** 写入部署级工具目录；PUT 是一次完整快照替换。 */
-  async putGlobalTools(input: unknown): Promise<GlobalToolsPayload> {
+  async putGlobalTools(input: unknown, actor?: OperationActor): Promise<GlobalToolsPayload> {
     if (!input || typeof input !== 'object' || Array.isArray(input)) {
       throw new BadRequestException('tools_payload_required');
     }
@@ -403,8 +439,9 @@ export class PersistenceService {
     };
     const tools = dedupeMarketplaceTools(source.tools).tools;
     await this.prisma.$transaction(async (tx) => {
-      await replaceAssets(tx, 'tool', tools);
+      const changes = await replaceAssets(tx, 'tool', tools);
       await writeToolCatalogMeta(tx, meta);
+      await appendOperationLogs(tx, actor, 'tool', changes);
     });
     return this.getGlobalTools();
   }
@@ -413,7 +450,7 @@ export class PersistenceService {
    * 整份快照写入：请求里带了哪个列表就整份替换哪张表，省略的列表保持不变
    * （旧客户端省略列表不等于清空货架）。tools 走部署级工具目录。
    */
-  async putMarketplace(workspaceId: string, payload: MarketplacePayload) {
+  async putMarketplace(workspaceId: string, payload: MarketplacePayload, actor?: OperationActor) {
     if (Array.isArray(payload?.skills)) {
       const nextIds = new Set(payload.skills.map((item) => (item as { id?: string })?.id));
       const removed = (await readAssets(this.prisma, 'skill')).filter((item) => !nextIds.has(item.id as string));
@@ -443,14 +480,111 @@ export class PersistenceService {
         tools: next.tools,
         externalCatalogVersion: payload.externalCatalogVersion,
         internalCatalogVersion: payload.internalCatalogVersion,
-      });
+      }, actor);
     }
     await this.prisma.$transaction(async (tx) => {
       for (const [key, kind] of MARKETPLACE_ASSET_LISTS) {
-        if (Array.isArray(payload?.[key])) await replaceAssets(tx, kind, next[key] as unknown[]);
+        if (!Array.isArray(payload?.[key])) continue;
+        const changes = await replaceAssets(tx, kind, next[key] as unknown[]);
+        if (kind === 'skill' || kind === 'agent') await appendOperationLogs(tx, actor, kind, changes);
       }
     });
     return this.readMarketplace(workspaceId);
+  }
+
+  /** 目录列表：只读这一类的现存行，不回写精选默认值。 */
+  async listCatalog(segment: string, viewer: CatalogViewer): Promise<Record<string, unknown[]>> {
+    const spec = catalogResource(segment);
+    return { [spec.listKey]: await readAssets(this.prisma, spec.kind, catalogScope(spec.kind, viewer)) };
+  }
+
+  async getCatalogItem(segment: string, id: string, viewer: CatalogViewer): Promise<Record<string, unknown>> {
+    const spec = catalogResource(segment);
+    const item = await readAsset(this.prisma, spec.kind, id, catalogScope(spec.kind, viewer));
+    if (!item) throw new NotFoundException('catalog_not_found');
+    return spec.kind === 'agent' ? this.withLinkedSkills(item) : item;
+  }
+
+  async createCatalogItem(segment: string, body: unknown, actor?: OperationActor): Promise<Record<string, unknown>> {
+    const spec = catalogResource(segment);
+    const item = await this.prisma.$transaction((tx) => createAsset(tx, spec.kind, this.catalogBody(body)));
+    await this.logCatalogChange(actor, spec.kind, 'create', item);
+    return spec.kind === 'agent' ? this.withLinkedSkills(item) : item;
+  }
+
+  async updateCatalogItem(segment: string, id: string, body: unknown, actor?: OperationActor): Promise<Record<string, unknown>> {
+    const spec = catalogResource(segment);
+    const item = await this.prisma.$transaction((tx) =>
+      updateAsset(tx, spec.kind, id, this.catalogBody(body, id)),
+    );
+    await this.logCatalogChange(actor, spec.kind, 'update', item);
+    return spec.kind === 'agent' ? this.withLinkedSkills(item) : item;
+  }
+
+  async deleteCatalogItem(segment: string, id: string, actor?: OperationActor): Promise<{ ok: true }> {
+    const spec = catalogResource(segment);
+    const current = await readAsset(this.prisma, spec.kind, id);
+    if (spec.kind === 'skill') {
+      await this.deleteCatalogSkill(id);
+      await this.logCatalogChange(actor, spec.kind, 'delete', current ?? { id });
+      return { ok: true };
+    }
+    const removed = await deleteAsset(this.prisma, spec.kind, id);
+    if (!removed) throw new NotFoundException('catalog_not_found');
+    await this.logCatalogChange(actor, spec.kind, 'delete', current ?? { id });
+    return { ok: true };
+  }
+
+  private async logCatalogChange(
+    actor: OperationActor | undefined,
+    kind: AssetKind,
+    action: 'create' | 'update' | 'delete',
+    item: Record<string, unknown>,
+  ) {
+    if (kind !== 'skill' && kind !== 'agent' && kind !== 'tool') return;
+    const id = String(item.id ?? '');
+    const name = typeof item.name === 'string' && item.name.trim() ? item.name.trim() : id;
+    await appendOperationLogs(this.prisma, actor, kind, [{ action, id, name }]);
+  }
+
+  /** 地址里的 id 为准。新建没带 id 时由服务端生成。 */
+  private catalogBody(body: unknown, urlId?: string): unknown {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return body;
+    const record = body as Record<string, unknown>;
+    const bodyId = typeof record.id === 'string' ? record.id.trim() : '';
+    if (urlId) {
+      if (bodyId && bodyId !== urlId) throw new BadRequestException('catalog_id_mismatch');
+      return { ...record, id: urlId };
+    }
+    return { ...record, id: bodyId || randomUUID() };
+  }
+
+  private async deleteCatalogSkill(id: string): Promise<void> {
+    const current = await readAsset(this.prisma, 'skill', id);
+    if (!current) throw new NotFoundException('catalog_not_found');
+    if (current.published === true || (await hasPendingApproval(this.prisma, 'skill', [id]))) {
+      throw new ConflictException('仅可删除已下架且无待处理审批的 Skill，请刷新后重试');
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.agentSkill.deleteMany({ where: { skillId: id } });
+      const removed = await deleteAsset(tx, 'skill', id);
+      if (!removed) throw new NotFoundException('catalog_not_found');
+    });
+  }
+
+  /** Agent 详情附上已存在的 Skill 名称，列表本身不带。 */
+  private async withLinkedSkills(agent: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const ids = Array.isArray(agent.skillIds) ? agent.skillIds.map((id) => String(id)) : [];
+    if (!ids.length) return { ...agent, linkedSkills: [] };
+    const rows = await this.prisma.skill.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true },
+    });
+    const names = new Map(rows.map((row) => [row.id, row.name]));
+    return {
+      ...agent,
+      linkedSkills: ids.filter((id) => names.has(id)).map((id) => ({ id, name: names.get(id) })),
+    };
   }
 
   /** userId 为空表示游客：只返回聚合计数，不带个人投票/收藏态 */
@@ -486,6 +620,8 @@ export class PersistenceService {
       inputTokens?: number;
       outputTokens?: number;
       errorCode?: string;
+      /** detail_direct 必须带：打开的分享链接上的编号 */
+      shareCode?: string;
       /** 收藏 / 取消收藏必须带：收藏表是「谁收藏了什么」的唯一来源 */
       favorite?: FavoriteSnapshot;
     },
@@ -498,10 +634,15 @@ export class PersistenceService {
       throw new BadRequestException('invalid_market_engagement_event_id');
     }
 
-    const action = String(input.action ?? '').trim().toLowerCase() as MarketEngagementEventAction;
-    if (!MARKET_ENGAGEMENT_EVENT_ACTIONS.has(action)) {
+    const requestedAction = String(input.action ?? '').trim().toLowerCase() as MarketEngagementEventAction;
+    if (!MARKET_ENGAGEMENT_EVENT_ACTIONS.has(requestedAction)) {
       throw new BadRequestException('invalid_market_engagement_action');
     }
+    // 编号无效（没带、伪造、属于别的资产）就是一次普通浏览，不算分享进入。
+    const openedShareCode =
+      requestedAction === 'detail_direct' ? await this.existingShareCode(contentId, input.shareCode) : null;
+    const action: MarketEngagementEventAction =
+      requestedAction === 'detail_direct' && !openedShareCode ? 'detail' : requestedAction;
     if (input.active !== undefined && typeof input.active !== 'boolean') {
       throw new BadRequestException('invalid_market_engagement_active');
     }
@@ -536,6 +677,10 @@ export class PersistenceService {
     }
 
     await this.assertKnownMarketEngagementContent(workspaceId, contentId);
+    // 页面可能是下架前打开的，分享和分享进入以服务端的上架状态为准。
+    if ((action === 'share' || action === 'detail_direct') && !(await this.isShareableAssetListed(contentId))) {
+      throw new NotFoundException('market_engagement_content_not_found');
+    }
 
     const occurredAt = new Date();
     const dateKey = portalAnalyticsDateKey(occurredAt);
@@ -545,6 +690,7 @@ export class PersistenceService {
           .update(`${workspaceId}:market-engagement:guest:${guestVisitorId}`)
           .digest('hex');
     const visitorType = userId ? 'user' : 'guest';
+    const shareCode = action === 'share' ? this.computeShareCode(contentId, visitorHash) : openedShareCode;
 
     return this.serializeMarketEngagementWrite(async () => {
       const result = await this.prisma.$transaction(async (tx) => {
@@ -586,6 +732,7 @@ export class PersistenceService {
           inputTokens,
           outputTokens,
           errorCode,
+          shareCode,
           assetType: requestedAssetType,
         }],
         skipDuplicates: true,
@@ -598,7 +745,7 @@ export class PersistenceService {
       if (!metric) {
         // Exposure and call facts do not create a zero-valued market card. They remain
         // queryable in the event table while the aggregate stays an interaction metric.
-        if (action !== 'exposure' && action !== 'call') {
+        if (action !== 'exposure' && action !== 'call' && action !== 'share') {
           metric = await tx.marketEngagement.upsert({
             where: { contentId },
             create: { contentId },
@@ -689,8 +836,8 @@ export class PersistenceService {
           update: { vote: nextVote },
         });
         vote = nextVote;
-      } else if (action === 'call') {
-        behaviorAction = 'call';
+      } else if (action === 'call' || action === 'share') {
+        behaviorAction = action;
       }
 
       if (behaviorAction) {
@@ -732,6 +879,40 @@ export class PersistenceService {
     if (!knownIds.has(contentId)) {
       throw new NotFoundException('market_engagement_content_not_found');
     }
+  }
+
+  /**
+   * 这个账号分享这个资产用的编号。同一账号分享同一资产始终是同一个编号，
+   * 所以链接不会越点越多。这里只计算不写库，点分享时的 share 事件才让编号生效。
+   */
+  async getMarketShareCode(workspaceId: string, contentId: string, userId: string) {
+    await this.assertKnownMarketEngagementContent(workspaceId, contentId);
+    return { shareCode: this.computeShareCode(contentId, this.accountVisitorHash(workspaceId, userId)) };
+  }
+
+  private computeShareCode(contentId: string, visitorHash: string): string {
+    return createHash('sha256').update(`mss-claw:share-link:v1:${contentId}:${visitorHash}`).digest('hex').slice(0, 16);
+  }
+
+  private async isShareableAssetListed(contentId: string): Promise<boolean> {
+    const where = { id: contentId, published: true };
+    const counts = await Promise.all([
+      this.prisma.tool.count({ where }),
+      this.prisma.skill.count({ where }),
+      this.prisma.agent.count({ where }),
+      this.prisma.caseInsightArticle.count({ where: { id: contentId, status: 'published', deletedAt: null } }),
+    ]);
+    return counts.some((count) => count > 0);
+  }
+
+  private async existingShareCode(contentId: string, raw: unknown): Promise<string | null> {
+    const code = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    if (!MARKET_SHARE_CODE_RE.test(code)) return null;
+    const shared = await this.prisma.marketEngagementEvent.findFirst({
+      where: { shareCode: code, contentId, action: 'share' },
+      select: { id: true },
+    });
+    return shared ? code : null;
   }
 
   /** 迁移脚本导入旧互动计数时也用它过滤已不存在的内容 */
@@ -877,4 +1058,36 @@ export class PersistenceService {
   async putPortalContent(_workspaceId: string, payload: PortalContentPayload) {
     return writePortalContent(this.prisma, payload);
   }
+
+  /** 只提交一条门户内容，按当前库合并后再整表落库。 */
+  async savePortalContentItem(raw: unknown, removingId?: string) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const current = await readPortalContent(this.prisma);
+      const items = Array.isArray(current?.items) ? current.items : [];
+      const revision = current?.revision ?? 0;
+      const next = removingId
+        ? items.filter((item) => String((item as { id?: unknown }).id) !== removingId)
+        : mergePortalItem(items, raw);
+      try {
+        return await writePortalContent(this.prisma, { items: next, expectedRevision: revision });
+      } catch (error) {
+        if (attempt === 0 && error instanceof ConflictException) continue;
+        throw error;
+      }
+    }
+    throw new ConflictException('portal_content_conflict');
+  }
+}
+
+function mergePortalItem(items: unknown[], raw: unknown): unknown[] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new BadRequestException('portal_content_required');
+  }
+  const record = raw as { id?: unknown };
+  const id = String(record.id ?? '').trim();
+  if (!id) throw new BadRequestException('portal_content_id_required');
+  const next = { ...record, id };
+  const index = items.findIndex((item) => String((item as { id?: unknown }).id) === id);
+  if (index < 0) return [next, ...items];
+  return items.map((item, itemIndex) => (itemIndex === index ? next : item));
 }

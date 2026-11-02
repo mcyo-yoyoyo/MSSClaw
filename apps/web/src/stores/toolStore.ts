@@ -1,8 +1,7 @@
 import { create } from 'zustand';
-import { fetchTools } from '@/api/centerApi';
+import { CenterApiError, fetchTools } from '@/api/centerApi';
 import {
   findToolByName,
-  TOOL_SEEDS,
   type PlatformTool,
   type ToolStatus,
   type ToolType,
@@ -28,8 +27,8 @@ interface ToolState {
 }
 
 export const useToolStore = create<ToolState>((set, get) => ({
-  tools: TOOL_SEEDS,
-  selectedToolId: TOOL_SEEDS[0]?.id ?? null,
+  tools: [],
+  selectedToolId: null,
   typeFilter: 'all',
   statusFilter: 'all',
   testRunning: false,
@@ -38,13 +37,21 @@ export const useToolStore = create<ToolState>((set, get) => ({
   load: () => {
     void (async () => {
       // legacy Tool 中心保留 workspace 参数以兼容路由，但目录本身已是全局单例。
-      const tools = await fetchTools();
-      set({
-        tools,
-        selectedToolId: tools[0]?.id ?? null,
-        typeFilter: 'all',
-        statusFilter: 'all',
-      });
+      try {
+        const tools = await fetchTools();
+        set({
+          tools,
+          selectedToolId: tools[0]?.id ?? null,
+          typeFilter: 'all',
+          statusFilter: 'all',
+        });
+      } catch (error) {
+        set({
+          tools: [],
+          selectedToolId: null,
+          toast: error instanceof CenterApiError ? error.message : '数据获取失败，请稍候重试',
+        });
+      }
     })();
   },
 

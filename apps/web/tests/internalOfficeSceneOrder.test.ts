@@ -181,9 +181,15 @@ test('new scenes start unlisted and listing changes persist with readback', asyn
   const workspaceId = 'ws-office-listing';
   let document = versionedDocument([]);
   globalThis.fetch = (async (_input, init) => {
-    if (init?.method === 'PUT') {
-      const { payload } = JSON.parse(String(init.body));
-      document = versionedDocument(payload.entries, document.revision + 1);
+    if (init?.method === 'POST') {
+      const entry = JSON.parse(String(init.body));
+      document = versionedDocument([entry, ...document.entries], document.revision + 1);
+    } else if (init?.method === 'PUT') {
+      const entry = JSON.parse(String(init.body));
+      document = versionedDocument(
+        document.entries.map((row: InternalOfficeSceneCatalogEntry) => (row.id === entry.id ? entry : row)),
+        document.revision + 1,
+      );
     }
     return jsonResponse({ kind: 'internal-office-scenes', payload: document });
   }) as typeof fetch;
@@ -199,20 +205,21 @@ test('new scenes start unlisted and listing changes persist with readback', asyn
   }
 });
 
-test('drop performs one CAS PUT, then publishes only the fresh canonical snapshot', async () => {
+test('drop performs one order PUT, then publishes only the fresh canonical snapshot', async () => {
   const workspaceId = 'ws-office-order-success';
   const initialEntries = [scene('a'), scene('hidden', false), scene('b'), scene('c')];
   let serverDocument = versionedDocument(initialEntries);
-  const putPayloads: Array<Record<string, unknown>> = [];
+  const putPayloads: Array<{ ids: string[] }> = [];
   let getCalls = 0;
 
   globalThis.fetch = (async (_input, init) => {
     if (init?.method === 'PUT') {
-      const body = JSON.parse(String(init.body)) as {
-        payload: Record<string, unknown> & { entries: InternalOfficeSceneCatalogEntry[] };
-      };
-      putPayloads.push(body.payload);
-      serverDocument = versionedDocument(body.payload.entries, 5);
+      const body = JSON.parse(String(init.body)) as { ids: string[] };
+      putPayloads.push(body);
+      serverDocument = versionedDocument(
+        body.ids.map((id) => initialEntries.find((entry) => entry.id === id)!),
+        5,
+      );
       return jsonResponse({ kind: 'internal-office-scenes', payload: serverDocument });
     }
     getCalls += 1;
@@ -229,14 +236,7 @@ test('drop performs one CAS PUT, then publishes only the fresh canonical snapsho
   );
 
   assert.equal(putPayloads.length, 1, 'one drop must issue exactly one PUT');
-  assert.equal(putPayloads[0]?.expectedRevision, 4);
-  assert.equal(putPayloads[0]?.revision, 4);
-  assert.deepEqual(
-    (putPayloads[0]?.entries as InternalOfficeSceneCatalogEntry[]).map(
-      (entry) => entry.id,
-    ),
-    ['c', 'hidden', 'a', 'b'],
-  );
+  assert.deepEqual(putPayloads[0]?.ids, ['c', 'hidden', 'a', 'b']);
   assert.equal(getCalls, 2, 'hydrate and post-PUT confirmation are the only GETs');
   assert.deepEqual(
     officeSceneStore.getState().entries.map((entry) => entry.id),

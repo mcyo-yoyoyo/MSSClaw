@@ -1,15 +1,12 @@
-import { AgentSchema, AGENT_SEEDS, type Agent } from '@/domain/agent';
-import {
-  KNOWLEDGE_SEEDS,
-  KnowledgeBaseSchema,
-  type KnowledgeBase,
-} from '@/domain/knowledge';
-import { MEMORY_SEEDS, MemoryStoreSchema, type MemoryLayer, type MemoryStore } from '@/domain/memory';
-import { PromptSchema, PROMPT_SEEDS, type Prompt } from '@/domain/prompt';
-import { SKILL_SEEDS, SkillSchema, type Skill } from '@/domain/skill';
-import { TOOL_SEEDS, PlatformToolSchema, type PlatformTool } from '@/domain/tool';
-import { WORKFLOW_SEEDS, WorkflowSchema, type Workflow } from '@/domain/workflow';
+import { AgentSchema, type Agent } from '@/domain/agent';
+import { KnowledgeBaseSchema, type KnowledgeBase } from '@/domain/knowledge';
+import { MemoryStoreSchema, type MemoryLayer, type MemoryStore } from '@/domain/memory';
+import { PromptSchema, type Prompt } from '@/domain/prompt';
+import { SkillSchema, type Skill } from '@/domain/skill';
+import { PlatformToolSchema, type PlatformTool } from '@/domain/tool';
+import { WorkflowSchema, type Workflow } from '@/domain/workflow';
 import { apiUrl } from '@/api/client';
+import { DATA_FETCH_FAILED_MESSAGE, useDataFetchNotice } from '@/domain/dataFetchNotice';
 import { fetchToolsApi } from '@/api/persistenceApi';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
@@ -20,15 +17,21 @@ export class CenterApiError extends Error {
   }
 }
 
-async function fetchJson<T>(url: string, fallback: T): Promise<T> {
-  if (!useWorkspaceStore.getState().apiConnected) return fallback;
+async function fetchJson<T>(url: string): Promise<T> {
+  if (!useWorkspaceStore.getState().apiConnected) {
+    useDataFetchNotice.getState().markFailed();
+    throw new CenterApiError(DATA_FETCH_FAILED_MESSAGE);
+  }
 
   try {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    useDataFetchNotice.getState().markOk();
     return (await response.json()) as T;
-  } catch {
-    return fallback;
+  } catch (error) {
+    useDataFetchNotice.getState().markFailed();
+    if (error instanceof CenterApiError) throw error;
+    throw new CenterApiError(DATA_FETCH_FAILED_MESSAGE);
   }
 }
 
@@ -63,12 +66,8 @@ function parseList<T>(items: unknown[], schema: { parse: (v: unknown) => T }): T
 }
 
 export async function fetchPrompts(): Promise<Prompt[]> {
-  const fallback = PROMPT_SEEDS;
-  const payload = await fetchJson<{ prompts: unknown[] }>(
-    apiUrl(`/api/v1/prompts`),
-    { prompts: fallback },
-  );
-  return parseList(payload.prompts, PromptSchema);
+  const payload = await fetchJson<{ prompts: unknown[] }>(apiUrl(`/api/v1/prompts`));
+  return parseList(payload.prompts ?? [], PromptSchema);
 }
 
 export async function advancePromptLifecycle(promptId: string): Promise<Prompt> {
@@ -80,12 +79,8 @@ export async function advancePromptLifecycle(promptId: string): Promise<Prompt> 
 }
 
 export async function fetchAgents(): Promise<Agent[]> {
-  const fallback = AGENT_SEEDS;
-  const payload = await fetchJson<{ agents: unknown[] }>(
-    apiUrl(`/api/v1/agents`),
-    { agents: fallback },
-  );
-  return parseList(payload.agents, AgentSchema);
+  const payload = await fetchJson<{ agents: unknown[] }>(apiUrl(`/api/v1/agents`));
+  return parseList(payload.agents ?? [], AgentSchema);
 }
 
 export async function patchAgentPersona(
@@ -112,12 +107,8 @@ export async function advanceAgentStatus(agentId: string): Promise<Agent> {
 }
 
 export async function fetchSkills(): Promise<Skill[]> {
-  const fallback = SKILL_SEEDS;
-  const payload = await fetchJson<{ skills: unknown[] }>(
-    apiUrl(`/api/v1/skills`),
-    { skills: fallback },
-  );
-  return parseList(payload.skills, SkillSchema);
+  const payload = await fetchJson<{ skills: unknown[] }>(apiUrl(`/api/v1/skills`));
+  return parseList(payload.skills ?? [], SkillSchema);
 }
 
 export async function advanceSkillLifecycle(skillId: string): Promise<Skill> {
@@ -129,12 +120,8 @@ export async function advanceSkillLifecycle(skillId: string): Promise<Skill> {
 }
 
 export async function fetchWorkflows(): Promise<Workflow[]> {
-  const fallback = WORKFLOW_SEEDS;
-  const payload = await fetchJson<{ workflows: unknown[] }>(
-    apiUrl(`/api/v1/workflows`),
-    { workflows: fallback },
-  );
-  return parseList(payload.workflows, WorkflowSchema);
+  const payload = await fetchJson<{ workflows: unknown[] }>(apiUrl(`/api/v1/workflows`));
+  return parseList(payload.workflows ?? [], WorkflowSchema);
 }
 
 export async function advanceWorkflowStatus(
@@ -148,12 +135,8 @@ export async function advanceWorkflowStatus(
 }
 
 export async function fetchKnowledgeBases(): Promise<KnowledgeBase[]> {
-  const fallback = KNOWLEDGE_SEEDS;
-  const payload = await fetchJson<{ bases: unknown[] }>(
-    apiUrl(`/api/v1/knowledge-bases`),
-    { bases: fallback },
-  );
-  return parseList(payload.bases, KnowledgeBaseSchema);
+  const payload = await fetchJson<{ bases: unknown[] }>(apiUrl(`/api/v1/knowledge-bases`));
+  return parseList(payload.bases ?? [], KnowledgeBaseSchema);
 }
 
 export async function runKnowledgePipelineApi(
@@ -168,13 +151,16 @@ export async function runKnowledgePipelineApi(
 }
 
 export async function fetchTools(): Promise<PlatformTool[]> {
-  // Tool 目录已迁移到部署级单例；保留参数仅为兼容 legacy store 调用方。
-  const fallback = TOOL_SEEDS;
-  if (!useWorkspaceStore.getState().apiConnected) return fallback;
+  if (!useWorkspaceStore.getState().apiConnected) {
+    useDataFetchNotice.getState().markFailed();
+    throw new CenterApiError(DATA_FETCH_FAILED_MESSAGE);
+  }
   try {
     const payload = await fetchToolsApi();
-    // 200 但缺少工具数组通常是旧代理/SPA fallback；保留静态目录，避免把已有列表清空。
-    if (!Array.isArray(payload?.tools)) return fallback;
+    if (!Array.isArray(payload?.tools)) {
+      useDataFetchNotice.getState().markFailed();
+      throw new CenterApiError(DATA_FETCH_FAILED_MESSAGE);
+    }
     const raw = payload.tools;
     // 新 marketplace 工具字段与旧 Tool 中心略有差异；仅为仍可访问的 legacy 页面
     // 填充其所需展示字段，主路径仍直接消费 marketplaceStore 的原始工具对象。
@@ -187,8 +173,10 @@ export async function fetchTools(): Promise<PlatformTool[]> {
         }
       })
       .filter((item): item is PlatformTool => item !== null);
-  } catch {
-    return fallback;
+  } catch (error) {
+    useDataFetchNotice.getState().markFailed();
+    if (error instanceof CenterApiError) throw error;
+    throw new CenterApiError(DATA_FETCH_FAILED_MESSAGE);
   }
 }
 
@@ -239,12 +227,8 @@ function toLegacyPlatformTool(raw: unknown): PlatformTool | null {
 }
 
 export async function fetchMemoryStores(): Promise<MemoryStore[]> {
-  const fallback = MEMORY_SEEDS;
-  const payload = await fetchJson<{ stores: unknown[] }>(
-    apiUrl(`/api/v1/memory-stores`),
-    { stores: fallback },
-  );
-  return parseList(payload.stores, MemoryStoreSchema);
+  const payload = await fetchJson<{ stores: unknown[] }>(apiUrl(`/api/v1/memory-stores`));
+  return parseList(payload.stores ?? [], MemoryStoreSchema);
 }
 
 export async function patchMemoryLayerPolicyApi(

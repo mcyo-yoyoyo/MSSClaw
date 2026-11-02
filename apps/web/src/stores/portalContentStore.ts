@@ -1,10 +1,14 @@
 import { create } from 'zustand';
-import { PROTOTYPE_PORTAL_CONTENT, type PortalContentItem } from '@/domain/prototype/portalContent';
+import { type PortalContentItem } from '@/domain/prototype/portalContent';
 import {
   loadPortalContent,
   scheduleSavePortalContent,
 } from '@/domain/persistence/portalStorage';
-import { demoDefaults } from '@/domain/demoContentPolicy';
+import {
+  deletePortalContentItemApi,
+  savePortalContentItemApi,
+} from '@/api/persistenceApi';
+import { useDataFetchNotice } from '@/domain/dataFetchNotice';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 interface PortalContentState {
@@ -34,7 +38,7 @@ function schedulePersist(get: () => PortalContentState) {
 
 export const usePortalContentStore = create<PortalContentState>((set, get) => ({
   ready: false,
-  items: structuredClone(demoDefaults(PROTOTYPE_PORTAL_CONTENT)),
+  items: [],
   toast: null,
 
   bootstrap: async () => {
@@ -55,43 +59,47 @@ export const usePortalContentStore = create<PortalContentState>((set, get) => ({
   },
 
   upsertItem: (item, isNew = false) => {
+    const creating = isNew || !get().items.some((row) => row.id === item.id);
     set((s) => ({
-      items: isNew
-        ? [item, ...s.items]
+      items: creating
+        ? [item, ...s.items.filter((row) => row.id !== item.id)]
         : s.items.map((row) => (row.id === item.id ? item : row)),
     }));
-    get().persist();
     if (!useWorkspaceStore.getState().apiConnected) {
-      get().showToast('已保存到本机；未连共享 API，其他电脑看不到此附件');
+      get().showToast('已保存在当前页面；未连共享 API，其他电脑看不到此内容');
+      return;
     }
+    void savePortalContentItemApi(item, creating).catch(() => {
+      useDataFetchNotice.getState().markFailed();
+      get().showToast('数据获取失败，请稍候重试');
+    });
   },
 
   deleteItem: (id) => {
-    const seedIds = new Set(demoDefaults(PROTOTYPE_PORTAL_CONTENT).map((p) => p.id));
-    if (seedIds.has(id)) {
-      set((s) => ({
-        items: s.items.map((row) => (row.id === id ? { ...row, published: false } : row)),
-      }));
-    } else {
-      set((s) => ({ items: s.items.filter((row) => row.id !== id) }));
-    }
-    get().persist();
+    set((s) => ({ items: s.items.filter((row) => row.id !== id) }));
+    if (!useWorkspaceStore.getState().apiConnected) return;
+    void deletePortalContentItemApi(id).catch(() => {
+      useDataFetchNotice.getState().markFailed();
+    });
   },
 
   togglePublished: (id) => {
+    const next = get().items.find((row) => row.id === id);
+    if (!next) return;
+    const updated = { ...next, published: next.published === false };
     set((s) => ({
-      items: s.items.map((row) =>
-        row.id === id ? { ...row, published: row.published === false } : row,
-      ),
+      items: s.items.map((row) => (row.id === id ? updated : row)),
     }));
-    get().persist();
+    if (!useWorkspaceStore.getState().apiConnected) return;
+    void savePortalContentItemApi(updated, false).catch(() => {
+      useDataFetchNotice.getState().markFailed();
+    });
   },
 
   getPublishedItems: () => get().items.filter((i) => i.published !== false),
 
   resetToSeeds: () => {
-    set({ items: structuredClone(demoDefaults(PROTOTYPE_PORTAL_CONTENT)) });
-    get().persist();
+    set({ toast: null });
   },
 
   showToast: (msg) => set({ toast: msg }),

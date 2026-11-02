@@ -1,18 +1,14 @@
 import { create } from 'zustand';
-import {
-  STATION_ANNOUNCEMENT_SEEDS,
-  type StationAnnouncement,
-} from '@/domain/stationAnnouncementSeeds';
+import { type StationAnnouncement } from '@/domain/stationAnnouncementSeeds';
 import {
   normalizeAnnouncementColor,
   normalizeAnnouncementTag,
 } from '@/domain/stationAnnouncementTags';
-import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
+import { useDataFetchNotice } from '@/domain/dataFetchNotice';
 import {
   canUsePlatformDocsApi,
   fetchPlatformDoc,
-  peekPlatformDocMemory,
-  savePlatformDoc,
+  writeDocItem,
 } from '@/api/platformDocsApi';
 
 const DOC_KIND = 'station-announcements' as const;
@@ -38,11 +34,6 @@ function normalize(list: readonly StationAnnouncement[]): StationAnnouncement[] 
     .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.publishedAt.localeCompare(a.publishedAt));
 }
 
-function seedItems(): StationAnnouncement[] {
-  if (!isDemoContentEnabled()) return [];
-  return normalize(STATION_ANNOUNCEMENT_SEEDS);
-}
-
 function docRevision(value: unknown): number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
 }
@@ -55,6 +46,8 @@ interface StationAnnouncementState {
   loaded: boolean;
   toast: string | null;
   hydrate: () => void;
+  /** 首页接口已经带回公告时直接展示，避免再读一遍公告文档。 */
+  show: (items: StationAnnouncement[], revision?: number) => void;
   /** 运营已填过的标签，供输入框做候选 */
   listTags: () => string[];
   upsert: (item: StationAnnouncement, isNew?: boolean) => void;
@@ -65,16 +58,20 @@ interface StationAnnouncementState {
 }
 
 export const useStationAnnouncementStore = create<StationAnnouncementState>((set, get) => ({
-  items: seedItems(),
+  items: [],
   revision: 0,
   loaded: false,
   toast: null,
 
+  show: (items, revision) => {
+    set({ items: normalize(items), revision: docRevision(revision), loaded: true });
+  },
+
   hydrate: () => {
     void (async () => {
       if (!canUsePlatformDocsApi()) {
-        // 静态演示构建没有库，用种子撑起首页公告条
-        set({ items: seedItems(), revision: 0, loaded: true });
+        useDataFetchNotice.getState().markFailed();
+        set({ items: [], revision: 0, loaded: true });
         return;
       }
       try {
@@ -84,6 +81,7 @@ export const useStationAnnouncementStore = create<StationAnnouncementState>((set
         // 库里不存在的公告，点开也没有对应的消息详情。
         set({ items: normalize(list), revision: docRevision(remote?.revision), loaded: true });
       } catch {
+        useDataFetchNotice.getState().markFailed();
         set({ items: [], revision: 0, loaded: true });
       }
     })();
@@ -149,20 +147,32 @@ function commit(
   nextItems: readonly StationAnnouncement[],
   toast: string,
 ) {
+  const previous = get().items;
   const normalized = normalize(nextItems);
   set({ items: normalized, toast });
   if (!canUsePlatformDocsApi()) return;
 
   void (async () => {
     try {
-      await savePlatformDoc(DOC_KIND, {
-        items: normalized,
-        revision: get().revision,
+      const created = normalized.filter((item) => !previous.some((row) => row.id === item.id));
+      const removed = previous.filter((item) => !normalized.some((row) => row.id === item.id));
+      const updated = normalized.filter((item) => {
+        const before = previous.find((row) => row.id === item.id);
+        return before && JSON.stringify(before) !== JSON.stringify(item);
       });
-      const saved = peekPlatformDocMemory<AnnouncementDoc>(DOC_KIND);
+      for (const item of created) {
+        await writeDocItem('/api/v1/docs/station-announcements/items', 'POST', item);
+      }
+      for (const item of updated) {
+        await writeDocItem(`/api/v1/docs/station-announcements/items/${encodeURIComponent(item.id)}`, 'PUT', item);
+      }
+      for (const item of removed) {
+        await writeDocItem(`/api/v1/docs/station-announcements/items/${encodeURIComponent(item.id)}`, 'DELETE');
+      }
+      const fresh = await fetchPlatformDoc<AnnouncementDoc>(DOC_KIND, { fresh: true });
       set({
-        items: Array.isArray(saved?.items) ? normalize(saved.items) : normalized,
-        revision: docRevision(saved?.revision) || get().revision + 1,
+        items: normalize(Array.isArray(fresh?.items) ? fresh.items : normalized),
+        revision: docRevision(fresh?.revision),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : '';

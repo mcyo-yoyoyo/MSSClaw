@@ -7,7 +7,6 @@ import {
 } from '@/api/centerApi';
 import {
   findMemoryStoreByName,
-  MEMORY_SEEDS,
   type MemoryLayer,
   type MemoryScope,
   type MemoryStore,
@@ -38,8 +37,8 @@ interface MemoryState {
 }
 
 export const useMemoryStore = create<MemoryState>((set, get) => ({
-  stores: MEMORY_SEEDS,
-  selectedStoreId: MEMORY_SEEDS[0]?.id ?? null,
+  stores: [],
+  selectedStoreId: null,
   selectedLayer: 'session',
   scopeFilter: 'all',
   reflectionRunning: false,
@@ -47,13 +46,21 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
 
   load: () => {
     void (async () => {
-      const stores = await fetchMemoryStores();
-      set({
-        stores,
-        selectedStoreId: stores[0]?.id ?? null,
-        selectedLayer: 'session',
-        scopeFilter: 'all',
-      });
+      try {
+        const stores = await fetchMemoryStores();
+        set({
+          stores,
+          selectedStoreId: stores[0]?.id ?? null,
+          selectedLayer: 'session',
+          scopeFilter: 'all',
+        });
+      } catch (error) {
+        set({
+          stores: [],
+          selectedStoreId: null,
+          toast: error instanceof CenterApiError ? error.message : '数据获取失败，请稍候重试',
+        });
+      }
     })();
   },
 

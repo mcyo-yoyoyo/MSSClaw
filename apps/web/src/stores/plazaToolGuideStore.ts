@@ -1,33 +1,15 @@
 import { create } from 'zustand';
 import {
-  flattenPlazaToolGuideSeeds,
   normalizePlazaToolGuideRecord,
   type PlazaToolGuide,
   type PlazaToolGuideRecord,
 } from '@/domain/plazaToolGuides';
-import { demoDefaults } from '@/domain/demoContentPolicy';
 import {
   canUsePlatformDocsApi,
   fetchPlatformDoc,
   scheduleSavePlatformDoc,
 } from '@/api/platformDocsApi';
-
-function howtoSeeds(): PlazaToolGuideRecord[] {
-  return demoDefaults(flattenPlazaToolGuideSeeds());
-}
-
-/** 合并默认指南；同 id 以运营修改为准 */
-function mergeGuideCatalog(
-  seeds: PlazaToolGuideRecord[],
-  saved: PlazaToolGuideRecord[],
-): PlazaToolGuideRecord[] {
-  const map = new Map(seeds.map((s) => [s.id, s]));
-  for (const row of saved) {
-    if (!row?.id) continue;
-    map.set(row.id, row);
-  }
-  return [...map.values()];
-}
+import { useDataFetchNotice } from '@/domain/dataFetchNotice';
 
 function persist(records: PlazaToolGuideRecord[]) {
   if (!canUsePlatformDocsApi()) return;
@@ -51,14 +33,14 @@ interface PlazaToolGuideState {
 
 export const usePlazaToolGuideStore = create<PlazaToolGuideState>((set, get) => ({
   ready: false,
-  records: howtoSeeds(),
+  records: [],
   toast: null,
 
   hydrate: () => {
     void (async () => {
-      const seeds = howtoSeeds();
       if (!canUsePlatformDocsApi()) {
-        set({ records: seeds, ready: true });
+        useDataFetchNotice.getState().markFailed();
+        set({ records: [], ready: true });
         return;
       }
       try {
@@ -69,12 +51,10 @@ export const usePlazaToolGuideStore = create<PlazaToolGuideState>((set, get) => 
               .map((row) => normalizePlazaToolGuideRecord(row))
               .filter((r): r is PlazaToolGuideRecord => Boolean(r))
           : [];
-        set({
-          records: saved.length ? mergeGuideCatalog(seeds, saved) : seeds,
-          ready: true,
-        });
+        set({ records: saved, ready: true });
       } catch {
-        set({ records: seeds, ready: true });
+        useDataFetchNotice.getState().markFailed();
+        set({ records: [], ready: true });
       }
     })();
   },
@@ -107,8 +87,7 @@ export const usePlazaToolGuideStore = create<PlazaToolGuideState>((set, get) => 
   },
 
   resetToSeeds: () => {
-    set({ records: howtoSeeds() });
-    get().persist();
+    set({ toast: null });
   },
 
   showToast: (msg) => set({ toast: msg }),

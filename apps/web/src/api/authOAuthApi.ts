@@ -12,27 +12,9 @@ export interface AuthConfigResult {
   ready: boolean;
 }
 
-/**
- * 读登录模式。优先打 /health（永远不被 API_KEY 守卫拦，且启动本来就要探活），
- * 拿不到再退到 /auth/config。两者都失败则由调用方落回 password。
- */
+/** 读登录模式。失败时由调用方落回 password。 */
 export async function fetchAuthConfig(): Promise<AuthConfigResult | null> {
   if (!isApiEnabled()) return null;
-  try {
-    const res = await fetch(apiUrl('/api/v1/health'), { headers: jsonHeaders() });
-    if (res.ok) {
-      const body = (await res.json()) as { auth?: { mode?: string; ready?: boolean } };
-      if (body?.auth?.mode) {
-        return {
-          mode: body.auth.mode === 'oauth' ? 'oauth' : 'password',
-          providerLabel: body.auth.mode === 'oauth' ? '企业统一身份认证' : '账号密码',
-          ready: body.auth.ready !== false,
-        };
-      }
-    }
-  } catch {
-    /* 退到 /auth/config */
-  }
   try {
     const res = await fetch(apiUrl('/api/v1/auth/config'), { headers: jsonHeaders() });
     if (!res.ok) return null;
@@ -125,7 +107,7 @@ export async function completeOAuthLogin(params: {
         detail: `POST /auth/oauth/callback 返回 HTTP ${res.status}`,
         hint:
           res.status === 401
-            ? '后端开了 API_KEY，但前端没带 X-API-Key（检查 VITE_API_KEY 或运行时偏好设置）'
+            ? '后端开了 API_KEY，但前端没带 X-API-Key（检查 VITE_API_KEY）'
             : res.status === 404
               ? '该版本 API 没有统一身份登录路由，确认部署的是最新构建'
               : '查看 API 日志中 [oauth] 开头的行',

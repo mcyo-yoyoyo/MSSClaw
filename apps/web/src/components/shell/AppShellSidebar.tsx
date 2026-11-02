@@ -4,7 +4,6 @@
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
-  type ReactNode,
 } from 'react';
 import {
   APP_VIEW_NAV,
@@ -36,11 +35,10 @@ export function AppShellSidebar() {
     setAppView,
     toggleSidebar,
     toggleNavSection,
-    openSettings,
   } = useAppViewStore();
   const isViewEnabled = useNavPresentationStore((s) => s.isViewEnabled);
-  const roleEnabled = useNavPresentationStore((s) => s.roleEnabled);
   const user = useSessionStore((s) => s.user);
+  const menus = useSessionStore((s) => s.menus);
   const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
   const logout = useSessionStore((s) => s.logout);
   const requestLogin = useAuthGateStore((s) => s.requestLogin);
@@ -48,8 +46,8 @@ export function AppShellSidebar() {
   const hydrate = useShellPerspectiveStore((s) => s.hydrate);
 
   useEffect(() => {
-    hydrate(user?.platformRole);
-  }, [hydrate, user?.platformRole, user?.id]);
+    hydrate(user?.platformRole, menus);
+  }, [hydrate, user?.platformRole, user?.id, menus]);
 
   const itemsBySection = useMemo(() => {
     const sidebarIds = new Set(APP_VIEW_NAV.map((i) => i.id));
@@ -80,7 +78,7 @@ export function AppShellSidebar() {
     });
 
     return acc;
-  }, [isViewEnabled, roleEnabled, user?.platformRole]);
+  }, [isViewEnabled, menus, user?.platformRole]);
 
   const capabilityItems = useMemo(() => {
     return sortByAdminMenuOrder(
@@ -93,9 +91,10 @@ export function AppShellSidebar() {
     [itemsBySection.ops],
   );
 
+  const orgItems = useMemo(() => sortByAdminMenuOrder(itemsBySection.org), [itemsBySection.org]);
+
   const systemNavNodes = useMemo(() => {
-    const sorted = sortByAdminMenuOrder(itemsBySection.system);
-    const renderItem = (item: { id: AppView; label: string; icon: string }) => (
+    return sortByAdminMenuOrder(itemsBySection.system).map((item) => (
       <button
         key={item.id}
         type="button"
@@ -107,27 +106,11 @@ export function AppShellSidebar() {
         <i className={cn('fa-solid w-5 text-center text-[15px]', item.icon)} />
         <span className="nav-label">{item.label}</span>
       </button>
-    );
-    const nodes: ReactNode[] = sorted.map((item) => renderItem(item));
-    if (nodes.length > 0) {
-      nodes.push(
-        <button
-          key="quick-settings"
-          type="button"
-          onClick={openSettings}
-          className="wb-nav-item"
-          title="偏好设置"
-        >
-          <i className="fa-solid fa-gear w-5 text-center text-[15px]" />
-          <span className="nav-label">偏好设置</span>
-        </button>,
-      );
-    }
-    return nodes;
-  }, [itemsBySection.system, appView, setAppView, openSettings]);
+    ));
+  }, [itemsBySection.system, appView, setAppView]);
 
   const initial = (user?.name?.trim()?.[0] ?? 'U').toUpperCase();
-  const roleLabel = user ? ROLE_LABELS[user.platformRole] : '';
+  const roleLabel = user ? (user.roleName ?? ROLE_LABELS[user.platformRole]) : '';
   const perspectiveLabel = user
     ? formatRolePerspective({
         platformRole: user.platformRole,
@@ -158,12 +141,13 @@ export function AppShellSidebar() {
   const hasCapabilityBody = capabilityItems.length > 0;
   const hasOperationsBody = operationsItems.length > 0;
   const hasSystemBody = systemNavNodes.length > 0;
+  const hasOrgBody = orgItems.length > 0;
 
   /** 运营壳 + 配置页 → 能力/运营/系统导航；其余（含业务壳全部）→ 三维筛选 */
   const showOpsConfigNav =
     !isBusiness &&
     isOpsOnlyView(appView) &&
-    (hasCapabilityBody || hasOperationsBody || hasSystemBody);
+    (hasCapabilityBody || hasOperationsBody || hasSystemBody || hasOrgBody);
 
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = Number(window.localStorage.getItem('mss-sidebar-width'));
@@ -290,6 +274,18 @@ export function AppShellSidebar() {
                 <div className="nav-section-body">{systemNavNodes}</div>
               </div>
             ) : null}
+            {hasOrgBody ? (
+              <NavSectionGroup
+                section="org"
+                label={NAV_SECTION_LABELS.org}
+                collapsed={navSectionsCollapsed.org}
+                onToggle={() => toggleNavSection('org')}
+                items={orgItems}
+                activeView={appView}
+                onSelect={setAppView}
+                sidebarCollapsed={sidebarCollapsed}
+              />
+            ) : null}
           </div>
         ) : (
           <SidebarMarketFilters collapsed={sidebarCollapsed} />
@@ -335,17 +331,6 @@ export function AppShellSidebar() {
                     个人中心
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAccountOpen(false);
-                    openSettings();
-                  }}
-                  className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] text-zinc-700 hover:bg-zinc-50"
-                >
-                  <i className="fa-solid fa-gear w-4 text-center text-[11px] text-zinc-400" />
-                  偏好设置
-                </button>
                 <button
                   type="button"
                   onClick={() => {

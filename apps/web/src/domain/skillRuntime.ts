@@ -1,5 +1,4 @@
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
-import { PROTOTYPE_SKILLS } from '@/domain/prototype/skills';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { getSkillPack } from '@/domain/skills/catalog';
 import {
@@ -43,17 +42,14 @@ export function isSkillRunnable(
 
 export function getSkillById(skillId?: string | null): PrototypeSkillSeed | null {
   if (!skillId) return null;
-  const fromMarket = useMarketplaceStore.getState().skills.find((s) => s.id === skillId);
-  if (fromMarket) return fromMarket;
-  return PROTOTYPE_SKILLS.find((s) => s.id === skillId) ?? null;
+  return useMarketplaceStore.getState().skills.find((s) => s.id === skillId) ?? null;
 }
 
 /** 从用户消息解析 slash 技能（如 /评论分析） */
 export function resolveSkillFromText(text: string): PrototypeSkillSeed | null {
   const market = useMarketplaceStore.getState();
   const published = typeof market.getPublishedSkills === 'function' ? market.getPublishedSkills() : [];
-  const skills = (published.length ? published : PROTOTYPE_SKILLS.filter((s) => s.published))
-    .filter(isSkillRunnable);
+  const skills = published.filter(isSkillRunnable);
   const trimmed = text.trim();
   const sorted = [...skills].sort((a, b) => b.command.length - a.command.length);
   for (const skill of sorted) {

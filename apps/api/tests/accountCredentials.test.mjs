@@ -43,7 +43,7 @@ async function seedMembers(members, revision = 0) {
       id: member.id,
       name: member.name,
       email: member.email.trim().toLowerCase().replace(/@company\.com$/, '@huawei.com'),
-      role: member.role ?? 'business_user',
+      roleId: member.role ?? 'business_user',
       status: member.status ?? 'active',
       position,
     })),
@@ -153,7 +153,7 @@ test('成员表同样受 revision 保护', async () => {
   assert.equal(ok.payload.revision, 3);
 });
 
-test('会话只存令牌的 SHA-256；移除成员连同密码和会话一起删除', async () => {
+test('刷新令牌只存 SHA-256；移除成员连同密码和刷新令牌一起删除', async () => {
   await seedMembers([
     { id: 'm-1', name: 'A', email: 'a@huawei.com' },
     { id: 'm-2', name: 'B', email: 'b@huawei.com' },
@@ -161,9 +161,9 @@ test('会话只存令牌的 SHA-256；移除成员连同密码和会话一起删
   await seedCredentials({ 'a@huawei.com': credentialFor('pw-a') });
   const login = await service().login({ email: 'a@huawei.com', password: 'pw-a' });
   assert.equal(login.ok, true);
-  const [stored] = await prisma.authSession.findMany();
-  assert.notEqual(stored.tokenHash, login.token);
-  assert.equal(stored.tokenHash, createHash('sha256').update(login.token).digest('hex'));
+  const [stored] = await prisma.refreshToken.findMany();
+  assert.notEqual(stored.tokenHash, login.refreshToken);
+  assert.equal(stored.tokenHash, createHash('sha256').update(login.refreshToken).digest('hex'));
   assert.equal((await service().me(login.token)).ok, true);
 
   const members = (await service().getDoc(WS, 'members')).payload;
@@ -172,6 +172,7 @@ test('会话只存令牌的 SHA-256；移除成员连同密码和会话一起删
     revision: members.revision,
   });
   assert.equal(await prisma.memberCredential.count(), 0);
+  assert.equal(await prisma.refreshToken.count(), 0);
   assert.equal((await service().me(login.token)).ok, false);
 });
 

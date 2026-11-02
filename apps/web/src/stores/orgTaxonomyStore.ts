@@ -1,21 +1,15 @@
 import { create } from 'zustand';
 import {
-  CHINA_REGION_ID,
   DEFAULT_HQ_DEPTS,
   DEFAULT_REGIONS,
-  HQ_REGION_ID,
   setOrgTaxonomy,
-  sortDeptIdsByLabel,
-  sortRegionIdsByLabel,
   type DeptId,
   type OrgUnit,
   type RegionId,
 } from '@/domain/orgTaxonomy';
-import {
-  canUsePlatformDocsApi,
-  fetchPlatformDoc,
-  scheduleSavePlatformDoc,
-} from '@/api/platformDocsApi';
+import { apiUrl, fetchWithTimeout, isApiEnabled } from '@/api/client';
+import { useDataFetchNotice } from '@/domain/dataFetchNotice';
+import { canUsePlatformDocsApi, scheduleSavePlatformDoc } from '@/api/platformDocsApi';
 
 function slugFromLabel(label: string, prefix: 'd' | 'r'): string {
   const ascii = label
@@ -25,57 +19,6 @@ function slugFromLabel(label: string, prefix: 'd' | 'r'): string {
     .replace(/[^a-z0-9-]/g, '');
   if (ascii && /^[a-z]/.test(ascii)) return ascii.slice(0, 32);
   return `${prefix}_${Date.now().toString(36)}`;
-}
-
-/** 兼容旧字典：中国→中国区；补齐机关；按展示序重排 */
-function migrateRegions(regions: OrgUnit[]): OrgUnit[] {
-  const byId = new Map<string, OrgUnit>();
-  for (const r of regions) {
-    if (!r?.id || !r?.label) continue;
-    if (r.id === CHINA_REGION_ID) {
-      byId.set(r.id, { ...r, label: '中国区' });
-    } else {
-      byId.set(r.id, r);
-    }
-  }
-  if (!byId.has(HQ_REGION_ID)) {
-    byId.set(HQ_REGION_ID, { id: HQ_REGION_ID, label: '机关' });
-  }
-  const orderedIds = sortRegionIdsByLabel([...byId.keys()] as RegionId[]);
-  return orderedIds.map((id) => byId.get(id)!);
-}
-
-function migrateDepts(depts: OrgUnit[]): OrgUnit[] {
-  const valid = depts
-    .filter((d) => d?.id && d?.label)
-    .map((d) =>
-      d.id === 'quality' && (d.label === '质量与运营' || d.label === '质量运营')
-        ? { ...d, label: '质运' }
-        : d,
-    );
-  const ordered = sortDeptIdsByLabel(valid.map((d) => d.id as DeptId));
-  const byId = new Map(valid.map((d) => [d.id, d]));
-  return ordered.map((id) => byId.get(id)!);
-}
-
-function defaults(): { depts: OrgUnit[]; regions: OrgUnit[] } {
-  return { depts: [...DEFAULT_HQ_DEPTS], regions: [...DEFAULT_REGIONS] };
-}
-
-function normalizeRemote(remote: {
-  depts?: OrgUnit[];
-  regions?: OrgUnit[];
-} | null): { depts: OrgUnit[]; regions: OrgUnit[] } {
-  if (!remote) return defaults();
-  const depts =
-    Array.isArray(remote.depts) && remote.depts.length
-      ? migrateDepts(remote.depts)
-      : [...DEFAULT_HQ_DEPTS];
-  const regions =
-    Array.isArray(remote.regions) && remote.regions.length
-      ? migrateRegions(remote.regions)
-      : [...DEFAULT_REGIONS];
-  return { depts, regions };
 }
 
 function persist(depts: OrgUnit[], regions: OrgUnit[]) {
@@ -99,7 +42,7 @@ interface OrgTaxonomyState {
   dismissToast: () => void;
 }
 
-const initial = defaults();
+const initial = { depts: [] as OrgUnit[], regions: [] as OrgUnit[] };
 setOrgTaxonomy(initial.depts, initial.regions);
 
 export const useOrgTaxonomyStore = create<OrgTaxonomyState>((set, get) => ({
@@ -107,22 +50,31 @@ export const useOrgTaxonomyStore = create<OrgTaxonomyState>((set, get) => ({
   regions: initial.regions,
   toast: null,
 
+  /** 区域、领域以数据库字典为准（组织权限 · 部门维护，只返回启用的） */
   hydrate: () => {
     void (async () => {
-      if (!canUsePlatformDocsApi()) {
-        const next = defaults();
+      if (!isApiEnabled()) {
+        useDataFetchNotice.getState().markFailed();
+        const next = { depts: [], regions: [] };
         setOrgTaxonomy(next.depts, next.regions);
         set(next);
         return;
       }
       try {
-        const remote = await fetchPlatformDoc<{ depts?: OrgUnit[]; regions?: OrgUnit[] }>('org-taxonomy',
-        );
-        const next = normalizeRemote(remote);
+        const res = await fetchWithTimeout(apiUrl('/api/v1/org/taxonomy'), { headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error(`org_taxonomy_${res.status}`);
+        const body = (await res.json()) as { regions?: { id: string; name: string }[]; domains?: { id: string; name: string }[] };
+        const toUnits = (rows: { id: string; name: string }[] | undefined) => (rows ?? []).map((row) => ({ id: row.id, label: row.name }));
+        const next = {
+          regions: toUnits(body.regions),
+          depts: toUnits(body.domains),
+        };
+        useDataFetchNotice.getState().markOk();
         setOrgTaxonomy(next.depts, next.regions);
         set(next);
       } catch {
-        const next = defaults();
+        useDataFetchNotice.getState().markFailed();
+        const next = { depts: [], regions: [] };
         setOrgTaxonomy(next.depts, next.regions);
         set(next);
       }

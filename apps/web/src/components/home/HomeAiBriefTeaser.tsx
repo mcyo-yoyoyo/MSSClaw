@@ -10,6 +10,7 @@ export function HomeAiBriefTeaser() {
   const payload = useAiBotDailyNewsStore((s) => s.payload);
   const hydrate = useAiBotDailyNewsStore((s) => s.hydrate);
   const pref = useAiNewsPreferenceStore((s) => s.pref);
+  const prefError = useAiNewsPreferenceStore((s) => s.error);
   const hydratePref = useAiNewsPreferenceStore((s) => s.hydrate);
   const setAppView = useAppViewStore((s) => s.setAppView);
 
@@ -31,6 +32,7 @@ export function HomeAiBriefTeaser() {
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {prefError ? null : (
           <button
             type="button"
             onClick={() => setAppView('ai-brief')}
@@ -44,6 +46,7 @@ export function HomeAiBriefTeaser() {
             <i className="fa-regular fa-envelope text-[8px]" />
             {pref.emailSubscribed ? '已订阅' : '订阅'}
           </button>
+          )}
           <button
             type="button"
             onClick={() => setAppView('ai-brief')}

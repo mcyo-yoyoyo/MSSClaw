@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import {
-  getSeedMembers,
   MEMBER_STATUS_LABELS,
   normalizePlatformRole,
   ROLE_LABELS,
@@ -18,7 +17,6 @@ import {
 import {
   generateTempPassword,
   setAccountPassword,
-  migrateCredentialEmailDomain,
   ensureMissingPasswords,
   hasCredential,
   hydrateAccountCredentials,
@@ -30,6 +28,7 @@ import {
   savePlatformDoc,
   setPlatformDocMemory,
 } from '@/api/platformDocsApi';
+import { useDataFetchNotice } from '@/domain/dataFetchNotice';
 
 function normalizeStoredMember(m: WorkspaceMember): WorkspaceMember {
   return {
@@ -56,25 +55,8 @@ export async function initMissingAccountPasswords(): Promise<number> {
   return ensureMissingPasswords(emails);
 }
 
-/** 合并种子账号（补齐核心种子；剔除已退役的 test1–10） */
 function isRetiredDemoMemberEmail(email: string): boolean {
   return /^test([1-9]|10)@huawei\.com$/i.test(email.trim());
-}
-
-function mergeWithSeedMembers(stored: WorkspaceMember[]): WorkspaceMember[] {
-  const seeds = getSeedMembers().map(normalizeStoredMember);
-  const byEmail = new Map<string, WorkspaceMember>();
-  for (const m of stored.map(normalizeStoredMember)) {
-    const key = m.email.toLowerCase();
-    if (!key || isRetiredDemoMemberEmail(key)) continue;
-    byEmail.set(key, m);
-  }
-  for (const seed of seeds) {
-    const key = seed.email.toLowerCase();
-    if (!key || isRetiredDemoMemberEmail(key)) continue;
-    if (!byEmail.has(key)) byEmail.set(key, seed);
-  }
-  return [...byEmail.values()];
 }
 
 function membersFromPayload(raw: unknown): WorkspaceMember[] {
@@ -83,13 +65,11 @@ function membersFromPayload(raw: unknown): WorkspaceMember[] {
     : Array.isArray((raw as { members?: unknown })?.members)
       ? ((raw as { members: WorkspaceMember[] }).members)
       : [];
-  if (!list.length) return getSeedMembers().map(normalizeStoredMember);
-  return mergeWithSeedMembers(list as WorkspaceMember[]);
+  return list.map(normalizeStoredMember).filter((member) => !isRetiredDemoMemberEmail(member.email));
 }
 
 function loadMembersSync(): WorkspaceMember[] {
-  migrateCredentialEmailDomain();
-  return getSeedMembers().map(normalizeStoredMember);
+  return [];
 }
 
 /**
@@ -122,7 +102,7 @@ function invalidateMembersAuthority(): number {
 }
 
 function fallbackMembers(): WorkspaceMember[] {
-  return confirmedMembers ? cloneMembers(confirmedMembers) : loadMembersSync();
+  return confirmedMembers ? cloneMembers(confirmedMembers) : [];
 }
 
 function ensureMembersWritable(): boolean {
@@ -218,6 +198,7 @@ export async function hydrateMembersFromServer(): Promise<WorkspaceMember[]> {
       return members;
     } catch {
       if (membersWriteGeneration === generation) knownMembersRevision = undefined;
+      useDataFetchNotice.getState().markFailed();
       return fallbackMembers();
     }
   })();

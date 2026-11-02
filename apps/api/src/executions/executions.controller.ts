@@ -83,6 +83,19 @@ export class ExecutionsController {
     return this.executionsService.evaluateSkill(workspaceId, body as Record<string, unknown>);
   }
 
+  @Post('skills/hub-tags')
+  async tagSkillHub(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      throw new BadRequestException('skill_hub_tags_body_must_be_object');
+    }
+    return this.executionsService.tagSkillHub(workspaceId, body as Record<string, unknown>);
+  }
+
   @Get('executions')
   list(
     @Query('limit') limit?: string,

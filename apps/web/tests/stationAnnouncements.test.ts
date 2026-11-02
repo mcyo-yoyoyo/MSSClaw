@@ -135,18 +135,18 @@ function announcement(overrides: Record<string, unknown> = {}) {
 
 test('运营自填的标签会被保留，保存时带上 revision 并采用服务端规范化结果', async () => {
   const requests: Array<{ method: string; payload?: any }> = [];
+  let doc: { items: any[]; revision: number } = { items: [announcement()], revision: 2 };
   globalThis.fetch = (async (input, init) => {
     const url = String(input);
     if (url.includes('/docs/station-announcements')) {
-      if (init?.method === 'PUT') {
-        const body = JSON.parse(String(init.body)) as { payload: any };
-        requests.push({ method: 'PUT', payload: body.payload });
-        return jsonResponse({
-          payload: { items: body.payload.items, revision: body.payload.revision + 1 },
-        });
+      if (init?.method === 'POST') {
+        const item = JSON.parse(String(init.body));
+        requests.push({ method: 'POST', payload: item });
+        doc = { items: [item, ...doc.items], revision: doc.revision + 1 };
+        return jsonResponse({ payload: doc });
       }
       requests.push({ method: 'GET' });
-      return jsonResponse({ payload: { items: [announcement()], revision: 2 } });
+      return jsonResponse({ payload: doc });
     }
     return jsonResponse({});
   }) as typeof fetch;
@@ -167,14 +167,12 @@ test('运营自填的标签会被保留，保存时带上 revision 并采用服�
     .upsert(announcement({ id: 'ann-launch', title: '新功能上线', badge: '上线' }), true);
   await new Promise((resolve) => setTimeout(resolve, 20));
 
-  const put = requests.find((r) => r.method === 'PUT');
-  assert.equal(put?.payload.revision, 2);
-  assert.equal(put?.payload.items.length, 2);
+  // 只提交新增的这一条，不带整表：服务端按当前库合并，不会抹掉别人的公告
+  const post = requests.find((r) => r.method === 'POST');
+  assert.equal(post?.payload.id, 'ann-launch');
   // 历史枚举值在写入前就补齐了 AI 前缀
-  assert.equal(
-    put?.payload.items.find((item: any) => item.id === 'ann-launch').badge,
-    'AI上线',
-  );
+  assert.equal(post?.payload.badge, 'AI上线');
+  assert.equal(announcementStore.getState().items.length, 2);
   assert.equal(announcementStore.getState().revision, 3);
 });
 
@@ -210,10 +208,9 @@ test('支持多条置顶，按创建时间倒序，编辑和置顶时间不改�
   globalThis.fetch = (async (input, init) => {
     if (String(input).includes('/docs/station-announcements')) {
       if (init?.method === 'PUT') {
-        const { payload } = JSON.parse(String(init.body));
-        assert.equal(payload.revision, saved.revision);
-        assert.ok(payload.items.every((item: any) => !('published' in item)));
-        saved = { items: payload.items, revision: saved.revision + 1 };
+        const item = JSON.parse(String(init.body));
+        assert.ok(!('published' in item));
+        saved = { items: saved.items.map((row) => (row.id === item.id ? item : row)), revision: saved.revision + 1 };
       }
       return jsonResponse({ payload: saved });
     }
@@ -232,7 +229,7 @@ test('支持多条置顶，按创建时间倒序，编辑和置顶时间不改�
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.deepEqual(ids(), ['ann-pin', 'ann-old', 'ann-new', 'ann-invalid-pin']);
   assert.equal(saved.items.find((a) => a.id === 'ann-old')?.pinned, true);
-  assert.equal(saved.items.filter((a) => a.pinned).length, 2);
+  assert.equal(saved.items.filter((a) => a.pinned === true).length, 2);
 
   const olderPinned = announcementStore.getState().items.find((a: any) => a.id === 'ann-old');
   announcementStore.getState().upsert({ ...olderPinned, title: '编辑旧的置顶公告' });
@@ -259,8 +256,8 @@ test('下架后不进首页公告条，重新上架后恢复', async () => {
   globalThis.fetch = (async (input, init) => {
     if (String(input).includes('/docs/station-announcements')) {
       if (init?.method === 'PUT') {
-        const { payload } = JSON.parse(String(init.body));
-        saved = { items: payload.items, revision: saved.revision + 1 };
+        const item = JSON.parse(String(init.body));
+        saved = { items: saved.items.map((row) => (row.id === item.id ? item : row)), revision: saved.revision + 1 };
       }
       return jsonResponse({ payload: saved });
     }
@@ -289,7 +286,7 @@ test('另一个运营先提交时拉回最新公告，不覆盖对方内容', as
   globalThis.fetch = (async (input, init) => {
     const url = String(input);
     if (url.includes('/docs/station-announcements')) {
-      if (init?.method === 'PUT') return jsonResponse({ error: 'conflict' }, 409);
+      if (init?.method === 'POST') return jsonResponse({ error: 'conflict' }, 409);
       return jsonResponse({
         payload: { items: [announcement({ id: 'ann-other', title: '别人写的公告' })], revision: 9 },
       });

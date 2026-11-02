@@ -3,6 +3,7 @@
 import type { AgentCapabilityTypeId } from '@/domain/agentHubFilters';
 import type { AgentLifecycleStatus } from '@/domain/agentLifecycle';
 import type { BusinessScenarioId } from '@/domain/businessScenarios';
+import type { SkillHubTags } from '@/domain/skillHubTags';
 import type { ToolDeliveryForm } from '@/domain/externalToolDelivery';
 import type { PortalCasePreviewFile } from '@/domain/prototype/portalContent';
 import type {
@@ -259,7 +260,9 @@ export interface PrototypeSkillSeed extends AssetOwnershipFields {
   accentColor?: string;
   /** 业务/运营手打标签 */
   tags: string[];
-  /** 模型/启发式识别的搜索关键词（可编辑） */
+  /** SkillHub V5 受控标签。检索词由其中的细词条生成。 */
+  hubTags?: SkillHubTags;
+  /** 由 hubTags 细词条同步，供列表检索；不再自由抽词 */
   searchKeywords?: string[];
   /** 平台对话执行时注入的 Skill 正文（可 run） */
   instructions?: string;

@@ -1,10 +1,13 @@
 import { BadRequestException, ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
-import { createHash, randomBytes } from 'crypto';
+import { randomBytes } from 'crypto';
+import { AuthTokens, looksLikeJwt, type IssuedTokens } from './auth-tokens';
+import { hashPassword, verifyPassword } from './password-hash';
+import { menuAccessForRole } from './rbac-store';
 import {
-  createSession,
   deleteSession,
   ensureMembersSeeded,
   findSession,
+  MEMBER_INCLUDE,
   memberToJson,
   normalizedAccountEmail,
   readAuthPolicy,
@@ -27,6 +30,7 @@ import {
   readStationAnnouncements,
   writeAiNewsDoc,
   writeApprovalsDoc,
+  readOfficeSceneEntries,
   writeOfficeScenesDoc,
   writeStationAnnouncements,
 } from './operations-store';
@@ -38,12 +42,35 @@ import {
   SEED_EXTERNAL_TOOL_LAYOUT,
   SEED_INTERNAL_OFFICE_SCENES,
 } from '../data/market-doc-seeds';
+import { appendOperationLogs, diffOfficeScenes, type OperationActor } from './operation-log';
 import { PortalAnalyticsService } from './portal-analytics.service';
 import {
   canonicalizeStationAnnouncements,
   syncStationAnnouncementBroadcast,
 } from './station-announcement-broadcast';
 import { PLATFORM_WORKSPACE_ID } from '../common/platform-workspace';
+
+function pickAiNews(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const source = raw as Record<string, unknown>;
+  const picked: Record<string, unknown> = {};
+  for (const key of ['id', 'title', 'summary', 'body', 'cadence', 'publishedAt', 'source']) {
+    if (source[key] !== undefined) picked[key] = source[key];
+  }
+  return picked;
+}
+
+function mergeById<T extends { id: string }>(items: T[], raw: unknown, label: string): T[] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new BadRequestException(`${label}_required`);
+  }
+  const id = String((raw as { id?: unknown }).id ?? '').trim();
+  if (!id) throw new BadRequestException(`${label}_id_required`);
+  const record = { ...(raw as T), id };
+  return items.some((item) => item.id === id)
+    ? items.map((item) => (item.id === id ? record : item))
+    : [record, ...items];
+}
 
 /** 允许持久化的平台文档 kind（对应原前端 localStorage 配置） */
 export const PLATFORM_DOC_KINDS = [
@@ -198,7 +225,7 @@ function canonicalizeHomeFeaturedInput(payload: unknown): HomeFeaturedChannels {
 }
 
 /** 读取时容错：忽略非法项，保证首页不会因为一条脏数据整栏报错。 */
-function homeFeaturedPayloadForRead(payload: unknown): {
+export function homeFeaturedPayloadForRead(payload: unknown): {
   version: number;
   revision: number;
   channels?: HomeFeaturedChannels;
@@ -733,6 +760,16 @@ function docRevision(payload: unknown): number {
     : 0;
 }
 
+/** token 沿用改造前的字段名（访问令牌）；refreshToken 由控制器写进 httpOnly Cookie 后从响应体去掉 */
+function tokenFields(tokens: IssuedTokens) {
+  return {
+    token: tokens.accessToken,
+    expiresAt: tokens.expiresAt,
+    refreshToken: tokens.refreshToken,
+    refreshExpiresAt: tokens.refreshExpiresAt,
+  };
+}
+
 function sessionUserForMember(member: Record<string, unknown>, workspaceId: string = PLATFORM_WORKSPACE_ID) {
   return {
     id: String(member.id),
@@ -748,14 +785,6 @@ function sessionUserForMember(member: Record<string, unknown>, workspaceId: stri
     postName: member.postName ? String(member.postName) : null,
     orgPath: member.orgPath ? String(member.orgPath) : null,
   };
-}
-
-function sha256Hex(text: string): string {
-  return createHash('sha256').update(text, 'utf8').digest('hex');
-}
-
-function hashPassword(password: string, salt: string): string {
-  return sha256Hex(`${salt}:${password}`);
 }
 
 function initialMarketDoc(kind: PlatformDocKind): unknown | undefined {
@@ -839,10 +868,14 @@ function defaultLlmConfig() {
 export class PlatformDocsService {
   private readonly logger = new Logger(PlatformDocsService.name);
 
+  readonly tokens: AuthTokens;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly portalAnalytics: PortalAnalyticsService,
-  ) {}
+  ) {
+    this.tokens = new AuthTokens(prisma);
+  }
 
   /**
    * 已拆成正式表的文档：读取走各自的表，返回形状与原文档一致。
@@ -905,14 +938,22 @@ export class PlatformDocsService {
     kind: string,
     payload: unknown,
     memberId?: string,
+    actor?: OperationActor,
   ): Promise<{ kind: string; payload: unknown }> {
     if (!isDocKind(kind)) throw new BadRequestException(`unsupported_doc_kind:${kind}`);
     await this.ensureWorkspace(workspaceId);
     switch (kind) {
       case 'external-tool-layout':
         return this.putExternalToolLayoutDoc(workspaceId, payload);
-      case 'internal-office-scenes':
-        return { kind, payload: await writeOfficeScenesDoc(this.prisma, canonicalizeOfficeSceneInput(payload)) };
+      case 'internal-office-scenes': {
+        const input = canonicalizeOfficeSceneInput(payload);
+        const before = actor ? await readOfficeSceneEntries(this.prisma) : [];
+        const saved = await writeOfficeScenesDoc(this.prisma, input);
+        if (actor) {
+          await appendOperationLogs(this.prisma, actor, 'office-scene', diffOfficeScenes(before, saved.entries));
+        }
+        return { kind, payload: saved };
+      }
       case 'auth-credentials': {
         const { doc, skipped } = await writeCredentialsDoc(this.prisma, payload);
         if (skipped.length) {
@@ -967,6 +1008,79 @@ export class PlatformDocsService {
       );
     }
     return { kind: 'station-announcements', payload: saved };
+  }
+
+  /** 只提交一条公告。服务端按当前库合并，避免陈旧整表把别人的公告抹掉。 */
+  async saveStationAnnouncementItem(raw: unknown, removingId?: string) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const current = await readStationAnnouncements(this.prisma);
+      const next = removingId
+        ? current.items.filter((item) => item.id !== removingId)
+        : mergeById(current.items, raw, 'announcement');
+      try {
+        const canonical = canonicalizeStationAnnouncements({ items: next });
+        const previous = current.items;
+        const saved = await writeStationAnnouncements(this.prisma, current.revision, canonical.items);
+        try {
+          await syncStationAnnouncementBroadcast(this.prisma, previous, saved.items);
+        } catch (error) {
+          this.logger.warn(
+            `station_announcement_broadcast_failed:${error instanceof Error ? error.message : 'unknown'}`,
+          );
+        }
+        return saved;
+      } catch (error) {
+        if (attempt === 0 && error instanceof ConflictException) continue;
+        throw error;
+      }
+    }
+    throw new ConflictException('station_announcements_revision_conflict');
+  }
+
+  async saveAiNewsItem(raw: unknown, removingId?: string) {
+    const current = await readAiNewsDoc(this.prisma);
+    const items = removingId
+      ? current.items.filter((item) => item.id !== removingId)
+      : mergeById(current.items as { id: string }[], pickAiNews(raw), 'ai_news');
+    return writeAiNewsDoc(this.prisma, { items });
+  }
+
+  async saveOfficeSceneItem(raw: unknown, removingId?: string) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const current = await readOfficeScenesDoc(this.prisma);
+      const entries = removingId
+        ? current.entries.filter((item) => item.id !== removingId)
+        : mergeById(current.entries, raw, 'office_scene');
+      try {
+        return await writeOfficeScenesDoc(this.prisma, {
+          expectedRevision: current.revision,
+          entries,
+        });
+      } catch (error) {
+        if (attempt === 0 && error instanceof ConflictException) continue;
+        throw error;
+      }
+    }
+    throw new ConflictException('internal_office_scenes_revision_conflict');
+  }
+
+  async saveOfficeSceneOrder(ids: string[]) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const current = await readOfficeScenesDoc(this.prisma);
+      const byId = new Map(current.entries.map((entry) => [entry.id, entry]));
+      const ordered = ids.map((id) => byId.get(id)).filter((entry) => entry !== undefined);
+      const rest = current.entries.filter((entry) => !ids.includes(entry.id));
+      try {
+        return await writeOfficeScenesDoc(this.prisma, {
+          expectedRevision: current.revision,
+          entries: [...ordered, ...rest],
+        });
+      } catch (error) {
+        if (attempt === 0 && error instanceof ConflictException) continue;
+        throw error;
+      }
+    }
+    throw new ConflictException('internal_office_scenes_revision_conflict');
   }
 
   async listDocs(workspaceId: string, memberId?: string) {
@@ -1157,40 +1271,45 @@ export class PlatformDocsService {
     return { kind: 'external-tool-layout', payload: nextPayload };
   }
 
-  async login(body: {
-    email?: string;
-    password?: string;
-    workspaceId?: string;
-    visitorId?: string;
-  }) {
+  async login(
+    body: {
+      email?: string;
+      password?: string;
+      workspaceId?: string;
+      visitorId?: string;
+    },
+    userAgent?: string,
+  ) {
     const email = normalizedAccountEmail(body.email);
     const password = body.password ?? '';
     if (!email || !password) throw new BadRequestException('email_and_password_required');
 
     await ensureMembersSeeded(this.prisma);
-    const member = await this.prisma.member.findUnique({ where: { email }, include: { credential: true } });
+    const member = await this.prisma.member.findUnique({ where: { email }, include: { ...MEMBER_INCLUDE, credential: true } });
     if (!member || member.status === 'suspended') {
-      return { ok: false, error: '账号不存在或已停用' };
+      return { ok: false as const, error: '账号不存在或已停用' };
     }
 
     // 没设密码的成员只在口令策略放行时可以用演示口令登录
     const cred = member.credential;
     let valid = false;
     if (cred) {
-      valid = hashPassword(password, cred.salt) === cred.passwordHash;
+      const checked = await verifyPassword(cred, password);
+      valid = checked.ok;
+      if (checked.needsRehash) {
+        await this.prisma.memberCredential.update({ where: { memberId: member.id }, data: await hashPassword(password) });
+      }
     } else if ((await readAuthPolicy(this.prisma)).allowDemoPassword && password === 'mssclaw') {
       valid = true;
     }
     if (!valid) {
-      return { ok: false, error: cred ? '密码错误' : '该账号尚未设置密码，请联系平台运营' };
+      return { ok: false as const, error: cred ? '密码错误' : '该账号尚未设置密码，请联系平台运营' };
     }
 
     const user = sessionUserForMember(memberToJson(member));
-    const token = randomBytes(24).toString('hex');
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    await createSession(this.prisma, { token, memberId: member.id, authMethod: cred ? 'password' : 'demo', expiresAt });
+    const tokens = await this.tokens.issue(member, cred ? 'password' : 'demo', userAgent);
     await this.recordLogin(user, body.visitorId);
-    return { ok: true, user, token, expiresAt: expiresAt.toISOString() };
+    return { ok: true as const, user, ...tokenFields(tokens) };
   }
 
   /** 登录统计不可反向阻断认证；数据库暂时不可写时保留服务端日志，登录仍正常返回。 */
@@ -1225,8 +1344,9 @@ export class PlatformDocsService {
     jitProvision: boolean;
     allowedEmailDomains: string[];
     sessionTtlHours: number;
+    userAgent?: string;
   }): Promise<
-    | { ok: true; user: Record<string, unknown>; token: string; expiresAt: string; provisioned: boolean }
+    | ({ ok: true; user: Record<string, unknown>; provisioned: boolean } & ReturnType<typeof tokenFields>)
     | { ok: false; code: string; error: string; detail?: string }
   > {
     const workspaceId = PLATFORM_WORKSPACE_ID;
@@ -1245,8 +1365,8 @@ export class PlatformDocsService {
     await ensureMembersSeeded(this.prisma);
     // externalId 优先：账号或邮箱变更后仍能认出同一个人
     let member =
-      (externalId ? await this.prisma.member.findUnique({ where: { externalId } }) : null) ??
-      (email ? await this.prisma.member.findUnique({ where: { email } }) : null);
+      (externalId ? await this.prisma.member.findUnique({ where: { externalId }, include: MEMBER_INCLUDE }) : null) ??
+      (email ? await this.prisma.member.findUnique({ where: { email }, include: MEMBER_INCLUDE }) : null);
 
     let provisioned = false;
     if (!member) {
@@ -1310,16 +1430,15 @@ export class PlatformDocsService {
     }
 
     const user = sessionUserForMember({ ...memberToJson(member!), ...(changed ? refreshed : {}) });
-    const token = randomBytes(24).toString('hex');
-    const ttlMs = Math.max(1, input.sessionTtlHours) * 60 * 60 * 1000;
-    const expiresAt = new Date(Date.now() + ttlMs);
-    await createSession(this.prisma, { token, memberId: member!.id, authMethod: 'oauth', expiresAt });
+    const tokens = await this.tokens.issue(member!, 'oauth', input.userAgent);
     await this.recordLogin(user, input.visitorId);
-    return { ok: true, user, token, expiresAt: expiresAt.toISOString(), provisioned };
+    return { ok: true, user, ...tokenFields(tokens), provisioned };
   }
 
   async me(token: string | undefined, _workspaceId = PLATFORM_WORKSPACE_ID) {
     if (!token) return { ok: false as const, error: '未登录' };
+    if (looksLikeJwt(token)) return this.meFromAccessToken(token);
+    // 改造前签发的会话令牌，到期前继续有效
     const session = await findSession(this.prisma, token);
     if (!session) return { ok: false as const, error: '会话已失效，请重新登录' };
     if (session.expiresAt.getTime() < Date.now()) {
@@ -1339,8 +1458,53 @@ export class PlatformDocsService {
     };
   }
 
-  async logout(token: string | undefined, _workspaceId = PLATFORM_WORKSPACE_ID) {
-    if (token) await deleteSession(this.prisma, token);
+  private async meFromAccessToken(token: string) {
+    const claims = this.tokens.verifyAccess(token);
+    if (!claims) return { ok: false as const, error: '会话已过期，请重新登录' };
+    const member = await this.prisma.member.findUnique({ where: { id: claims.sub }, include: MEMBER_INCLUDE });
+    // 改角色、停用、管理员强制下线都会让 token_version 加一，旧访问令牌立即失效
+    if (!member || member.tokenVersion !== claims.tv) return { ok: false as const, error: '会话已失效，请重新登录' };
+    if (member.status === 'suspended') return { ok: false as const, error: '无权访问该工作区' };
+    if (claims.amr === 'demo' && !(await readAuthPolicy(this.prisma)).allowDemoPassword) {
+      return { ok: false as const, error: '会话已失效，请重新登录' };
+    }
+    return {
+      ok: true as const,
+      user: sessionUserForMember(memberToJson(member)),
+      token,
+      expiresAt: new Date(claims.exp * 1000).toISOString(),
+    };
+  }
+
+  /** 登录、刷新、/auth/me 的成功响应带上角色名称和当前角色可见、可编辑的二级菜单 id */
+  async withMenus<T extends { ok: boolean; user?: { platformRole?: unknown } }>(
+    result: T,
+  ): Promise<T & { roleName?: string; menus?: string[]; editableMenus?: string[] }> {
+    if (!result.ok || !result.user) return result;
+    const roleId = String(result.user.platformRole);
+    const [role, access] = await Promise.all([
+      this.prisma.role.findUnique({ where: { id: roleId }, select: { name: true } }),
+      menuAccessForRole(this.prisma, roleId),
+    ]);
+    return { ...result, roleName: role?.name ?? roleId, ...access };
+  }
+
+  /** 用刷新令牌换新的访问令牌和刷新令牌 */
+  async refresh(refreshToken: string | undefined, userAgent?: string) {
+    if (!refreshToken) return { ok: false as const, error: 'refresh_token_missing' };
+    const rotated = await this.tokens.rotate(refreshToken, userAgent);
+    if (!rotated.ok) return rotated;
+    if (rotated.authMethod === 'demo' && !(await readAuthPolicy(this.prisma)).allowDemoPassword) {
+      await this.tokens.revoke(rotated.tokens.refreshToken);
+      return { ok: false as const, error: 'refresh_token_revoked' };
+    }
+    const member = await this.prisma.member.findUniqueOrThrow({ where: { id: rotated.memberId }, include: MEMBER_INCLUDE });
+    return { ok: true as const, user: sessionUserForMember(memberToJson(member)), ...tokenFields(rotated.tokens) };
+  }
+
+  async logout(token: string | undefined, refreshToken?: string) {
+    if (refreshToken) await this.tokens.revoke(refreshToken);
+    if (token && !looksLikeJwt(token)) await deleteSession(this.prisma, token);
     return { ok: true as const };
   }
 

@@ -75,12 +75,21 @@ export const LazyPromptCenterPage = lazy(() =>
   import('@/features/_legacy/prompt/PromptCenterPage').then((m) => ({ default: m.PromptCenterPage })),
 );
 
-export const LazySettingsPage = lazy(() =>
-  import('@/features/_legacy/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })),
+
+export const LazyOrgMembersPage = lazy(() =>
+  import('@/features/org/OrgMembersPage').then((m) => ({ default: m.OrgMembersPage })),
 );
 
-export const LazyPresentationConfigPage = lazy(() =>
-  import('@/features/presentation/PresentationConfigPage').then((m) => ({ default: m.PresentationConfigPage })),
+export const LazyOrgRolesPage = lazy(() =>
+  import('@/features/org/OrgRolesPage').then((m) => ({ default: m.OrgRolesPage })),
+);
+
+export const LazyOrgDeptsPage = lazy(() =>
+  import('@/features/org/OrgDeptsPage').then((m) => ({ default: m.OrgDeptsPage })),
+);
+
+export const LazyOrgAuditPage = lazy(() =>
+  import('@/features/org/OrgAuditPage').then((m) => ({ default: m.OrgAuditPage })),
 );
 
 export const LazyPortalContentOpsPage = lazy(() =>
@@ -107,10 +116,6 @@ export const LazyApprovalCenterPage = lazy(() =>
 
 export const LazyCommandPalette = lazy(() =>
   import('@/components/shell/CommandPalette').then((m) => ({ default: m.CommandPalette })),
-);
-
-export const LazySettingsDrawer = lazy(() =>
-  import('@/components/shell/SettingsDrawer').then((m) => ({ default: m.SettingsDrawer })),
 );
 
 export const LazyExportModal = lazy(() =>
@@ -141,8 +146,10 @@ export const ROUTE_PREFETCH: Partial<Record<AppView, () => void>> = {
   'office-scenes': () => void import('@/features/ops/OfficeSceneOpsPage'),
   memory: () => void import('@/features/_legacy/memory/MemoryCenterPage'),
   prompts: () => void import('@/features/_legacy/prompt/PromptCenterPage'),
-  admin: () => void import('@/features/_legacy/settings/SettingsPage'),
-  presentation: () => void import('@/features/presentation/PresentationConfigPage'),
+  'org-members': () => void import('@/features/org/OrgMembersPage'),
+  'org-roles': () => void import('@/features/org/OrgRolesPage'),
+  'org-depts': () => void import('@/features/org/OrgDeptsPage'),
+  'org-audit': () => void import('@/features/org/OrgAuditPage'),
   'portal-ops': () => void import('@/features/ops/PortalContentOpsPage'),
   'portal-dashboard': () => void import('@/features/ops/PortalDataDashboardPage'),
   'model-ops': () => void import('@/features/ops/ModelCatalogOpsPage'),

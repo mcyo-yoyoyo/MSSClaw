@@ -27,6 +27,18 @@ export interface PortalAnalyticsAssetRow {
   /** 货架来源；旧服务不返回时按 'none' 处理，前端不臆造归类。 */
   source?: 'external' | 'company' | 'none';
   department?: string | null;
+  /** 累计值，不随所选区间变化：资产模块只展示这一组 */
+  lifetime: {
+    detailPv: number;
+    sharePv: number;
+    /** 分享按钮点击次数 */
+    shares: number;
+    favorites: number;
+    likes: number;
+    dislikes: number;
+    redirects: number;
+    downloads: number;
+  };
   exposurePv: number;
   exposureUv: number;
   /** 详情浏览数（含分享进入），只算所选区间 */
@@ -80,8 +92,13 @@ export interface PortalAnalyticsUserRow {
   department: string;
   regionId: string | null;
   role: string;
-  firstUseAt: string | null;
-  lastActiveAt: string | null;
+  firstLoginAt: string | null;
+  /** 所选区间内最新一次页面访问，页面范围与 PV 相同 */
+  lastVisitAt: string | null;
+  /** 所选区间内的页面浏览数，页面范围与总 PV 相同 */
+  pv: number;
+  /** 累计登录次数，不随所选区间变化 */
+  loginCount: number;
   accessDays?: number;
   accessFrequency?: number;
   calls?: number;

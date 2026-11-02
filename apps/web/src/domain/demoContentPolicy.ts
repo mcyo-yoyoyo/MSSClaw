@@ -3,18 +3,14 @@
  *
  * 优先级：
  * 1. 构建变量 VITE_INCLUDE_DEMO_CONTENT=false → 全局关闭（部署时推荐）
- * 2. 工作区 docs `demo-content` → 运营在设置里「清空演示数据」后写入服务端
+ * 2. 工作区 docs `demo-content.demoContentOff` → 已写入的关闭标记仍然生效
  */
 
 import {
   canUsePlatformDocsApi,
   fetchPlatformDoc,
-  scheduleSavePlatformDoc,
-  setPlatformDocMemory,
   peekPlatformDocMemory,
 } from '@/api/platformDocsApi';
-
-export const LS_DEMO_CONTENT_OFF = 'mssclaw_demo_content_off';
 
 type DemoDoc = { demoContentOff?: boolean };
 
@@ -59,64 +55,3 @@ export async function hydrateDemoContentPolicy(): Promise<void> {
   }
 }
 
-function persistDemoFlag(off: boolean) {
-  memoryDemoOff = off;
-  const payload: DemoDoc = { demoContentOff: off };
-  setPlatformDocMemory('demo-content', payload);
-  if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc('demo-content', payload);
-}
-
-/**
- * 关闭演示内容注入（写入工作区 docs）。
- * 调用方应在之后刷新页面。
- */
-export function clearDemoContentAndDisable(): { removed: number } {
-  persistDemoFlag(true);
-  return { removed: 0 };
-}
-
-/** 重新打开演示内容（仅当构建期仍允许时有意义） */
-export function reenableLocalDemoContent(): boolean {
-  if (!envAllowsDemoContent()) return false;
-  persistDemoFlag(false);
-  return true;
-}
-
-/** @deprecated 旧 LS 清理入口，现为 no-op */
-export function removeDemoContentCaches(): number {
-  return 0;
-}
-
-/**
- * 一键恢复系统自带演示内容：重新开启注入并写回服务端。
- * 调用方应刷新页面。构建期 VITE_INCLUDE_DEMO_CONTENT=false 时不可用。
- */
-export function restoreDemoContentDefaults():
-  | { ok: true; removed: number }
-  | { ok: false; reason: string } {
-  if (!envAllowsDemoContent()) {
-    return {
-      ok: false,
-      reason: '当前构建已关闭演示内容（VITE_INCLUDE_DEMO_CONTENT=false），无法恢复示例',
-    };
-  }
-  persistDemoFlag(false);
-  return { ok: true, removed: 0 };
-}
-
-export function demoContentStatusLabel(): string {
-  if (!envAllowsDemoContent()) {
-    return '已关闭（部署配置：不含演示内容）';
-  }
-  if (isLocalDemoContentOff()) {
-    return '已关闭（工作区已关闭演示内容）';
-  }
-  return '开启中（使用系统自带示例）';
-}
-
-/** 设置页：是否已关闭演示 */
-export function isDemoContentDisabledInSettings(): boolean {
-  if (!envAllowsDemoContent()) return true;
-  return isLocalDemoContentOff();
-}

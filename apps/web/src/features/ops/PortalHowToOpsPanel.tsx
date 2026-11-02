@@ -49,7 +49,6 @@ export function PortalHowToOpsPanel() {
   const records = usePlazaToolGuideStore((s) => s.records);
   const upsert = usePlazaToolGuideStore((s) => s.upsert);
   const remove = usePlazaToolGuideStore((s) => s.remove);
-  const resetToSeeds = usePlazaToolGuideStore((s) => s.resetToSeeds);
   const showToast = usePlazaToolGuideStore((s) => s.showToast);
   const bootstrap = usePlazaToolGuideStore((s) => s.bootstrap);
 
@@ -187,22 +186,6 @@ export function PortalHowToOpsPanel() {
             className="rounded-xl bg-zinc-900 px-3 py-2 text-[12px] font-semibold text-white"
           >
             + 新建指引
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (
-                window.confirm(
-                  '确定恢复为系统自带的示例指引？你改过、新建的 How to 都会被覆盖。',
-                )
-              ) {
-                resetToSeeds();
-                showToast('已恢复为默认示例指引');
-              }
-            }}
-            className="rounded-xl border border-zinc-200 px-3 py-2 text-[12px] font-medium text-zinc-600 hover:bg-zinc-50"
-          >
-            恢复默认示例
           </button>
         </div>
       </div>

@@ -116,10 +116,11 @@ function deferred<T>() {
 }
 
 function readFetchCall(input: RequestInfo | URL, init?: RequestInit): FetchCall {
+  const raw = init?.body == null ? '' : String(init.body);
   return {
     url: String(input),
     method: init?.method,
-    body: JSON.parse(String(init?.body)) as MarketplaceSnapshot,
+    body: (raw ? JSON.parse(raw) : {}) as MarketplaceSnapshot,
   };
 }
 
@@ -277,8 +278,10 @@ test('saveToolNow commits the edited tool only after the remote save succeeds', 
   await nextTurn();
 
   assert.equal(calls.length, 1);
+  assert.equal(calls[0]?.method, 'PUT');
+  assert.match(calls[0]?.url ?? '', /\/api\/v1\/catalog\/tools\/tool-excel-trae-work$/);
   assert.equal(
-    calls[0]?.body.tools[0]?.logoUrl,
+    (calls[0]?.body as { logoUrl?: string }).logoUrl,
     editedTool.logoUrl,
     'the persisted snapshot must contain the materialized Logo',
   );
@@ -319,8 +322,9 @@ test('saveToolNow can directly persist external tool listing and unlisting', asy
     await marketplaceStore.getState().saveToolNow({ ...listedTool, published: false }),
     { synced: true },
   );
-  assert.equal(calls[0]?.body.tools[0]?.published, false);
-  assert.equal(calls[0]?.body.tools[0]?.marketShelf, 'external');
+  assert.equal(calls[0]?.method, 'PUT');
+  assert.equal((calls[0]?.body as { published?: boolean }).published, false);
+  assert.equal((calls[0]?.body as { marketShelf?: string }).marketShelf, 'external');
   assert.equal(marketplaceStore.getState().tools[0]?.published, false);
 
   const unlistedTool = marketplaceStore.getState().tools[0];
@@ -329,8 +333,9 @@ test('saveToolNow can directly persist external tool listing and unlisting', asy
     await marketplaceStore.getState().saveToolNow({ ...unlistedTool, published: true }),
     { synced: true },
   );
-  assert.equal(calls[1]?.body.tools[0]?.published, true);
-  assert.equal(calls[1]?.body.tools[0]?.marketShelf, 'external');
+  assert.equal(calls[1]?.method, 'PUT');
+  assert.equal((calls[1]?.body as { published?: boolean }).published, true);
+  assert.equal((calls[1]?.body as { marketShelf?: string }).marketShelf, 'external');
   assert.equal(marketplaceStore.getState().tools[0]?.published, true);
 });
 
@@ -384,7 +389,8 @@ test('deleteToolNow commits the removal only after the remote save succeeds', as
   const deleting = marketplaceStore.getState().deleteToolNow(deleteTool.id);
   await nextTurn();
 
-  assert.deepEqual(calls[0]?.body.tools, [keepTool]);
+  assert.equal(calls[0]?.method, 'DELETE');
+  assert.match(calls[0]?.url ?? '', /\/api\/v1\/catalog\/tools\/tool-delete$/);
   assert.deepEqual(
     marketplaceStore.getState().tools,
     [keepTool, deleteTool],
@@ -454,7 +460,8 @@ test('ordinary persist during saveToolNow keeps both the edited branding and the
 
   assert.deepEqual(await saving, { synced: true });
   await waitForCallCount(calls, 2);
-  const finalTool = calls[1]?.body.tools.find((tool) => tool.id === editedTool.id);
+  const finalTool = calls[1]?.body as { homepageUrl?: string; logoUrl?: string; invokes?: number };
+  assert.match(calls[1]?.url ?? '', /\/api\/v1\/catalog\/tools\/tool-saas-trae$/);
   assert.equal(finalTool?.homepageUrl, editedTool.homepageUrl);
   assert.equal(finalTool?.logoUrl, logoUrl);
   assert.equal(finalTool?.invokes, 1);
@@ -506,15 +513,9 @@ test('concurrent saveToolNow calls do not overwrite the first confirmed tool wit
   responses[0]!.resolve(new Response(null, { status: 200 }));
   await nextTurn();
   assert.equal(calls.length, 2);
-  assert.equal(
-    calls[1]?.body.tools.find((tool) => tool.id === firstEdited.id)?.homepageUrl,
-    firstEdited.homepageUrl,
-    'the later full snapshot must include the first confirmed edit',
-  );
-  assert.equal(
-    calls[1]?.body.tools.find((tool) => tool.id === secondEdited.id)?.homepageUrl,
-    secondEdited.homepageUrl,
-  );
+  assert.match(calls[0]?.url ?? '', /\/api\/v1\/catalog\/tools\/tool-first$/);
+  assert.match(calls[1]?.url ?? '', /\/api\/v1\/catalog\/tools\/tool-second$/);
+  assert.equal((calls[1]?.body as { homepageUrl?: string }).homepageUrl, secondEdited.homepageUrl);
 
   responses[1]!.resolve(new Response(null, { status: 200 }));
   assert.deepEqual(await firstSave, { synced: true });
@@ -537,8 +538,8 @@ test('Skill deletion waits for persistence and restores the record and bindings 
   const operation = marketplaceStore.getState().deleteSkillNow('skill-delete');
   await nextTurn();
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0].body.skills, []);
-  assert.deepEqual((calls[0].body.agents[0] as typeof agent).skillIds, ['other']);
+  assert.equal(calls[0].method, 'DELETE');
+  assert.match(calls[0].url, /\/api\/v1\/catalog\/skills\/skill-delete$/);
   response.resolve(new Response('save failed', { status: 500 }));
   assert.equal((await operation).synced, false);
   assert.deepEqual(marketplaceStore.getState().skills, [skill]);

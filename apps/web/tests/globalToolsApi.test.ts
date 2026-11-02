@@ -85,16 +85,14 @@ test('legacy Tool API uses the global endpoint and keeps mixed record shapes', a
   assert.equal(tools[1]?.status, 'active');
 });
 
-test('legacy Tool API falls back when the online payload has no tools array', async () => {
+test('Tool API reports a fetch failure instead of showing built-in seed data', async () => {
   globalThis.fetch = (async () =>
     new Response(JSON.stringify({ ok: true }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     })) as typeof fetch;
 
-  const tools = await fetchTools();
-  assert.ok(tools.length > 0);
-  assert.equal(tools[0]?.id, 'tool-sap');
+  await assert.rejects(() => fetchTools(), /数据获取失败/);
 });
 
 test('marketplace global loader rejects a malformed online payload in strict mode', async () => {

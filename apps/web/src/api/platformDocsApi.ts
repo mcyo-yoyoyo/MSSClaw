@@ -114,27 +114,33 @@ export async function savePlatformDoc(
   setPlatformDocMemory(kind, savedPayload);
 }
 
+/** 登录、刷新、/auth/me 成功时带回的会话：用户 + 当前角色可见 / 可编辑的二级菜单 */
+export interface ApiSessionUser {
+  id: string;
+  name: string;
+  email: string;
+  platformRole: string;
+  avatar: string;
+  deptIds: string[];
+  regionId: string | null;
+}
+
+export interface ApiSession {
+  ok: true;
+  user: ApiSessionUser;
+  /** 角色显示名（自定义角色在前端没有内置名称） */
+  roleName?: string;
+  menus?: string[];
+  editableMenus?: string[];
+}
+
+export type ApiTokenSession = ApiSession & { token: string; expiresAt: string };
+
 export async function loginWithApi(params: {
   email: string;
   password: string;
   visitorId?: string;
-}): Promise<
-  | {
-      ok: true;
-      token: string;
-      expiresAt: string;
-      user: {
-        id: string;
-        name: string;
-        email: string;
-        platformRole: string;
-        avatar: string;
-        deptIds: string[];
-        regionId: string | null;
-      };
-    }
-  | { ok: false; error: string }
-> {
+}): Promise<ApiTokenSession | { ok: false; error: string }> {
   if (!isApiEnabled()) {
     return { ok: false, error: '共享服务未启用' };
   }
@@ -170,39 +176,10 @@ export async function loginWithApi(params: {
   if (!looksLikeApi) {
     throw new Error('login_unreachable_not_json');
   }
-  return (await res.json()) as
-    | {
-        ok: true;
-        token: string;
-        expiresAt: string;
-        user: {
-          id: string;
-          name: string;
-          email: string;
-          platformRole: string;
-          avatar: string;
-          deptIds: string[];
-          regionId: string | null;
-        };
-      }
-    | { ok: false; error: string };
+  return (await res.json()) as ApiTokenSession | { ok: false; error: string };
 }
 
-export async function fetchSessionMeApi(): Promise<
-  | {
-      ok: true;
-      user: {
-        id: string;
-        name: string;
-        email: string;
-        platformRole: string;
-        avatar: string;
-        deptIds: string[];
-        regionId: string | null;
-      };
-    }
-  | { ok: false; error: string }
-> {
+export async function fetchSessionMeApi(): Promise<ApiSession | { ok: false; error: string }> {
   if (!isApiEnabled()) return { ok: false, error: '共享服务未启用' };
   const res = await fetchWithTimeout(
     apiUrl('/api/v1/auth/me'),
@@ -212,20 +189,34 @@ export async function fetchSessionMeApi(): Promise<
     8000,
   );
   if (!res.ok) return { ok: false, error: `会话校验失败（HTTP ${res.status}）` };
-  return (await res.json()) as
-    | {
-        ok: true;
-        user: {
-          id: string;
-          name: string;
-          email: string;
-          platformRole: string;
-          avatar: string;
-          deptIds: string[];
-          regionId: string | null;
-        };
-      }
-    | { ok: false; error: string };
+  return (await res.json()) as ApiSession | { ok: false; error: string };
+}
+
+let refreshInFlight: Promise<ApiTokenSession | null> | null = null;
+
+/**
+ * 用 httpOnly Cookie 里的刷新令牌换新的访问令牌；没有或已失效返回 null。
+ * 刷新令牌每次轮换，并发刷新只有一个会成功、失败的那个还会清掉 Cookie，所以同一时间只发一次。
+ */
+export function refreshSessionApi(): Promise<ApiTokenSession | null> {
+  if (!isApiEnabled()) return Promise.resolve(null);
+  refreshInFlight ??= (async () => {
+    try {
+      const res = await fetchWithTimeout(
+        apiUrl('/api/v1/auth/refresh'),
+        { method: 'POST', headers: { Accept: 'application/json' }, credentials: 'include' },
+        8000,
+      );
+      if (!res.ok) return null;
+      const body = (await res.json()) as ApiTokenSession | { ok: false };
+      return body.ok ? body : null;
+    } catch {
+      return null;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
 }
 
 export async function logoutWithApi(): Promise<void> {
@@ -268,4 +259,21 @@ export function scheduleSavePlatformDoc(
     }, ms);
     saveTimers.set(key, { timer, waiters });
   });
+}
+
+/** 单条写入。path 形如 /api/v1/docs/station-announcements/items */
+export async function writeDocItem(
+  path: string,
+  method: 'POST' | 'PUT' | 'DELETE',
+  body?: unknown,
+): Promise<unknown> {
+  const res = await fetchWithTimeout(apiUrl(path), {
+    method,
+    headers: jsonHeaders(),
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  // 调用方靠 `_409` 结尾识别「别人先改了」，要拉回最新内容
+  if (!res.ok) throw new Error(`doc_item_write_${res.status}`);
+  const text = await res.text();
+  return text.trim() ? JSON.parse(text) : null;
 }

@@ -19,7 +19,7 @@ export function SharedCatalogEmptyHint({
     tip =
       apiStatus === 'local-demo'
         ? '当前为本机模式。部门内共享请确认已部署后台并反代 /api。'
-        : '共享服务未连通：同事上传的内容不会出现在此。请联系运维检查 /api/v1/health。';
+        : '共享服务未连通：同事上传的内容不会出现在此。请联系运维检查后台进程和反向代理。';
   } else if (!demoOn) {
     tip = `演示样例已关闭。请用平台运营账号在「配置${assetLabel}」中新建或导入，保存后同事刷新即可看到。`;
   } else {

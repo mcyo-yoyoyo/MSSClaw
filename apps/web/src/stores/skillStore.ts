@@ -6,7 +6,6 @@ import {
 } from '@/api/centerApi';
 import {
   findSkillByName,
-  SKILL_SEEDS,
   type Skill,
   type SkillLifecycle,
   type SkillTraceStep,
@@ -39,8 +38,8 @@ const MOCK_TRACE: SkillTraceStep[] = [
 ];
 
 export const useSkillStore = create<SkillState>((set, get) => ({
-  skills: SKILL_SEEDS,
-  selectedSkillId: SKILL_SEEDS[0]?.id ?? null,
+  skills: [],
+  selectedSkillId: null,
   lifecycleFilter: 'all',
   traceRunning: false,
   liveTrace: [],
@@ -48,13 +47,21 @@ export const useSkillStore = create<SkillState>((set, get) => ({
 
   load: () => {
     void (async () => {
-      const skills = await fetchSkills();
-      set({
-        skills,
-        selectedSkillId: skills[0]?.id ?? null,
-        lifecycleFilter: 'all',
-        liveTrace: [],
-      });
+      try {
+        const skills = await fetchSkills();
+        set({
+          skills,
+          selectedSkillId: skills[0]?.id ?? null,
+          lifecycleFilter: 'all',
+          liveTrace: [],
+        });
+      } catch (error) {
+        set({
+          skills: [],
+          selectedSkillId: null,
+          toast: error instanceof CenterApiError ? error.message : '数据获取失败，请稍候重试',
+        });
+      }
     })();
   },
 

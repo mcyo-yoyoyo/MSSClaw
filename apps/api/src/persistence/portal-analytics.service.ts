@@ -160,14 +160,23 @@ interface UserIdentityRow {
   visitorHash: string | null;
   firstDate: string | null;
   firstAt: Date | string | number | null;
-  lastAt: Date | string | number | null;
 }
 
 interface UserActivityRow {
   dateKey: string;
   visitorHash: string | null;
   events: CountValue;
-  lastAt?: Date | string | number | null;
+}
+
+interface UserVisitRow {
+  visitorHash: string | null;
+  lastVisitAt: Date | string | number | null;
+  pv: CountValue;
+}
+
+interface UserLoginCountRow {
+  visitorHash: string | null;
+  loginCount: CountValue;
 }
 
 interface CallFactRow {
@@ -268,8 +277,14 @@ export interface PortalAnalyticsReport {
       department: string;
       regionId: string | null;
       role: string;
-      firstUseAt: string | null;
-      lastActiveAt: string | null;
+      /** 首次登录时间；登录记录从 2026-08-21 开始，长期保持登录的账号可能为空 */
+      firstLoginAt: string | null;
+      /** 所选区间内最新一次页面访问，页面范围与 PV 相同 */
+      lastVisitAt: string | null;
+      /** 所选区间内的页面浏览数，页面范围与总 PV 相同 */
+      pv: number;
+      /** 累计登录次数，不随所选区间变化 */
+      loginCount: number;
       accessDays: number;
       accessFrequency: number;
       calls: number;
@@ -314,6 +329,18 @@ export interface PortalAnalyticsReport {
       contentId: string;
       assetType: string;
       name: string;
+      /** 累计值，不随所选区间变化：分享浏览数和分享次数来自事件，其余来自 market_engagement_stat */
+      lifetime: {
+        detailPv: number;
+        sharePv: number;
+        /** 分享按钮点击次数 */
+        shares: number;
+        favorites: number;
+        likes: number;
+        dislikes: number;
+        redirects: number;
+        downloads: number;
+      };
       exposurePv: number;
       exposureUv: number;
       /** 详情浏览数：detail + detail_direct（含旧的 view），只算所选区间 */
@@ -687,8 +714,11 @@ export class PortalAnalyticsService {
       behaviorAssetRows,
       behaviorDownloadRows,
       marketEngagementRows,
+      lifetimeShareRows,
       userIdentityRows,
       userActivityRows,
+      userVisitRows,
+      userLoginCountRows,
       callFactRows,
     ] = await Promise.all([
       this.prisma.$queryRaw<TotalsRow[]>`
@@ -965,11 +995,20 @@ export class PortalAnalyticsService {
           COALESCE(m."favorites", 0) AS "favorites"
         FROM "market_engagement_stat" AS m
       `),
+      optionalRows(this.prisma.$queryRaw<Array<{ contentId: string; sharePv: CountValue; shares: CountValue }>>`
+        SELECT
+          "content_id" AS "contentId",
+          SUM(CASE WHEN "action" = 'detail_direct' THEN 1 ELSE 0 END) AS "sharePv",
+          SUM(CASE WHEN "action" = 'share' THEN 1 ELSE 0 END) AS "shares"
+        FROM "market_engagement_event"
+        WHERE "action" IN ('detail_direct', 'share')
+        GROUP BY "content_id"
+      `),
       optionalRows(this.prisma.$queryRaw<UserIdentityRow[]>`
         -- Account cohorts are defined by successful login facts. Page views and
         -- engagement events still feed active-day metrics below, but an anonymous
         -- or pre-login visit must not become a registered/new user.
-        SELECT "visitor_hash" AS "visitorHash", MIN("date_key") AS "firstDate", MIN("eventAt") AS "firstAt", MAX("eventAt") AS "lastAt"
+        SELECT "visitor_hash" AS "visitorHash", MIN("date_key") AS "firstDate", MIN("eventAt") AS "firstAt"
         FROM (
           SELECT "visitor_hash", "date_key", "first_login_at" AS "eventAt"
           FROM "portal_daily_login"
@@ -984,7 +1023,7 @@ export class PortalAnalyticsService {
         -- A market event counts as an active-day fact only when it represents an
         -- actual execution. Exposure, detail views and reactions are not DAU
         -- operations under the metric definition.
-        SELECT "date_key" AS "dateKey", "visitor_hash" AS "visitorHash", COUNT(*) AS "events", MAX("eventAt") AS "lastAt"
+        SELECT "date_key" AS "dateKey", "visitor_hash" AS "visitorHash", COUNT(*) AS "events"
         FROM (
           SELECT "date_key", "visitor_hash", "first_login_at" AS "eventAt"
           FROM "portal_daily_login"
@@ -1009,6 +1048,31 @@ export class PortalAnalyticsService {
             AND "visitor_hash" IS NOT NULL
         ) AS activity
         GROUP BY "date_key", "visitor_hash"
+      `),
+      optionalRows(this.prisma.$queryRaw<UserVisitRow[]>`
+        SELECT "visitor_hash" AS "visitorHash", MAX("occurred_at") AS "lastVisitAt", COUNT(*) AS "pv"
+        FROM "portal_page_view"
+        WHERE "visitor_type" = 'user'
+          AND "route_key" IN ('home', 'ai-brief', 'market-external', 'market-internal', 'market-projects')
+          AND "date_key" BETWEEN ${from} AND ${to}
+          AND "visitor_hash" IS NOT NULL
+        GROUP BY "visitor_hash"
+      `),
+      optionalRows(this.prisma.$queryRaw<UserLoginCountRow[]>`
+        -- login_success 记录每次登录，但 2026-08-28 之前没有这张表的数据，之后也可能缺浏览器标识。
+        -- portal_daily_login 每天只有一行，所以当天没有事件的登录日按 1 次算，只会少算不会多算。
+        SELECT "visitorHash", SUM("logins") AS "loginCount"
+        FROM (
+          SELECT d."visitor_hash" AS "visitorHash", GREATEST(COUNT(e."event_id"), 1) AS "logins"
+          FROM "portal_daily_login" AS d
+          LEFT JOIN "portal_conversion_event" AS e
+            ON e."event_type" = 'login_success'
+            AND e."date_key" = d."date_key"
+            AND e."user_hash" = d."visitor_hash"
+          WHERE d."date_key" >= ${USER_STATS_START_DATE}
+          GROUP BY d."date_key", d."visitor_hash"
+        ) AS daily
+        GROUP BY "visitorHash"
       `),
       optionalRows(this.prisma.$queryRaw<CallFactRow[]>`
         SELECT "content_id" AS "contentId", "asset_type" AS "assetType", "visitor_hash" AS "visitorHash", "success", "duration_ms" AS "durationMs", "input_tokens" AS "inputTokens", "output_tokens" AS "outputTokens"
@@ -1147,7 +1211,6 @@ export class PortalAnalyticsService {
     // activity fact when the event tables are empty.
     const firstByUser = new Map<string, string>();
     const firstAtByUser = new Map<string, string>();
-    const lastAtByUser = new Map<string, string>();
     for (const row of userIdentityRows) {
       const visitorHash = stringValue(row.visitorHash);
       const firstDate = asDateKey(row.firstDate);
@@ -1155,17 +1218,12 @@ export class PortalAnalyticsService {
       const previous = firstByUser.get(visitorHash);
       if (!previous || firstDate < previous) firstByUser.set(visitorHash, firstDate);
       const firstAt = normalizedUpdatedAt(row.firstAt);
-      const lastAt = normalizedUpdatedAt(row.lastAt);
       if (firstAt && (!firstAtByUser.has(visitorHash) || firstAt < (firstAtByUser.get(visitorHash) ?? firstAt))) {
         firstAtByUser.set(visitorHash, firstAt);
-      }
-      if (lastAt && (!lastAtByUser.has(visitorHash) || lastAt > (lastAtByUser.get(visitorHash) ?? lastAt))) {
-        lastAtByUser.set(visitorHash, lastAt);
       }
     }
     const activityByDate = new Map<string, Set<string>>();
     const activityEventsByUser = new Map<string, number>();
-    const lastActivityAtByUser = new Map<string, string>();
     for (const row of userActivityRows) {
       const date = asDateKey(row.dateKey);
       const visitorHash = stringValue(row.visitorHash);
@@ -1178,10 +1236,6 @@ export class PortalAnalyticsService {
           visitorHash,
           (activityEventsByUser.get(visitorHash) ?? 0) + count(row.events),
         );
-      }
-      const lastAt = normalizedUpdatedAt(row.lastAt);
-      if (lastAt && (!lastActivityAtByUser.has(visitorHash) || lastAt > (lastActivityAtByUser.get(visitorHash) ?? lastAt))) {
-        lastActivityAtByUser.set(visitorHash, lastAt);
       }
     }
     const activeUsersBetween = (start: string, end: string): Set<string> => {
@@ -1251,6 +1305,18 @@ export class PortalAnalyticsService {
       contentId: string;
       assetType: string;
       name: string;
+      /** 累计值，不随所选区间变化：分享浏览数和分享次数来自事件，其余来自 market_engagement_stat */
+      lifetime: {
+        detailPv: number;
+        sharePv: number;
+        /** 分享按钮点击次数 */
+        shares: number;
+        favorites: number;
+        likes: number;
+        dislikes: number;
+        redirects: number;
+        downloads: number;
+      };
       exposurePv: number;
       exposureUv: number;
       detailPv: number;
@@ -1278,6 +1344,7 @@ export class PortalAnalyticsService {
       contentId,
       assetType: catalogRow?.assetType ?? 'unknown',
       name: catalogRow?.name || contentId,
+      lifetime: { detailPv: 0, sharePv: 0, shares: 0, favorites: 0, likes: 0, dislikes: 0, redirects: 0, downloads: 0 },
       exposurePv: 0,
       exposureUv: 0,
       detailPv: 0,
@@ -1361,24 +1428,22 @@ export class PortalAnalyticsService {
     for (const asset of assetMap.values()) {
       if (asset.assetType === 'case') asset.detailUv = caseVisitors.get(asset.contentId) ?? 0;
     }
+    // 资产和交互行为模块只展示累计值，和门户卡片读同一张表。案例也要进来。
     for (const row of marketEngagementRows) {
-      const contentId = stringValue(row.contentId);
-      if (!contentId || !isBlackCatalogAsset(contentId)) continue;
-      const asset = assetMap.get(contentId);
-      if (!asset) continue;
-      const views = count(row.views);
-      const uses = count(row.uses);
-      const likes = count(row.likes);
-      const dislikes = count(row.dislikes);
-      const downloads = count(row.downloads);
-      const favorites = count(row.favorites);
-      asset.exposurePv = Math.max(asset.exposurePv, views);
-      asset.redirects = Math.max(asset.redirects, uses);
-      asset.likes = Math.max(asset.likes, likes);
-      asset.dislikes = Math.max(asset.dislikes, dislikes);
-      asset.favorites = Math.max(asset.favorites, favorites);
-      asset.downloads = Math.max(asset.downloads, downloads);
-      assetMap.set(contentId, asset);
+      const lifetime = assetMap.get(stringValue(row.contentId))?.lifetime;
+      if (!lifetime) continue;
+      lifetime.detailPv = count(row.views);
+      lifetime.favorites = count(row.favorites);
+      lifetime.likes = count(row.likes);
+      lifetime.dislikes = count(row.dislikes);
+      lifetime.redirects = count(row.uses);
+      lifetime.downloads = count(row.downloads);
+    }
+    for (const row of lifetimeShareRows) {
+      const lifetime = assetMap.get(stringValue(row.contentId))?.lifetime;
+      if (!lifetime) continue;
+      lifetime.sharePv = count(row.sharePv);
+      lifetime.shares = count(row.shares);
     }
     for (const row of callFactRows) {
       const contentId = stringValue(row.contentId);
@@ -1516,15 +1581,26 @@ export class PortalAnalyticsService {
       if (BLACK_ASSET_TYPES.has(assetType)) item.assetTypes.add(assetType);
       callByUser.set(visitorHash, item);
     }
+    const lastVisitAtByUser = new Map<string, string>();
+    const pvByUser = new Map<string, number>();
+    for (const row of userVisitRows) {
+      const visitorHash = stringValue(row.visitorHash);
+      const lastVisitAt = normalizedUpdatedAt(row.lastVisitAt);
+      if (visitorHash && lastVisitAt) lastVisitAtByUser.set(visitorHash, lastVisitAt);
+      if (visitorHash) pvByUser.set(visitorHash, count(row.pv));
+    }
+    const loginCountByUser = new Map(
+      userLoginCountRows.map((row) => [stringValue(row.visitorHash), count(row.loginCount)]),
+    );
     const userRows = members
       .map((member) => {
         const userId = stringValue(member.id);
         if (!userId) return null;
         const visitorHash = this.accountVisitorHash(workspaceId, userId);
-        if (!firstByUser.has(visitorHash)) return null;
+        // 区间内访问过页面的账号也要收录：长期保持登录的人可能没有登录记录，但已计入登录用户 UV。
+        if (!firstByUser.has(visitorHash) && !lastVisitAtByUser.has(visitorHash)) return null;
         const firstDate = firstByUser.get(visitorHash);
         const dates = memberActivity.get(visitorHash);
-        const lastDate = dates && dates.size ? [...dates].sort().at(-1) : undefined;
         const callFacts = callByUser.get(visitorHash);
         return {
           userId,
@@ -1534,12 +1610,10 @@ export class PortalAnalyticsService {
             : stringValue(member.department ?? member.deptId),
           regionId: stringValue(member.regionId) || null,
           role: stringValue(member.role ?? member.platformRole),
-          firstUseAt: firstAtByUser.get(visitorHash) ?? (firstDate ? `${firstDate}T00:00:00.000Z` : null),
-          lastActiveAt:
-            [lastAtByUser.get(visitorHash), lastActivityAtByUser.get(visitorHash), lastDate ? `${lastDate}T00:00:00.000Z` : null]
-              .filter((value): value is string => Boolean(value))
-              .sort()
-              .at(-1) ?? null,
+          firstLoginAt: firstAtByUser.get(visitorHash) ?? (firstDate ? `${firstDate}T00:00:00.000Z` : null),
+          lastVisitAt: lastVisitAtByUser.get(visitorHash) ?? null,
+          pv: pvByUser.get(visitorHash) ?? 0,
+          loginCount: loginCountByUser.get(visitorHash) ?? 0,
           accessDays: dates?.size ?? 0,
           accessFrequency: ratio(activityEventsByUser.get(visitorHash) ?? 0, days),
           calls: callFacts?.calls ?? 0,
@@ -1556,7 +1630,8 @@ export class PortalAnalyticsService {
       const userId = stringValue(member.id);
       if (!userId) continue;
       const visitorHash = this.accountVisitorHash(workspaceId, userId);
-      const active = memberActivity.has(visitorHash);
+      // 与用户明细同一口径：区间内访问过页面才算活跃，登录或调用不算。
+      const active = lastVisitAtByUser.has(visitorHash);
       const callCount = callByUser.get(visitorHash)?.calls ?? 0;
       const departmentIds = Array.isArray(member.deptIds)
         ? member.deptIds.map(String).filter(Boolean)

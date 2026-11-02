@@ -60,10 +60,6 @@ export function StationAnnounceBanner({ className }: { className?: string }) {
   const [dismissTick, setDismissTick] = useState(0);
   const leaveTimer = useRef<number | null>(null);
 
-  useEffect(() => {
-    useStationAnnouncementStore.getState().hydrate();
-  }, []);
-
   // 没有后端的演示构建里，公告要先合成进消息列表，点标题才看得到全文。
   useEffect(() => {
     ensureStationAnnouncementInbox();

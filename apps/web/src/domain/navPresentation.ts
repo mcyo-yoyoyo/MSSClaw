@@ -2,9 +2,6 @@ import type { AppView, NavSection } from '@/domain/appView';
 import { APP_VIEWS } from '@/domain/appView';
 import { PlatformRoleSchema, ROLE_LABELS, type PlatformRole } from '@/domain/rbac';
 
-/** 展示配置页本身：仅平台运营 */
-export const PRESENTATION_CONFIG_VIEW = 'presentation' as const satisfies AppView;
-
 export type NavPresetId = 'full' | 'customer' | 'standard' | 'custom';
 
 /**
@@ -233,20 +230,16 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   {
     id: 'admin',
     label: '组织权限',
-    subtitle: '成员 · 角色归属标签 · 部门字典（短期不做数据权限）',
+    subtitle: '旧入口，跳到成员 / 角色 / 部门',
     icon: 'fa-shield-halved',
-    section: 'system',
+    section: 'org',
+    hiddenFromSidebar: true,
     adminOnly: true,
   },
-  {
-    id: PRESENTATION_CONFIG_VIEW,
-    label: '展示配置',
-    subtitle: '按角色配置侧栏菜单',
-    icon: 'fa-sliders',
-    section: 'system',
-    locked: true,
-    adminOnly: true,
-  },
+  { id: 'org-members', label: '成员', subtitle: '账号 · 角色 · 区域领域 · 批量导入', icon: 'fa-users', section: 'org', adminOnly: true },
+  { id: 'org-roles', label: '角色', subtitle: '角色与菜单权限（可见 / 可编辑）', icon: 'fa-user-shield', section: 'org', adminOnly: true },
+  { id: 'org-depts', label: '部门', subtitle: '区域与领域字典 · 影响 AI工具Hub 筛选', icon: 'fa-sitemap', section: 'org', adminOnly: true },
+  { id: 'org-audit', label: '操作日志', subtitle: 'Skill / Agent / 工具 / 办公场景的增删改', icon: 'fa-clipboard-list', section: 'org', adminOnly: true },
 ];
 
 export const NAV_SLOT_IDS: NavSlotId[] = NAV_PRESENTATION_META.map((m) => m.id);
@@ -286,8 +279,6 @@ function withAdminLocks(base: Record<NavSlotId, boolean>, role: PlatformRole): R
       next[meta.id] = role === 'super_admin' ? true : false;
     }
   }
-  // 展示配置入口不可被关掉
-  if (role === 'super_admin') next[PRESENTATION_CONFIG_VIEW] = true;
   return next;
 }
 
@@ -593,8 +584,10 @@ export const NAV_FALLBACK_ORDER: AppView[] = [
   'automation',
   'workflow',
   'prompts',
-  'admin',
-  PRESENTATION_CONFIG_VIEW,
+  'org-members',
+  'org-roles',
+  'org-depts',
+  'org-audit',
   'portal-ops',
   'portal-dashboard',
   'model-ops',

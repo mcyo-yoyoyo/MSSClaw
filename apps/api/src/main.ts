@@ -29,6 +29,10 @@ async function bootstrap() {
   if (!hasSecretKey()) {
     throw new Error('LLM_KEY_SECRET 未配置：模型 API Key 加密存储需要它，见 deploy/api.env.example');
   }
+  // 访问令牌签名密钥；多实例部署必须一致，换了它所有访问令牌失效（刷新令牌不受影响）
+  if (!process.env.JWT_SECRET?.trim()) {
+    throw new Error('JWT_SECRET 未配置：登录令牌签名需要它，见 deploy/api.env.example');
+  }
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['error', 'warn', 'log'],
     bodyParser: false,

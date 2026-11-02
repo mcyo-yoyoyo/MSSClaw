@@ -55,6 +55,7 @@ import {
   PACKAGE_UPLOAD_MAX_LABEL,
   packageUploadSizeError,
 } from '@/domain/packageUpload';
+import { assetCreatorName } from '@/domain/assetCreator';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
 import { shareSyncSaveHint } from '@/domain/shareSync';
 import {
@@ -128,6 +129,7 @@ function normalizeAgent(agent: PrototypeAgentSeed): PrototypeAgentSeed {
     ...agent,
     skillIds: Array.isArray(agent.skillIds) ? agent.skillIds : [],
     planSteps: Array.isArray(agent.planSteps) ? agent.planSteps : [],
+    author: assetCreatorName(agent) || agent.author || '',
     systemPrompt: agent.systemPrompt ?? '',
     demoPrompt: agent.demoPrompt ?? '',
     caseAttachments: Array.isArray(agent.caseAttachments) ? agent.caseAttachments : [],
@@ -539,6 +541,9 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
       return;
     }
     const prev = !isNew ? agents.find((a) => a.id === target) : null;
+    const creator = form.author?.trim() || getCurrentUserName() || 'Mcyo';
+    const previousCreator = prev ? assetCreatorName(prev) : '';
+    const creatorEdited = !prev || creator !== previousCreator;
     const id = isNew ? `agent-${Date.now()}` : (target as string);
     const needsApproval = isNew || (form.published && !prev?.published);
     const planSteps = (form.planSteps ?? []).map((s) => s.trim()).filter(Boolean);
@@ -645,8 +650,8 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
         homeTag: prev?.homeTag ?? 'mkt',
         chatId: chatIdForBusinessScenario(businessScenarioId),
         businessScenarioId,
-        author: form.author?.trim() || getCurrentUserName() || 'Mcyo',
-        publisher: form.publisher || getCurrentUserName() || 'Mcyo',
+        author: creator,
+        publisher: creatorEdited ? creator : prev?.publisher || creator,
         publisherUserId: form.publisherUserId || getCurrentUserId() || undefined,
         invokes: prev?.invokes ?? 0,
         icon: form.icon || prev?.icon || 'fa-robot',
@@ -813,9 +818,18 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
             ) : null}
           </div>
         </div>
-        <FormField label="名称">
-          <FormInput value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        </FormField>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <FormField label="名称">
+            <FormInput value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          </FormField>
+          <FormField label="创建人" hint="展示在卡片和详情">
+            <FormInput
+              value={form.author ?? ''}
+              placeholder={getCurrentUserName() || '当前用户'}
+              onChange={(e) => setForm({ ...form, author: e.target.value })}
+            />
+          </FormField>
+        </div>
         <FormField label="描述">
           <FormTextarea
             rows={2}
@@ -1308,13 +1322,6 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
                   value={form.version ?? ''}
                   placeholder="V1.0"
                   onChange={(e) => setForm({ ...form, version: e.target.value })}
-                />
-              </FormField>
-              <FormField label="创建人">
-                <FormInput
-                  value={form.author ?? ''}
-                  placeholder={getCurrentUserName() || '当前用户'}
-                  onChange={(e) => setForm({ ...form, author: e.target.value })}
                 />
               </FormField>
               <FormField label="维护团队">

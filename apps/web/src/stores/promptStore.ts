@@ -6,7 +6,6 @@ import {
 } from '@/api/centerApi';
 import {
   findPromptByName,
-  PROMPT_SEEDS,
   type Prompt,
   type PromptLifecycle,
 } from '@/domain/prompt';
@@ -28,19 +27,27 @@ interface PromptState {
 }
 
 export const usePromptStore = create<PromptState>((set, get) => ({
-  prompts: PROMPT_SEEDS,
-  selectedPromptId: PROMPT_SEEDS[0]?.id ?? null,
+  prompts: [],
+  selectedPromptId: null,
   lifecycleFilter: 'all',
   toast: null,
 
   load: () => {
     void (async () => {
-      const prompts = await fetchPrompts();
-      set({
-        prompts,
-        selectedPromptId: prompts[0]?.id ?? null,
-        lifecycleFilter: 'all',
-      });
+      try {
+        const prompts = await fetchPrompts();
+        set({
+          prompts,
+          selectedPromptId: prompts[0]?.id ?? null,
+          lifecycleFilter: 'all',
+        });
+      } catch (error) {
+        set({
+          prompts: [],
+          selectedPromptId: null,
+          toast: error instanceof CenterApiError ? error.message : '数据获取失败，请稍候重试',
+        });
+      }
     })();
   },
 

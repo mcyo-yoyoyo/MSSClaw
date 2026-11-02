@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { authenticate, type LoginAccount } from '@/domain/authAccounts';
 import { normalizePlatformRole, type PlatformRole } from '@/domain/rbac';
+import { DATA_FETCH_FAILED_MESSAGE, useDataFetchNotice } from '@/domain/dataFetchNotice';
 import {
   normalizeOrgAffiliation,
   type DeptId,
@@ -11,6 +11,8 @@ import {
   fetchSessionMeApi,
   loginWithApi,
   logoutWithApi,
+  refreshSessionApi,
+  type ApiSession,
 } from '@/api/platformDocsApi';
 import { isApiEnabled } from '@/api/client';
 import { fetchOAuthLogoutUrl } from '@/api/authOAuthApi';
@@ -27,6 +29,9 @@ export interface SessionUser {
   avatar: string;
   deptIds: DeptId[];
   regionId: RegionId | null;
+  /** 服务端角色 id 与名称；platformRole 是映射到内置四种角色后的值，自定义角色按业务用户处理 */
+  roleId?: string;
+  roleName?: string;
 }
 
 /**
@@ -48,6 +53,13 @@ interface SessionState {
   visitorId: string;
   bootstrapped: boolean;
   /**
+   * 服务端按角色下发的二级菜单 id；null 表示没有服务端菜单（游客、离线演示登录），
+   * 此时导航回落到前端内置矩阵。
+   */
+  menus: string[] | null;
+  /** menus 里可以新增、修改、删除的部分 */
+  editableMenus: string[];
+  /**
    * 主动登出后的一次性标记：此时用户是自愿离开登录态，
    * 个人域页面只做静默回落，不应立刻再弹登录墙。
    */
@@ -57,6 +69,8 @@ interface SessionState {
   enterGuest: (options?: { suppressGate?: boolean }) => void;
   /** 启动时用服务端 token 恢复会话（不再信任本地用户 JSON） */
   hydrateFromServer: () => Promise<void>;
+  /** 用刷新令牌续期；失败时回落游客态 */
+  refreshSession: () => Promise<boolean>;
   login: (
     email: string,
     password: string,
@@ -90,20 +104,33 @@ function writeToken(token: string | null) {
   }
 }
 
-function toSessionUser(account: LoginAccount): SessionUser {
-  const aff = normalizeOrgAffiliation({
-    deptIds: account.deptIds,
-    regionId: account.regionId,
-  });
-  return {
-    id: account.id,
-    name: account.name,
-    email: account.email,
-    platformRole: account.platformRole,
-    avatar: account.avatar,
-    deptIds: aff.deptIds,
-    regionId: aff.regionId ?? null,
-  };
+/** 访问令牌过期前多久续期 */
+const REFRESH_AHEAD_MS = 60_000;
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearRefreshTimer() {
+  if (refreshTimer) clearTimeout(refreshTimer);
+  refreshTimer = null;
+}
+
+/** 读 JWT 的 exp（毫秒）；解析不了返回 null */
+function tokenExpiry(token: string | null): number | null {
+  const payload = token?.split('.')[1];
+  if (!payload) return null;
+  try {
+    const json = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/'))) as { exp?: unknown };
+    return typeof json.exp === 'number' ? json.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+function scheduleRefresh(token: string | null) {
+  clearRefreshTimer();
+  const expiresAt = tokenExpiry(token);
+  if (!expiresAt) return;
+  const delay = Math.max(5_000, expiresAt - Date.now() - REFRESH_AHEAD_MS);
+  refreshTimer = setTimeout(() => void useSessionStore.getState().refreshSession(), delay);
 }
 
 function fromApiUser(u: {
@@ -136,7 +163,26 @@ const GUEST_STATE = {
   isAuthenticated: false,
   isGuest: true,
   shellReady: true,
+  menus: null,
+  editableMenus: [] as string[],
 };
+
+/** 服务端会话落到 store：用户、菜单、壳视角一起更新 */
+function signedInState(session: ApiSession) {
+  const user = { ...fromApiUser(session.user), roleId: session.user.platformRole, roleName: session.roleName };
+  const menus = session.menus ?? null;
+  useShellPerspectiveStore.getState().hydrate(user.platformRole, menus);
+  return {
+    user,
+    menus,
+    editableMenus: session.editableMenus ?? menus ?? [],
+    mode: 'user' as SessionMode,
+    isAuthenticated: true,
+    isGuest: false,
+    shellReady: true,
+    bootstrapped: true,
+  };
+}
 
 export const useSessionStore = create<SessionState>((set, get) => ({
   user: null,
@@ -146,11 +192,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   shellReady: false,
   visitorId: '',
   bootstrapped: false,
+  menus: null,
+  editableMenus: [],
   suppressGuestGate: false,
 
   clearGuestGateSuppression: () => set({ suppressGuestGate: false }),
 
   enterGuest: (options) => {
+    clearRefreshTimer();
     useShellPerspectiveStore.getState().hydrate(undefined);
     set({
       ...GUEST_STATE,
@@ -162,27 +211,32 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   hydrateFromServer: async () => {
     const epoch = ++sessionEpoch;
     const token = readToken();
-    if (!token || !isApiEnabled()) {
-      // 无 token：只结束启动校验，不清掉刚完成的内存登录
+    if (!isApiEnabled()) {
       if (!get().isAuthenticated) get().enterGuest();
       set({ bootstrapped: true });
       return;
     }
     try {
-      const me = await fetchSessionMeApi();
+      const me = token ? await fetchSessionMeApi() : null;
       if (epoch !== sessionEpoch) return;
-      if (me.ok) {
-        const user = fromApiUser(me.user);
-        useShellPerspectiveStore.getState().hydrate(user.platformRole);
-        set({
-          user,
-          mode: 'user',
-          isAuthenticated: true,
-          isGuest: false,
-          shellReady: true,
-          visitorId: get().visitorId || getVisitorId(),
-          bootstrapped: true,
-        });
+      if (me?.ok) {
+        set({ ...signedInState(me), visitorId: get().visitorId || getVisitorId() });
+        scheduleRefresh(token);
+        return;
+      }
+      // 访问令牌过期或新开标签页（sessionStorage 为空）：用刷新 Cookie 续上会话
+      const refreshed = await refreshSessionApi();
+      if (epoch !== sessionEpoch) return;
+      if (refreshed) {
+        writeToken(refreshed.token);
+        set({ ...signedInState(refreshed), visitorId: get().visitorId || getVisitorId() });
+        scheduleRefresh(refreshed.token);
+        return;
+      }
+      if (!token) {
+        // 无 token：只结束启动校验，不清掉刚完成的内存登录
+        if (!get().isAuthenticated) get().enterGuest();
+        set({ bootstrapped: true });
         return;
       }
     } catch {
@@ -203,6 +257,23 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ bootstrapped: true });
   },
 
+  refreshSession: async () => {
+    const epoch = sessionEpoch;
+    const refreshed = await refreshSessionApi();
+    if (epoch !== sessionEpoch) return Boolean(refreshed);
+    if (!refreshed) {
+      if (get().isAuthenticated && readToken()) {
+        writeToken(null);
+        get().enterGuest();
+      }
+      return false;
+    }
+    writeToken(refreshed.token);
+    set(signedInState(refreshed));
+    scheduleRefresh(refreshed.token);
+    return true;
+  },
+
   login: async (email, password) => {
     // oauth 模式下密码通道在服务端已被 403；前端也拦一道，避免把 403 当成"密码错了"
     if (currentAuthMode() === 'oauth') {
@@ -220,24 +291,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         const remote = await loginWithApi({ email, password, visitorId });
         if (remote.ok && remote.token) {
           writeToken(remote.token);
-          const user = fromApiUser(remote.user);
-          useShellPerspectiveStore.getState().hydrate(user.platformRole);
           useWorkspaceStore.setState({ apiConnected: true, apiStatus: 'connected' });
-          set({
-            user,
-            mode: 'user',
-            isAuthenticated: true,
-            isGuest: false,
-            shellReady: true,
-            visitorId,
-            suppressGuestGate: false,
-            bootstrapped: true,
-          });
+          set({ ...signedInState(remote), visitorId, suppressGuestGate: false });
+          scheduleRefresh(remote.token);
           return { ok: true };
         }
         if (remote.ok === false) {
           const msg = remote.error || '登录失败';
-          // 仅账号/密码类错误硬失败；HTTP 405/不可达必须回退本地演示登录
           if (/密码|账号|不存在|停用|尚未|未激活/.test(msg) && !/\b40[45]\b/.test(msg)) {
             return { ok: false, error: msg };
           }
@@ -247,30 +307,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
     }
 
-    // Offline fallback: memory-only session (no browser user profile cache)
-    //
-    // 【安全红线】企业统一身份模式下绝不能走到这里：本地账号表 + 演示口令会让
-    // "把 API 打挂"变成一条绕过 SSO 的登录路径。上面的 oauth 早退已经挡住了
-    // 正常调用，这里再兜一道，防止将来有人绕开早退直接调用。
-    if (currentAuthMode() === 'oauth') {
-      return { ok: false, error: '统一身份服务暂不可达，请稍后重试' };
-    }
-    const result = await authenticate(email, password);
-    if (!result.ok) return { ok: false, error: result.error };
-    writeToken(null);
-    const user = toSessionUser(result.account);
-    useShellPerspectiveStore.getState().hydrate(user.platformRole);
-    set({
-      user,
-      mode: 'user',
-      isAuthenticated: true,
-      isGuest: false,
-      shellReady: true,
-      visitorId,
-      suppressGuestGate: false,
-      bootstrapped: true,
-    });
-    return { ok: true };
+    useDataFetchNotice.getState().markFailed();
+    return { ok: false, error: DATA_FETCH_FAILED_MESSAGE };
   },
 
   /** 登出回落游客态而非登录页：门户内容保持可浏览 */
@@ -297,3 +335,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       regionId: get().user?.regionId ?? null,
     }),
 }));
+
+// 页面在后台时定时器可能被节流；切回前台时令牌快到期就立刻续期
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    const { isAuthenticated, menus, refreshSession } = useSessionStore.getState();
+    const expiresAt = tokenExpiry(readToken());
+    if (isAuthenticated && menus && expiresAt && expiresAt - Date.now() < REFRESH_AHEAD_MS) void refreshSession();
+  });
+}

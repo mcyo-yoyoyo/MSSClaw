@@ -1,4 +1,6 @@
-/** localStorage key for runtime API override (Settings → Runtime) */
+import { useDataFetchNotice } from '@/domain/dataFetchNotice';
+
+/** 历史本机 API 地址覆盖。界面已不再提供填写入口，已写入的值仍会生效。 */
 export const LS_API_KEY = 'mssclaw_api';
 /** 与 Nest API_KEY 对应的客户端密钥（可选） */
 export const LS_API_AUTH_KEY = 'mssclaw_api_auth';
@@ -61,31 +63,6 @@ export function isApiEnabled(): boolean {
   return true;
 }
 
-/** 展示用：当前生效的 API 根（空 = 同源自动） */
-export function getApiBaseLabel(): string {
-  const base = getApiBase();
-  if (base) return base;
-  if (typeof location !== 'undefined') {
-    return `${location.origin}（同源 /api）`;
-  }
-  return '同源 /api';
-}
-
-export function clearApiBaseOverride(): void {
-  if (typeof localStorage === 'undefined') return;
-  localStorage.removeItem(LS_API_KEY);
-}
-
-export function setApiBaseOverride(value: string): void {
-  if (typeof localStorage === 'undefined') return;
-  const trimmed = value.trim().replace(/\/$/, '');
-  if (!trimmed) {
-    clearApiBaseOverride();
-    return;
-  }
-  localStorage.setItem(LS_API_KEY, trimmed);
-}
-
 /** Nest OptionalApiKeyGuard：有密钥时注入 X-API-Key */
 export function getApiAuthKey(): string {
   if (typeof localStorage !== 'undefined') {
@@ -93,16 +70,6 @@ export function getApiAuthKey(): string {
     if (stored) return stored;
   }
   return (import.meta.env.VITE_API_KEY as string | undefined)?.trim() ?? '';
-}
-
-export function setApiAuthKey(value: string): void {
-  if (typeof localStorage === 'undefined') return;
-  const trimmed = value.trim();
-  if (!trimmed) {
-    localStorage.removeItem(LS_API_AUTH_KEY);
-    return;
-  }
-  localStorage.setItem(LS_API_AUTH_KEY, trimmed);
 }
 
 /** 会话令牌存放位置。sessionStore 与 OAuth 回调页共用同一个 key。 */
@@ -157,7 +124,13 @@ export async function fetchWithTimeout(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
   try {
-    return await fetch(input, { ...init, signal: controller.signal });
+    const response = await fetch(input, { ...init, signal: controller.signal });
+    if (response.status >= 500) useDataFetchNotice.getState().markFailed();
+    else if (response.ok) useDataFetchNotice.getState().markOk();
+    return response;
+  } catch (error) {
+    useDataFetchNotice.getState().markFailed();
+    throw error;
   } finally {
     clearTimeout(timer);
   }

@@ -4,7 +4,6 @@ import { isPlatformView } from '@/domain/appView';
 import { useWorkflowStore } from '@/stores/workflowStore';
 import { useMemoryStore } from '@/stores/memoryStore';
 import { usePromptStore } from '@/stores/promptStore';
-import { useSettingsStore } from '@/stores/settingsStore';
 
 /**
  * Lazy-load expert platform stores when entering iteration-9 views.
@@ -24,9 +23,6 @@ export function usePlatformStoreLoader(appView: AppView) {
         break;
       case 'prompts':
         usePromptStore.getState().load();
-        break;
-      case 'admin':
-        useSettingsStore.getState().load();
         break;
       default:
         break;

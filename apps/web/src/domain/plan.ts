@@ -1,5 +1,3 @@
-import { PROTOTYPE_AGENTS } from '@/domain/prototype/agents';
-import { PROTOTYPE_SKILLS } from '@/domain/prototype/skills';
 import { generatePlanStepsWithLlm, isLlmConfigured } from '@/api/llmClient';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { skillDisplayName } from '@/domain/skillDisplay';
@@ -24,9 +22,7 @@ export type ActionType = keyof typeof EXEC_PLANS;
 
 export function getAgentById(agentId?: string) {
   if (!agentId) return null;
-  const fromMarket = useMarketplaceStore.getState().agents.find((a) => a.id === agentId);
-  if (fromMarket) return fromMarket;
-  return PROTOTYPE_AGENTS.find((a) => a.id === agentId) ?? null;
+  return useMarketplaceStore.getState().agents.find((a) => a.id === agentId) ?? null;
 }
 
 export function getSkillLabels(agentId?: string): string[] {
@@ -35,7 +31,7 @@ export function getSkillLabels(agentId?: string): string[] {
   const skills = useMarketplaceStore.getState().skills;
   return agent.skillIds
     .map((id) => {
-      const hit = skills.find((s) => s.id === id) ?? PROTOTYPE_SKILLS.find((s) => s.id === id);
+      const hit = skills.find((s) => s.id === id);
       if (!hit) return id;
       return skillDisplayName(hit);
     })

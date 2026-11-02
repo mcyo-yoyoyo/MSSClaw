@@ -7,7 +7,6 @@ import {
 } from '@/api/centerApi';
 import {
   findAgentByName,
-  AGENT_SEEDS,
   type Agent,
   type AgentStatus,
 } from '@/domain/agent';
@@ -34,8 +33,8 @@ interface AgentState {
 }
 
 export const useAgentStore = create<AgentState>((set, get) => ({
-  agents: AGENT_SEEDS,
-  selectedAgentId: AGENT_SEEDS[0]?.id ?? null,
+  agents: [],
+  selectedAgentId: null,
   statusFilter: 'all',
   testInput: '',
   testRunning: false,
@@ -43,13 +42,21 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   load: () => {
     void (async () => {
-      const agents = await fetchAgents();
-      set({
-        agents,
-        selectedAgentId: agents[0]?.id ?? null,
-        statusFilter: 'all',
-        testInput: '',
-      });
+      try {
+        const agents = await fetchAgents();
+        set({
+          agents,
+          selectedAgentId: agents[0]?.id ?? null,
+          statusFilter: 'all',
+          testInput: '',
+        });
+      } catch (error) {
+        set({
+          agents: [],
+          selectedAgentId: null,
+          toast: error instanceof CenterApiError ? error.message : '数据获取失败，请稍候重试',
+        });
+      }
     })();
   },
 

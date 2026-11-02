@@ -18,7 +18,6 @@ export interface AppCommandHandlers {
   newTask: () => void;
   exportArtifact: () => void;
   pushToGroup: () => void;
-  openSettings: () => void;
 }
 
 export interface AppCommandMarketplace {
@@ -179,15 +178,10 @@ const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
     view: 'workflow',
     run: () => h.goto('workflow'),
   },
-  { id: 'goto-admin', label: '打开组织权限', icon: 'fa-shield-halved', keywords: 'rbac admin 组织 权限', view: 'admin', run: () => h.goto('admin') },
-  {
-    id: 'goto-presentation',
-    label: '打开展示配置',
-    icon: 'fa-sliders',
-    keywords: 'menu nav presentation demo',
-    view: 'presentation',
-    run: () => h.goto('presentation'),
-  },
+  { id: 'goto-org-members', label: '打开成员', icon: 'fa-users', keywords: 'rbac admin 组织 权限 成员 账号 导入', view: 'org-members', run: () => h.goto('org-members') },
+  { id: 'goto-org-roles', label: '打开角色', icon: 'fa-user-shield', keywords: 'rbac 组织 权限 角色 菜单', view: 'org-roles', run: () => h.goto('org-roles') },
+  { id: 'goto-org-depts', label: '打开部门', icon: 'fa-sitemap', keywords: '组织 部门 区域 领域', view: 'org-depts', run: () => h.goto('org-depts') },
+  { id: 'goto-org-audit', label: '打开操作日志', icon: 'fa-clipboard-list', keywords: '操作日志 审计 增删改 skill agent 工具 办公场景', view: 'org-audit', run: () => h.goto('org-audit') },
   {
     id: 'goto-portal-ops',
     label: '打开门户运营',
@@ -237,7 +231,6 @@ const NAV_COMMANDS = (h: AppCommandHandlers): AppCommand[] => [
     run: () => h.goto('messages'),
   },
   { id: 'push', label: '推送交付物', icon: 'fa-paper-plane', run: () => h.pushToGroup() },
-  { id: 'settings', label: '打开偏好设置', icon: 'fa-gear', keywords: '设置 偏好 settings 快捷', run: () => h.openSettings() },
 ];
 
 const EXECUTE_COMMAND_IDS = new Set([

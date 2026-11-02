@@ -405,13 +405,18 @@ test('auth login forwards the stable visitor ID to the service', async () => {
       calls.push(body);
       return { ok: true };
     },
+    withMenus: async (result) => result,
   });
-  await controller.login({
-    email: 'user@example.com',
-    password: 'secret',
-    workspaceId: 'ws-test',
-    visitorId: GUEST_VISITOR_ID,
-  });
+  await controller.login(
+    {
+      email: 'user@example.com',
+      password: 'secret',
+      workspaceId: 'ws-test',
+      visitorId: GUEST_VISITOR_ID,
+    },
+    { headers: {}, secure: false },
+    { cookie: () => {} },
+  );
   assert.equal(calls[0].visitorId, GUEST_VISITOR_ID);
 });
 

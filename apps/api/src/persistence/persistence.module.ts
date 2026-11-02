@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { CatalogController } from './catalog.controller';
+import { HomeController } from './home.controller';
 import { GlobalToolsController, PersistenceController } from './persistence.controller';
 import { PersistenceService } from './persistence.service';
 import { BlobStoreService } from './blob-store.service';
@@ -13,10 +15,15 @@ import { AiBriefSubscriptionsService } from './ai-brief-subscriptions.service';
 import { CaseInsightsController } from './case-insights.controller';
 import { CaseInsightsService } from './case-insights.service';
 import { MeController } from './me.controller';
+import { AdminController, OrgController } from './admin.controller';
+import { IdentityBootstrapService } from './identity-bootstrap.service';
+import { MenuGuard } from './menu.guard';
 
 @Module({
   controllers: [
     PersistenceController,
+    CatalogController,
+    HomeController,
     GlobalToolsController,
     PlatformDocsController,
     AuthController,
@@ -25,6 +32,8 @@ import { MeController } from './me.controller';
     AiBriefSubscriptionsController,
     CaseInsightsController,
     MeController,
+    AdminController,
+    OrgController,
   ],
   providers: [
     PersistenceService,
@@ -34,6 +43,8 @@ import { MeController } from './me.controller';
     PortalAnalyticsService,
     AiBriefSubscriptionsService,
     CaseInsightsService,
+    IdentityBootstrapService,
+    MenuGuard,
   ],
   exports: [PersistenceService, BlobStoreService, PlatformDocsService],
 })

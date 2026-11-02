@@ -43,9 +43,8 @@ import { useAppViewStore } from '@/stores/appViewStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { returnFromResource } from '@/domain/openResourceNav';
 import { canExecuteChat } from '@/domain/permissions';
-import { allowsTaskExecutionSurfaces } from '@/domain/marketRunCapability';
+import { useAllowsTaskExecution } from '@/domain/marketRunCapability';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
-import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { ExpertTeamModal } from '@/components/content/ExpertTeamModal';
 import {
   countScenarioEnvSlots,
@@ -323,9 +322,9 @@ export function AiMapPage({
   const showToast = useMarketplaceStore((s) => s.showToast);
   const setAppView = useAppViewStore((s) => s.setAppView);
   const user = useSessionStore((s) => s.user);
-  const navPreset = useNavPresentationStore((s) => s.preset);
+  const taskExecutionAllowed = useAllowsTaskExecution();
   const canRunOnline =
-    canExecuteChat(user?.platformRole) && allowsTaskExecutionSurfaces(navPreset);
+    canExecuteChat(user?.platformRole) && taskExecutionAllowed;
 
   const [listFilter, setListFilter] = useState<ScenarioListFilter>('related');
   const [search, setSearch] = useState('');

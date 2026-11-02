@@ -126,8 +126,10 @@ export function validateNamedPresetMatrices(): string[] {
     errors.push(`super_admin standard(${stdAdmin.size}) 不应多于 full(${fullAdmin.size})`);
   }
   for (const id of [
-    'admin',
-    'presentation',
+    'org-members',
+    'org-roles',
+    'org-depts',
+    'org-audit',
     'portal-ops',
     'portal-dashboard',
     'model-ops',

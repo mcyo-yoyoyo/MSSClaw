@@ -83,7 +83,7 @@ const SHARED_KB_PROMPT: WorkspaceResource[] = [
   },
 ];
 
-/** 平台目录种子：接口不可用或返回空目录时使用 */
+/** 历史演示目录。运行时不再用来顶替接口失败或空目录。 */
 export const PLATFORM_CATALOG: WorkspaceCatalog = {
   workspace: {
     id: PROTOTYPE_WORKSPACE_ID,
@@ -95,6 +95,20 @@ export const PLATFORM_CATALOG: WorkspaceCatalog = {
   chats: {},
   defaultChatId: '',
   resources: [...PROTOTYPE_AGENT_RESOURCES, ...SHARED_KB_PROMPT],
+};
+
+/** 接口失败或尚未返回时的空目录，不带演示资源。 */
+export const EMPTY_PLATFORM_CATALOG: WorkspaceCatalog = {
+  workspace: {
+    id: PROTOTYPE_WORKSPACE_ID,
+    name: 'MSS AI提效平台',
+    namespace: 'hw.global.mkt',
+    description: '',
+    memberCount: 0,
+  },
+  chats: {},
+  defaultChatId: '',
+  resources: [],
 };
 
 export function getResourcesByKind(catalog: WorkspaceCatalog, kind: ResourceKind) {
