@@ -16,7 +16,8 @@ import {
   deleteAsset,
   readAsset,
   readAssetIds,
-  orgScopeWhere,
+  catalogScope,
+  type CatalogViewer,
   readAssets,
   readToolCatalogMeta,
   replaceAssets,
@@ -61,14 +62,7 @@ const CATALOG_RESOURCES = {
   automations: { kind: 'automation', listKey: 'automations', writeMenu: 'automation' },
 } as const satisfies Record<string, { kind: AssetKind; listKey: string; writeMenu: string }>;
 
-export type CatalogViewer = { id: string; platformRole: string; regionId: string | null; deptIds: string[] } | null;
-
-/** Skill / Agent 按查看人的区域、领域过滤；超管和其他资产类型不过滤 */
-function catalogScope(kind: AssetKind, viewer: CatalogViewer): OrgScopeWhere | undefined {
-  if (kind !== 'skill' && kind !== 'agent') return undefined;
-  if (viewer?.platformRole === SUPER_ADMIN_ROLE) return undefined;
-  return orgScopeWhere(viewer && { id: viewer.id, regionId: viewer.regionId, domainIds: viewer.deptIds });
-}
+export type { CatalogViewer };
 
 export function catalogResource(segment: string): { kind: AssetKind; listKey: string; writeMenu: string } {
   const spec = CATALOG_RESOURCES[segment as keyof typeof CATALOG_RESOURCES];

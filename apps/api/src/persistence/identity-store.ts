@@ -212,10 +212,6 @@ async function assertMemberReferences(db: Db, members: PreparedMember[]): Promis
     const unknownDomain = member.domainIds.find((domainId) => !domainIds.has(domainId));
     if (unknownDomain) invalidMember(member.id, `unknown_domain_${unknownDomain}`);
   }
-  const superAdmins = members.filter((member) => member.roleId === SUPER_ADMIN_ROLE);
-  if (superAdmins.length > 1) {
-    throw new BadRequestException(`super_admin_must_be_unique:${superAdmins.map((member) => member.id).join(',')}`);
-  }
 }
 
 /** PUT /docs/members：版本一致才整份替换；从表里去掉的成员连同密码、会话一起删除（外键级联）。 */

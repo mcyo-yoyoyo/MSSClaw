@@ -114,12 +114,9 @@ beforeEach(async () => {
 
 const member = (over = {}) => ({ id: 'u-a', name: 'A', email: 'a@huawei.com', role: 'business_user', deptIds: [], regionId: null, ...over });
 
-test('数据库层：第二个超管和大写邮箱都写不进去', async () => {
+test('数据库层：可以有多个超管，大写邮箱写不进去', async () => {
   await prisma.member.create({ data: { id: 'u-a', name: 'A', email: 'a@huawei.com', roleId: 'super_admin' } });
-  await assert.rejects(
-    prisma.member.create({ data: { id: 'u-b', name: 'B', email: 'b@huawei.com', roleId: 'super_admin' } }),
-    (error) => error.code === 'P2002',
-  );
+  await prisma.member.create({ data: { id: 'u-b', name: 'B', email: 'b@huawei.com', roleId: 'super_admin' } });
   await assert.rejects(prisma.member.create({ data: { id: 'u-c', name: 'C', email: 'C@huawei.com' } }), /member_email_lowercase/);
 });
 
@@ -136,7 +133,7 @@ test('成员表保存：领域走关联表，返回形状不变', async () => {
   assert.deepEqual((await readMembersDoc(prisma)).members[0].deptIds, ['hr', 'mkt']);
 });
 
-test('成员表保存：字典外的角色 / 区域 / 领域、缺邮箱、两个超管都拒绝', async () => {
+test('成员表保存：字典外的角色 / 区域 / 领域、缺邮箱都拒绝；可以保存多个超管', async () => {
   const rejects = async (members, message) =>
     assert.rejects(writeMembersDoc(prisma, { revision: 0, members }), (error) => {
       assert.match(String(error.response?.message ?? error.message), message);
@@ -146,11 +143,12 @@ test('成员表保存：字典外的角色 / 区域 / 领域、缺邮箱、两�
   await rejects([member({ regionId: 'mars' })], /unknown_region_mars/);
   await rejects([member({ deptIds: ['legal'] })], /unknown_domain_legal/);
   await rejects([member({ email: '' })], /email_required/);
-  await rejects(
-    [member({ role: 'super_admin' }), member({ id: 'u-b', email: 'b@huawei.com', role: 'super_admin' })],
-    /super_admin_must_be_unique/,
-  );
   assert.equal(await prisma.member.count(), 0);
+  await writeMembersDoc(prisma, {
+    revision: 0,
+    members: [member({ role: 'super_admin' }), member({ id: 'u-b', email: 'b@huawei.com', role: 'super_admin' })],
+  });
+  assert.equal(await prisma.member.count({ where: { roleId: 'super_admin' } }), 2);
 });
 
 test('成员表保存：一次保存里交接超管、互换邮箱都能成功，改角色的成员令牌版本加一', async () => {

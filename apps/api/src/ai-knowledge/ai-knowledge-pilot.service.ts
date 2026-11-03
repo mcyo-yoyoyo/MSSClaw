@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { nestLlmConfigFromDoc, nestLlmConfigFromEnv, nestLlmStreamedText } from '../executions/llm.client';
 import { readLlmConfigDoc } from '../persistence/llm-config-store';
 import { PrismaService } from '../prisma/prisma.service';
-import { AiKnowledgeResourceService, type PilotAssetViewer } from './ai-knowledge.resources';
+import { AiKnowledgeResourceService } from './ai-knowledge.resources';
 import type { AiKnowledgeActor } from './ai-knowledge.types';
 import { maxPersonaInstructions, replyPolicyInstructions, replyStyleIssue, selectReplyMode, type ReplyMode } from './ai-knowledge-reply-policy';
 import { AiKnowledgeInsightResources, attachInsightSnippets, insightQuery, insightRange, type InsightRange } from './ai-knowledge-insight.resources';
@@ -236,12 +236,7 @@ export class AiKnowledgePilotService {
   async read(actor: AiKnowledgeActor, id: string) { return (await this.get(actor, id)).session; }
 
   async search(query: string, actor?: AiKnowledgeActor): Promise<Source[]> {
-    let viewer: PilotAssetViewer = {};
-    if (actor?.type === 'user' && actor.userId) {
-      const member = await this.prisma.member.findUnique({ where: { id: actor.userId }, include: { domains: true } });
-      if (member?.status === 'active') viewer = { userId: member.id, name: member.name,
-        role: member.roleId, deptIds: member.domains.map(d => d.domainId), regionId: member.regionId };
-    }
+    const viewer = await this.resources.viewerFor(actor);
     const terms = [...new Set([...(query.match(/[a-zA-Z][a-zA-Z0-9-]{1,}/g) || []),
       ...(query.match(/[\u3400-\u9fff]{2,}/g) || []).flatMap(s => Array.from({ length: s.length - 1 }, (_, i) => s.slice(i, i + 2)))])]
       .filter(t => !['希望', '想要', '可以', '帮我', '工具', '使用', '我们', '现在', '一个', '什么'].includes(t)).slice(0, 24);
@@ -262,7 +257,7 @@ export class AiKnowledgePilotService {
     const content: Source[] = [
       ...articles.map(a => ({ id: `article:${a.id}`, kind: 'case', label: a.publishedTitle || '',
         description: [a.publishedSummary, a.publishedMarkdown?.slice(0, 1800)].filter(Boolean).join('\n'),
-        url: `http://localhost:5173/#/detail?type=case&id=${encodeURIComponent(a.id)}`, evidence: '平台已发布案例洞察' })),
+        url: `/#/detail?type=case&id=${encodeURIComponent(a.id)}`, evidence: '平台已发布案例洞察' })),
       ...posts.map(a => ({ id: `post:${a.id}`, kind: 'news', label: a.title,
         description: [a.summary, a.body.slice(0, 1400)].filter(Boolean).join('\n'), evidence: `平台AI快讯 · ${a.publishedAt}` })),
       ...feed.map(a => ({ id: `news:${a.id}`, kind: 'news', label: a.title,

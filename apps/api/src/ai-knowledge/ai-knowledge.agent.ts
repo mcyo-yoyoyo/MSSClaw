@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { nestLlmStreamedText, type NestLlmRuntimeConfig } from '../executions/llm.client';
 import type { DemandDraft, DemandSummary, SolutionResource } from './ai-knowledge.types';
+import type { CatalogViewer } from '../persistence/asset-catalog';
 import { AiKnowledgeResourceService } from './ai-knowledge.resources';
 
 type AgentGeneration = {
@@ -161,6 +162,7 @@ export class AiKnowledgeAgentRunner {
     config: NestLlmRuntimeConfig,
     signal?: AbortSignal,
     repair = false,
+    viewer: CatalogViewer = null,
   ): Promise<AgentGeneration> {
     // 检索在服务端确定性完成，不再让模型用 function calling 自己发查询：
     // 候选资源一次性放进提示词，请求就退化成一次普通补全。
@@ -175,8 +177,8 @@ export class AiKnowledgeAgentRunner {
     ].filter(Boolean).join(' ');
     const [cases, tools, capabilities] = await Promise.all([
       this.resources.searchCases(workspaceId, query, 4),
-      this.resources.searchTools(workspaceId, query, 4),
-      this.resources.searchCapabilities(workspaceId, query, 4),
+      this.resources.searchTools(workspaceId, query, 4, viewer),
+      this.resources.searchCapabilities(workspaceId, query, 4, viewer),
     ]);
     const collected = uniqueResources([...tools, ...capabilities, ...cases]).slice(0, 12);
 

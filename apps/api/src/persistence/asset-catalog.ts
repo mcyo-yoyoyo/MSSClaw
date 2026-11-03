@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
+import { SUPER_ADMIN_ROLE } from './identity-store';
 
 /**
  * 资产表 ↔ 接口 JSON。整份快照（GET/PUT /marketplace、/tools）和目录单条
@@ -365,6 +366,15 @@ export function orgScopeWhere(viewer: { id: string; regionId: string | null; dom
     : { domains: { none: {} } };
   const scoped: OrgScopeWhere = { AND: [notPrivate, region, domain] };
   return viewer ? { OR: [{ publisherUserId: viewer.id }, scoped] } : scoped;
+}
+
+export type CatalogViewer = { id: string; platformRole: string; regionId: string | null; deptIds: string[] } | null;
+
+/** Skill / Agent 按查看人的区域、领域过滤；超管和其他资产类型不过滤 */
+export function catalogScope(kind: AssetKind, viewer: CatalogViewer): OrgScopeWhere | undefined {
+  if (kind !== 'skill' && kind !== 'agent') return undefined;
+  if (viewer?.platformRole === SUPER_ADMIN_ROLE) return undefined;
+  return orgScopeWhere(viewer && { id: viewer.id, regionId: viewer.regionId, domainIds: viewer.deptIds });
 }
 
 export async function readAssetIds(db: Db, kind: AssetKind): Promise<string[]> {

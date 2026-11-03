@@ -33,7 +33,7 @@ const reply = (overrides = {}) => ({ reply: '你希望先得到清单还是完�
   understanding: { task: '写需求文档', goal: '', inputs: '', output: '完整需求文档', constraints: '' },
   needsClarification: false, citedIds: ['skill:real'], ...overrides });
 
-test('访客可读公开能力，归属部门不影响公开可见性；领域/私有仍按权限', () => {
+test('工具可见范围：公开工具都能看，组织和私有工具按权限；同名不算发布方', () => {
   assert.equal(pilotAssetVisible({ published: true }), true);
   assert.equal(pilotAssetVisible({ published: false }), false);
   assert.equal(pilotAssetVisible({ published: true, visibility: 'private' }), false);
@@ -42,9 +42,11 @@ test('访客可读公开能力，归属部门不影响公开可见性；领域/�
   assert.equal(pilotAssetVisible({ published: true, ownerDeptIds: ['mkt'] }), true);
   const org = { published: true, visibility: 'org', ownerDeptIds: ['mkt'] };
   assert.equal(pilotAssetVisible(org), false);
-  assert.equal(pilotAssetVisible(org, { userId: 'a', deptIds: ['mkt'] }), true);
-  assert.equal(pilotAssetVisible(org, { userId: 'b', deptIds: ['rd'] }), false);
-  assert.equal(pilotAssetVisible({ ...org, visibility: 'private', publisherUserId: 'a' }, { userId: 'a' }), true);
+  const viewer = (id, deptIds) => ({ id, platformRole: 'business_user', regionId: null, deptIds });
+  assert.equal(pilotAssetVisible(org, viewer('a', ['mkt'])), true);
+  assert.equal(pilotAssetVisible(org, viewer('b', ['rd'])), false);
+  assert.equal(pilotAssetVisible({ ...org, visibility: 'private', publisherUserId: 'a' }, viewer('a', [])), true);
+  assert.equal(pilotAssetVisible({ published: true, visibility: 'private', author: '张三' }, viewer('b', [])), false);
 });
 
 test('无角色和非关键字段时可以形成方向，历史按访问者隔离', async () => {

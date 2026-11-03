@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { readFile, stat } from 'node:fs/promises';
-import { readAssets } from '../persistence/asset-catalog';
+import { catalogScope, readAssets, type AssetKind, type CatalogViewer } from '../persistence/asset-catalog';
+import { SUPER_ADMIN_ROLE } from '../persistence/identity-store';
 import { PrismaService } from '../prisma/prisma.service';
-import type { DemandDraft, SolutionResource } from './ai-knowledge.types';
+import type { AiKnowledgeActor, DemandDraft, SolutionResource } from './ai-knowledge.types';
 import { matchesRequiredCaseIntent } from './ai-knowledge.relevance';
 
 type ResourceKind = SolutionResource['kind'];
@@ -60,22 +61,28 @@ function normalizedLimit(limit: number): number {
   return Math.min(Math.max(Math.floor(limit) || 1, 1), 8);
 }
 
-export type PilotAssetViewer = { userId?: string; name?: string; role?: string; deptIds?: string[]; regionId?: string | null };
-
-/** 与前端 canViewAsset 同口径：归属部门是元数据，public 不能被部门字段挡住。 */
-export function pilotAssetVisible(item: CatalogItem, viewer: PilotAssetViewer = {}): boolean {
+/**
+ * 目录接口不按归属过滤工具，这里补上工具自身的可见范围。
+ * Skill / Agent 已由 catalogScope 在查询时过滤，不走这里。
+ */
+export function pilotAssetVisible(item: CatalogItem, viewer: CatalogViewer = null): boolean {
   if (item.published !== true) return false;
-  if (viewer.role === 'super_admin') return true;
+  if (viewer?.platformRole === SUPER_ADMIN_ROLE) return true;
   const visibility = text(item, 'visibility') || 'public';
   if (visibility === 'public') return true;
-  if (viewer.userId && text(item, 'publisherUserId') === viewer.userId) return true;
-  if (viewer.name && [text(item, 'publisher'), text(item, 'author')].includes(viewer.name)) return true;
+  if (viewer && text(item, 'publisherUserId') === viewer.id) return true;
   if (visibility === 'private') return false;
   const depts = strings(item, 'ownerDeptIds');
   const regions = strings(item, 'ownerRegionIds');
   if (!regions.length && text(item, 'ownerRegionId')) regions.push(text(item, 'ownerRegionId'));
-  return Boolean(viewer.deptIds?.some(dept => depts.includes(dept))
-    || (viewer.regionId && regions.includes(viewer.regionId)));
+  return Boolean(viewer?.deptIds.some(dept => depts.includes(dept))
+    || (viewer?.regionId && regions.includes(viewer.regionId)));
+}
+
+/** MAX 读资产的唯一入口：Skill / Agent 与目录接口同一口径，没有 viewer 按游客算 */
+export async function readVisibleAssets(prisma: PrismaService, kind: AssetKind, viewer: CatalogViewer = null): Promise<CatalogItem[]> {
+  const items = (await readAssets(prisma, kind, catalogScope(kind, viewer))) as CatalogItem[];
+  return items.filter(item => item.published === true && (kind !== 'tool' || pilotAssetVisible(item, viewer)));
 }
 
 @Injectable()
@@ -87,6 +94,14 @@ export class AiKnowledgeResourceService {
     private readonly prisma: PrismaService,
   ) {}
 
+  /** 登录且在职的成员才有归属；其余都按游客 */
+  async viewerFor(actor?: AiKnowledgeActor): Promise<CatalogViewer> {
+    if (actor?.type !== 'user' || !actor.userId) return null;
+    const member = await this.prisma.member.findUnique({ where: { id: actor.userId }, include: { domains: true } });
+    if (member?.status !== 'active') return null;
+    return { id: member.id, platformRole: member.roleId, regionId: member.regionId, deptIds: member.domains.map(d => d.domainId) };
+  }
+
   async searchCases(workspaceId: string, query: string, limit = 5): Promise<SolutionResource[]> {
     // 案例只来自随包的本地案例库（库里从没有写入过 case / ai-case 记录）
     const localCases = await this.loadLocalCases();
@@ -95,8 +110,8 @@ export class AiKnowledgeResourceService {
       .slice(0, normalizedLimit(limit));
   }
 
-  async searchTools(workspaceId: string, query: string, limit = 5): Promise<SolutionResource[]> {
-    const items = await this.marketplaceItems(workspaceId, 'tools');
+  async searchTools(workspaceId: string, query: string, limit = 5, viewer: CatalogViewer = null): Promise<SolutionResource[]> {
+    const items = await readVisibleAssets(this.prisma, 'tool', viewer);
     return this.rank('tool', items, query, normalizedLimit(limit));
   }
 
@@ -104,10 +119,11 @@ export class AiKnowledgeResourceService {
     workspaceId: string,
     query: string,
     limit = 5,
+    viewer: CatalogViewer = null,
   ): Promise<SolutionResource[]> {
     const [agents, skills] = await Promise.all([
-      this.marketplaceItems(workspaceId, 'agents'),
-      this.marketplaceItems(workspaceId, 'skills'),
+      readVisibleAssets(this.prisma, 'agent', viewer),
+      readVisibleAssets(this.prisma, 'skill', viewer),
     ]);
     const perKind = Math.max(2, Math.ceil(normalizedLimit(limit) / 2));
     return [
@@ -116,22 +132,21 @@ export class AiKnowledgeResourceService {
     ].slice(0, normalizedLimit(limit));
   }
 
-  async searchPilotAssets(query: string, viewer: PilotAssetViewer = {}): Promise<SolutionResource[]> {
-    const lists = await Promise.all((['skills', 'agents', 'tools'] as const)
-      .map(key => this.marketplaceItems('ws-cn-marketing', key)));
-    return lists.flatMap((items, index) => {
-      const kind = (['skill', 'agent', 'tool'] as const)[index];
-      const visible = items.filter(item => pilotAssetVisible(item, viewer));
+  async searchPilotAssets(query: string, viewer: CatalogViewer = null): Promise<SolutionResource[]> {
+    const kinds = ['skill', 'agent', 'tool'] as const;
+    const lists = await Promise.all(kinds.map(kind => readVisibleAssets(this.prisma, kind, viewer)));
+    return lists.flatMap((visible, index) => {
+      const kind = kinds[index];
       return this.rank(kind, visible, query, kind === 'tool' ? 2 : 4).map(resource => {
         const item = visible.find(item => item.id === resource.id);
         const shelf = item ? text(item, 'marketShelf') : '';
-        return { ...resource, url: `http://localhost:5173/#/detail?type=${kind}&id=${encodeURIComponent(resource.id || '')}`, evidence: [resource.evidence,
+        return { ...resource, url: `/#/detail?type=${kind}&id=${encodeURIComponent(resource.id || '')}`, evidence: [resource.evidence,
           shelf === 'internal' ? '内部工具' : shelf === 'external' ? '外部工具' : ''].filter(Boolean).join(' · ') };
       });
     });
   }
 
-  async searchForDraft(workspaceId: string, draft: DemandDraft): Promise<SolutionResource[]> {
+  async searchForDraft(workspaceId: string, draft: DemandDraft, viewer: CatalogViewer = null): Promise<SolutionResource[]> {
     const query = [
       draft.originalQuestion,
       draft.demand.problem,
@@ -147,8 +162,8 @@ export class AiKnowledgeResourceService {
     ].filter(Boolean).join(' ');
     const [cases, tools, capabilities] = await Promise.all([
       this.searchCases(workspaceId, query, 3),
-      this.searchTools(workspaceId, query, 3),
-      this.searchCapabilities(workspaceId, query, 4),
+      this.searchTools(workspaceId, query, 3, viewer),
+      this.searchCapabilities(workspaceId, query, 4, viewer),
     ]);
     return this.unique([...cases, ...tools, ...capabilities]).slice(0, 10);
   }
@@ -316,15 +331,6 @@ export class AiKnowledgeResourceService {
       resource.caseResult,
       ...(resource.toolsUsed ?? []),
     ].filter(Boolean).join(' ');
-  }
-
-  private async marketplaceItems(
-    _workspaceId: string,
-    key: 'tools' | 'skills' | 'agents',
-  ): Promise<CatalogItem[]> {
-    const kind = key === 'tools' ? 'tool' : key === 'skills' ? 'skill' : 'agent';
-    const items = (await readAssets(this.prisma, kind)) as CatalogItem[];
-    return items.filter((item) => item.published !== false);
   }
 
   private async loadLocalCases(): Promise<CatalogItem[]> {

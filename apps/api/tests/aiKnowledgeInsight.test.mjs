@@ -5,6 +5,8 @@ const require = createRequire(import.meta.url);
 const { insightRange, rankInsightSources, insightQuery, attachInsightSnippets } = require('../dist/ai-knowledge/ai-knowledge-insight.resources.js');
 const { insightEvidenceIssue, insightReply, materializeInsightEvidence, insightFailureDetail } = require('../dist/ai-knowledge/ai-knowledge-insight.domain.js');
 const { AiKnowledgePilotService } = require('../dist/ai-knowledge/ai-knowledge-pilot.service.js');
+const { aiContext } = require('../dist/common/ai-usage-context.js');
+const usage = { operation: (_actor, _id, _purpose, fn) => aiContext.run({}, fn) };
 const now = new Date('2026-10-30T04:00:00Z');
 const source = (id, date, changes = {}) => ({ id, kind: 'news', label: '营销内容生成变化' + id,
   description: '这条资料记录了营销团队使用AI生成内容初稿，人工核对后发布。',
@@ -70,7 +72,7 @@ test('修复请求携带具体错误和上一轮结果，成功后保存后端�
   const db = { appSetting: { create: async ({ data }) => { saved = data.value; } } };
   const insights = { search: async () => ({ sources: [doc], range: insightRange('近期营销', now),
     coverage: { reportsWithBody: 0, truncated: false, localUnavailable: false } }) };
-  const service = new AiKnowledgePilotService(db, {}, insights);
+  const service = new AiKnowledgePilotService(db, {}, insights, usage);
   const wrong = structuredClone(answer); wrong.nextStep = '字'.repeat(251);
   const corrected = structuredClone(answer); corrected.findings[0].evidence = [{ sourceId: 'r1', snippetId: 's1' }];
   service.complete = async input => { prompts.push(input); return { value: prompts.length === 1 ? wrong : corrected, model: 'test' }; };
@@ -85,7 +87,7 @@ test('没有匹配资料时不调用模型冒充洞察，仍保存可追溯的�
   const db = { appSetting: { create: async ({ data }) => { saved = data.value; } } };
   const insights = { search: async () => ({ sources: [], range: insightRange('最近营销', now),
     coverage: { reportsWithBody: 0, truncated: false, localUnavailable: false } }) };
-  const service = new AiKnowledgePilotService(db, {}, insights);
+  const service = new AiKnowledgePilotService(db, {}, insights, usage);
   service.complete = async () => { throw Error('must not call model'); };
   const session = await service.message({ key: 'guest:test', type: 'guest' }, '最近营销有什么变化', undefined, 'insight');
   assert.equal(session.mode, 'insight'); assert.equal(session.messages.at(-1).insight.noEvidence, true);

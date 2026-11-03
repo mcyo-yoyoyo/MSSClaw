@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test, { after, before, beforeEach } from 'node:test';
 import { PrismaClient } from '@prisma/client';
 import { orgScopeWhere, readAssets, replaceAssets } from '../dist/persistence/asset-catalog.js';
+import { AiKnowledgeResourceService, readVisibleAssets } from '../dist/ai-knowledge/ai-knowledge.resources.js';
 import { PersistenceService } from '../dist/persistence/persistence.service.js';
 import { PlatformDocsService } from '../dist/persistence/platform-docs.service.js';
 import { CatalogController } from '../dist/persistence/catalog.controller.js';
@@ -154,6 +155,24 @@ test('过滤：区域、领域都要命中，没打标签的不限；私有只�
   assert.deepEqual(await visibleIds({ id: 'u-other', regionId: null, domainIds: ['mkt'] }), ['any', 'mkt', 'org-any']);
   assert.deepEqual(await visibleIds({ id: 'u-other', regionId: 'apac', domainIds: [] }), ['any', 'apac', 'org-any']);
   assert.deepEqual(await visibleIds(null), ['any', 'org-any']);
+});
+
+test('MAX 检索和目录接口同一口径：公开但限定区域、领域的资产不外泄，同名不算发布方', async () => {
+  await prisma.domain.upsert({ where: { id: 'legal' }, create: { id: 'legal', name: '法务' }, update: {} });
+  await saveSkills(MATRIX.map((item) => ({ ...item, desc: '渠道预测', author: '张三' })));
+  const member = (id, regionId, deptIds, platformRole = 'business_user') => ({ id, platformRole, regionId, deptIds });
+  const visible = async (viewer) => (await readVisibleAssets(prisma, 'skill', viewer)).map((item) => item.id).sort();
+  assert.deepEqual(await visible(null), ['any', 'org-any']);
+  assert.deepEqual(await visible(member('u-other', 'europe', ['hr'])), ['any', 'apac+mkt', 'europe', 'org-any']);
+  assert.deepEqual(
+    await visible(member('u-me', 'apac', ['mkt'])),
+    ['any', 'apac', 'apac+mkt', 'mkt', 'org-any', 'own-europe-private'],
+  );
+  assert.equal((await visible(member('u-root', null, [], 'super_admin'))).length, MATRIX.length);
+
+  const found = await new AiKnowledgeResourceService(prisma).searchPilotAssets('渠道预测', null);
+  assert.deepEqual(found.map((item) => item.id).sort(), ['any', 'org-any']);
+  assert.ok(found.every((item) => item.url.startsWith('/#/detail?')));
 });
 
 test('目录接口：按登录人过滤、超管不过滤、带了无效令牌 401；写要有对应配置菜单', async () => {

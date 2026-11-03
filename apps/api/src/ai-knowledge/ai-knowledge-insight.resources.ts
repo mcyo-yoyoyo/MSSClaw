@@ -104,13 +104,13 @@ export class AiKnowledgeInsightResources {
         description: evidenceText(body).slice(0, 2600), url, publishedAt: date, dateLabel, contentLevel, evidence });
     const reportSources = reports.flatMap(r => {
       const body = r.content || (Array.isArray(r.chunkTexts) ? r.chunkTexts.filter(x => typeof x === 'string').join('\n') : '');
-      return body ? [source(`report:${r.id}`, 'report', r.title, body, `http://localhost:5173/#/knowledge`, publishedDate(r.sourceUpdatedAt), 'body', '资料更新时间', '公开报告正文')] : [];
+      return body ? [source(`report:${r.id}`, 'report', r.title, body, '/#/knowledge', publishedDate(r.sourceUpdatedAt), 'body', '资料更新时间', '公开报告正文')] : [];
     });
     const all: InsightSource[] = [
       ...feed.slice(0, 2000).map(n => source(`news:${n.id}`, 'news', n.title, n.summary, n.url, publishedDate(n.publishedAt), 'summary', '来源标注日期', 'AI快讯归档 · 仅摘要')),
       ...posts.slice(0, 300).map(n => source(`post:${n.id}`, 'news', n.title, n.body || n.summary || '', '', publishedDate(n.publishedAt), n.body ? 'body' : 'summary', '平台发布日期', '平台AI快讯')),
       ...articles.slice(0, 300).map(c => source(`article:${c.id}`, 'case', c.publishedTitle || '', c.publishedMarkdown || c.publishedHtml || c.publishedSummary || '',
-        `http://localhost:5173/#/detail?type=case&id=${encodeURIComponent(c.id)}`, c.publishedAt?.toISOString() ?? null,
+        `/#/detail?type=case&id=${encodeURIComponent(c.id)}`, c.publishedAt?.toISOString() ?? null,
         c.publishedMarkdown || c.publishedHtml ? 'body' : 'summary', '平台发布日期', '已发布案例洞察')),
       ...local.filter(c => c.publication_status !== 'draft' && c.publication_status !== 'private' && c.publication_status !== 'unpublished').map(c => source(`local-case:${string(c.id)}`, 'case', string(c.title_zh) || string(c.title_original),
         [c.article_digest_zh, c.summary_zh, c.ai_use_case, c.business_value, c.learnings].map(string).filter(Boolean).join('\n'),
