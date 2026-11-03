@@ -1453,9 +1453,35 @@ export function MarketShelfPage({
                   logoUrl: tool.logoUrl,
                   assetType: 'tool',
                 });
-                const win = window.open(tool.homepageUrl, '_blank', 'noopener,noreferrer');
                 bumpToolInvokes(tool.id);
                 bumpRedirect(tool.id, 'tool');
+
+                // 员工助手：先尝试唤起本地桌面应用，未安装则回退到下载页
+                if (tool.id === 'tool-hw-assistant') {
+                  const fallbackUrl = tool.homepageUrl;
+                  const hiddenFrame = document.createElement('iframe');
+                  hiddenFrame.style.display = 'none';
+                  hiddenFrame.src = 'weclaw://';
+                  document.body.appendChild(hiddenFrame);
+                  const cleanup = () => {
+                    document.body.removeChild(hiddenFrame);
+                    window.removeEventListener('blur', onBlur);
+                    clearTimeout(timer);
+                  };
+                  const onBlur = () => cleanup();
+                  const timer = setTimeout(() => {
+                    cleanup();
+                    if (!document.hidden) {
+                      showToast('未检测到员工助手桌面端，正在打开下载页…');
+                      window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
+                    }
+                  }, 2000);
+                  window.addEventListener('blur', onBlur);
+                  showToast(`正在打开：${tool.name}`);
+                  return;
+                }
+
+                const win = window.open(tool.homepageUrl, '_blank', 'noopener,noreferrer');
                 if (!win) showToast('浏览器拦截了弹窗，请允许后重试');
                 else showToast(`已打开：${tool.name}`);
               }}

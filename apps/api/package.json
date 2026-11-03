@@ -6,7 +6,7 @@
     "build": "nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node dist/src/main",
     "test:case-insight-reads": "npm run build --silent && node --test tests/caseInsightReads.test.mjs",
     "test:ai-brief-dedupe": "npm run build --silent && node --test tests/aiBriefEmailRecipients.test.mjs",
     "test:ai-news-sync": "npm run build --silent && node --test tests/aiDailyNewsSync.test.mjs",
