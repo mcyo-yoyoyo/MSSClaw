@@ -28,8 +28,10 @@ interface ContentEngagementState {
   get: (id: string) => ContentEngagement;
   userVote: (id: string) => UserVote;
   bumpExposure: (id: string, assetType?: MarketAssetType) => void;
-  /** 详情页直达时 action 传 detail_direct（代替 detail，见 domain/directEntry） */
-  bumpDetail: (id: string, assetType?: MarketAssetType, action?: 'detail' | 'detail_direct') => void;
+  /** 打开分享链接时 action 传 detail_direct 并带上编号（见 domain/directEntry） */
+  bumpDetail: (id: string, assetType?: MarketAssetType, action?: 'detail' | 'detail_direct', shareCode?: string) => void;
+  /** 点击分享按钮 +1，不看复制是否成功 */
+  bumpShare: (id: string, assetType?: MarketAssetType) => void;
   bumpView: (id: string, assetType?: MarketAssetType) => void;
   bumpUse: (id: string, assetType?: MarketAssetType) => void;
   bumpRedirect: (id: string, assetType?: MarketAssetType) => void;
@@ -73,6 +75,7 @@ function runMutation(
   action: MarketEngagementAction,
   active?: boolean,
   assetType?: MarketAssetType,
+  shareCode?: string,
 ) {
   const isDetail = action === 'detail' || action === 'detail_direct';
   if (isDetail ? !isApiEnabled() : !canUsePlatformDocsApi()) return;
@@ -82,6 +85,7 @@ function runMutation(
     eventId: createMarketEngagementEventId(),
     visitorId: guestVisitorRef(),
     ...(assetType ? { assetType } : {}),
+    ...(shareCode ? { shareCode } : {}),
   };
   if (isDetail) {
     detailQueue.enqueue(input.eventId, { set, id, input });
@@ -133,7 +137,8 @@ export const useContentEngagementStore = create<ContentEngagementState>((set, ge
   get: (id) => get().byId[id] ?? emptyEngagement(id),
   userVote: (id) => get().userVotes[id] ?? null,
   bumpExposure: (id, assetType) => runMutation(set, id, 'exposure', undefined, assetType),
-  bumpDetail: (id, assetType, action = 'detail') => runMutation(set, id, action, undefined, assetType),
+  bumpDetail: (id, assetType, action = 'detail', shareCode) => runMutation(set, id, action, undefined, assetType, shareCode),
+  bumpShare: (id, assetType) => runMutation(set, id, 'share', undefined, assetType),
   bumpView: (id, assetType) => runMutation(set, id, 'view', undefined, assetType),
   bumpUse: (id, assetType) => runMutation(set, id, 'use', undefined, assetType),
   bumpRedirect: (id, assetType) => runMutation(set, id, 'redirect', undefined, assetType),

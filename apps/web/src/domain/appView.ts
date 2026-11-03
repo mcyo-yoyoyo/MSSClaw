@@ -23,7 +23,10 @@ export const APP_VIEWS = [
   'memory',
   'prompts',
   'admin',
-  'presentation',
+  'org-members',
+  'org-roles',
+  'org-depts',
+  'org-audit',
   'portal-ops',
   'portal-dashboard',
   'model-ops',
@@ -40,7 +43,7 @@ export function isPlatformView(view: AppView): view is PlatformView {
   return (PLATFORM_VIEWS as readonly string[]).includes(view);
 }
 
-export const NAV_SECTIONS = ['workspace', 'platform', 'ops', 'system'] as const;
+export const NAV_SECTIONS = ['workspace', 'platform', 'ops', 'system', 'org'] as const;
 export type NavSection = (typeof NAV_SECTIONS)[number];
 
 export interface AppViewNavItem {
@@ -111,9 +114,19 @@ export const ADMIN_MENU_VIEWS = [
   'memory',
   'automation',
   'workflow',
-  'admin',
-  'presentation',
+  'org-members',
+  'org-roles',
+  'org-depts',
+  'org-audit',
 ] as const satisfies readonly AppView[];
+
+/** 组织权限下的页面；旧的 'admin' 深链跳到其中第一个可见的 */
+export const ORG_VIEWS = ['org-members', 'org-roles', 'org-depts', 'org-audit'] as const satisfies readonly AppView[];
+
+/** 管理后台里的菜单（能力配置 / 运营设置 / 系统设置 / 组织权限）；有其中任一项才显示管理后台入口 */
+export function isAdminMenuId(id: string): boolean {
+  return id === 'prompts' || (ADMIN_MENU_VIEWS as readonly string[]).includes(id);
+}
 
 export function adminMenuOrderIndex(view: AppView): number {
   const i = (ADMIN_MENU_VIEWS as readonly string[]).indexOf(view);
@@ -134,6 +147,7 @@ export const NAV_SECTION_LABELS: Record<NavSection, string> = {
   platform: '能力配置',
   ops: '运营设置',
   system: '系统设置',
+  org: '组织权限',
 };
 
 /** 侧栏实际渲染的一级分类顺序（全角色一致） */
@@ -142,6 +156,7 @@ export const SIDEBAR_NAV_SECTIONS = [
   'platform',
   'ops',
   'system',
+  'org',
 ] as const satisfies readonly NavSection[];
 
 /** AppView 占位页（尚未实现的视图） */

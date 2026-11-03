@@ -58,7 +58,7 @@ npm run build --workspace @mss-claw/web
 # VITE_INCLUDE_DEMO_CONTENT=false npm run build --workspace @mss-claw/web
 ```
 
-若后端开启了 `API_KEY`，构建时一并写入（或事后在偏好设置里填）：
+若后端开启了 `API_KEY`，构建时一并写入：
 
 ```bash
 VITE_API_KEY=与后端API_KEY相同的值 VITE_INCLUDE_DEMO_CONTENT=false npm run build --workspace @mss-claw/web

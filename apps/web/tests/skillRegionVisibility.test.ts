@@ -17,11 +17,11 @@ test('指定区域的 Skill 卡片仍显示原区域标签', () => {
   assert.equal(getAssetRegionLabel('hq'), '机关');
 });
 
-test('不限区域的 Skill 命中任意具体区域筛选', () => {
+test('选中具体区域时，不限区域的 Skill 不再命中', () => {
   for (const region of REGIONS) {
     const selected = [region.id];
-    assert.equal(unrestrictedRegionMatchesSelection(null, selected), true);
-    assert.equal(unrestrictedRegionMatchesSelection(undefined, selected), true);
+    assert.equal(unrestrictedRegionMatchesSelection(null, selected), false);
+    assert.equal(unrestrictedRegionMatchesSelection(undefined, selected), false);
   }
 });
 

@@ -39,3 +39,11 @@ export function getCurrentOrgLabel(): string {
 export function isSystemAdmin(role?: PlatformRole): boolean {
   return (role ?? getCurrentPlatformRole()) === 'super_admin';
 }
+
+/** 登录会话里的菜单勾选；没有服务端菜单时（离线）仍只放行超级管理员 */
+export function useHasMenu(menuId: string): boolean {
+  const menus = useSessionStore((state) => state.menus);
+  const role = useSessionStore((state) => state.user?.platformRole);
+  if (menus) return menus.includes(menuId);
+  return role === 'super_admin';
+}

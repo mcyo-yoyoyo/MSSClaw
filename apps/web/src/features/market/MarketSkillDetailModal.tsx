@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import { GuestGateLock } from '@/components/auth/GuestGateLock';
 import { SkillAvatar } from '@/components/brand/SkillAvatar';
 import { CenterModal } from '@/components/center/CenterShell';
+import { SkillHubTagSummary } from '@/components/center/SkillHubTagFields';
 import { CaseDocumentPreviewList } from '@/components/content/CaseDocumentPreview';
 import { PackageFileTree } from '@/components/market/PackageFileTree';
 import { downloadPackageBlob } from '@/api/blobApi';
@@ -326,6 +327,7 @@ export function MarketSkillDetailModal({
   const usageNotes = skill.usageNotes?.trim() || '';
   const cases = skill.cases?.filter((c) => c.title?.trim()) ?? [];
   const caseAttachments = skill.caseAttachments ?? [];
+  const hasUploadedCases = cases.length > 0 || caseAttachments.length > 0;
   const env = skill.envInfo;
   const skillRunnable = isSkillRunnable(skill);
   const canRunOnline = canRun && skillRunnable;
@@ -430,7 +432,7 @@ export function MarketSkillDetailModal({
 
   const tabs: { id: DetailTab; label: string; badge?: string }[] = [
     { id: 'overview', label: '概览' },
-    { id: 'guide', label: '快速上手' },
+    ...(hasUploadedCases ? [{ id: 'guide' as const, label: '快速上手' }] : []),
     { id: 'files', label: '文件' },
     { id: 'versions' as const, label: '版本' },
     {
@@ -446,6 +448,31 @@ export function MarketSkillDetailModal({
    * 生效版本若没单独归档包，回落到当前 skill.packageBlob——
    * 存量 Skill 的 versions 是历史遗留数据，行里本来就没有包引用。
    */
+  const activeTab = tab === 'guide' && !hasUploadedCases ? 'overview' : tab;
+
+  const uploadedCases = (
+    <section>
+      <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">快速上手</h4>
+      {cases.length ? (
+        <div className="space-y-3">
+          {cases.map((c, i) => (
+            <article key={`${c.title}-${i}`} className="rounded-xl border border-zinc-100 bg-white p-3.5">
+              <p className="text-[12px] font-semibold text-zinc-800">{c.title}</p>
+              {c.input ? <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-zinc-50 p-2.5 text-[11px] text-zinc-600">输入：{c.input}</pre> : null}
+              {c.output ? <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-emerald-50/60 p-2.5 text-[11px] text-zinc-600">输出：{c.output}</pre> : null}
+            </article>
+          ))}
+        </div>
+      ) : null}
+      {caseAttachments.length ? (
+        <div className={cases.length ? 'mt-3 space-y-2' : 'space-y-2'}>
+          <p className="text-[11px] font-medium text-zinc-500">案例附件</p>
+          <CaseDocumentPreviewList files={caseAttachments} policy="restricted" />
+        </div>
+      ) : null}
+    </section>
+  );
+
   const versionRows: SkillVersionRecord[] = (
     skill.versions?.length
       ? skill.versions
@@ -587,7 +614,7 @@ export function MarketSkillDetailModal({
                 onClick={() => setTab(t.id)}
                 className={cn(
                   'inline-flex shrink-0 items-center gap-1.5 rounded-t-lg px-3.5 py-2 text-[12px] font-semibold transition',
-                  tab === t.id
+                  activeTab === t.id
                     ? 'bg-white text-zinc-900 shadow-[inset_0_-2px_0_0_#18181b]'
                     : 'text-zinc-400 hover:text-zinc-700',
                 )}
@@ -603,7 +630,7 @@ export function MarketSkillDetailModal({
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-5 md:py-5">
-            {tab === 'overview' ? (
+            {activeTab === 'overview' ? (
               <div className="flex min-h-full flex-col gap-5">
                 {skill.descEn && skill.descEn !== desc ? (
                   <section>
@@ -611,14 +638,6 @@ export function MarketSkillDetailModal({
                     <p className="text-[12px] leading-relaxed text-zinc-500">{skill.descEn}</p>
                   </section>
                 ) : null}
-                <section>
-                  <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">能力边界</h4>
-                  <ul className="list-disc space-y-1.5 pl-4 text-[12px] leading-relaxed text-zinc-600">
-                    <li>依赖平台对话或本地技能包执行，连接器能力以当前部署为准。</li>
-                    <li>组织权限外用户不可见受限范围 Skill。</li>
-                    <li>安全扫描能力待对接公司 IT，当前不作为上线硬门禁。</li>
-                  </ul>
-                </section>
                 {planSteps.length ? (
                   <section>
                     <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">默认执行计划</h4>
@@ -637,30 +656,40 @@ export function MarketSkillDetailModal({
                     </ol>
                   </section>
                 ) : null}
-                {(skill.tags?.length || skill.searchKeywords?.length) ? (
+                {(skill.tags?.length || skill.hubTags || skill.searchKeywords?.length) ? (
                   <section>
                     <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">标签与关键词</h4>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(skill.tags ?? []).map((tag) => (
-                        <span
-                          key={`tag-${tag}`}
-                          className="rounded-md bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                      {(skill.searchKeywords ?? []).map((kw) => (
-                        <span
-                          key={`kw-${kw}`}
-                          className="rounded-md border border-dashed border-zinc-200 px-2 py-0.5 text-[11px] text-zinc-400"
-                        >
-                          {kw}
-                        </span>
-                      ))}
-                    </div>
+                    {skill.tags?.length ? (
+                      <div className="mb-3 flex flex-wrap gap-1.5">
+                        {skill.tags.map((tag) => (
+                          <span
+                            key={`tag-${tag}`}
+                            className="rounded-md bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {skill.hubTags ? (
+                      <SkillHubTagSummary tags={skill.hubTags} />
+                    ) : skill.searchKeywords?.length ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {skill.searchKeywords.map((kw) => (
+                          <span
+                            key={`kw-${kw}`}
+                            className="rounded-md border border-dashed border-zinc-200 px-2 py-0.5 text-[11px] text-zinc-400"
+                          >
+                            {kw}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </section>
                 ) : null}
-                {instructions ? (
+                {hasUploadedCases ? (
+                  uploadedCases
+                ) : instructions ? (
                   <section className="flex min-h-0 flex-1 flex-col">
                     <h4 className="mb-2 shrink-0 text-[12px] font-semibold text-zinc-800">
                       Skill 正文摘要
@@ -675,7 +704,7 @@ export function MarketSkillDetailModal({
               </div>
             ) : null}
 
-            {tab === 'guide' ? (
+            {activeTab === 'guide' ? (
               <div className="space-y-5">
                 <section>
                   <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">使用须知</h4>
@@ -691,31 +720,7 @@ export function MarketSkillDetailModal({
                     </div>
                   )}
                 </section>
-                <section>
-                  <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">使用案例</h4>
-                  {cases.length ? (
-                    <div className="space-y-3">
-                      {cases.map((c, i) => (
-                        <article key={`${c.title}-${i}`} className="rounded-xl border border-zinc-100 bg-white p-3.5">
-                          <p className="text-[12px] font-semibold text-zinc-800">{c.title}</p>
-                          {c.input ? <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-zinc-50 p-2.5 text-[11px] text-zinc-600">输入：{c.input}</pre> : null}
-                          {c.output ? <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-emerald-50/60 p-2.5 text-[11px] text-zinc-600">输出：{c.output}</pre> : null}
-                        </article>
-                      ))}
-                    </div>
-                  ) : !caseAttachments.length ? (
-                    <p className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70 px-3 py-5 text-center text-[11px] text-zinc-400">
-                      暂无上传案例素材
-                    </p>
-                  ) : null}
-
-                  {caseAttachments.length ? (
-                    <div className="mt-3 space-y-2">
-                      <p className="text-[11px] font-medium text-zinc-500">案例附件</p>
-                      <CaseDocumentPreviewList files={caseAttachments} policy="restricted" />
-                    </div>
-                  ) : null}
-                </section>
+                {uploadedCases}
                 <section>
                   <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">权限要求</h4>
                   <p className="text-[13px] leading-relaxed text-zinc-600">

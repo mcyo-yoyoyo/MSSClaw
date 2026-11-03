@@ -3,7 +3,7 @@ import { BackButton } from '@/components/common/BackButton';
 import { buildAppRoute, readAppRouteFromLocation } from '@/domain/appRoute';
 import { getAiBriefContentMode, setAiBriefContentMode, type AiBriefContentMode } from '@/domain/aiBriefContentMode';
 import { cn } from '@/lib/utils';
-import { flattenAiBotNews } from '@/domain/aiBotDailyNews';
+import { defaultAiNewsDateRange, flattenAiBotNews } from '@/domain/aiBotDailyNews';
 import {
   AI_BRIEF_CATEGORIES,
   classifyAiBriefItem,
@@ -323,7 +323,7 @@ export function AiBriefPage() {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [emailDraft, setEmailDraft] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<AiBriefCategoryId | 'all'>('all');
-  const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
+  const [dateRange, setDateRange] = useState(defaultAiNewsDateRange);
   const [searchDraft, setSearchDraft] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [contentMode, setContentModeState] = useState(getAiBriefContentMode);
@@ -377,29 +377,28 @@ export function AiBriefPage() {
     setHighlightId(null); setNewsLocation(readNewsLocation());
   };
 
-  const classified = useMemo(
-    () =>
-      flat.map((item) => ({
-        item,
-        ...classifyAiBriefItem(item),
-      })),
-    [flat],
-  );
+  const datedGroups = useMemo(() => {
+    return payload.groups.filter((group) => {
+      if (!dateRange.startDate) return true;
+      if (!group.dateKey) return false;
+      const endDate = dateRange.endDate || dateRange.startDate;
+      return group.dateKey >= dateRange.startDate && group.dateKey <= endDate;
+    });
+  }, [payload.groups, dateRange.endDate, dateRange.startDate]);
 
   const mssBoard = useMemo(
-    () => classified.filter((x) => x.mssFit).slice(0, 6),
-    [classified],
+    () =>
+      datedGroups
+        .flatMap((group) => group.items)
+        .map((item) => ({ item, ...classifyAiBriefItem(item) }))
+        .filter((entry) => entry.mssFit)
+        .slice(0, 6),
+    [datedGroups],
   );
 
   const visibleGroups = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
-    return payload.groups
-      .filter((group) => {
-        if (!dateRange.startDate) return true;
-        if (!group.dateKey) return false;
-        const endDate = dateRange.endDate || dateRange.startDate;
-        return group.dateKey >= dateRange.startDate && group.dateKey <= endDate;
-      })
+    return datedGroups
       .map((g) => ({
         ...g,
         items: g.items.filter((item) => {
@@ -416,7 +415,7 @@ export function AiBriefPage() {
         }),
       }))
       .filter((g) => g.items.length > 0);
-  }, [payload.groups, categoryFilter, dateRange.endDate, dateRange.startDate, searchQuery]);
+  }, [datedGroups, categoryFilter, searchQuery]);
 
   useEffect(() => {
     if (!highlightId) return;

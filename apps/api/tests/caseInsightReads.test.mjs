@@ -114,7 +114,11 @@ test('read reports require an admin and recording requires a logged-in user', as
   const anonymous = new CaseInsightsController(articles, { me: async () => ({ ok: false }) });
   await assert.rejects(anonymous.reads(undefined, undefined), error => error.getStatus() === 401);
   await assert.rejects(anonymous.recordRead('a', { eventId: 'event-0001' }), error => error.getStatus() === 401);
-  const member = new CaseInsightsController(articles, { me: async () => ({ ok: true, user: { id: 'u', platformRole: 'user' } }) });
+  const member = new CaseInsightsController(
+    articles,
+    { me: async () => ({ ok: true, user: { id: 'u', platformRole: 'user' } }) },
+    { menu: { findUnique: async () => ({ fixed: false }) }, roleMenu: { findUnique: async () => null } },
+  );
   await assert.rejects(member.reads(undefined, undefined), error => error.getStatus() === 403);
   await member.recordRead('a', { eventId: 'event-0001' });
   const admin = new CaseInsightsController(articles, { me: async () => ({ ok: true, user: { id: 'u', platformRole: 'super_admin' } }) });

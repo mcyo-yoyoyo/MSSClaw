@@ -1,8 +1,9 @@
 import type { ChatConfig } from '@/domain/chat';
 import type { MarketplaceSnapshot } from '@/domain/persistence/storage';
 import type { PortalContentItem } from '@/domain/prototype/portalContent';
-import type { PrototypeToolSeed } from '@/domain/prototype/types';
-import { apiUrl, isApiEnabled, apiAuthHeaders } from '@/api/client';
+import type { PrototypeAgentSeed, PrototypeSkillSeed, PrototypeToolSeed } from '@/domain/prototype/types';
+import type { StationAnnouncement } from '@/domain/stationAnnouncementSeeds';
+import { apiUrl, apiAuthHeaders } from '@/api/client';
 
 export class PortalConflictError extends Error {
   revision?: number;
@@ -19,44 +20,6 @@ function jsonHeaders(): HeadersInit {
     Accept: 'application/json',
     ...apiAuthHeaders(),
   };
-}
-
-/** 校验真实 Nest health JSON，避免 SPA fallback 把 HTML 200 当成已连接 */
-export type ApiHealthInfo = {
-  ok: boolean;
-  llmEnvConfigured: boolean;
-};
-
-export async function fetchApiHealthInfo(): Promise<ApiHealthInfo> {
-  if (!isApiEnabled()) return { ok: false, llmEnvConfigured: false };
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3000);
-    const res = await fetch(apiUrl('/api/v1/health'), {
-      signal: controller.signal,
-      headers: { Accept: 'application/json', ...apiAuthHeaders() },
-    });
-    clearTimeout(timer);
-    if (!res.ok) return { ok: false, llmEnvConfigured: false };
-    const ct = res.headers.get('content-type') || '';
-    if (!ct.includes('application/json')) return { ok: false, llmEnvConfigured: false };
-    const body = (await res.json()) as {
-      status?: string;
-      service?: string;
-      llmEnvConfigured?: boolean;
-    };
-    const ok = body?.status === 'ok' && body?.service === 'mss-claw-api';
-    return {
-      ok,
-      llmEnvConfigured: ok && Boolean(body.llmEnvConfigured),
-    };
-  } catch {
-    return { ok: false, llmEnvConfigured: false };
-  }
-}
-
-export async function fetchApiHealth(): Promise<boolean> {
-  return (await fetchApiHealthInfo()).ok;
 }
 
 export async function fetchSessionsApi(): Promise<Record<string, ChatConfig> | null> {
@@ -77,6 +40,28 @@ export async function saveSessionsApi(
     body: JSON.stringify({ chats }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+export interface HomeShowcasePayload {
+  configured: boolean;
+  channels: { external: string[]; internal: string[]; projects: string[] } | null;
+  tools: PrototypeToolSeed[];
+  skills: PrototypeSkillSeed[];
+  agents: PrototypeAgentSeed[];
+  announcements: StationAnnouncement[];
+  announcementRevision: number;
+  externalToolLayout: unknown;
+  officeScenes: unknown;
+}
+
+/** 首页展示数据。已保存三栏配置时只含被引用的资产。 */
+export async function fetchHomeShowcase(): Promise<HomeShowcasePayload> {
+  const res = await fetch(apiUrl('/api/v1/home'), {
+    headers: { Accept: 'application/json', ...apiAuthHeaders() },
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`home_${res.status}`);
+  return (await res.json()) as HomeShowcasePayload;
 }
 
 export async function fetchMarketplaceApi(): Promise<Partial<MarketplaceSnapshot> | null> {
@@ -124,6 +109,59 @@ export async function fetchToolsApi(): Promise<Partial<ToolCatalogPayload> | nul
   return typeof payload === 'object' ? (payload as Partial<ToolCatalogPayload>) : null;
 }
 
+export class CatalogConflictError extends Error {
+  constructor() {
+    super('catalog_conflict');
+    this.name = 'CatalogConflictError';
+  }
+}
+
+/** 目录单条写入。新建 POST，修改 PUT。expectedUpdatedAt 只在更新时带上。 */
+export async function saveCatalogItemApi(
+  resource: 'agents' | 'skills' | 'tools' | 'kb-docs' | 'automations',
+  item: Record<string, unknown>,
+  isNew: boolean,
+): Promise<Record<string, unknown>> {
+  const id = typeof item.id === 'string' ? item.id : '';
+  const url = isNew
+    ? apiUrl(`/api/v1/catalog/${resource}`)
+    : apiUrl(`/api/v1/catalog/${resource}/${encodeURIComponent(id)}`);
+  const res = await fetch(url, {
+    method: isNew ? 'POST' : 'PUT',
+    headers: jsonHeaders(),
+    body: JSON.stringify(item),
+  });
+  if (res.status === 409) throw new CatalogConflictError();
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const text = await res.text();
+  if (!text.trim()) return item;
+  const payload = JSON.parse(text) as Record<string, unknown>;
+  return payload && typeof payload === 'object' ? payload : item;
+}
+
+export async function deleteCatalogItemApi(
+  resource: 'agents' | 'skills' | 'tools' | 'kb-docs' | 'automations',
+  id: string,
+): Promise<void> {
+  const res = await fetch(apiUrl(`/api/v1/catalog/${resource}/${encodeURIComponent(id)}`), {
+    method: 'DELETE',
+    headers: apiAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+export async function fetchCatalogItemApi(
+  resource: 'agents' | 'skills' | 'tools' | 'kb-docs' | 'automations',
+  id: string,
+): Promise<Record<string, unknown> | null> {
+  const res = await fetch(apiUrl(`/api/v1/catalog/${resource}/${encodeURIComponent(id)}`), {
+    headers: apiAuthHeaders(),
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()) as Record<string, unknown>;
+}
+
 export async function saveToolsApi(
   payload: ToolCatalogPayload | PrototypeToolSeed[],
 ): Promise<void> {
@@ -155,6 +193,26 @@ export async function fetchPortalContentApi(
     };
   }
   return null;
+}
+
+export async function savePortalContentItemApi(item: PortalContentItem, isNew: boolean): Promise<void> {
+  const url = isNew
+    ? apiUrl('/api/v1/portal-content/items')
+    : apiUrl(`/api/v1/portal-content/items/${encodeURIComponent(item.id)}`);
+  const res = await fetch(url, {
+    method: isNew ? 'POST' : 'PUT',
+    headers: jsonHeaders(),
+    body: JSON.stringify(item),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+export async function deletePortalContentItemApi(id: string): Promise<void> {
+  const res = await fetch(apiUrl(`/api/v1/portal-content/items/${encodeURIComponent(id)}`), {
+    method: 'DELETE',
+    headers: apiAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }
 
 export async function savePortalContentApi(

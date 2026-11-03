@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { AI_NEWS_SEEDS, type AiNewsCadence } from '@/domain/aiNewsSeeds';
+import { type AiNewsCadence } from '@/domain/aiNewsSeeds';
 import { ensureAiNewsOverviewInbox } from '@/domain/aiNews';
 import { useAiNewsStore, type AiNewsRecord } from '@/stores/aiNewsStore';
 import { useAiBotDailyNewsStore } from '@/stores/aiBotDailyNewsStore';
@@ -31,7 +31,6 @@ export function PortalAiNewsPanel() {
   const upsert = useAiNewsStore((s) => s.upsert);
   const remove = useAiNewsStore((s) => s.remove);
   const togglePublished = useAiNewsStore((s) => s.togglePublished);
-  const resetToSeeds = useAiNewsStore((s) => s.resetToSeeds);
   const showToast = useAiNewsStore((s) => s.toast);
   const dismissToast = useAiNewsStore((s) => s.dismissToast);
   const syncing = useAiBotDailyNewsStore((s) => s.syncing);
@@ -105,21 +104,8 @@ export function PortalAiNewsPanel() {
           >
             新建新闻
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (!window.confirm('恢复系统默认 AI 新闻示例？当前自定义将被覆盖。')) return;
-              resetToSeeds();
-              ensureAiNewsOverviewInbox();
-              setDraft(null);
-            }}
-            className="rounded-xl border border-zinc-200 px-3 py-1.5 text-[12px] font-medium text-zinc-600 hover:bg-zinc-50"
-          >
-            恢复默认示例
-          </button>
           <span className="self-center text-[11px] text-zinc-400">
-            已上架 {items.filter((a) => a.published).length} / {items.length} · 种子{' '}
-            {AI_NEWS_SEEDS.length} 条可参考
+            已上架 {items.filter((a) => a.published).length} / {items.length}
           </span>
         </div>
       </div>
@@ -310,7 +296,7 @@ export function PortalAiNewsPanel() {
           ))
         ) : (
           <div className="rounded-2xl border border-dashed border-zinc-200 px-4 py-12 text-center text-[13px] text-zinc-400">
-            暂无新闻。可新建，或恢复默认示例。
+            暂无新闻。
           </div>
         )}
       </div>

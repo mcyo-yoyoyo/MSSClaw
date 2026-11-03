@@ -139,14 +139,15 @@ test('【安全红线】oauth 模式下 API 不可达时，绝不能回落本地
   assert.equal(sessionStore.getState().isAuthenticated, false);
 });
 
-test('password 模式下，离线兜底登录仍然可用（不影响开发环境）', async () => {
+test('password 模式下，后端不可达时不再用本地账号登录', async () => {
   authModeStore.setState({ mode: 'password' });
   workspaceStore.setState({ apiConnected: false, apiStatus: 'unreachable' });
 
   const result = await sessionStore.getState().login('mcyo@huawei.com', 'mssclaw');
 
-  assert.equal(result.ok, true, '开发环境必须保持原有账号密码登录体验');
-  assert.equal(sessionStore.getState().isAuthenticated, true);
+  assert.equal(result.ok, false);
+  assert.equal(sessionStore.getState().isAuthenticated, false);
+  assert.match((result as { error: string }).error, /数据获取失败/);
 });
 
 test('oauth 登出先作废平台会话，再跳转 IDaaS', async () => {

@@ -4,6 +4,7 @@ import { formatToolInvokes } from '@/domain/aiToolCategories';
 import { GuestGateLock } from '@/components/auth/GuestGateLock';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { CenterModal } from '@/components/center/CenterShell';
+import { isEmployeeAssistantTool, launchEmployeeAssistant } from '@/domain/employeeAssistantLaunch';
 import { resolveToolLogoUrl } from '@/domain/toolLogo';
 import type { MarketShelfKind } from '@/domain/marketShelf';
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
@@ -97,7 +98,6 @@ export function MarketToolDetailModal({
       showToast('暂无可用入口');
       return;
     }
-    const win = window.open(tool.homepageUrl, '_blank', 'noopener,noreferrer');
     bumpToolInvokes(tool.id);
     bumpRedirect(tool.id, 'tool');
     pushRecent({
@@ -108,6 +108,15 @@ export function MarketToolDetailModal({
       assetType: 'tool',
       logoUrl: resolveToolLogoUrl(tool),
     });
+    if (isEmployeeAssistantTool(tool.id)) {
+      launchEmployeeAssistant({
+        name: tool.name,
+        fallbackUrl: tool.homepageUrl,
+        notify: showToast,
+      });
+      return;
+    }
+    const win = window.open(tool.homepageUrl, '_blank', 'noopener,noreferrer');
     if (!win) showToast('浏览器拦截了弹窗，请允许后重试');
     else showToast(`已打开：${tool.name}`);
   };

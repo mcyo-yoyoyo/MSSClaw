@@ -18,11 +18,10 @@ import {
   uploadWorkspacePackage,
 } from '@/api/blobApi';
 import { packageUploadSizeError } from '@/domain/packageUpload';
+import { skillHubSearchTerms } from '@/domain/skillHubTags';
 import { packageZipErrorMessage } from '@/domain/safeZip';
 import { rebuildKbVectorIndex } from '@/api/kbClient';
 import {
-  flushSaveTools,
-  flushSaveMarketplace,
   loadMarketplace,
   loadTools,
   scheduleSaveMarketplace,
@@ -30,6 +29,13 @@ import {
   type MarketplaceSaveResult,
   type ToolCatalogSnapshot,
 } from '@/domain/persistence/storage';
+import {
+  CatalogConflictError,
+  deleteCatalogItemApi,
+  fetchCatalogItemApi,
+  saveCatalogItemApi,
+} from '@/api/persistenceApi';
+import { DATA_FETCH_FAILED_MESSAGE, useDataFetchNotice } from '@/domain/dataFetchNotice';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import {
   matchesAssetOrgFilters,
@@ -208,6 +214,88 @@ function invalidateGlobalToolsAfterSaveFailure() {
   globalToolsEpoch += 1;
 }
 
+type CatalogResource = 'agents' | 'skills' | 'tools' | 'kb-docs' | 'automations';
+
+function catalogOnline() {
+  return useWorkspaceStore.getState().apiConnected;
+}
+
+function stampIfNew<T extends { createdAt?: string; updatedAt?: string }>(item: T, isNew: boolean): T {
+  if (!isNew) return item;
+  const now = new Date().toISOString();
+  return { ...item, createdAt: item.createdAt || now, updatedAt: item.updatedAt || now };
+}
+
+type CatalogListName = 'agents' | 'skills' | 'tools' | 'automations' | 'kbDocs';
+
+function commitCatalogRow(
+  resource: CatalogResource,
+  listName: CatalogListName,
+  stamped: { id: string; updatedAt?: string },
+  previous: { id: string; updatedAt?: string } | undefined,
+  creating: boolean,
+  get: () => {
+    showToast: (message: string) => void;
+    agents: { id: string }[];
+    skills: { id: string }[];
+    tools: { id: string }[];
+    automations: { id: string }[];
+    kbDocs: { id: string }[];
+  },
+  set: (partial: Record<string, unknown>) => void,
+) {
+  if (!catalogOnline()) return;
+  void writeCatalogItem(
+    resource,
+    stamped as unknown as Record<string, unknown>,
+    creating,
+    previous?.updatedAt,
+  )
+    .then((saved) => {
+      const list = get()[listName];
+      set({
+        [listName]: list.map((item) => (item.id === stamped.id ? { ...stamped, ...saved } : item)),
+      });
+    })
+    .catch(async (error: unknown) => {
+      if (error instanceof CatalogConflictError) {
+        const fresh = await fetchCatalogItemApi(resource, stamped.id).catch(() => null);
+        if (fresh) {
+          const list = get()[listName];
+          set({
+            [listName]: list.map((item) => (item.id === stamped.id ? fresh : item)),
+          });
+        }
+        get().showToast('这条记录已被其他人更新，已拉取最新内容');
+        return;
+      }
+      const list = get()[listName];
+      const current = list.find((item) => item.id === stamped.id);
+      if (current && JSON.stringify(current) === JSON.stringify(stamped)) {
+        set({
+          [listName]: previous
+            ? list.map((item) => (item.id === stamped.id ? previous : item))
+            : list.filter((item) => item.id !== stamped.id),
+        });
+      }
+      useDataFetchNotice.getState().markFailed();
+      get().showToast(DATA_FETCH_FAILED_MESSAGE);
+    });
+}
+
+async function writeCatalogItem(
+  resource: CatalogResource,
+  item: Record<string, unknown>,
+  isNew: boolean,
+  expectedUpdatedAt?: string,
+) {
+  const body =
+    !isNew && expectedUpdatedAt
+      ? { ...item, expectedUpdatedAt }
+      : item;
+  return saveCatalogItemApi(resource, body, isNew);
+}
+
 function withUpsertedTool(
   tools: PrototypeToolSeed[],
   tool: PrototypeToolSeed,
@@ -352,49 +440,68 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   },
 
   upsertAgent: (agent, isNew = false) => {
-    if (isNew) {
-      const now = new Date().toISOString();
-      agent = { ...agent, createdAt: agent.createdAt || now, updatedAt: agent.updatedAt || now };
-    }
+    const previous = get().agents.find((item) => item.id === agent.id);
+    const stamped = stampIfNew(agent, isNew);
+    const creating = isNew || !previous;
     set((s) => ({
-      agents: isNew ? [agent, ...s.agents] : s.agents.map((a) => (a.id === agent.id ? agent : a)),
+      agents: isNew
+        ? [stamped, ...s.agents.filter((item) => item.id !== stamped.id)]
+        : s.agents.map((item) => (item.id === stamped.id ? stamped : item)),
     }));
-    get().persist();
+    void commitCatalogRow('agents', 'agents', stamped, previous, creating, get, set);
   },
 
   upsertSkill: (skill, isNew = false) => {
-    if (isNew) {
-      const now = new Date().toISOString();
-      skill = { ...skill, createdAt: skill.createdAt || now, updatedAt: skill.updatedAt || now };
-    }
+    const previous = get().skills.find((item) => item.id === skill.id);
+    const stamped = stampIfNew(skill, isNew);
+    const creating = isNew || !previous;
     set((s) => ({
-      skills: isNew ? [skill, ...s.skills] : s.skills.map((sk) => (sk.id === skill.id ? skill : sk)),
+      skills: isNew
+        ? [stamped, ...s.skills.filter((item) => item.id !== stamped.id)]
+        : s.skills.map((item) => (item.id === stamped.id ? stamped : item)),
     }));
-    get().persist();
+    void commitCatalogRow('skills', 'skills', stamped, previous, creating, get, set);
   },
 
   upsertTool: (tool, isNew = false) => {
+    const previous = get().tools.find((item) => item.id === tool.id);
+    const creating = isNew || !previous;
     set((s) => ({
-      tools: withUpsertedTool(s.tools, tool, isNew),
+      tools: withUpsertedTool(s.tools, tool, creating),
     }));
-    get().persistTools();
+    const stamped = get().tools.find((item) => item.id === tool.id) ?? tool;
+    void commitCatalogRow('tools', 'tools', stamped, previous, creating, get, set);
   },
 
   saveToolNow: async (tool, isNew = false) => {
     const previous = immediateToolSaveChains.get(GLOBAL_TOOL_SAVE_KEY);
     const run = async (): Promise<MarketplaceSaveResult> => {
+      if (!catalogOnline()) return { synced: false, reason: 'offline' };
       const current = get();
-      const tools = withUpsertedTool(current.tools, tool, isNew);
-      const result = await flushSaveTools({ tools }, { reportFailure: false });
-      if (!result.synced) {
+      const existed = current.tools.find((item) => item.id === tool.id);
+      const creating = isNew || !existed;
+      const merged = withUpsertedTool(current.tools, tool, creating).find((item) => item.id === tool.id) ?? tool;
+      try {
+        const saved = await writeCatalogItem(
+          'tools',
+          merged as unknown as Record<string, unknown>,
+          creating,
+          (existed as { updatedAt?: string } | undefined)?.updatedAt,
+        );
+        const tools = withUpsertedTool(get().tools, { ...merged, ...saved } as PrototypeToolSeed, creating);
+        globalToolsEpoch += 1;
+        globalToolsSnapshot = { ...globalToolsSnapshot, tools };
+        globalToolsLoaded = true;
+        set({ tools });
+        return { synced: true };
+      } catch (error) {
         invalidateGlobalToolsAfterSaveFailure();
-        return result;
+        return {
+          synced: false,
+          reason: 'failed',
+          detail: error instanceof Error ? error.message : 'HTTP 500',
+        };
       }
-      globalToolsEpoch += 1;
-      globalToolsSnapshot = { ...globalToolsSnapshot, tools };
-      globalToolsLoaded = true;
-      set((state) => ({ tools: withUpsertedTool(state.tools, tool, isNew) }));
-      return result;
     };
     const operation = previous ? previous.then(run, run) : run();
     immediateToolSaveChains.set(GLOBAL_TOOL_SAVE_KEY, operation);
@@ -426,9 +533,17 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     }));
     // 保存期间的其他编辑也必须使用删除后的快照，避免排队写入把 Skill 恢复。
     set({ skills, agents });
-    const result = await flushSaveMarketplace({
-      skills, agents, automations: current.automations, kbDocs: current.kbDocs,
-    }, { reportFailure: false });
+    let result: MarketplaceSaveResult;
+    try {
+      await deleteCatalogItemApi('skills', id);
+      result = { synced: true };
+    } catch (error) {
+      result = {
+        synced: false,
+        reason: 'failed',
+        detail: error instanceof Error ? error.message : 'HTTP 500',
+      };
+    }
     if (!result.synced) {
       const boundAgentIds = new Set(current.agents.filter((agent) => agent.skillIds.includes(id)).map((agent) => agent.id));
       set((state) => ({
@@ -444,18 +559,24 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     const previous = immediateToolSaveChains.get(GLOBAL_TOOL_SAVE_KEY);
     const run = async (): Promise<MarketplaceSaveResult> => {
       const current = get();
-      const tools = current.tools.filter((item) => item.id !== id);
-      if (tools.length === current.tools.length) return { synced: true };
-      const result = await flushSaveTools({ tools }, { reportFailure: false });
-      if (!result.synced) {
+      if (!current.tools.some((item) => item.id === id)) return { synced: true };
+      if (!catalogOnline()) return { synced: false, reason: 'offline' };
+      try {
+        await deleteCatalogItemApi('tools', id);
+      } catch (error) {
         invalidateGlobalToolsAfterSaveFailure();
-        return result;
+        return {
+          synced: false,
+          reason: 'failed',
+          detail: error instanceof Error ? error.message : 'HTTP 500',
+        };
       }
+      const tools = get().tools.filter((item) => item.id !== id);
       globalToolsEpoch += 1;
       globalToolsSnapshot = { ...globalToolsSnapshot, tools };
       globalToolsLoaded = true;
-      set((state) => ({ tools: state.tools.filter((item) => item.id !== id) }));
-      return result;
+      set({ tools });
+      return { synced: true };
     };
     const operation = previous ? previous.then(run, run) : run();
     immediateToolSaveChains.set(GLOBAL_TOOL_SAVE_KEY, operation);
@@ -475,19 +596,25 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   },
 
   upsertAutomation: (automation, isNew = false) => {
+    const previous = get().automations.find((item) => item.id === automation.id);
+    const creating = isNew || !previous;
     set((s) => ({
       automations: isNew
-        ? [automation, ...s.automations]
-        : s.automations.map((a) => (a.id === automation.id ? automation : a)),
+        ? [automation, ...s.automations.filter((item) => item.id !== automation.id)]
+        : s.automations.map((item) => (item.id === automation.id ? automation : item)),
     }));
-    get().persist();
+    void commitCatalogRow('automations', 'automations', automation, previous, creating, get, set);
   },
 
   upsertKbDoc: (doc, isNew = false) => {
+    const previous = get().kbDocs.find((item) => item.id === doc.id);
+    const creating = isNew || !previous;
     set((s) => ({
-      kbDocs: isNew ? [doc, ...s.kbDocs] : s.kbDocs.map((d) => (d.id === doc.id ? doc : d)),
+      kbDocs: isNew
+        ? [doc, ...s.kbDocs.filter((item) => item.id !== doc.id)]
+        : s.kbDocs.map((item) => (item.id === doc.id ? doc : item)),
     }));
-    get().persist();
+    void commitCatalogRow('kb-docs', 'kbDocs', doc, previous, creating, get, set);
   },
 
   uploadKbFile: async (file) => {
@@ -645,7 +772,9 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     const timer = setInterval(() => {
       if (i >= pending.length) {
         clearInterval(timer);
-        get().persist();
+        for (const doc of get().kbDocs.filter((item) => pending.some((row) => row.id === item.id))) {
+          void commitCatalogRow('kb-docs', 'kbDocs', doc, pending.find((row) => row.id === doc.id), false, get, set);
+        }
         void (async () => {
           const result = await rebuildKbVectorIndex(get().kbDocs);
           get().showToast(result.message ?? `同步完成 · ${pending.length} 篇文档已索引`);
@@ -748,7 +877,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
       }
       if (
         q &&
-        !`${s.name} ${s.nameZh ?? ''} ${s.nameEn ?? ''} ${s.desc} ${s.descZh ?? ''} ${s.descEn ?? ''} ${(s.tags ?? []).join(' ')} ${(s.searchKeywords ?? []).join(' ')}`
+        !`${s.name} ${s.nameZh ?? ''} ${s.nameEn ?? ''} ${s.desc} ${s.descZh ?? ''} ${s.descEn ?? ''} ${(s.tags ?? []).join(' ')} ${skillHubSearchTerms(s.hubTags).join(' ')} ${(s.searchKeywords ?? []).join(' ')}`
           .toLowerCase()
           .includes(q)
       ) {
@@ -858,43 +987,64 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   },
 
   bumpAgentInvokes: (id) => {
-    set((s) => ({
-      agents: s.agents.map((a) => (a.id === id ? { ...a, invokes: a.invokes + 1 } : a)),
-    }));
-    get().persist();
+    const previous = get().agents.find((item) => item.id === id);
+    if (!previous) return;
+    const next = { ...previous, invokes: previous.invokes + 1 };
+    set((s) => ({ agents: s.agents.map((item) => (item.id === id ? next : item)) }));
+    void commitCatalogRow('agents', 'agents', next, previous, false, get, set);
   },
 
   bumpSkillInvokes: (id) => {
-    set((s) => ({
-      skills: s.skills.map((sk) => (sk.id === id ? { ...sk, invokes: sk.invokes + 1 } : sk)),
-    }));
-    get().persist();
+    const previous = get().skills.find((item) => item.id === id);
+    if (!previous) return;
+    const next = { ...previous, invokes: previous.invokes + 1 };
+    set((s) => ({ skills: s.skills.map((item) => (item.id === id ? next : item)) }));
+    void commitCatalogRow('skills', 'skills', next, previous, false, get, set);
   },
 
   bumpToolInvokes: (id) => {
-    set((s) => ({
-      tools: s.tools.map((t) => (t.id === id ? { ...t, invokes: t.invokes + 1 } : t)),
-    }));
-    get().persistTools();
+    const previous = get().tools.find((item) => item.id === id);
+    if (!previous) return;
+    const next = { ...previous, invokes: previous.invokes + 1 };
+    set((s) => ({ tools: s.tools.map((item) => (item.id === id ? next : item)) }));
+    const send = () => {
+      const latest = get().tools.find((item) => item.id === id);
+      if (!latest || !catalogOnline()) return;
+      void writeCatalogItem(
+        'tools',
+        latest as unknown as Record<string, unknown>,
+        false,
+        (latest as { updatedAt?: string }).updatedAt,
+      ).catch(
+        () => {
+          useDataFetchNotice.getState().markFailed();
+        },
+      );
+    };
+    const pending = immediateToolSaveChains.get(GLOBAL_TOOL_SAVE_KEY);
+    if (pending) void pending.then(send, send);
+    else send();
   },
 
-  toggleAutomation: (id) =>
-    set((s) => {
-      const next = {
-        automations: s.automations.map((a) => (a.id === id ? { ...a, enabled: !a.enabled } : a)),
-        toast: s.automations.find((a) => a.id === id)
-          ? `${s.automations.find((a) => a.id === id)!.enabled ? '已暂停' : '已启用'}自动化`
-          : null,
-      };
-      queueMicrotask(() => get().persist());
-      return next;
-    }),
+  toggleAutomation: (id) => {
+    const previous = get().automations.find((item) => item.id === id);
+    set((s) => ({
+      automations: s.automations.map((item) =>
+        item.id === id ? { ...item, enabled: !item.enabled } : item,
+      ),
+      toast: previous ? `${previous.enabled ? '已暂停' : '已启用'}自动化` : null,
+    }));
+    const updated = get().automations.find((item) => item.id === id);
+    if (updated) void commitCatalogRow('automations', 'automations', updated, previous, false, get, set);
+  },
 
   markAutomationRun: (id) => {
+    const previous = get().automations.find((item) => item.id === id);
     set((s) => ({
-      automations: s.automations.map((a) => (a.id === id ? { ...a, lastRun: '刚刚' } : a)),
+      automations: s.automations.map((item) => (item.id === id ? { ...item, lastRun: '刚刚' } : item)),
     }));
-    get().persist();
+    const updated = get().automations.find((item) => item.id === id);
+    if (updated) void commitCatalogRow('automations', 'automations', updated, previous, false, get, set);
   },
 
   dismissToast: () => set({ toast: null }),

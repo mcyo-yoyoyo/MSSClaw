@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
+import { isEmployeeAssistantTool, launchEmployeeAssistant } from '@/domain/employeeAssistantLaunch';
 import { listExternalCategoryRankedMore } from '@/domain/externalFeaturedOrder';
 import { orderExternalToolsByLayoutIds } from '@/domain/externalToolLayout';
 import {
@@ -39,6 +40,7 @@ import {
   matchesSkillHubSearch,
   SKILL_HUB_SEARCH_HINTS,
 } from '@/domain/skillHubSearch';
+import { skillHubSearchTerms } from '@/domain/skillHubTags';
 import {
   AGENT_HUB_SEARCH_HINTS,
   matchesAgentHubSearch,
@@ -136,9 +138,8 @@ import { useRecentMarketStore } from '@/stores/recentMarketStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useMarketFeaturedStore } from '@/stores/marketFeaturedStore';
 import { useExternalToolLayoutStore } from '@/stores/externalToolLayoutStore';
-import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
-import { allowsMarketScenarioRun } from '@/domain/marketRunCapability';
+import { useAllowsTaskExecution } from '@/domain/marketRunCapability';
 import { requireLogin, type AuthGateAction } from '@/stores/authGateStore';
 
 export type MarketShelfPageProps = {
@@ -208,8 +209,8 @@ export function MarketShelfPage({
 
   const canSubmit = canExecuteChat(user?.platformRole);
   const canShowSubmit = isGuest || canSubmit;
-  const navPreset = useNavPresentationStore((s) => s.preset);
-  const allowScenarioRun = allowsMarketScenarioRun(navPreset);
+  const taskExecutionAllowed = useAllowsTaskExecution();
+  const allowScenarioRun = taskExecutionAllowed;
   const canRunProjects =
     kind === 'projects' &&
     allowScenarioRun &&
@@ -606,7 +607,14 @@ export function MarketShelfPage({
               .filter(Boolean)
               .join(' '),
             // 创建人也参与匹配：搜人名能找到他贡献的 Skill
-            description: [skillDisplayDesc(s), s.desc, s.descZh, s.descEn, assetCreatorName(s)]
+            description: [
+              skillDisplayDesc(s),
+              s.desc,
+              s.descZh,
+              s.descEn,
+              assetCreatorName(s),
+              skillHubSearchTerms(s.hubTags).join(' '),
+            ]
               .filter(Boolean)
               .join(' '),
             instructions: s.instructions,
@@ -1433,6 +1441,24 @@ export function MarketShelfPage({
                 showToast(`「${scene.label}」暂无已上架工具，请运营完成绑定`)
               }
               onExperience={(tool) => {
+                if (isEmployeeAssistantTool(tool.id)) {
+                  pushRecent({
+                    id: tool.id,
+                    kind: 'internal',
+                    title: tool.name,
+                    icon: 'fa-cube',
+                    logoUrl: tool.logoUrl,
+                    assetType: 'tool',
+                  });
+                  bumpToolInvokes(tool.id);
+                  bumpRedirect(tool.id, 'tool');
+                  launchEmployeeAssistant({
+                    name: tool.name,
+                    fallbackUrl: tool.homepageUrl && tool.homepageUrl !== '#' ? tool.homepageUrl : '',
+                    notify: showToast,
+                  });
+                  return;
+                }
                 if (!tool.homepageUrl || tool.homepageUrl === '#') {
                   showToast('暂无可用链接，请查看快速上手');
                   openInternalToolDetail(tool);
@@ -1446,9 +1472,10 @@ export function MarketShelfPage({
                   logoUrl: tool.logoUrl,
                   assetType: 'tool',
                 });
-                const win = window.open(tool.homepageUrl, '_blank', 'noopener,noreferrer');
                 bumpToolInvokes(tool.id);
                 bumpRedirect(tool.id, 'tool');
+
+                const win = window.open(tool.homepageUrl, '_blank', 'noopener,noreferrer');
                 if (!win) showToast('浏览器拦截了弹窗，请允许后重试');
                 else showToast(`已打开：${tool.name}`);
               }}

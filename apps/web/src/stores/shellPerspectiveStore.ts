@@ -9,7 +9,7 @@ import type { PlatformRole } from '@/domain/rbac';
 interface ShellPerspectiveState {
   perspective: ShellPerspective;
   /** Sync shell from login role (no manual toggle). */
-  hydrate: (role: PlatformRole | undefined) => void;
+  hydrate: (role: PlatformRole | undefined, menus?: readonly string[] | null) => void;
   /** Ops-only deep links must not flip business shell to ops. */
   ensureOpsForView: (view: string) => void;
 }
@@ -17,8 +17,8 @@ interface ShellPerspectiveState {
 export const useShellPerspectiveStore = create<ShellPerspectiveState>((set, get) => ({
   perspective: 'business',
 
-  hydrate: (role) => {
-    set({ perspective: loadShellPerspective(role) });
+  hydrate: (role, menus) => {
+    set({ perspective: loadShellPerspective(role, menus) });
   },
 
   ensureOpsForView: (view) => {

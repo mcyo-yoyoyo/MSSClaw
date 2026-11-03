@@ -1,10 +1,10 @@
 import { create } from 'zustand';
-import { AI_NEWS_SEEDS, type AiNewsCadence, type AiNewsItem } from '@/domain/aiNewsSeeds';
-import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
+import { type AiNewsCadence, type AiNewsItem } from '@/domain/aiNewsSeeds';
+import { useDataFetchNotice } from '@/domain/dataFetchNotice';
 import {
   canUsePlatformDocsApi,
   fetchPlatformDoc,
-  scheduleSavePlatformDoc,
+  writeDocItem,
 } from '@/api/platformDocsApi';
 
 export type AiNewsRecord = AiNewsItem & {
@@ -54,14 +54,27 @@ function dedupeByCadence(list: AiNewsRecord[]): AiNewsRecord[] {
   return out;
 }
 
-function seedItems(): AiNewsRecord[] {
-  if (!isDemoContentEnabled()) return [];
-  return dedupeByCadence(normalize(AI_NEWS_SEEDS.map((a) => ({ ...a, published: true }))));
-}
-
-function persist(items: AiNewsRecord[]) {
+function persist(previous: AiNewsRecord[], items: AiNewsRecord[]) {
   if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc('ai-news', { items });
+  const created = items.filter((item) => !previous.some((row) => row.id === item.id));
+  const removed = previous.filter((item) => !items.some((row) => row.id === item.id));
+  const updated = items.filter((item) => {
+    const before = previous.find((row) => row.id === item.id);
+    return before && JSON.stringify(before) !== JSON.stringify(item);
+  });
+  void (async () => {
+    try {
+      for (const item of created) await writeDocItem('/api/v1/docs/ai-news/items', 'POST', item);
+      for (const item of updated) {
+        await writeDocItem(`/api/v1/docs/ai-news/items/${encodeURIComponent(item.id)}`, 'PUT', item);
+      }
+      for (const item of removed) {
+        await writeDocItem(`/api/v1/docs/ai-news/items/${encodeURIComponent(item.id)}`, 'DELETE');
+      }
+    } catch {
+      useDataFetchNotice.getState().markFailed();
+    }
+  })();
 }
 
 interface AiNewsState {
@@ -77,13 +90,14 @@ interface AiNewsState {
 }
 
 export const useAiNewsStore = create<AiNewsState>((set, get) => ({
-  items: seedItems(),
+  items: [],
   toast: null,
 
   hydrate: () => {
     void (async () => {
       if (!canUsePlatformDocsApi()) {
-        set({ items: seedItems() });
+        useDataFetchNotice.getState().markFailed();
+        set({ items: [] });
         return;
       }
       try {
@@ -91,10 +105,11 @@ export const useAiNewsStore = create<AiNewsState>((set, get) => ({
         );
         const list = Array.isArray(remote?.items) ? remote.items : [];
         set({
-          items: list.length ? dedupeByCadence(normalize(list)) : seedItems(),
+          items: dedupeByCadence(normalize(list)),
         });
       } catch {
-        set({ items: seedItems() });
+        useDataFetchNotice.getState().markFailed();
+        set({ items: [] });
       }
     })();
   },
@@ -109,28 +124,28 @@ export const useAiNewsStore = create<AiNewsState>((set, get) => ({
           : get().items.map((x) => (x.id === item.id ? item : x)),
       ),
     );
-    persist(next);
+    persist(get().items, next);
     set({ items: next, toast: isNew ? '已新增 AI 新闻' : '已保存 AI 新闻' });
   },
 
   remove: (id) => {
-    const next = get().items.filter((x) => x.id !== id);
-    persist(next);
+    const previous = get().items;
+    const next = previous.filter((x) => x.id !== id);
+    persist(previous, next);
     set({ items: next, toast: '已删除' });
   },
 
   togglePublished: (id) => {
-    const next = get().items.map((x) =>
+    const previous = get().items;
+    const next = previous.map((x) =>
       x.id === id ? { ...x, published: !x.published } : x,
     );
-    persist(next);
+    persist(previous, next);
     set({ items: next });
   },
 
   resetToSeeds: () => {
-    const next = seedItems();
-    persist(next);
-    set({ items: next, toast: '已恢复种子稿' });
+    set({ toast: null });
   },
 
   dismissToast: () => set({ toast: null }),

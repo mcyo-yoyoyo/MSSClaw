@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 import type { ModuleId } from '@/domain/chat';
-import { EXPLORER_SECTIONS, PLATFORM_CATALOG, type ExplorerSection, type WorkspaceCatalog } from '@/domain/workspace';
+import { EXPLORER_SECTIONS, EMPTY_PLATFORM_CATALOG, type ExplorerSection, type WorkspaceCatalog } from '@/domain/workspace';
 import { fetchPlatformCatalog } from '@/api/workspaceApi';
-import { fetchApiHealthInfo } from '@/api/persistenceApi';
 import { isApiEnabled, isForceLocalDemo } from '@/api/client';
+import { useDataFetchNotice } from '@/domain/dataFetchNotice';
 
 /** 平台目录（资源树、对话列表）与共享 API 连接状态；平台只有一个空间。 */
 interface WorkspaceState {
@@ -33,7 +33,7 @@ const DEFAULT_EXPANDED = EXPLORER_SECTIONS.reduce(
 );
 
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
-  catalog: PLATFORM_CATALOG,
+  catalog: EMPTY_PLATFORM_CATALOG,
   catalogReady: false,
   catalogLoading: false,
   apiConnected: false,
@@ -47,26 +47,21 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
     set({ catalogLoading: true });
 
-    const finishLocal = (status: 'unreachable' | 'local-demo') => {
+    const finishUnreachable = () => {
+      useDataFetchNotice.getState().markFailed();
       set({
-        catalog: PLATFORM_CATALOG,
+        catalog: EMPTY_PLATFORM_CATALOG,
         catalogReady: true,
         catalogLoading: false,
         apiConnected: false,
         nestLlmEnvConfigured: false,
-        apiStatus: status,
+        apiStatus: 'unreachable',
       });
     };
 
     try {
       if (!isApiEnabled() || isForceLocalDemo()) {
-        finishLocal('local-demo');
-        return;
-      }
-
-      const health = await fetchApiHealthInfo();
-      if (!health.ok) {
-        finishLocal('unreachable');
+        finishUnreachable();
         return;
       }
 
@@ -75,11 +70,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         catalogReady: true,
         catalogLoading: false,
         apiConnected: true,
-        nestLlmEnvConfigured: health.llmEnvConfigured,
         apiStatus: 'connected',
       });
     } catch {
-      finishLocal('unreachable');
+      finishUnreachable();
     }
   },
 

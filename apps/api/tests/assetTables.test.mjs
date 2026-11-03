@@ -167,6 +167,90 @@ test('全新库读取工具目录返回空列表，不写入种子或目录元�
   assert.equal((await service.getGlobalTools()).tools[0].id, 'imported-tool');
 });
 
+test('目录里的 Skill 和工具按单条增删改查，新建排到最前', async () => {
+  const service = new PersistenceService(prisma);
+  await service.createCatalogItem('skills', skill('skill-a'));
+  await service.createCatalogItem('skills', skill('skill-b', { versions: [{ version: '1.0', notes: '初版' }] }));
+  assert.deepEqual((await service.listCatalog('skills')).skills.map((item) => item.id), ['skill-b', 'skill-a']);
+
+  const detail = await service.getCatalogItem('skills', 'skill-b');
+  assert.equal(detail.versions[0].notes, '初版');
+  const renamed = await service.updateCatalogItem('skills', 'skill-a', skill('skill-a', { name: '改名' }));
+  assert.equal(renamed.name, '改名');
+  assert.deepEqual((await service.listCatalog('skills')).skills.map((item) => item.id), ['skill-b', 'skill-a']);
+
+  const replaced = await service.updateCatalogItem('skills', 'skill-b', skill('skill-b', { versions: [{ version: '2.0', notes: '新版' }] }));
+  assert.deepEqual(replaced.versions.map((item) => item.version), ['2.0']);
+
+  await assert.rejects(() => service.createCatalogItem('skills', skill('skill-a')), /catalog_id_exists/);
+  await assert.rejects(() => service.updateCatalogItem('skills', 'missing', skill('missing')), /catalog_not_found/);
+  await assert.rejects(() => service.updateCatalogItem('skills', 'skill-a', skill('other')), /catalog_id_mismatch/);
+  await assert.rejects(() => service.listCatalog('widgets'), /catalog_resource_not_found/);
+
+  const { id: _omit, ...noId } = skill('ignored');
+  const minted = await service.createCatalogItem('skills', noId);
+  assert.equal(typeof minted.id, 'string');
+  assert.equal(minted.id.length > 0, true);
+  assert.equal((await service.listCatalog('skills')).skills[0].id, minted.id);
+
+  await service.createCatalogItem('tools', tool('tool-a'));
+  await service.createCatalogItem('tools', tool('tool-b'));
+  assert.deepEqual((await service.listCatalog('tools')).tools.map((item) => item.id), ['tool-b', 'tool-a']);
+  const toolUpdated = await service.updateCatalogItem('tools', 'tool-a', tool('tool-a', { name: '工具 A' }));
+  assert.equal(toolUpdated.name, '工具 A');
+  assert.deepEqual((await service.listCatalog('tools')).tools.map((item) => item.id), ['tool-b', 'tool-a']);
+  assert.deepEqual(await service.deleteCatalogItem('tools', 'tool-b'), { ok: true });
+  assert.deepEqual((await service.listCatalog('tools')).tools.map((item) => item.id), ['tool-a']);
+  const globalTools = await service.getGlobalTools();
+  assert.equal(globalTools.initialized, false);
+  assert.equal(globalTools.tools[0].id, 'tool-a');
+  await assert.rejects(() => service.deleteCatalogItem('tools', 'tool-b'), /catalog_not_found/);
+});
+
+test('目录删除下架 Skill 时摘掉 Agent 编排；已上架或待审批不能删', async () => {
+  const service = new PersistenceService(prisma);
+  await service.createCatalogItem('skills', skill('skill-delete'));
+  await service.createCatalogItem('skills', skill('skill-other'));
+  await service.createCatalogItem('agents', agent('agent-keep', ['skill-delete', 'skill-other']));
+  await approval('skill-delete', 'approved');
+
+  assert.deepEqual(await service.deleteCatalogItem('skills', 'skill-delete'), { ok: true });
+  assert.deepEqual((await service.listCatalog('skills')).skills.map((item) => item.id), ['skill-other']);
+  assert.deepEqual((await service.getCatalogItem('agents', 'agent-keep')).skillIds, ['skill-other']);
+  assert.equal(await prisma.assetApproval.count(), 1);
+  assert.equal(await prisma.skillVersion.count(), 0);
+
+  await service.createCatalogItem('skills', skill('skill-live', { published: true, versions: [{ version: '1.0' }] }));
+  await assert.rejects(() => service.deleteCatalogItem('skills', 'skill-live'), /仅可删除已下架/);
+  assert.equal(await prisma.skillVersion.count(), 1);
+
+  await service.createCatalogItem('skills', skill('skill-pending'));
+  await approval('skill-pending', 'pending');
+  await assert.rejects(() => service.deleteCatalogItem('skills', 'skill-pending'), /仅可删除已下架/);
+  assert.equal((await service.getCatalogItem('skills', 'skill-pending')).id, 'skill-pending');
+});
+
+test('目录 Agent 详情带回 Skill 名称，知识文档和自动化也能单条写入', async () => {
+  const service = new PersistenceService(prisma);
+  await service.createCatalogItem('skills', skill('skill-a', { name: '评分采集' }));
+  const created = await service.createCatalogItem('agents', agent('agent-1', ['skill-a', 'missing']));
+  assert.deepEqual(created.linkedSkills, [{ id: 'skill-a', name: '评分采集' }]);
+  assert.equal('linkedSkills' in (await service.listCatalog('agents')).agents[0], false);
+
+  await service.createCatalogItem('kb-docs', {
+    id: 'doc-1', title: '手册', desc: '', collection: 'c', type: 'pdf', size: '1kb', pages: 2,
+    clearance: 'internal', indexed: false, chunks: 0, author: 't', tags: [], updatedAt: '2026-10-30',
+  });
+  await service.createCatalogItem('automations', {
+    id: 'auto-1', name: '早报', desc: '', agentId: 'agent-1', skillIds: ['skill-a'],
+    schedule: '0 9 * * *', enabled: true, lastRun: '',
+  });
+  assert.equal((await service.listCatalog('kb-docs')).kbDocs[0].id, 'doc-1');
+  assert.deepEqual((await service.getCatalogItem('automations', 'auto-1')).skillIds, ['skill-a']);
+  assert.deepEqual(await service.deleteCatalogItem('automations', 'auto-1'), { ok: true });
+  await assert.rejects(() => service.getCatalogItem('automations', 'auto-1'), /catalog_not_found/);
+});
+
 test('PUT /tools 整份替换并标记已初始化，GET /marketplace 的 tools 来自工具表', async () => {
   const service = new PersistenceService(prisma);
   const saved = await service.putGlobalTools({ tools: [tool('tool-b'), tool('tool-a'), tool('tool-b')] });

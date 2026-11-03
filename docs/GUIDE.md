@@ -114,11 +114,7 @@ npm run dev
 
 **④ 命令面板（Ctrl/Cmd + K）**
 
-快速跳转任意视图、调用 Agent/Skill、新建任务、打开 WarRoom、导出等。
-
-**⑤ 设置抽屉（右上角 M）**
-
-成员、KB 同步、Skill 导出、Runtime API 地址、LLM 配置等。LLM Key 存于浏览器 localStorage，不会提交到仓库。
+快速跳转任意视图、调用 Agent/Skill、新建任务、打开 WarRoom、导出等。对话里的「选用」打开模型配置；LLM Key 存于浏览器 localStorage，不会提交到仓库。
 
 ### 3.3 单一平台空间
 
@@ -154,7 +150,7 @@ MSSClaw/
 main.tsx → App.tsx（壳层编排）
               ├── AppHeader / AppShellSidebar
               ├── AppViewRouter（按 AppView 懒加载页面）
-              ├── CommandPalette / SettingsDrawer / Toast
+              ├── CommandPalette / Toast
               └── hooks：路由同步、平台 Store 懒加载
 
 features/          # 页面（home, task, agent, skill, knowledge, automation）
@@ -182,7 +178,7 @@ hooks/             # 路由、Focus Trap 等
 | `workspaceStore` | 工作区列表、catalog、API 连接状态 |
 | `conversationStore` | 会话、消息、Plan、SSE 执行、交付物 |
 | `marketplaceStore` | Agent / Skill / KB / 自动化市场数据 |
-| `appViewStore` | 当前视图、设置抽屉开关 |
+| `appViewStore` | 当前视图、侧栏折叠 |
 | `taskStore` | 任务列表 UI、新建任务对话框、资源浏览器 |
 | `llmConfigStore` | LLM Provider / Key / Model（localStorage） |
 | `agentStore` 等 | 专家平台视图数据（进入对应页面时懒加载） |
@@ -262,7 +258,7 @@ Portal（单一平台空间）
 
 | 键 | 用途 |
 |----|------|
-| `mssclaw_api` | 覆盖 API 地址（设置抽屉） |
+| `mssclaw_api` | 覆盖 API 地址（历史本机覆盖，启动时若无效会清掉） |
 | `mssclaw_sessions_{workspaceId}` | 按工作区的任务会话 |
 | LLM 相关 | `llmConfigStore` 管理 |
 

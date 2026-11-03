@@ -1,14 +1,13 @@
 import { create } from 'zustand';
 import {
   AUDIT_CATEGORY_LABELS,
-  SEED_AUDIT_LOGS,
   type AuditCategory,
   type AuditLogEntry,
 } from '@/domain/auditLog';
 import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
-import { SEED_MEMBERS, type PlatformRole } from '@/domain/rbac';
+import { type PlatformRole } from '@/domain/rbac';
 import { useSessionStore } from '@/stores/sessionStore';
-import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
+import { useDataFetchNotice } from '@/domain/dataFetchNotice';
 import {
   canUsePlatformDocsApi,
   fetchPlatformDoc,
@@ -17,22 +16,8 @@ import {
 
 const MAX_LOGS = 400;
 
-function emptyOrSeedLogs(): AuditLogEntry[] {
-  return isDemoContentEnabled() ? [...SEED_AUDIT_LOGS] : [];
-}
-
-/** 旧日志缺少组织轴时，按邮箱从种子成员补全，便于筛选 */
-function enrichOrgFields(entry: AuditLogEntry): AuditLogEntry {
-  if ((entry.deptIds?.length ?? 0) > 0 || entry.regionId) return entry;
-  const email = entry.userEmail?.toLowerCase();
-  if (!email) return entry;
-  const member = SEED_MEMBERS.find((m) => m.email.toLowerCase() === email);
-  if (!member) return entry;
-  return {
-    ...entry,
-    deptIds: entry.deptIds?.length ? entry.deptIds : [...(member.deptIds ?? [])],
-    regionId: entry.regionId !== undefined ? entry.regionId : (member.regionId ?? null),
-  };
+function emptyLogs(): AuditLogEntry[] {
+  return [];
 }
 
 export interface RecordAuditInput {
@@ -65,26 +50,24 @@ interface AuditState {
 }
 
 export const useAuditStore = create<AuditState>((set, get) => ({
-  logs: emptyOrSeedLogs(),
+  logs: emptyLogs(),
   filter: 'all',
 
   hydrate: () => {
     void (async () => {
       if (!canUsePlatformDocsApi()) {
-        set({ logs: emptyOrSeedLogs() });
+        useDataFetchNotice.getState().markFailed();
+        set({ logs: emptyLogs() });
         return;
       }
       try {
         const remote = await fetchPlatformDoc<{ logs?: AuditLogEntry[] }>('audit-log',
         );
         const list = Array.isArray(remote?.logs) ? remote.logs : [];
-        set({
-          logs: list.length
-            ? list.map(enrichOrgFields).slice(0, MAX_LOGS)
-            : emptyOrSeedLogs(),
-        });
+        set({ logs: list.slice(0, MAX_LOGS) });
       } catch {
-        set({ logs: emptyOrSeedLogs() });
+        useDataFetchNotice.getState().markFailed();
+        set({ logs: emptyLogs() });
       }
     })();
   },

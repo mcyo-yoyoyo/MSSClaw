@@ -69,6 +69,7 @@ function mapAihotDevPayload(items: AihotDevItem[]) {
       score: typeof item.score === 'number' ? item.score : undefined,
       aihotUrl: item.links?.aihot || undefined,
     };
+    if (!dateKey) continue;
     const group = grouped.get(dateKey);
     if (group) group.items.push(mapped);
     else grouped.set(dateKey, { dateLabel, items: [mapped] });

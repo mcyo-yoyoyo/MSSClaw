@@ -38,7 +38,7 @@ export function AppHeader({ apiConnected: _apiConnected }: AppHeaderProps) {
   const expandAdminNav = useAppViewStore((s) => s.expandAdminNav);
   const openPalette = useCommandPaletteStore((s) => s.openPalette);
   const isViewEnabled = useNavPresentationStore((s) => s.isViewEnabled);
-  const roleEnabled = useNavPresentationStore((s) => s.roleEnabled);
+  const menus = useSessionStore((s) => s.menus);
   const activeNavRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     activeNavRef.current?.scrollIntoView({ block: 'nearest', inline: 'center' });
@@ -46,10 +46,10 @@ export function AppHeader({ apiConnected: _apiConnected }: AppHeaderProps) {
   const user = useSessionStore((s) => s.user);
   const isGuest = useSessionStore((s) => s.isGuest);
   const requestLogin = useAuthGateStore((s) => s.requestLogin);
-  const isOpsShell = defaultShellPerspective(user?.platformRole) === 'ops';
+  const isOpsShell = defaultShellPerspective(user?.platformRole, menus) === 'ops';
   const adminItems = useMemo(
     () => ADMIN_MENU_ITEMS.filter((i) => isViewEnabled(i.view)),
-    [isViewEnabled, roleEnabled, user?.platformRole],
+    [isViewEnabled, menus, user?.platformRole],
   );
   const canOpenAdmin = isOpsShell && adminItems.length > 0;
   const adminActive = isOpsOnlyView(appView);

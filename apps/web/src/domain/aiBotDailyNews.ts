@@ -188,6 +188,24 @@ export function flattenAiBotNews(payload: AiBotDailyNewsPayload): AiBotNewsItem[
   return payload.groups.flatMap((g) => g.items);
 }
 
+/** 页面时间筛选的默认跨度：最近三个上海自然日（含今天）。数据本身不截断。 */
+export const AI_NEWS_DEFAULT_RANGE_DAYS = 3;
+
+function shiftDateKey(key: string, days: number): string {
+  const [year, month, day] = key.split('-').map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  const y = shifted.getUTCFullYear();
+  const m = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(shifted.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function defaultAiNewsDateRange(now = new Date()): { startDate: string; endDate: string } {
+  const endDate = shanghaiDateKey(now.toISOString()) ?? '';
+  if (!endDate) return { startDate: '', endDate: '' };
+  return { startDate: shiftDateKey(endDate, -(AI_NEWS_DEFAULT_RANGE_DAYS - 1)), endDate };
+}
+
 export function apiAiDailyNewsPath(): string {
   return apiUrl('/api/v1/ai-daily-news');
 }
@@ -220,7 +238,9 @@ export async function fetchAiBotDailyNews(signal?: AbortSignal): Promise<AiBotDa
       if (!res.ok) continue;
       const data = (await res.json()) as AiBotDailyNewsPayload;
       if (!data?.groups?.length) continue;
-      return withStableDateKeys({ ...data, fromFallback: false });
+      const normalized = withStableDateKeys({ ...data, fromFallback: false });
+      if (!normalized.groups.length) continue;
+      return normalized;
     } catch {
       /* try next */
     }

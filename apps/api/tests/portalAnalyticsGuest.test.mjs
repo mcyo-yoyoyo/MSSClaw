@@ -33,7 +33,7 @@ function analyticsStub() {
   };
 }
 
-function controllerWith(session = { ok: false, error: '未登录' }) {
+function controllerWith(session = { ok: false, error: '未登录' }, grants = []) {
   const analytics = analyticsStub();
   const docsCalls = [];
   const docs = {
@@ -42,10 +42,19 @@ function controllerWith(session = { ok: false, error: '未登录' }) {
       return session;
     },
   };
+  const prisma = {
+    menu: { findUnique: async () => ({ fixed: false }) },
+    roleMenu: {
+      findUnique: async ({ where: { roleId_menuId: key } }) =>
+        grants.some((grant) => grant.roleId === key.roleId && grant.menuId === key.menuId)
+          ? { canEdit: false }
+          : null,
+    },
+  };
   return {
     analytics,
     docsCalls,
-    controller: new PortalAnalyticsController(analytics, docs),
+    controller: new PortalAnalyticsController(analytics, docs, prisma),
   };
 }
 
@@ -237,13 +246,20 @@ test('gate hit endpoint validates the guest identity and forwards action, route 
   });
 });
 
-test('analytics report remains restricted to super_admin', async () => {
+test('analytics report follows the portal-dashboard menu grant', async () => {
   const viewer = controllerWith({ ok: true, user: { id: 'u1', platformRole: 'business_user' } });
   await assert.rejects(
     viewer.controller.getReport('Bearer token', undefined, '7'),
     (error) => error?.getStatus?.() === 403,
   );
   assert.equal(viewer.analytics.calls.reports.length, 0);
+
+  const developer = controllerWith(
+    { ok: true, user: { id: 'dev', platformRole: 'capability_ops' } },
+    [{ roleId: 'capability_ops', menuId: 'portal-dashboard' }],
+  );
+  await developer.controller.getReport('Bearer token', undefined, '7');
+  assert.equal(developer.analytics.calls.reports.length, 1);
 
   const admin = controllerWith({ ok: true, user: { id: 'admin', platformRole: 'super_admin' } });
   await admin.controller.getReport('Bearer token', undefined, '30');
@@ -405,13 +421,18 @@ test('auth login forwards the stable visitor ID to the service', async () => {
       calls.push(body);
       return { ok: true };
     },
+    withMenus: async (result) => result,
   });
-  await controller.login({
-    email: 'user@example.com',
-    password: 'secret',
-    workspaceId: 'ws-test',
-    visitorId: GUEST_VISITOR_ID,
-  });
+  await controller.login(
+    {
+      email: 'user@example.com',
+      password: 'secret',
+      workspaceId: 'ws-test',
+      visitorId: GUEST_VISITOR_ID,
+    },
+    { headers: {}, secure: false },
+    { cookie: () => {} },
+  );
   assert.equal(calls[0].visitorId, GUEST_VISITOR_ID);
 });
 

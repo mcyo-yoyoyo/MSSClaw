@@ -166,6 +166,12 @@ before(async () => {
   });
   globalThis.fetch = jsonFetch;
   globalThis.window = globalThis as unknown as Window & typeof globalThis;
+  // Node 的 globalThis 没有事件方法，而部分 store 一加载就注册 online 等监听
+  Object.assign(globalThis, {
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent: () => true,
+  });
   sessionStore = (
     (await vite.ssrLoadModule('/src/stores/sessionStore.ts')) as {
       useSessionStore: Store<SessionState>;
@@ -420,6 +426,27 @@ test('游客与登录后的 PV 请求沿用同一 visitorId', async () => {
     ) {
       pageViews.push(JSON.parse(String(init.body)) as (typeof pageViews)[number]);
     }
+    if (String(input).includes('/auth/login')) {
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          token: 'test-token',
+          expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          user: {
+            id: 'u-dickson',
+            name: 'Dickson',
+            email: 'dickson@huawei.com',
+            platformRole: 'business_user',
+            avatar: '',
+            deptIds: [],
+            regionId: null,
+          },
+          menus: ['home'],
+          editableMenus: ['home'],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
     return new Response('{}', {
       status: 201,
       headers: { 'Content-Type': 'application/json' },
@@ -431,7 +458,7 @@ test('游客与登录后的 PV 请求沿用同一 visitorId', async () => {
   await waitForCallCount(pageViews, 1);
   guestCleanup?.();
 
-  workspaceStore.setState({ apiConnected: false, apiStatus: 'local-demo' });
+  workspaceStore.setState({ apiConnected: true, apiStatus: 'connected' });
   const loginResult = await sessionStore.getState().login(
     'dickson@huawei.com',
     'mssclaw',

@@ -2,14 +2,15 @@ import {
   Body,
   Controller,
   Delete,
-  ForbiddenException,
   Get,
   Headers,
   Post,
   UnauthorizedException,
 } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import { PlatformDocsService } from './platform-docs.service';
 import { AiBriefSubscriptionsService } from './ai-brief-subscriptions.service';
+import { assertAnyMenu } from './rbac-store';
 // 单租户：原路由参数 workspaceId 固定为平台空间，方法体沿用这个名字（服务层还用它拼 center_record 的记录 id，对应文档迁到正式表时一起去掉）
 import { PLATFORM_WORKSPACE_ID as workspaceId } from '../common/platform-workspace';
 
@@ -24,6 +25,7 @@ export class AiBriefSubscriptionsController {
   constructor(
     private readonly subscriptions: AiBriefSubscriptionsService,
     private readonly docs: PlatformDocsService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Get('me')
@@ -64,9 +66,7 @@ export class AiBriefSubscriptionsController {
     @Headers('x-session-token') xSessionToken: string | undefined,
   ) {
     const user = await this.requireSession(workspaceId, authorization, xSessionToken);
-    if (String(user.platformRole ?? '') !== 'super_admin') {
-      throw new ForbiddenException('ai_brief_subscriptions_admin_required');
-    }
+    await assertAnyMenu(this.prisma, String(user.platformRole ?? ''), ['portal-ops']);
     return this.subscriptions.list();
   }
 

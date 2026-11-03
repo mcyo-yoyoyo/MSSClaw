@@ -25,8 +25,8 @@ const CASE_INTENT_RULES: CaseIntentRule[] = [
     caseEvidence: /评论分析|用户评论|用户声音|情感分析|舆情|\bvoc\b/i,
   },
   {
-    demand: /翻译|多语言|本地化/,
-    caseEvidence: /翻译|多语言|本地化/,
+    demand: /翻译|多语言|多语种|本地化/,
+    caseEvidence: /翻译|多语言|多语种|本地化|译文/,
   },
 ];
 

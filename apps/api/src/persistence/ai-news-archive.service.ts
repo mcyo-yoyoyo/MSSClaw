@@ -5,7 +5,7 @@ import { ProxyAgent, fetch as undiciFetch } from 'undici';
 import { PrismaService } from '../prisma/prisma.service';
 import { inTransaction, readRows, replaceRows, type Db, type TableSpec } from './json-table';
 
-export const AI_NEWS_SOURCE = 'https://aihot.virxact.com';
+export const AI_NEWS_SOURCE = 'https://aihot.news';
 const ITEMS_API = `${AI_NEWS_SOURCE}/api/v1/items?mode=selected&window=7d&limit=100`;
 
 /** 归档保留半年；超期条目在每次归档后滚动淘汰 */
@@ -246,6 +246,7 @@ export class AiNewsArchiveService implements OnModuleInit {
       const upstream = await undiciFetch(ITEMS_API, {
         dispatcher,
         signal: AbortSignal.timeout(timeoutMs),
+        redirect: 'follow',
         headers: {
           'User-Agent': 'mssclaw-ai-brief/1.0',
           Accept: 'application/json',
@@ -328,16 +329,35 @@ export class AiNewsArchiveService implements OnModuleInit {
     return { ok: true, added, total: items.length };
   }
 
-  /** 供接口读取：按日期分组，结构与原实时代理保持一致 */
+  /** 供接口读取：返回归档里的全部快讯并按日期分组。最近三天由页面筛选默认值控制。 */
   async readGrouped() {
-    const archive = await this.readArchive();
+    const [rows, setting] = await Promise.all([
+      this.prisma.aiNewsFeedItem.findMany({
+        orderBy: { publishedAt: 'desc' },
+      }),
+      this.prisma.appSetting.findUnique({ where: { settingKey: SYNC_SETTING_KEY } }),
+    ]);
+    const sync = (setting?.value ?? {}) as Omit<ArchivePayload, 'items'>;
     const grouped = new Map<
       string,
       { dateLabel: string; items: ArchivedNewsItem[] }
     >();
-    for (const item of archive.items) {
-      // 旧归档没有 dateKey；读取时由 publishedAt 现算，无需数据迁移。
-      const key = dateKey(item.publishedAt);
+    for (const row of rows) {
+      const key = dateKey(row.publishedAt);
+      if (!key) continue;
+      const item: ArchivedNewsItem = {
+        id: row.id,
+        publishedAt: row.publishedAt,
+        dateLabel: row.dateLabel,
+        title: row.title,
+        summary: row.summary,
+        url: row.url,
+        source: row.source ?? undefined,
+        category: row.category ?? undefined,
+        reason: row.reason ?? undefined,
+        score: row.score ?? undefined,
+        aihotUrl: row.aihotUrl ?? undefined,
+      };
       const group = grouped.get(key);
       if (group) group.items.push(item);
       else grouped.set(key, { dateLabel: item.dateLabel, items: [item] });
@@ -345,9 +365,9 @@ export class AiNewsArchiveService implements OnModuleInit {
     return {
       sourceUrl: AI_NEWS_SOURCE,
       sourceName: 'AIHOT',
-      fetchedAt: archive.updatedAt,
-      lastSyncAt: archive.lastSyncAt,
-      lastSyncError: archive.lastSyncError,
+      fetchedAt: sync.updatedAt ?? new Date(0).toISOString(),
+      lastSyncAt: sync.lastSyncAt,
+      lastSyncError: sync.lastSyncError,
       groups: [...grouped].map(([key, group]) => ({
         dateKey: key,
         dateLabel: group.dateLabel,

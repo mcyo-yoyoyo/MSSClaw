@@ -228,10 +228,15 @@ export function regionMatchesSelection(
   });
 }
 
-/** “不限区域”资产在任一区域筛选下均可见；指定区域仍按原规则精确匹配。 */
+/**
+ * 侧栏未选区域时，未标记区域（卡片为「全部区域」）的资产仍然可见。
+ * 选中具体区域后，只保留明确标了该区域的资产。
+ */
 export function unrestrictedRegionMatchesSelection(
   ownerRegionId: RegionId | null | undefined,
   selected: RegionId[],
 ): boolean {
-  return !ownerRegionId || regionMatchesSelection(ownerRegionId, selected);
+  if (!selected.length) return true;
+  if (!ownerRegionId) return false;
+  return regionMatchesSelection(ownerRegionId, selected);
 }

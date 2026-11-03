@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { advanceWorkflowStatus as advanceWorkflowStatusApi, CenterApiError, fetchWorkflows } from '@/api/centerApi';
 import {
   findWorkflowByName,
-  WORKFLOW_SEEDS,
   type Workflow,
   type WorkflowStatus,
 } from '@/domain/workflow';
@@ -29,8 +28,8 @@ interface WorkflowState {
 }
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
-  workflows: WORKFLOW_SEEDS,
-  selectedWorkflowId: WORKFLOW_SEEDS[0]?.id ?? null,
+  workflows: [],
+  selectedWorkflowId: null,
   selectedNodeId: null,
   statusFilter: 'all',
   debugRunning: false,
@@ -39,14 +38,22 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   load: () => {
     void (async () => {
-      const workflows = await fetchWorkflows();
-      set({
-        workflows,
-        selectedWorkflowId: workflows[0]?.id ?? null,
-        selectedNodeId: null,
-        statusFilter: 'all',
-        debugTrace: [],
-      });
+      try {
+        const workflows = await fetchWorkflows();
+        set({
+          workflows,
+          selectedWorkflowId: workflows[0]?.id ?? null,
+          selectedNodeId: null,
+          statusFilter: 'all',
+          debugTrace: [],
+        });
+      } catch (error) {
+        set({
+          workflows: [],
+          selectedWorkflowId: null,
+          toast: error instanceof CenterApiError ? error.message : '数据获取失败，请稍候重试',
+        });
+      }
     })();
   },
 

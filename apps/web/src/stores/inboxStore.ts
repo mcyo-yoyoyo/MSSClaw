@@ -7,7 +7,6 @@ import {
 } from '@/domain/inbox';
 import { saveInboxMessages } from '@/domain/persistence/inboxStorage';
 import { getCurrentUserId, getCurrentUserName } from '@/domain/currentUser';
-import { isDemoContentEnabled } from '@/domain/demoContentPolicy';
 import {
   canUseInboxApi,
   createInboxMessage,
@@ -52,10 +51,8 @@ export const useInboxStore = create<InboxState>((set, get) => ({
     void (async () => {
       const { hydrateInboxMessages } = await import('@/domain/persistence/inboxStorage');
       const uid = getCurrentUserId();
-      const { messages, fromServer } = await hydrateInboxMessages(uid);
+      const { messages } = await hydrateInboxMessages(uid);
       set({ messages, ready: true });
-      // 接口拉挂了也会得到空列表，这时再灌演示消息就会越攒越多
-      if (uid && (fromServer || !canUseInboxApi())) get().seedDemoIfEmpty(uid);
     })();
   },
 
@@ -136,48 +133,5 @@ export const useInboxStore = create<InboxState>((set, get) => ({
     );
   },
 
-  seedDemoIfEmpty: (userId) => {
-    if (!isDemoContentEnabled()) return;
-    const mine = get().forUser(userId);
-    if (mine.length) return;
-    const now = Date.now();
-    const seeds: InboxMessage[] = [
-      {
-        id: `msg-seed-${now}-1`,
-        kind: 'system',
-        title: '欢迎使用「MSS AI提效平台」',
-        body: '这里是你的通知中枢：找案例学样板 → 做任务进入用·做任务开工 → 任务记录查看进度与交付 → 交付物可推送到协作空间或成员。系统提醒、协作通知与交付推送都会汇集于此。',
-        fromName: 'MSS AI',
-        toUserId: userId,
-        createdAt: new Date(now - 3600_000).toISOString(),
-        read: false,
-      },
-      {
-        id: `msg-seed-${now}-2`,
-        kind: 'system',
-        title: '上手提示：三步走通提效闭环',
-        body: '① 在「用 · 做任务」点选场景技能并补充意图；② 在「任务记录」确认计划并执行；③ 预览交付物后选择「推送」发给协作空间或同事——对方可在「我的消息」查收。',
-        fromName: 'MSS AI',
-        toUserId: userId,
-        createdAt: new Date(now - 5400_000).toISOString(),
-        read: false,
-      },
-      {
-        id: `msg-seed-${now}-3`,
-        kind: 'deliverable',
-        title: '样例：任务交付物已推送',
-        body: '演示消息：某次 Agent 任务已产出可预览交付物。正式使用时，同事推送的报告、方案与纪要将出现在此，并可跳转任务中心继续跟进。',
-        fromName: '系统演示',
-        toUserId: userId,
-        createdAt: new Date(now - 7200_000).toISOString(),
-        read: true,
-        meta: { artifactType: 'marketing', query: '从用·做任务发起一次提效任务' },
-      },
-    ];
-    set((s) => ({ messages: [...seeds, ...s.messages] }));
-    get().persist();
-    if (canUseInboxApi()) {
-      for (const message of seeds) void createInboxMessage(message);
-    }
-  },
+  seedDemoIfEmpty: () => undefined,
 }));

@@ -1,7 +1,7 @@
 import { PortalAiUsagePanel } from './PortalAiUsagePanel';
 import { useEffect, useMemo, useState } from 'react';
 import { CenterPageHeader } from '@/components/center/CenterShell';
-import { isSystemAdmin } from '@/domain/currentUser';
+import { useHasMenu } from '@/domain/currentUser';
 import { buildPortalToolInventory } from '@/domain/portalToolInventory';
 import { PortalTrafficPanel } from '@/features/ops/PortalTrafficPanel';
 import { useAppViewStore } from '@/stores/appViewStore';
@@ -17,7 +17,7 @@ function DashboardAccessDenied() {
           <i className="fa-solid fa-lock text-xl" />
         </div>
         <h2 className="text-lg font-semibold text-zinc-900">无权访问数据看板</h2>
-        <p className="mt-2 text-[13px] text-zinc-500">仅系统管理员可查看门户与内容运营数据。</p>
+        <p className="mt-2 text-[13px] text-zinc-500">当前角色没有勾选数据看板，无法查看。</p>
         <button
           type="button"
           onClick={() => setAppView('home')}
@@ -82,6 +82,7 @@ function PortalDataDashboardContent() {
 }
 
 export function PortalDataDashboardPage() {
-  if (!isSystemAdmin()) return <DashboardAccessDenied />;
+  const allowed = useHasMenu('portal-dashboard');
+  if (!allowed) return <DashboardAccessDenied />;
   return <PortalDataDashboardContent />;
 }

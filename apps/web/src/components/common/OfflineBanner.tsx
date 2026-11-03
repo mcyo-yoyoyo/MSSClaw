@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { DATA_FETCH_FAILED_MESSAGE, useDataFetchNotice } from '@/domain/dataFetchNotice';
 import { isSystemAdmin } from '@/domain/currentUser';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useShareSyncStore } from '@/domain/shareSync';
@@ -16,7 +17,7 @@ function canSeeShareBanner(role: string | undefined): boolean {
 }
 
 /**
- * 平台运营 / 能力开发可见完整运维文案；业务用户可见简化「服务不可用」提示。
+ * 接口失败、网络断开或后端不可达时，全站只显示同一句提示。
  */
 export function OfflineBanner({ onRetry }: OfflineBannerProps) {
   const apiConnected = useWorkspaceStore((s) => s.apiConnected);
@@ -26,6 +27,7 @@ export function OfflineBanner({ onRetry }: OfflineBannerProps) {
   const lastSync = useShareSyncStore((s) => s.last);
   const role = useSessionStore((s) => s.user?.platformRole);
   const isOps = canSeeShareBanner(role);
+  const fetchFailed = useDataFetchNotice((s) => s.failed);
   const [online, setOnline] = useState(() =>
     typeof navigator !== 'undefined' ? navigator.onLine : true,
   );
@@ -56,9 +58,6 @@ export function OfflineBanner({ onRetry }: OfflineBannerProps) {
     }
   }, [apiConnected]);
 
-  // 未登录不展示；业务用户仅提示网络/服务不可用，不同步失败细节
-  if (!role) return null;
-
   const offline = !online;
   const apiDown = online && !apiConnected && apiStatus === 'unreachable';
   const syncFail =
@@ -69,19 +68,11 @@ export function OfflineBanner({ onRetry }: OfflineBannerProps) {
     lastSync &&
     !lastSync.synced &&
     lastSync.reason === 'failed';
-  const visible = !dismissed && (offline || apiDown || syncFail);
+  const visible = !dismissed && (offline || apiDown || fetchFailed || syncFail);
 
   if (!visible) return null;
 
-  const message = offline
-    ? isOps
-      ? '网络已断开，部分功能将使用本地缓存'
-      : '网络已断开，货架内容可能不是最新'
-    : apiDown
-      ? isOps
-        ? '后端接口未连通或响应格式不匹配：当前页面可能显示本地兜底数据，新增和修改不会同步。请检查 API 地址、/api/v1/health、反向代理与后端进程。'
-        : '后端服务暂不可用或接口配置不正确，当前内容可能不是最新，修改也可能无法保存。请联系平台运营或稍后重试。'
-      : '最近一次写入共享服务失败：内容可能未同步到同事。请点「重试」或检查后台日志。';
+  const message = DATA_FETCH_FAILED_MESSAGE;
 
   return (
     <div

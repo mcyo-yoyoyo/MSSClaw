@@ -3,7 +3,7 @@ import {
   MARKET_SHELF_META,
   type MarketShelfKind,
 } from '@/domain/marketShelf';
-import { isMvpCapabilityPreset } from '@/domain/marketRunCapability';
+import { allowsTaskExecution } from '@/domain/marketRunCapability';
 import { emptyOrgPerspectiveSelection } from '@/domain/orgAxisTags';
 import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
 import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
@@ -14,7 +14,6 @@ import { useConversationStore } from '@/stores/conversationStore';
 import { useMarketFilterStore } from '@/stores/marketFilterStore';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
-import { useSessionStore } from '@/stores/sessionStore';
 import { useTaskStore } from '@/stores/taskStore';
 
 export type HomeJourneyOpts = {
@@ -79,15 +78,9 @@ export function openUseSkills(opts?: HomeJourneyOpts) {
     return;
   }
 
-  const preset = useNavPresentationStore.getState().preset;
-  const role = useSessionStore.getState().user?.platformRole;
-  if (
-    isMvpCapabilityPreset(preset) &&
-    (role === 'business_user' || role === 'viewer')
-  ) {
+  if (!allowsTaskExecution()) {
     useConversationStore.setState({
-      pushToast:
-        'MVP 业务侧以货架下载学习为主；在线执行请使用标准/完整方案，或联系运营账号演示。',
+      pushToast: '当前角色没有「任务记录」菜单，暂不能在线执行；可在货架下载学习，或联系管理员开通。',
     });
     openMarketShelf('projects', opts?.businessId ? { businessId: opts.businessId } : undefined);
     return;

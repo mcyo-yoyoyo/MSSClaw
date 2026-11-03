@@ -16,7 +16,7 @@ before(async () => {
   prisma = new PrismaClient({ datasourceUrl: database.url });
   const salt = randomBytes(8).toString('hex');
   await prisma.member.create({
-    data: { id: 'm-mcyo', name: 'mcyo', email: 'mcyo@huawei.com', role: 'super_admin' },
+    data: { id: 'm-mcyo', name: 'mcyo', email: 'mcyo@huawei.com', roleId: 'super_admin' },
   });
   await prisma.memberCredential.create({
     data: {

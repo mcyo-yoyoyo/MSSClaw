@@ -113,7 +113,7 @@ test('首页配置读取时丢弃脏数据，不让单条坏引用拖垮首页',
   });
 });
 
-test('首页配置对游客只读开放，写入仅限 super_admin', async () => {
+test('首页配置对游客只读开放，写入认门户运营菜单', async () => {
   let role = 'platform_ops';
   let putCalls = 0;
   const controller = new PlatformDocsController({
@@ -123,6 +123,12 @@ test('首页配置对游客只读开放，写入仅限 super_admin', async () =>
       putCalls += 1;
       return { ok: true };
     },
+  }, {
+    menu: { findUnique: async () => ({ fixed: false }) },
+    roleMenu: {
+      findUnique: async ({ where: { roleId_menuId: key } }) =>
+        key.roleId === 'capability_ops' && key.menuId === 'portal-ops' ? { canEdit: true } : null,
+    },
   });
 
   assert.deepEqual(await controller.getOne('home-featured'), {
@@ -131,11 +137,15 @@ test('首页配置对游客只读开放，写入仅限 super_admin', async () =>
   });
   await assert.rejects(
     controller.putOne('home-featured', { payload: {} }, 'Bearer t'),
-    (error) => error.message === 'home_featured_admin_required',
+    (error) => error.message === 'menu_forbidden:portal-ops',
   );
   assert.equal(putCalls, 0);
 
-  role = 'super_admin';
+  role = 'capability_ops';
   await controller.putOne('home-featured', { payload: {} }, 'Bearer t');
   assert.equal(putCalls, 1);
+
+  role = 'super_admin';
+  await controller.putOne('home-featured', { payload: {} }, 'Bearer t');
+  assert.equal(putCalls, 2);
 });

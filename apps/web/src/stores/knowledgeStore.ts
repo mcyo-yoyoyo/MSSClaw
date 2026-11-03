@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { CenterApiError, fetchKnowledgeBases, runKnowledgePipelineApi } from '@/api/centerApi';
 import {
   findKnowledgeBaseByName,
-  KNOWLEDGE_SEEDS,
   type KnowledgeBase,
   type PipelineStage,
 } from '@/domain/knowledge';
@@ -24,20 +23,28 @@ interface KnowledgeState {
 }
 
 export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
-  bases: KNOWLEDGE_SEEDS,
-  selectedBaseId: KNOWLEDGE_SEEDS[0]?.id ?? null,
+  bases: [],
+  selectedBaseId: null,
   selectedDocumentId: null,
   pipelineRunning: false,
   toast: null,
 
   load: () => {
     void (async () => {
-      const bases = await fetchKnowledgeBases();
-      set({
-        bases,
-        selectedBaseId: bases[0]?.id ?? null,
-        selectedDocumentId: null,
-      });
+      try {
+        const bases = await fetchKnowledgeBases();
+        set({
+          bases,
+          selectedBaseId: bases[0]?.id ?? null,
+          selectedDocumentId: null,
+        });
+      } catch (error) {
+        set({
+          bases: [],
+          selectedBaseId: null,
+          toast: error instanceof CenterApiError ? error.message : '数据获取失败，请稍候重试',
+        });
+      }
     })();
   },
   selectBase: (id) => set({ selectedBaseId: id, selectedDocumentId: null }),

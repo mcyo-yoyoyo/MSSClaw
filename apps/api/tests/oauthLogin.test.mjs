@@ -48,7 +48,7 @@ async function buildDocs({ members = [member()] } = {}) {
   }
   await prisma.collectionRevision.create({ data: { collection: 'members', revision: 1 } });
   await prisma.member.createMany({
-    data: members.map(({ lastActive: _lastActive, ...item }, position) => ({ ...item, position })),
+    data: members.map(({ lastActive: _lastActive, role, deptIds: _deptIds, ...item }, position) => ({ ...item, roleId: role, position })),
   });
   return { docs: new PlatformDocsService(prisma, { recordDailyLogin: async () => {} }) };
 }
@@ -223,7 +223,7 @@ test('字段完全认不出来时，错误里要带上游实际字段名，好�
   }
 });
 
-test('JIT 建号固定为 business_user，环境变量不能提权', async () => {
+test('JIT 建号固定为默认的普通用户，环境变量不能提权', async () => {
   const h = await harness({
     members: [],
     profile: { uuid: 'u1', email: 'newbie@huawei.com', userName: '新人' },
@@ -233,7 +233,7 @@ test('JIT 建号固定为 business_user，环境变量不能提权', async () =>
     const result = await h.login();
     assert.equal(result.ok, true, JSON.stringify(result));
     assert.equal(result.provisioned, true);
-    assert.equal(result.user.platformRole, 'business_user');
+    assert.equal(result.user.platformRole, 'member');
 
     const saved = await prisma.member.findMany();
     assert.equal(saved.length, 1);

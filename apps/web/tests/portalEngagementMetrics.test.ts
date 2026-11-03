@@ -136,7 +136,7 @@ test('数据看板是门户运营后的独立后台入口，访问数据不再�
   assert.match(appViewSource, /ops: '运营设置'/);
   assert.match(
     appViewSource,
-    /SIDEBAR_NAV_SECTIONS = \[\s*'workspace',\s*'platform',\s*'ops',\s*'system',?\s*\]/,
+    /SIDEBAR_NAV_SECTIONS = \[\s*'workspace',\s*'platform',\s*'ops',\s*'system',\s*'org',?\s*\]/,
   );
   assert.match(
     navPresentationSource,
@@ -180,18 +180,21 @@ test('数据看板按文档口径命名，四类资产的行为指标分开统�
     // 2.2 用户维度
     '登录用户页面浏览数 PV',
     '游客页面浏览数 PV',
-    '部门活跃',
+    '领域活跃',
     '用户明细',
-    '部门',
-    '首次使用时间',
-    '最近活跃时间',
+    '领域',
+    '首次登录时间',
+    '活跃时间',
     // 2.3 资产维度（海外/国内不再单独出卡片，改为资产表里的「海外 / 国内」列）
     '资产总数',
     '外部工具数',
     '公司工具数',
     '海外 / 国内',
     // 2.3 用户行为
-    '资产浏览数',
+    '总浏览数 PV',
+    '系统进入浏览数 PV',
+    '分享链接进入浏览数 PV',
+    '分享次数',
     '资产收藏数',
     '资产点赞数',
     '资产点踩数',

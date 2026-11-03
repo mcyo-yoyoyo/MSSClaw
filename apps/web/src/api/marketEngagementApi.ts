@@ -7,6 +7,7 @@ export type MarketEngagementAction =
   | 'exposure'
   | 'detail'
   | 'detail_direct'
+  | 'share'
   | 'view'
   | 'use'
   | 'redirect'
@@ -39,6 +40,20 @@ export async function fetchMarketEngagementApi(
   return (await res.json()) as MarketEngagementSnapshot;
 }
 
+/** 当前账号分享这个资产用的编号；同一账号同一资产始终相同。游客不能分享。 */
+export async function fetchMarketShareCodeApi(contentId: string): Promise<string> {
+  const res = await fetchWithTimeout(
+    apiUrl(`/api/v1/market-engagement/${encodeURIComponent(contentId)}/share-code`),
+    {
+      method: 'POST',
+      headers: { Accept: 'application/json', ...apiAuthHeaders() },
+    },
+    20_000,
+  );
+  if (!res.ok) throw new Error(`market_share_code_${res.status}`);
+  return ((await res.json()) as { shareCode: string }).shareCode;
+}
+
 export async function mutateMarketEngagementApi(
   contentId: string,
   input: {
@@ -47,6 +62,8 @@ export async function mutateMarketEngagementApi(
     eventId: string;
     visitorId: string;
     assetType?: MarketAssetType;
+    /** detail_direct 时带上：打开的分享链接上的编号 */
+    shareCode?: string;
   },
 ): Promise<MarketEngagementMutation> {
   const res = await fetchWithTimeout(

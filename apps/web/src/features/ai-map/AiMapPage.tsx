@@ -26,7 +26,7 @@ import {
   SHOWCASE_TABS,
   type ShowcaseTabId,
 } from '@/domain/scenarioShowcase';
-import { isSystemAdmin } from '@/domain/currentUser';
+import { useHasMenu } from '@/domain/currentUser';
 import { getPortalItemById, resolveScenarioCaseItems } from '@/domain/portalCase';
 import {
   resolvePipelineStepTargets,
@@ -44,9 +44,8 @@ import { useAppViewStore } from '@/stores/appViewStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { returnFromResource } from '@/domain/openResourceNav';
 import { canExecuteChat } from '@/domain/permissions';
-import { allowsTaskExecutionSurfaces } from '@/domain/marketRunCapability';
+import { useAllowsTaskExecution } from '@/domain/marketRunCapability';
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
-import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { ExpertTeamModal } from '@/components/content/ExpertTeamModal';
 import {
   countScenarioEnvSlots,
@@ -317,9 +316,9 @@ export function AiMapPage({
   const showToast = useMarketplaceStore((s) => s.showToast);
   const setAppView = useAppViewStore((s) => s.setAppView);
   const user = useSessionStore((s) => s.user);
-  const navPreset = useNavPresentationStore((s) => s.preset);
+  const taskExecutionAllowed = useAllowsTaskExecution();
   const canRunOnline =
-    canExecuteChat(user?.platformRole) && allowsTaskExecutionSurfaces(navPreset);
+    canExecuteChat(user?.platformRole) && taskExecutionAllowed;
 
   const [listFilter, setListFilter] = useState<ScenarioListFilter>('related');
   const [search, setSearch] = useState('');
@@ -328,7 +327,7 @@ export function AiMapPage({
   const [narrativeKind, setNarrativeKind] = useState<'all' | ShowcaseTabId>('all');
   const [teamPlan, setTeamPlan] = useState<ScenarioDemoPlan | null>(null);
   const [inspectTarget, setInspectTarget] = useState<ScenarioLayerInspectTarget | null>(null);
-  const isAdmin = isSystemAdmin(user?.platformRole);
+  const isAdmin = useHasMenu('portal-ops');
   const bumpExposure = useContentEngagementStore((state) => state.bumpExposure);
   const bumpDetail = useContentEngagementStore((state) => state.bumpDetail);
   const bumpRedirect = useContentEngagementStore((state) => state.bumpRedirect);

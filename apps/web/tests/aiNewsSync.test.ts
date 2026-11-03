@@ -7,8 +7,16 @@ type NewsPayload = {
   sourceUrl: string;
   fetchedAt: string;
   groups: Array<{
+    dateKey?: string;
     dateLabel: string;
-    items: Array<{ id: string; dateLabel: string; title: string; summary: string; url: string }>;
+    items: Array<{
+      id: string;
+      dateLabel: string;
+      publishedAt?: string;
+      title: string;
+      summary: string;
+      url: string;
+    }>;
   }>;
   fromFallback?: boolean;
 };
@@ -54,17 +62,32 @@ let newsStore: NewsStore;
 let workspaceStore: WorkspaceStore;
 const originalFetch = globalThis.fetch;
 
-function payload(title: string): NewsPayload {
+function shanghaiTodayKey(): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+  return `${year}-${month}-${day}`;
+}
+
+function payload(title: string, dateKey = shanghaiTodayKey()): NewsPayload {
   return {
     sourceUrl: 'https://aihot.virxact.com',
-    fetchedAt: '2026-08-27T04:00:00.000Z',
+    fetchedAt: new Date().toISOString(),
     groups: [
       {
+        dateKey,
         dateLabel: '8月27日周四',
         items: [
           {
             id: `news-${title}`,
             dateLabel: '8月27日周四',
+            publishedAt: new Date().toISOString(),
             title,
             summary: '摘要',
             url: 'https://example.com/news',
@@ -237,6 +260,37 @@ test('接口没有快讯时保持加载，不写入内置快照', async () => {
 
   assert.equal(newsStore.getState().loading, true);
   assert.equal(newsStore.getState().payload.groups.length, 0);
+});
+
+test('早于三天的快讯仍进入数据，时间范围由页面筛选决定', async () => {
+  newsStore.setState({
+    payload: { sourceUrl: '', fetchedAt: '', groups: [] },
+    loading: true,
+    syncing: false,
+    error: null,
+  });
+  globalThis.fetch = (async () =>
+    jsonResponse(payload('过期快讯', '2020-01-01'))) as typeof fetch;
+
+  await newsStore.getState().hydrate(true);
+
+  assert.equal(newsStore.getState().loading, false);
+  assert.equal(newsStore.getState().payload.groups[0]?.items[0]?.title, '过期快讯');
+});
+
+test('快讯页默认把时间筛选设成最近三个上海自然日', async () => {
+  const news = (await vite.ssrLoadModule('/src/domain/aiBotDailyNews.ts')) as {
+    defaultAiNewsDateRange: (now?: Date) => { startDate: string; endDate: string };
+  };
+  assert.deepEqual(news.defaultAiNewsDateRange(new Date('2026-10-30T16:00:00.000Z')), {
+    startDate: '2026-10-29',
+    endDate: '2026-10-31',
+  });
+  assert.deepEqual(news.defaultAiNewsDateRange(new Date('2026-10-30T15:59:00.000Z')), {
+    startDate: '2026-10-28',
+    endDate: '2026-10-30',
+  });
+  assert.match(briefPageSource, /useState\(defaultAiNewsDateRange\)/);
 });
 
 test('接口返回快讯后结束加载', async () => {

@@ -41,7 +41,6 @@ npm run dev:react
 | `apple-header` 顶栏 | `components/shell/AppHeader.tsx` |
 | 分组侧栏 + 折叠 | `components/shell/AppShellSidebar.tsx` |
 | `switchAppView()` | `stores/appViewStore.ts` + `domain/appView.ts` |
-| 设置抽屉 | `components/shell/SettingsDrawer.tsx` |
 | home / task / automation 占位 | `components/shell/AppViewPlaceholder.tsx` |
 
 **已接入：**

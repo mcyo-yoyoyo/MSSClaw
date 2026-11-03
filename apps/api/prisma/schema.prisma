@@ -61,9 +61,12 @@ model MarketEngagementEvent {
   inputTokens  Int?     @map("input_tokens")
   outputTokens Int?     @map("output_tokens")
   errorCode    String?  @map("error_code")
+  /// 分享编号：share 事件记自己的编号，detail_direct 事件记打开的是哪个编号
+  shareCode    String?  @map("share_code")
   occurredAt   DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
 
   @@index([dateKey, action], map: "market_engagement_event_date_action_idx")
+  @@index([shareCode], map: "market_engagement_event_share_code_idx")
   @@index([occurredAt], map: "market_engagement_event_time_idx")
   @@index([dateKey, visitorHash], map: "market_engagement_event_date_visitor_idx")
   @@index([visitorHash, occurredAt], map: "market_engagement_event_visitor_time_idx")
@@ -274,9 +277,6 @@ model Skill {
   businessScenarioId  String?        @map("business_scenario_id")
   sourceType          String?        @map("source_type")
   visibility          String?
-  ownerDeptIds        Json?          @map("owner_dept_ids")
-  ownerRegionId       String?        @map("owner_region_id")
-  ownerRegionIds      Json?          @map("owner_region_ids")
   homepageUrl         String?        @map("homepage_url")
   scenarioTags        Json?          @map("scenario_tags")
   invokes             Int            @default(0)
@@ -297,6 +297,8 @@ model Skill {
   createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
   versions            SkillVersion[]
+  regions             SkillRegion[]
+  domains             SkillDomain[]
 
   @@map("skill")
 }
@@ -318,55 +320,104 @@ model SkillVersion {
 
 /// Agent：原 marketplace.agents[]
 model Agent {
-  no                  BigInt       @id @default(autoincrement())
-  id                  String       @unique
+  no                  BigInt        @id @default(autoincrement())
+  id                  String        @unique
   position            Int
   name                String
-  desc                String       @map("description")
-  valueProposition    String?      @map("value_proposition")
+  desc                String        @map("description")
+  valueProposition    String?       @map("value_proposition")
   category            String
-  bizLine             String       @map("biz_line")
-  homeTag             String       @map("home_tag")
+  bizLine             String        @map("biz_line")
+  homeTag             String        @map("home_tag")
   author              String
-  publisher           String?      @map("publisher_name")
-  publisherUserId     String?      @map("publisher_member_id")
+  publisher           String?       @map("publisher_name")
+  publisherUserId     String?       @map("publisher_member_id")
   maintainer          String?
   published           Boolean
-  featuredInDoTask    Boolean?     @map("featured_in_do_task")
-  lifecycleStatus     String?      @map("lifecycle_status")
-  businessScenarioId  String?      @map("business_scenario_id")
-  sourceType          String?      @map("source_type")
+  featuredInDoTask    Boolean?      @map("featured_in_do_task")
+  lifecycleStatus     String?       @map("lifecycle_status")
+  businessScenarioId  String?       @map("business_scenario_id")
+  sourceType          String?       @map("source_type")
   visibility          String?
-  ownerDeptIds        Json?        @map("owner_dept_ids")
-  ownerRegionIds      Json?        @map("owner_region_ids")
-  scenarioTags        Json?        @map("scenario_tags")
-  capabilityTypeIds   Json?        @map("capability_type_ids")
-  invokes             Int          @default(0)
-  primarySkillId      String?      @map("primary_skill_id")
-  chatId              String       @map("chat_id")
+  scenarioTags        Json?         @map("scenario_tags")
+  capabilityTypeIds   Json?         @map("capability_type_ids")
+  invokes             Int           @default(0)
+  primarySkillId      String?       @map("primary_skill_id")
+  chatId              String        @map("chat_id")
   icon                String
   color               String
-  avatarPresetId      String?      @map("avatar_preset_id")
-  avatarUrl           String?      @map("avatar_url")
-  systemPrompt        String?      @map("system_prompt")
-  demoPrompt          String?      @map("demo_prompt")
-  demoUrl             String?      @map("demo_url")
-  solutionDocUrl      String?      @map("solution_doc_url")
-  feedbackUrl         String?      @map("feedback_url")
-  installCommand      String?      @map("install_command")
+  avatarPresetId      String?       @map("avatar_preset_id")
+  avatarUrl           String?       @map("avatar_url")
+  systemPrompt        String?       @map("system_prompt")
+  demoPrompt          String?       @map("demo_prompt")
+  demoUrl             String?       @map("demo_url")
+  solutionDocUrl      String?       @map("solution_doc_url")
+  feedbackUrl         String?       @map("feedback_url")
+  installCommand      String?       @map("install_command")
   version             String?
-  versionSummary      String?      @map("version_summary")
-  requiresHumanReview Boolean?     @map("requires_human_review")
-  packageBlob         Json?        @map("package_blob")
-  planSteps           Json?        @map("plan_steps")
+  versionSummary      String?       @map("version_summary")
+  requiresHumanReview Boolean?      @map("requires_human_review")
+  packageBlob         Json?         @map("package_blob")
+  planSteps           Json?         @map("plan_steps")
   detail              Json?
-  sourceCreatedAt     String?      @map("source_created_at")
-  sourceUpdatedAt     String?      @map("source_updated_at")
-  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt           DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  sourceCreatedAt     String?       @map("source_created_at")
+  sourceUpdatedAt     String?       @map("source_updated_at")
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
   skills              AgentSkill[]
+  regions             AgentRegion[]
+  domains             AgentDomain[]
 
   @@map("agent")
+}
+
+/// Skill / Agent 的区域、领域标签（接口字段 ownerRegionIds / ownerDeptIds）。没有区域标签 = 全部区域
+model SkillRegion {
+  skillNo  BigInt @map("skill_no")
+  regionId String @map("region_id")
+  position Int    @default(0)
+  skill    Skill  @relation(fields: [skillNo], references: [no], onDelete: Cascade, map: "skill_region_skill_no_fkey")
+  region   Region @relation(fields: [regionId], references: [id], map: "skill_region_region_id_fkey")
+
+  @@id([skillNo, regionId])
+  @@index([regionId], map: "skill_region_region_idx")
+  @@map("skill_region")
+}
+
+model SkillDomain {
+  skillNo  BigInt @map("skill_no")
+  domainId String @map("domain_id")
+  position Int    @default(0)
+  skill    Skill  @relation(fields: [skillNo], references: [no], onDelete: Cascade, map: "skill_domain_skill_no_fkey")
+  domain   Domain @relation(fields: [domainId], references: [id], map: "skill_domain_domain_id_fkey")
+
+  @@id([skillNo, domainId])
+  @@index([domainId], map: "skill_domain_domain_idx")
+  @@map("skill_domain")
+}
+
+model AgentRegion {
+  agentNo  BigInt @map("agent_no")
+  regionId String @map("region_id")
+  position Int    @default(0)
+  agent    Agent  @relation(fields: [agentNo], references: [no], onDelete: Cascade, map: "agent_region_agent_no_fkey")
+  region   Region @relation(fields: [regionId], references: [id], map: "agent_region_region_id_fkey")
+
+  @@id([agentNo, regionId])
+  @@index([regionId], map: "agent_region_region_idx")
+  @@map("agent_region")
+}
+
+model AgentDomain {
+  agentNo  BigInt @map("agent_no")
+  domainId String @map("domain_id")
+  position Int    @default(0)
+  agent    Agent  @relation(fields: [agentNo], references: [no], onDelete: Cascade, map: "agent_domain_agent_no_fkey")
+  domain   Domain @relation(fields: [domainId], references: [id], map: "agent_domain_domain_id_fkey")
+
+  @@id([agentNo, domainId])
+  @@index([domainId], map: "agent_domain_domain_idx")
+  @@map("agent_domain")
 }
 
 /// Agent 编排的 Skill：原 agent.skillIds[]；skill_id 不加外键（可能引用未上架或已删除的 Skill）
@@ -428,27 +479,122 @@ model KbDocument {
 // ---------------------------------------------------------------------------
 // 第 4 期身份表（docs/database-design.sql A1–A3、C5）。接口仍是 /docs/members、/docs/auth-credentials 整份收发。
 
-/// 成员：原 doc:members.members[]；position 保持成员表顺序
-model Member {
-  id          String            @id
-  email       String?           @unique
-  externalId  String?           @unique @map("external_id")
-  name        String            @map("display_name")
-  avatar      String            @default("bg-zinc-600")
-  postName    String?           @map("post_name")
-  orgPath     String?           @map("org_path")
-  role        String            @default("business_user")
-  status      String            @default("active")
-  deptIds     Json              @default("[]") @map("dept_ids")
-  regionId    String?           @map("region_id")
-  position    Int               @default(0)
-  lastLoginAt DateTime?         @map("last_login_at") @db.Timestamptz(3)
-  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
-  credential  MemberCredential?
-  sessions    AuthSession[]
+/// 角色：一个成员一个角色；super_admin 全库只能有一个成员（迁移里的部分唯一索引）
+model Role {
+  id          String     @id
+  name        String
+  description String?
+  isSystem    Boolean    @default(false) @map("is_system")
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  members     Member[]
+  menus       RoleMenu[]
 
+  @@map("role")
+}
+
+/// 菜单：id 即前端视图 id（AppView）
+/// 两层菜单：parent_id 为空的是一级分组（只分组、不授权），二级菜单才分配给角色。
+/// fixed：所有登录用户都有，不进 role_menu
+model Menu {
+  id       String     @id
+  name     String
+  section  String
+  icon     String?
+  sort     Int        @default(0)
+  parentId String?    @map("parent_id")
+  fixed    Boolean    @default(false)
+  parent   Menu?      @relation("MenuTree", fields: [parentId], references: [id], onDelete: Restrict, map: "menu_parent_id_fkey")
+  children Menu[]     @relation("MenuTree")
+  roles    RoleMenu[]
+
+  @@index([parentId], map: "menu_parent_idx")
+  @@map("menu")
+}
+
+/// 角色可见菜单；super_admin 不查这张表，全部放行
+/// canEdit=false 时只能看，不能新增、修改、删除
+model RoleMenu {
+  roleId  String  @map("role_id")
+  menuId  String  @map("menu_id")
+  canEdit Boolean @default(true) @map("can_edit")
+  role    Role    @relation(fields: [roleId], references: [id], onDelete: Cascade, map: "role_menu_role_id_fkey")
+  menu    Menu    @relation(fields: [menuId], references: [id], onDelete: Cascade, map: "role_menu_menu_id_fkey")
+
+  @@id([roleId, menuId])
+  @@index([menuId], map: "role_menu_menu_idx")
+  @@map("role_menu")
+}
+
+/// 区域字典：成员归属与 Skill / Agent 标签共用
+model Region {
+  id        String        @id
+  name      String
+  enabled   Boolean       @default(true)
+  sort      Int           @default(0)
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  members   Member[]
+  skills    SkillRegion[]
+  agents    AgentRegion[]
+
+  @@map("region")
+}
+
+/// 领域字典：成员归属与 Skill / Agent 标签共用（原组织字典里的 depts）
+model Domain {
+  id        String         @id
+  name      String
+  enabled   Boolean        @default(true)
+  sort      Int            @default(0)
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  members   MemberDomain[]
+  skills    SkillDomain[]
+  agents    AgentDomain[]
+
+  @@map("domain")
+}
+
+/// 成员：原 doc:members.members[]；position 保持成员表顺序。邮箱一律小写存储（迁移里的 CHECK 约束）
+model Member {
+  id            String            @id
+  email         String            @unique
+  externalId    String?           @unique @map("external_id")
+  name          String            @map("display_name")
+  avatar        String            @default("bg-zinc-600")
+  postName      String?           @map("post_name")
+  orgPath       String?           @map("org_path")
+  roleId        String            @default("member") @map("role_id")
+  status        String            @default("active")
+  regionId      String?           @map("region_id")
+  tokenVersion  Int               @default(0) @map("token_version")
+  position      Int               @default(0)
+  lastLoginAt   DateTime?         @map("last_login_at") @db.Timestamptz(3)
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  role          Role              @relation(fields: [roleId], references: [id], map: "member_role_id_fkey")
+  region        Region?           @relation(fields: [regionId], references: [id], map: "member_region_id_fkey")
+  domains       MemberDomain[]
+  credential    MemberCredential?
+  sessions      AuthSession[]
+  refreshTokens RefreshToken[]
+
+  @@index([roleId], map: "member_role_idx")
   @@map("member")
+}
+
+/// 成员所属领域（可多个）；position 保持选择顺序
+model MemberDomain {
+  memberId String @map("member_id")
+  domainId String @map("domain_id")
+  position Int    @default(0)
+  member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade, map: "member_domain_member_id_fkey")
+  domain   Domain @relation(fields: [domainId], references: [id], map: "member_domain_domain_id_fkey")
+
+  @@id([memberId, domainId])
+  @@index([domainId], map: "member_domain_domain_idx")
+  @@map("member_domain")
 }
 
 /// 成员密码：原 doc:auth-credentials.credentials[email]；sha256(salt + ":" + password)
@@ -478,6 +624,24 @@ model AuthSession {
   @@index([memberId], map: "auth_session_member_idx")
   @@index([expiresAt], map: "auth_session_expires_idx")
   @@map("auth_session")
+}
+
+/// 刷新令牌：库里只存 SHA-256；每次刷新作废旧的、签发新的（replaced_by 指向新令牌）
+model RefreshToken {
+  id         String    @id
+  memberId   String    @map("member_id")
+  tokenHash  String    @unique @map("token_hash")
+  authMethod String    @map("auth_method")
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(3)
+  replacedBy String?   @map("replaced_by")
+  userAgent  String?   @map("user_agent")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  member     Member    @relation(fields: [memberId], references: [id], onDelete: Cascade, map: "refresh_token_member_id_fkey")
+
+  @@index([memberId], map: "refresh_token_member_idx")
+  @@index([expiresAt], map: "refresh_token_expires_idx")
+  @@map("refresh_token")
 }
 
 /// 整表替换集合的版本号（members / auth-credentials），乐观锁用
@@ -667,19 +831,19 @@ model AssetApprovalWatch {
 
 /// 审计日志：只追加，保留 180 天
 model AuditLog {
-  no          BigInt   @id @default(autoincrement()) @map("id")
-  entryId     String   @unique @map("entry_id")
-  occurredAt  DateTime @map("occurred_at") @db.Timestamptz(3)
-  category    String
-  action      String
-  module      String
-  detail      String
-  actorName   String   @map("actor_name")
-  actorEmail  String?  @map("actor_email")
-  actorRole   String?  @map("actor_role")
-  deptIds     Json?    @map("dept_ids")
-  regionId    String?  @map("region_id")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  no         BigInt   @id @default(autoincrement()) @map("id")
+  entryId    String   @unique @map("entry_id")
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
+  category   String
+  action     String
+  module     String
+  detail     String
+  actorName  String   @map("actor_name")
+  actorEmail String?  @map("actor_email")
+  actorRole  String?  @map("actor_role")
+  deptIds    Json?    @map("dept_ids")
+  regionId   String?  @map("region_id")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@index([occurredAt], map: "audit_log_time_idx")
   @@map("audit_log")

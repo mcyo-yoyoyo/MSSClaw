@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import type { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -12,12 +12,15 @@ import type { PrismaService } from '../prisma/prisma.service';
 
 type Db = PrismaService | Prisma.TransactionClient;
 type JsonRecord = Record<string, unknown>;
-type MemberRow = Prisma.MemberGetPayload<object>;
+
+/** 成员行连同所属领域一起读，memberToJson 依赖 domains */
+export const MEMBER_INCLUDE = { domains: { orderBy: { position: 'asc' } } } satisfies Prisma.MemberInclude;
+export type MemberRow = Prisma.MemberGetPayload<{ include: typeof MEMBER_INCLUDE }>;
 
 export const SEED_MEMBERS = [
-  { id: 'u-mcyo', name: 'Mcyo', email: 'mcyo@huawei.com', role: 'super_admin', avatar: 'bg-indigo-600', status: 'active', deptIds: ['quality'], regionId: null },
-  { id: 'u-jacky', name: 'Jacky', email: 'jacky@huawei.com', role: 'capability_ops', avatar: 'bg-teal-600', status: 'active', deptIds: ['quality'], regionId: null },
-  { id: 'u-dickson', name: 'Dickson', email: 'dickson@huawei.com', role: 'business_user', avatar: 'bg-amber-500', status: 'active', deptIds: ['mkt'], regionId: null },
+  { id: 'u-mcyo', name: 'Mcyo', email: 'mcyo@huawei.com', roleId: 'super_admin', avatar: 'bg-indigo-600', status: 'active', domainIds: ['quality'], regionId: null },
+  { id: 'u-jacky', name: 'Jacky', email: 'jacky@huawei.com', roleId: 'capability_ops', avatar: 'bg-teal-600', status: 'active', domainIds: ['quality'], regionId: null },
+  { id: 'u-dickson', name: 'Dickson', email: 'dickson@huawei.com', roleId: 'business_user', avatar: 'bg-amber-500', status: 'active', domainIds: ['mkt'], regionId: null },
 ];
 
 export function normalizedAccountEmail(value: unknown): string {
@@ -67,7 +70,7 @@ export async function bumpCollectionRevision(
 }
 
 /** 成员表被 OAuth 登录改动时无条件加一，让管理员手里的旧快照写入时撞 409。 */
-async function touchRevision(tx: Prisma.TransactionClient, collection: string): Promise<void> {
+export async function touchRevision(tx: Prisma.TransactionClient, collection: string): Promise<void> {
   await tx.collectionRevision.upsert({
     where: { collection },
     create: { collection, revision: 1 },
@@ -98,12 +101,12 @@ export function memberToJson(row: MemberRow): JsonRecord {
   return {
     id: row.id,
     name: row.name,
-    email: row.email ?? '',
-    role: row.role,
+    email: row.email,
+    role: row.roleId,
     avatar: row.avatar,
     lastActive: lastActiveLabel(row.lastLoginAt),
     status: row.status,
-    deptIds: Array.isArray(row.deptIds) ? row.deptIds : [],
+    deptIds: row.domains.map((domain) => domain.domainId),
     regionId: row.regionId ?? null,
     ...(row.externalId ? { externalId: row.externalId } : {}),
     ...(row.postName ? { postName: row.postName } : {}),
@@ -112,7 +115,7 @@ export function memberToJson(row: MemberRow): JsonRecord {
 }
 
 export async function readMembers(db: Db): Promise<MemberRow[]> {
-  return db.member.findMany({ orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] });
+  return db.member.findMany({ include: MEMBER_INCLUDE, orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] });
 }
 
 export async function readMembersDoc(db: Db) {
@@ -125,7 +128,13 @@ export async function ensureMembersSeeded(db: Db): Promise<void> {
   if (await db.collectionRevision.findUnique({ where: { collection: 'members' } })) return;
   if (await db.member.count()) return;
   await db.member.createMany({
-    data: SEED_MEMBERS.map((member, position) => ({ ...member, position })),
+    data: SEED_MEMBERS.map(({ domainIds: _domainIds, ...member }, position) => ({ ...member, position })),
+    skipDuplicates: true,
+  });
+  await db.memberDomain.createMany({
+    data: SEED_MEMBERS.flatMap((member) =>
+      member.domainIds.map((domainId, position) => ({ memberId: member.id, domainId, position })),
+    ),
     skipDuplicates: true,
   });
 }
@@ -165,23 +174,48 @@ export function prepareMembers(payload: unknown) {
     }
     if (ids.has(id)) invalidMember(id, 'duplicate_id');
     ids.add(id);
-    const email = normalizedAccountEmail(item.email) || null;
-    if (email) {
-      if (emails.has(email)) invalidMember(id, `duplicate_email_${email}`);
-      emails.add(email);
-    }
+    const email = normalizedAccountEmail(item.email);
+    if (!email) invalidMember(id, 'email_required');
+    if (emails.has(email)) invalidMember(id, `duplicate_email_${email}`);
+    emails.add(email);
     return {
       id,
       name: item.name,
       email,
-      role: typeof item.role === 'string' && item.role ? item.role : 'business_user',
+      roleId: typeof item.role === 'string' && item.role ? item.role : 'member',
       avatar: typeof item.avatar === 'string' && item.avatar ? item.avatar : 'bg-zinc-600',
       status: typeof item.status === 'string' && item.status ? item.status : 'active',
-      deptIds: (item.deptIds as string[] | undefined) ?? [],
-      regionId: (item.regionId as string | null | undefined) ?? null,
+      domainIds: [...new Set((item.deptIds as string[] | undefined) ?? [])],
+      regionId: (item.regionId as string | null | undefined) || null,
       position,
     };
   });
+}
+
+type PreparedMember = ReturnType<typeof prepareMembers>[number];
+
+export const SUPER_ADMIN_ROLE = 'super_admin';
+
+/** 角色、区域、领域必须在字典里；超级管理员全库只能有一个。 */
+async function assertMemberReferences(db: Db, members: PreparedMember[]): Promise<void> {
+  const [roles, regions, domains] = await Promise.all([
+    db.role.findMany({ select: { id: true } }),
+    db.region.findMany({ select: { id: true } }),
+    db.domain.findMany({ select: { id: true } }),
+  ]);
+  const roleIds = new Set(roles.map((row) => row.id));
+  const regionIds = new Set(regions.map((row) => row.id));
+  const domainIds = new Set(domains.map((row) => row.id));
+  for (const member of members) {
+    if (!roleIds.has(member.roleId)) invalidMember(member.id, `unknown_role_${member.roleId}`);
+    if (member.regionId && !regionIds.has(member.regionId)) invalidMember(member.id, `unknown_region_${member.regionId}`);
+    const unknownDomain = member.domainIds.find((domainId) => !domainIds.has(domainId));
+    if (unknownDomain) invalidMember(member.id, `unknown_domain_${unknownDomain}`);
+  }
+  const superAdmins = members.filter((member) => member.roleId === SUPER_ADMIN_ROLE);
+  if (superAdmins.length > 1) {
+    throw new BadRequestException(`super_admin_must_be_unique:${superAdmins.map((member) => member.id).join(',')}`);
+  }
 }
 
 /** PUT /docs/members：版本一致才整份替换；从表里去掉的成员连同密码、会话一起删除（外键级联）。 */
@@ -190,15 +224,34 @@ export async function writeMembersDoc(prisma: PrismaService, payload: unknown) {
   const expected = expectedRevisionOf(payload);
   await prisma.$transaction(async (tx) => {
     await bumpRevision(tx, 'members', expected);
-    const existing = new Map((await tx.member.findMany({ select: { id: true, email: true } })).map((row) => [row.id, row.email]));
+    await assertMemberReferences(tx, prepared);
+    const existing = new Map(
+      (await tx.member.findMany({ select: { id: true, email: true, roleId: true } })).map((row) => [row.id, row]),
+    );
     await tx.member.deleteMany({ where: { id: { notIn: prepared.map((member) => member.id) } } });
-    // 先清掉要换邮箱的成员的旧邮箱，两个成员互换邮箱时才不会撞唯一键
-    const emailChanged = prepared.filter((member) => existing.has(member.id) && existing.get(member.id) !== member.email);
-    if (emailChanged.length) {
-      await tx.member.updateMany({ where: { id: { in: emailChanged.map((member) => member.id) } }, data: { email: null } });
-    }
+    // 两个成员互换邮箱或交接超管时，先把旧值挪开，逐行写入才不会撞唯一约束
     for (const member of prepared) {
-      await tx.member.upsert({ where: { id: member.id }, create: member, update: member });
+      const before = existing.get(member.id);
+      if (!before) continue;
+      const data: Prisma.MemberUpdateInput = {};
+      if (before.email !== member.email) data.email = `swap-${randomUUID()}@invalid`;
+      if (before.roleId === SUPER_ADMIN_ROLE && member.roleId !== SUPER_ADMIN_ROLE) data.role = { connect: { id: member.roleId } };
+      if (Object.keys(data).length) await tx.member.update({ where: { id: member.id }, data });
+    }
+    for (const { domainIds, ...member } of prepared) {
+      const changed = existing.get(member.id);
+      const tokenVersion = changed && changed.roleId !== member.roleId ? { increment: 1 } : undefined;
+      await tx.member.upsert({
+        where: { id: member.id },
+        create: member,
+        update: { ...member, ...(tokenVersion ? { tokenVersion } : {}) },
+      });
+      await tx.memberDomain.deleteMany({ where: { memberId: member.id } });
+      if (domainIds.length) {
+        await tx.memberDomain.createMany({
+          data: domainIds.map((domainId, position) => ({ memberId: member.id, domainId, position })),
+        });
+      }
     }
   });
   return readMembersDoc(prisma);
@@ -207,17 +260,17 @@ export async function writeMembersDoc(prisma: PrismaService, payload: unknown) {
 /** 统一身份登录：建号或回写上游属性，成员表版本加一。 */
 export async function saveOAuthMember(
   prisma: PrismaService,
-  member: { id: string; name: string; email: string | null; externalId: string | null; postName: string | null; orgPath: string | null },
+  member: { id: string; name: string; email: string; externalId: string | null; postName: string | null; orgPath: string | null },
   create: boolean,
 ): Promise<MemberRow> {
   return prisma.$transaction(async (tx) => {
     await touchRevision(tx, 'members');
     if (!create) {
       const { id, ...data } = member;
-      return tx.member.update({ where: { id }, data });
+      return tx.member.update({ where: { id }, data, include: MEMBER_INCLUDE });
     }
     const last = await tx.member.findFirst({ orderBy: { position: 'desc' }, select: { position: true } });
-    return tx.member.create({ data: { ...member, position: (last?.position ?? -1) + 1 } });
+    return tx.member.create({ data: { ...member, position: (last?.position ?? -1) + 1 }, include: MEMBER_INCLUDE });
   });
 }
 
@@ -280,7 +333,12 @@ export async function writeCredentialsDoc(prisma: PrismaService, payload: unknow
       where: { email: { in: [...credentials.keys()] } },
       select: { id: true, email: true },
     });
-    const memberIdByEmail = new Map(members.map((member) => [member.email as string, member.id]));
+    const memberIdByEmail = new Map(members.map((member) => [member.email, member.id]));
+    const stored = new Map(
+      (await tx.memberCredential.findMany({ where: { memberId: { in: members.map((member) => member.id) } } })).map(
+        (row) => [row.memberId, row],
+      ),
+    );
     const kept: string[] = [];
     for (const [email, credential] of credentials) {
       const memberId = memberIdByEmail.get(email);
@@ -289,8 +347,12 @@ export async function writeCredentialsDoc(prisma: PrismaService, payload: unknow
         continue;
       }
       kept.push(memberId);
+      // 前端整份回传时不带 algorithm：盐和哈希没变就是原样回传（可能已升级为 scrypt），保持不动
+      const previous = stored.get(memberId);
+      if (previous && previous.salt === credential.salt && previous.passwordHash === credential.hash) continue;
       const parsed = Date.parse(credential.updatedAt);
       const data = {
+        algorithm: 'sha256-salt',
         salt: credential.salt,
         passwordHash: credential.hash,
         passwordUpdatedAt: Number.isFinite(parsed) ? new Date(parsed) : new Date(),
@@ -332,7 +394,10 @@ export async function createSession(
 }
 
 export async function findSession(db: Db, token: string) {
-  return db.authSession.findUnique({ where: { tokenHash: hashToken(token) }, include: { member: true } });
+  return db.authSession.findUnique({
+    where: { tokenHash: hashToken(token) },
+    include: { member: { include: MEMBER_INCLUDE } },
+  });
 }
 
 export async function deleteSession(db: Db, token: string): Promise<void> {

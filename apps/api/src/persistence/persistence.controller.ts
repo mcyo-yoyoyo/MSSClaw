@@ -31,6 +31,7 @@ import {
 } from './persistence.service';
 import { BlobStoreService, packageArchiveMimeType } from './blob-store.service';
 import { hasValidApiKey } from '../common/optional-api-key.guard';
+import { operationActorFrom } from './operation-log';
 import { PlatformDocsService } from './platform-docs.service';
 // 单租户：原路由参数 workspaceId 固定为平台空间，方法体沿用这个名字（服务层还用它拼 center_record 的记录 id，对应文档迁到正式表时一起去掉）
 import { PLATFORM_WORKSPACE_ID as workspaceId } from '../common/platform-workspace';
@@ -39,6 +40,7 @@ const MARKET_ENGAGEMENT_ACTIONS = new Set([
   'exposure',
   'detail',
   'detail_direct',
+  'share',
   'view',
   'use',
   'redirect',
@@ -197,8 +199,12 @@ export class PersistenceController {
   }
 
   @Put('marketplace')
-  putMarketplace(@Body() body: MarketplacePayload) {
-    return this.persistence.putMarketplace(workspaceId, body);
+  async putMarketplace(
+    @Body() body: MarketplacePayload,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    return this.persistence.putMarketplace(workspaceId, body, await optionalActor(this.docs, authorization, xSessionToken));
   }
 
   /**
@@ -235,6 +241,7 @@ export class PersistenceController {
       inputTokens?: number;
       outputTokens?: number;
       errorCode?: string;
+      shareCode?: string;
     },
     @Headers('authorization') authorization?: string,
     @Headers('x-session-token') xSessionToken?: string,
@@ -272,7 +279,29 @@ export class PersistenceController {
       inputTokens: body.inputTokens,
       outputTokens: body.outputTokens,
       errorCode: body.errorCode,
+      shareCode: body.shareCode,
     });
+  }
+
+  /** 详情页打开时取好分享编号，点分享时才能在用户手势内同步复制链接。分享必须登录。 */
+  @Post('market-engagement/:contentId/share-code')
+  @Throttle({ default: { limit: 300, ttl: 60_000 } })
+  async getMarketShareCode(
+    @Param('contentId') contentId: string,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    const normalizedContentId = contentId.trim();
+    if (
+      !normalizedContentId ||
+      normalizedContentId.length > 200 ||
+      MARKET_CONTENT_ID_CONTROL_RE.test(normalizedContentId)
+    ) {
+      throw new BadRequestException('invalid_market_engagement_content_id');
+    }
+    const userId = await this.optionalSessionUserId(workspaceId, authorization, xSessionToken);
+    if (!userId) throw new UnauthorizedException('market_engagement_login_required');
+    return this.persistence.getMarketShareCode(workspaceId, normalizedContentId, userId);
   }
 
   /**
@@ -295,6 +324,7 @@ export class PersistenceController {
       inputTokens?: number;
       outputTokens?: number;
       errorCode?: string;
+      shareCode?: string;
     },
     @Headers('authorization') authorization?: string,
     @Headers('x-session-token') xSessionToken?: string,
@@ -332,6 +362,7 @@ export class PersistenceController {
       inputTokens: body?.inputTokens,
       outputTokens: body?.outputTokens,
       errorCode: body?.errorCode,
+      shareCode: body?.shareCode,
     });
   }
 
@@ -370,6 +401,22 @@ export class PersistenceController {
     @Body() body: PortalContentPayload,
   ) {
     return this.persistence.putPortalContent(workspaceId, body ?? { items: [] });
+  }
+
+  @Post('portal-content/items')
+  createPortalContentItem(@Body() body: unknown) {
+    return this.persistence.savePortalContentItem(body);
+  }
+
+  @Put('portal-content/items/:id')
+  updatePortalContentItem(@Param('id') id: string, @Body() body: unknown) {
+    const record = body && typeof body === 'object' && !Array.isArray(body) ? { ...body, id } : { id };
+    return this.persistence.savePortalContentItem(record);
+  }
+
+  @Delete('portal-content/items/:id')
+  deletePortalContentItem(@Param('id') id: string) {
+    return this.persistence.savePortalContentItem(undefined, id);
   }
 
   /** 对象存储 blob：用 base64 JSON 上传，避免额外 multer 依赖 */
@@ -536,7 +583,10 @@ export class PersistenceController {
 /** 部署级工具目录：所有 workspace 读取同一份快照。 */
 @Controller('tools')
 export class GlobalToolsController {
-  constructor(private readonly persistence: PersistenceService) {}
+  constructor(
+    private readonly persistence: PersistenceService,
+    private readonly docs: PlatformDocsService,
+  ) {}
 
   @Get()
   getTools() {
@@ -544,7 +594,19 @@ export class GlobalToolsController {
   }
 
   @Put()
-  putTools(@Body() body: unknown) {
-    return this.persistence.putGlobalTools(body);
+  async putTools(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    return this.persistence.putGlobalTools(body, await optionalActor(this.docs, authorization, xSessionToken));
   }
+}
+
+/** 带了有效登录就记下是谁；没带或令牌无效仍允许写入，操作人记为未登录 */
+async function optionalActor(docs: PlatformDocsService, authorization?: string, xSessionToken?: string) {
+  const token = sessionToken(authorization, xSessionToken);
+  if (!token) return operationActorFrom(null);
+  const session = await docs.me(token);
+  return operationActorFrom(session.ok ? session.user : null);
 }

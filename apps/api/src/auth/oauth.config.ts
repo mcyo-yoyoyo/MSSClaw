@@ -201,7 +201,7 @@ export function validateOAuthConfig(config = oauthConfig()): ConfigCheck[] {
     true,
     'info',
     config.jitProvision
-      ? `开启，新用户自动建号为 business_user${config.allowedEmailDomains.length ? `（限 ${config.allowedEmailDomains.join('/')}）` : '（未限邮箱域，建议配 OAUTH_ALLOWED_EMAIL_DOMAINS）'}`
+      ? `开启，新用户自动建号为普通用户（member）${config.allowedEmailDomains.length ? `（限 ${config.allowedEmailDomains.join('/')}）` : '（未限邮箱域，建议配 OAUTH_ALLOWED_EMAIL_DOMAINS）'}`
       : '关闭，未登记的用户会被拒绝登录',
   );
   if (config.jitProvision && !config.allowedEmailDomains.length) {

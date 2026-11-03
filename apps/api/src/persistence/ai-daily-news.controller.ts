@@ -1,18 +1,19 @@
 import {
   Controller,
-  ForbiddenException,
   Get,
   Header,
   Headers,
   Post,
   UnauthorizedException,
 } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import { AI_NEWS_SOURCE, AiNewsArchiveService } from './ai-news-archive.service';
 import { PlatformDocsService } from './platform-docs.service';
+import { assertAnyMenu } from './rbac-store';
 import { PLATFORM_WORKSPACE_ID } from '../common/platform-workspace';
 
 /**
- * AI 快讯：读数据库归档，不再每次访问都代理上游。
+ * AI 快讯：只读数据库归档，不再每次访问都代理上游。展示范围由页面筛选决定。
  * 上游拉取由 AiNewsArchiveService 每天 08:00 定时执行。
  */
 @Controller('ai-daily-news')
@@ -20,6 +21,7 @@ export class AiDailyNewsController {
   constructor(
     private readonly archive: AiNewsArchiveService,
     private readonly docs: PlatformDocsService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Get()
@@ -52,9 +54,7 @@ export class AiDailyNewsController {
     if (!session.ok) {
       throw new UnauthorizedException(session.error || 'ai_news_sync_login_required');
     }
-    if (String(session.user.platformRole ?? '') !== 'super_admin') {
-      throw new ForbiddenException('ai_news_sync_admin_required');
-    }
+    await assertAnyMenu(this.prisma, String(session.user.platformRole ?? ''), ['portal-ops']);
     return this.archive.syncNow();
   }
 }

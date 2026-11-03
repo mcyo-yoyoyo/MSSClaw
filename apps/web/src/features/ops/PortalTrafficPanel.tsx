@@ -34,7 +34,7 @@ type AssetTab = 'externalTool' | 'companyTool' | 'skill' | 'agent' | 'case';
 type RangeKey = 'today' | 'last7Days' | 'last30Days' | 'custom';
 type ModuleId = 'overview' | 'users' | 'assets' | 'behavior';
 /** 文档要求行为指标按这四类分别统计。 */
-type AssetClass = 'externalTool' | 'companyTool' | 'skill' | 'agent';
+type AssetClass = 'externalTool' | 'companyTool' | 'skill' | 'agent' | 'case';
 
 interface RangeSpec {
   key: RangeKey;
@@ -59,6 +59,8 @@ interface BehaviorCounts {
   views: number;
   /** 其中通过分享链接直达的 */
   shareViews: number;
+  /** 分享按钮点击次数 */
+  shares: number;
   favorites: number;
   likes: number;
   dislikes: number;
@@ -110,6 +112,7 @@ const ASSET_CLASSES: Array<{ value: AssetClass; label: string }> = [
   { value: 'companyTool', label: '公司工具' },
   { value: 'skill', label: 'Skill' },
   { value: 'agent', label: 'Agent' },
+  { value: 'case', label: '案例洞察' },
 ];
 
 const PAGE_SIZES = [10, 20, 50, 100];
@@ -140,6 +143,7 @@ const EMPTY_TRAFFIC: PortalAnalyticsTrafficCounts = {
 const EMPTY_BEHAVIOR: BehaviorCounts = {
   views: 0,
   shareViews: 0,
+  shares: 0,
   favorites: 0,
   likes: 0,
   dislikes: 0,
@@ -180,7 +184,7 @@ function validateRange(spec: RangeSpec, today: string): string | null {
   if (spec.key !== 'custom') return null;
   if (!spec.from || !spec.to) return '请同时选择开始与结束日期。';
   if (spec.from > spec.to) return '开始日期不能晚于结束日期。';
-  if (spec.to > today) return `结束日期不能晚于今天（${formatDate(today)}）。`;
+  if (spec.to > today) return `结束日期不能晚于今天（${today}）。`;
   const span = daysBetween(spec.from, spec.to);
   if (span > MAX_CUSTOM_DAYS) return `自定义区间最长 ${MAX_CUSTOM_DAYS} 天，当前选了 ${span} 天。`;
   return null;
@@ -226,24 +230,23 @@ function formatOptionalCount(value: number | null | undefined): string {
   return value === null || value === undefined ? NOT_COLLECTED : formatCount(value);
 }
 
+const SHANGHAI_DATE_TIME = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Shanghai',
+  hourCycle: 'h23',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+/** 北京时间 yyyy-mm-dd HH:mm */
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return NOT_COLLECTED;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    hour12: false,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function formatDate(value: string): string {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  return match ? `${match[1]}/${match[2]}/${match[3]}` : value;
+  const parts = Object.fromEntries(SHANGHAI_DATE_TIME.formatToParts(date).map((part) => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
 }
 
 function formatShare(part: number, whole: number): string {
@@ -256,6 +259,11 @@ function regionLabel(region: PortalAnalyticsAssetRow['region']): string {
 }
 
 /* ── 分类与汇总 ── */
+
+/** 工具看跳转，Skill / Agent 看下载 */
+function assetTabShowsRedirects(tab: AssetTab): boolean {
+  return tab === 'externalTool' || tab === 'companyTool';
+}
 
 function matchesAssetTab(row: PortalAnalyticsAssetRow, tab: AssetTab): boolean {
   const type = row.assetType.toLowerCase();
@@ -272,6 +280,7 @@ function classifyAsset(row: PortalAnalyticsAssetRow): AssetClass | null {
   if (type.includes('office-scene')) return null;
   if (type.includes('skill')) return 'skill';
   if (type.includes('agent')) return 'agent';
+  if (type === 'case') return 'case';
   if (!type.includes('tool')) return null;
   if (row.source === 'external') return 'externalTool';
   if (row.source === 'company') return 'companyTool';
@@ -280,13 +289,14 @@ function classifyAsset(row: PortalAnalyticsAssetRow): AssetClass | null {
 
 function addBehavior(target: BehaviorCounts, row: PortalAnalyticsAssetRow): BehaviorCounts {
   return {
-    views: target.views + row.detailPv,
-    shareViews: target.shareViews + row.sharePv,
-    favorites: target.favorites + row.favorites,
-    likes: target.likes + row.likes,
-    dislikes: target.dislikes + row.dislikes,
-    redirects: target.redirects + row.redirects,
-    downloads: target.downloads + row.downloads,
+    views: target.views + row.lifetime.detailPv,
+    shareViews: target.shareViews + row.lifetime.sharePv,
+    shares: target.shares + row.lifetime.shares,
+    favorites: target.favorites + row.lifetime.favorites,
+    likes: target.likes + row.lifetime.likes,
+    dislikes: target.dislikes + row.lifetime.dislikes,
+    redirects: target.redirects + row.lifetime.redirects,
+    downloads: target.downloads + row.lifetime.downloads,
   };
 }
 
@@ -304,6 +314,7 @@ function buildBehaviorBreakdown(rows: PortalAnalyticsAssetRow[]): BehaviorBreakd
     companyTool: { ...EMPTY_BEHAVIOR },
     skill: { ...EMPTY_BEHAVIOR },
     agent: { ...EMPTY_BEHAVIOR },
+    case: { ...EMPTY_BEHAVIOR },
   };
   let total = { ...EMPTY_BEHAVIOR };
   let unclassifiedTools = { ...EMPTY_BEHAVIOR };
@@ -315,8 +326,13 @@ function buildBehaviorBreakdown(rows: PortalAnalyticsAssetRow[]): BehaviorBreakd
     const assetClass = classifyAsset(row);
     if (assetClass) {
       if (assetClass === 'externalTool' || assetClass === 'companyTool') toolSourceKnown = true;
-      byClass[assetClass] = addBehavior(byClass[assetClass], row);
-      total = addBehavior(total, row);
+      // 案例只有浏览：门户上没有收藏、点赞、点踩、跳转和下载入口。
+      const counted =
+        assetClass === 'case'
+          ? { ...row, lifetime: { ...row.lifetime, favorites: 0, likes: 0, dislikes: 0, redirects: 0, downloads: 0 } }
+          : row;
+      byClass[assetClass] = addBehavior(byClass[assetClass], counted);
+      total = addBehavior(total, counted);
     } else if (type.includes('tool')) {
       unclassifiedTools = addBehavior(unclassifiedTools, row);
       total = addBehavior(total, row);
@@ -437,9 +453,10 @@ function Module({
   title: string;
   /** 整个模块共用的统计范围，写一次，不在每张卡下重复 */
   scope?: string;
-  range: RangeSpec;
-  today: string;
-  onRangeChange: (next: RangeSpec) => void;
+  /** 三项都不传时不显示时间筛选：资产和交互行为只看累计 */
+  range?: RangeSpec;
+  today?: string;
+  onRangeChange?: (next: RangeSpec) => void;
   children: ReactNode;
 }) {
   return (
@@ -455,7 +472,7 @@ function Module({
           </h3>
           {scope ? <p className="text-[11px] text-zinc-400">{scope}</p> : null}
         </div>
-        <RangePicker value={range} today={today} onChange={onRangeChange} />
+        {range && today && onRangeChange ? <RangePicker value={range} today={today} onChange={onRangeChange} /> : null}
       </header>
       <div className="space-y-3.5">{children}</div>
     </section>
@@ -739,7 +756,7 @@ function monotoneCurve(coords: Array<{ x: number; y: number }>): string {
   return path;
 }
 
-/** 轴标签用 M/D，formatDate 的 YYYY/MM/DD 在 30 天区间里排不下。 */
+/** 轴标签用 M/D，完整日期在 30 天区间里排不下。 */
 function formatTrendTick(dateKey: string): string {
   const match = dateKey.match(/^\d{4}-(\d{2})-(\d{2})$/);
   return match ? `${Number(match[1])}/${Number(match[2])}` : dateKey;
@@ -865,9 +882,7 @@ function TrafficTrendChart({ points }: { points: TrendPoint[] }) {
           height={TREND_HEIGHT}
           role="img"
           tabIndex={0}
-          aria-label={`访问趋势折线图，${formatDate(points[0].date)} 至 ${formatDate(
-            points[points.length - 1].date,
-          )}，包含${TREND_SERIES.map((series) => series.label).join('、')}；方向键可逐日读数。`}
+          aria-label={`访问趋势折线图，${points[0].date} 至 ${points[points.length - 1].date}，包含${TREND_SERIES.map((series) => series.label).join('、')}；方向键可逐日读数。`}
           className="block touch-none outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
           onPointerMove={(event) => setActiveIndex(nearestIndex(event.clientX, event.currentTarget))}
           onPointerLeave={() => setActiveIndex(null)}
@@ -1032,7 +1047,7 @@ function TrafficTrendChart({ points }: { points: TrendPoint[] }) {
             )}
             style={{ left: xOf(activeIndex ?? 0) + (tooltipOnLeft ? -10 : 10) }}
           >
-            <p className="text-[10.5px] text-zinc-400 tabular-nums">{formatDate(active.date)}</p>
+            <p className="text-[10.5px] text-zinc-400 tabular-nums">{active.date}</p>
             <dl className="mt-1.5 space-y-1">
               {visible.map((series) => (
                 <div key={series.key} className="flex items-center gap-2">
@@ -1370,7 +1385,6 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
   const overviewState = stateOf('overview');
   const usersState = stateOf('users');
   const assetsState = stateOf('assets');
-  const behaviorState = stateOf('behavior');
 
   /** 区间本身不合法时显示具体原因；否则显示服务端返回的失败原因。 */
   const renderRangeIssue = useCallback(
@@ -1412,7 +1426,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
     [overviewSeries],
   );
   const overviewRangeLabel = overviewState.report
-    ? `${formatDate(overviewState.report.range.from)} – ${formatDate(overviewState.report.range.to)}`
+    ? `${overviewState.report.range.from} – ${overviewState.report.range.to}`
     : undefined;
 
   /* 02 用户分析 */
@@ -1422,26 +1436,18 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
     return PAGE_METRICS.map((page) => ({ ...page, ...pages.get(page.routeKey) }));
   }, [usersState.report?.pages]);
   const userRows = useMemo(() => {
+    // lastVisitAt 由服务端按北京时间、所选区间算好，为空表示这个人区间内没访问过页面。
     const rows = usersState.report?.users?.rows ?? [];
-    const from = usersState.report?.range?.from;
-    const to = usersState.report?.range?.to;
-    const start = from ? Date.parse(`${from}T00:00:00.000Z`) : Number.NEGATIVE_INFINITY;
-    const end = to ? Date.parse(`${to}T23:59:59.999Z`) : Number.POSITIVE_INFINITY;
-    return [...rows]
-      .filter((row) => {
-        if (!row.lastActiveAt) return false;
-        const activeAt = Date.parse(row.lastActiveAt);
-        return Number.isFinite(activeAt) && activeAt >= start && activeAt <= end;
-      })
+    return rows
+      .filter((row) => Boolean(row.lastVisitAt))
       .sort((a, b) => {
-        const aActive = Date.parse(a.lastActiveAt ?? '');
-        const bActive = Date.parse(b.lastActiveAt ?? '');
-        return bActive - aActive || a.userId.localeCompare(b.userId);
+        const aVisit = Date.parse(a.lastVisitAt ?? '');
+        const bVisit = Date.parse(b.lastVisitAt ?? '');
+        return bVisit - aVisit || a.userId.localeCompare(b.userId);
       });
-  }, [usersState.report?.range?.from, usersState.report?.range?.to, usersState.report?.users?.rows]);
-  // activeUv 是服务端按所选区间过滤后的活跃人数（见 portal-analytics.service 里
-  // memberActivity 对 from/to 的裁剪），所以这里直接跟随本模块的时间筛选。
-  // 不过滤零活跃：没人来过的部门也是结论，隐藏它会让人误以为名册里没有这个部门。
+  }, [usersState.report?.users?.rows]);
+  // activeUv 是服务端算好的所选区间内访问过页面的人数，和用户明细的活跃时间同一口径。
+  // 不过滤零活跃：没人来过的领域也是结论，隐藏它会让人误以为名册里没有这个领域。
   const departmentRows = useMemo(
     () =>
       [...(usersState.report?.users?.departmentRows ?? [])].sort(
@@ -1452,7 +1458,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
   const activeDepartmentCount = departmentRows.filter((row) => (row.activeUv ?? 0) > 0).length;
   const departmentMax = Math.max(1, ...departmentRows.map((row) => row.activeUv ?? 0));
   const usersRangeLabel = usersState.report
-    ? `${formatDate(usersState.report.range.from)} 至 ${formatDate(usersState.report.range.to)}`
+    ? `${usersState.report.range.from} 至 ${usersState.report.range.to}`
     : '暂无数据';
 
   useEffect(() => {
@@ -1473,7 +1479,10 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
     assetsToolTotal + (assetsSummary.skill ?? 0) + (assetsSummary.agent ?? 0) + (assetsSummary.case ?? 0);
   const allAssetRows = useMemo(() => assetsState.report?.assets?.rows ?? [], [assetsState.report?.assets?.rows]);
   const assetRows = useMemo(
-    () => allAssetRows.filter((row) => matchesAssetTab(row, assetTab)),
+    () =>
+      allAssetRows
+        .filter((row) => matchesAssetTab(row, assetTab))
+        .sort((a, b) => b.lifetime.detailPv - a.lifetime.detailPv || a.contentId.localeCompare(b.contentId)),
     [allAssetRows, assetTab],
   );
   useEffect(() => {
@@ -1518,41 +1527,44 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
       '资产名称',
       '资产 ID',
       '地区',
-      '浏览总数',
-      '站内点击浏览数',
-      '分享链接浏览数',
+      '总浏览数 PV',
+      '系统进入浏览数 PV',
+      '分享链接进入浏览数 PV',
+      '分享次数',
       '收藏数',
       '点赞数',
       '点踩数',
       '跳转数',
       '下载数',
     ];
-    const body = allAssetRows.map((row) => [
+    // 和页面五个标签同一批资产、同一组指标（不含办公场景）；页面上没有的指标留空。
+    const body = allAssetRows.flatMap((row) => {
+      const tab = ASSET_TABS.find((item) => matchesAssetTab(row, item.value))?.value;
+      if (!tab) return [];
+      const isCase = tab === 'case';
+      return [[
       row.assetType,
       row.source === 'external' ? '外部工具' : row.source === 'company' ? '公司工具' : '—',
       row.name || row.contentId,
       row.contentId,
       regionLabel(row.region),
-      String(row.detailPv),
-      String(inAppDetailPv(row)),
-      String(row.sharePv),
-      String(row.favorites),
-      String(row.likes),
-      String(row.dislikes),
-      String(row.redirects),
-      String(row.downloads),
-    ]);
+      String(row.lifetime.detailPv),
+      String(inAppDetailPv(row.lifetime)),
+      String(row.lifetime.sharePv),
+      String(row.lifetime.shares),
+      isCase ? '' : String(row.lifetime.favorites),
+      isCase ? '' : String(row.lifetime.likes),
+      isCase ? '' : String(row.lifetime.dislikes),
+      !isCase && assetTabShowsRedirects(tab) ? String(row.lifetime.redirects) : '',
+      !isCase && !assetTabShowsRedirects(tab) ? String(row.lifetime.downloads) : '',
+      ]];
+    });
     downloadBlob(
-      `数据看板_资产明细_${report.range.from}_${report.range.to}.csv`,
+      `数据看板_资产明细_累计_${today}.csv`,
       `﻿${toCsv([header, ...body])}`,
       'text/csv;charset=utf-8',
     );
-  }, [allAssetRows, assetsState.report]);
-
-  const assetsRangeLabel = assetsState.report
-    ? `${formatDate(assetsState.report.range.from)} 至 ${formatDate(assetsState.report.range.to)}`
-    : '暂无数据';
-  const behaviorRangeLabel = assetsRangeLabel;
+  }, [allAssetRows, assetsState.report, today]);
 
   return (
     <div className="space-y-5 pb-6">
@@ -1670,7 +1682,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
 
         <TableShell
           title="用户明细"
-          subtitle={`${formatCount(userRows.length)} 名登录用户 · 按最近活跃时间筛选与排序`}
+          subtitle={`${formatCount(userRows.length)} 名登录用户 · 所选区间内访问过页面，按活跃时间排序`}
           footer={
             <Pagination
               page={userCurrentPage}
@@ -1682,14 +1694,16 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
             />
           }
         >
-          <table className="w-full min-w-[780px] text-left">
+          <table className="w-full min-w-[960px] text-left">
             <thead>
               <tr>
                 <Th>用户名</Th>
-                <Th>部门</Th>
+                <Th>领域</Th>
                 <Th>区域</Th>
-                <Th>首次使用时间</Th>
-                <Th>最近活跃时间</Th>
+                <Th>首次登录时间</Th>
+                <Th>活跃时间</Th>
+                <Th align="right">页面浏览数 PV</Th>
+                <Th align="right">累计登录次数</Th>
               </tr>
             </thead>
             <tbody>
@@ -1697,14 +1711,16 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                 pagedUserRows.map((row) => (
                   <Row key={row.userId}>
                     <Td className="font-medium text-zinc-900">{row.name || row.userId}</Td>
-                    <Td>{row.department ? row.department.split(',').map((id) => getDeptLabel(id.trim())).join('、') : NOT_COLLECTED}</Td>
-                    <Td>{row.regionId ? getRegionLabel(row.regionId) : '机关'}</Td>
-                    <Td>{formatDateTime(row.firstUseAt)}</Td>
-                    <Td>{formatDateTime(row.lastActiveAt)}</Td>
+                    <Td>{row.department ? row.department.split(',').map((id) => getDeptLabel(id.trim())).join('、') : '未设置'}</Td>
+                    <Td>{row.regionId ? getRegionLabel(row.regionId) : '未设置'}</Td>
+                    <Td>{formatDateTime(row.firstLoginAt)}</Td>
+                    <Td>{formatDateTime(row.lastVisitAt)}</Td>
+                    <Td align="right">{formatCount(row.pv)}</Td>
+                    <Td align="right">{formatCount(row.loginCount)}</Td>
                   </Row>
                 ))
               ) : (
-                <EmptyRow colSpan={5} label={usersState.loading ? '读取中' : '暂无登录用户事实'} />
+                <EmptyRow colSpan={7} label={usersState.loading ? '读取中' : '暂无登录用户事实'} />
               )}
             </tbody>
           </table>
@@ -1734,13 +1750,13 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
         </TableShell>
 
         <TableShell
-          title="部门活跃"
-          subtitle={`${usersRangeLabel} · 共 ${formatCount(departmentRows.length)} 个部门，${formatCount(activeDepartmentCount)} 个有活跃`}
+          title="领域活跃"
+          subtitle={`${usersRangeLabel} · 共 ${formatCount(departmentRows.length)} 个领域，${formatCount(activeDepartmentCount)} 个有活跃`}
         >
           <table className="w-full min-w-[420px] text-left">
             <thead>
               <tr>
-                <Th>部门</Th>
+                <Th>领域</Th>
                 <Th>分布</Th>
                 <Th align="right">活跃人数</Th>
               </tr>
@@ -1749,7 +1765,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
               {departmentRows.length ? (
                 departmentRows.map((row) => (
                   <Row key={row.department}>
-                    <Td className="font-medium text-zinc-900">{row.department}</Td>
+                    <Td className="font-medium text-zinc-900">{getDeptLabel(row.department)}</Td>
                     <Td>
                       <span className="block h-1.5 w-full max-w-[280px] overflow-hidden rounded-full bg-zinc-100">
                         {(row.activeUv ?? 0) > 0 ? (
@@ -1769,7 +1785,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                   </Row>
                 ))
               ) : (
-                <EmptyRow colSpan={3} label={usersState.loading ? '读取中' : '暂无部门数据'} />
+                <EmptyRow colSpan={3} label={usersState.loading ? '读取中' : '暂无领域数据'} />
               )}
             </tbody>
           </table>
@@ -1780,9 +1796,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
       <Module
         id="assets"
         title="资产"
-        range={ranges.assets}
-        onRangeChange={(next) => setRange('assets', next, assetsState)}
-        today={today}
+        scope="累计数据，不随时间变化"
       >
         {renderRangeIssue('assets', assetsState)}
         {inventoryError ? <Notice tone="error">{inventoryError}</Notice> : null}
@@ -1806,9 +1820,9 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <HeroStat
-              label="工具总数"
-              value={formatOptionalCount(assetsHasFacts ? assetsToolTotal : null)}
-              note="已上架外部工具 + 公司工具"
+              label="洞察案例数"
+              value={formatOptionalCount(assetsHasFacts ? assetsSummary.case : null)}
+              note="已上架洞察案例"
             />
             <HeroStat
               label="外部工具数"
@@ -1842,7 +1856,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
 
         <TableShell
           title="资产明细"
-          subtitle={`${formatCount(assetRows.length)} 条 · ${assetsRangeLabel}`}
+          subtitle={`${formatCount(assetRows.length)} 条 · 累计`}
           actions={
             <>
               <ChipGroup label="资产类型" options={ASSET_TABS} value={assetTab} onChange={setAssetTab} />
@@ -1867,21 +1881,22 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
             />
           }
         >
-          <table className="w-full min-w-[800px] text-left">
+          <table className="w-full min-w-[1040px] text-left">
             <thead>
               <tr>
                 <Th>名称</Th>
                 {assetTab === 'externalTool' ? <Th>海外 / 国内</Th> : null}
-                <Th align="right">浏览总数</Th>
-                <Th align="right">站内点击浏览数</Th>
-                <Th align="right">分享链接浏览数</Th>
+                <Th align="right">总浏览数 PV</Th>
+                <Th align="right">系统进入浏览数 PV</Th>
+                <Th align="right">分享链接进入浏览数 PV</Th>
+                <Th align="right">分享次数</Th>
                 {/* 案例没有收藏、点赞、下载，只看浏览 */}
                 {assetTab === 'case' ? null : (
                   <>
                     <Th align="right">收藏数</Th>
                     <Th align="right">点赞数</Th>
                     <Th align="right">点踩数</Th>
-                    <Th align="right">{assetTab === 'externalTool' ? '跳转数' : '下载数'}</Th>
+                    <Th align="right">{assetTabShowsRedirects(assetTab) ? '跳转数' : '下载数'}</Th>
                   </>
                 )}
               </tr>
@@ -1898,19 +1913,20 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                         </span>
                       </Td>
                     ) : null}
-                    {/* 浏览总数 = 站内点击 + 分享链接 */}
+                    {/* 总浏览数 = 系统进入 + 分享链接进入 */}
                     <Td align="right" className="font-semibold text-zinc-900">
-                      {formatCount(row.detailPv)}
+                      {formatCount(row.lifetime.detailPv)}
                     </Td>
-                    <Td align="right">{formatCount(inAppDetailPv(row))}</Td>
-                    <Td align="right">{formatCount(row.sharePv)}</Td>
+                    <Td align="right">{formatCount(inAppDetailPv(row.lifetime))}</Td>
+                    <Td align="right">{formatCount(row.lifetime.sharePv)}</Td>
+                    <Td align="right">{formatCount(row.lifetime.shares)}</Td>
                     {assetTab === 'case' ? null : (
                       <>
-                        <Td align="right">{formatCount(row.favorites)}</Td>
-                        <Td align="right">{formatCount(row.likes)}</Td>
-                        <Td align="right">{formatCount(row.dislikes)}</Td>
+                        <Td align="right">{formatCount(row.lifetime.favorites)}</Td>
+                        <Td align="right">{formatCount(row.lifetime.likes)}</Td>
+                        <Td align="right">{formatCount(row.lifetime.dislikes)}</Td>
                         <Td align="right" className="font-semibold text-zinc-900">
-                          {assetTab === 'externalTool' ? formatCount(row.redirects) : formatCount(row.downloads)}
+                          {assetTabShowsRedirects(assetTab) ? formatCount(row.lifetime.redirects) : formatCount(row.lifetime.downloads)}
                         </Td>
                       </>
                     )}
@@ -1918,7 +1934,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                 ))
               ) : (
                 <EmptyRow
-                  colSpan={assetTab === 'externalTool' ? 9 : assetTab === 'case' ? 4 : 8}
+                  colSpan={assetTab === 'externalTool' ? 10 : assetTab === 'case' ? 5 : 9}
                   label={assetsState.loading ? '读取中' : assetsHasFacts ? '当前类型暂无资产事实' : '资产明细未采集'}
                 />
               )}
@@ -1931,12 +1947,9 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
       <Module
         id="behavior"
         title="交互行为"
-        scope="统计范围：外部工具、公司工具、Skill、Agent"
-        range={ranges.behavior}
-        onRangeChange={(next) => setRange('behavior', next, behaviorState)}
-        today={today}
+        scope="累计数据，不随时间变化 · 统计范围：外部工具、公司工具、Skill、Agent、案例洞察"
       >
-        {renderRangeIssue('behavior', behaviorState)}
+        {renderRangeIssue('assets', assetsState)}
 
         {!behavior.toolSourceKnown && behaviorHasFacts ? (
           <Notice>
@@ -1948,8 +1961,8 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
           <Skeleton className="h-[86px]" />
         ) : (
           <div className="space-y-3">
-            {/* 8 张卡片：上下两排各 4 张 */}
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {/* 9 张卡片：每排 3 张 */}
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <HeroStat
                 label="资产浏览总数"
                 value={formatCount(inAppViews(behavior.total))}
@@ -1961,35 +1974,33 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                 note="打开分享链接进入详情"
               />
               <HeroStat
-                label="资产收藏数"
-                value={formatCount(behavior.total.favorites)}
-              />
-              <HeroStat
-                label="资产点赞数"
-                value={formatCount(behavior.total.likes)}
-              />
-              <HeroStat
-                label="资产点踩数"
-                value={formatCount(behavior.total.dislikes)}
-              />
-              <HeroStat
                 label="工具跳转数"
                 value={formatCount(toolRedirects)}
                 note="外部工具 + 公司工具，点击「立即体验」"
               />
+              <HeroStat label="资产收藏数" value={formatCount(behavior.total.favorites)} />
+              <HeroStat label="资产点赞数" value={formatCount(behavior.total.likes)} />
+              <HeroStat label="资产点踩数" value={formatCount(behavior.total.dislikes)} />
               <HeroStat label="Skill 下载数" value={formatCount(behavior.byClass.skill.downloads)} note="用户点击下载" />
               <HeroStat label="Agent 下载数" value={formatCount(behavior.byClass.agent.downloads)} note="用户点击下载" />
+              <HeroStat
+                label="洞察案例浏览数"
+                value={formatCount(behavior.byClass.case.views)}
+                note="平台内点击 + 分享链接进入"
+              />
             </div>
           </div>
         )}
 
-        <TableShell title="资产行为分类统计" subtitle={behaviorRangeLabel}>
-          <table className="w-full min-w-[640px] text-left">
+        <TableShell title="资产行为分类统计" subtitle="累计">
+          <table className="w-full min-w-[960px] text-left">
             <thead>
               <tr>
                 <Th>资产类型</Th>
-                <Th align="right">资产浏览数</Th>
-                <Th align="right">资产分享数</Th>
+                <Th align="right">总浏览数 PV</Th>
+                <Th align="right">系统进入浏览数 PV</Th>
+                <Th align="right">分享链接进入浏览数 PV</Th>
+                <Th align="right">分享次数</Th>
                 <Th align="right">资产收藏数</Th>
                 <Th align="right">资产点赞数</Th>
                 <Th align="right">资产点踩数</Th>
@@ -2002,9 +2013,11 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                     <Row key={row.key}>
                       <Td className={cn('font-medium', row.muted ? 'text-zinc-500' : 'text-zinc-900')}>{row.label}</Td>
                       <Td align="right" className="font-semibold text-zinc-900">
-                        {formatCount(inAppViews(row.counts))}
+                        {formatCount(row.counts.views)}
                       </Td>
+                      <Td align="right">{formatCount(inAppViews(row.counts))}</Td>
                       <Td align="right">{formatCount(row.counts.shareViews)}</Td>
+                      <Td align="right">{formatCount(row.counts.shares)}</Td>
                       <Td align="right">{formatCount(row.counts.favorites)}</Td>
                       <Td align="right">{formatCount(row.counts.likes)}</Td>
                       <Td align="right">{formatCount(row.counts.dislikes)}</Td>
@@ -2013,10 +2026,16 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                   <tr className="bg-zinc-50/80">
                     <Td className="font-semibold text-zinc-900">合计</Td>
                     <Td align="right" className="font-semibold text-zinc-900">
+                      {formatCount(behavior.total.views)}
+                    </Td>
+                    <Td align="right" className="font-semibold text-zinc-900">
                       {formatCount(inAppViews(behavior.total))}
                     </Td>
                     <Td align="right" className="font-semibold text-zinc-900">
                       {formatCount(behavior.total.shareViews)}
+                    </Td>
+                    <Td align="right" className="font-semibold text-zinc-900">
+                      {formatCount(behavior.total.shares)}
                     </Td>
                     <Td align="right" className="font-semibold text-zinc-900">
                       {formatCount(behavior.total.favorites)}
@@ -2030,7 +2049,7 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
                   </tr>
                 </>
               ) : (
-                <EmptyRow colSpan={6} label={assetsState.loading ? '读取中' : '资产行为事实未采集'} />
+                <EmptyRow colSpan={8} label={assetsState.loading ? '读取中' : '资产行为事实未采集'} />
               )}
             </tbody>
           </table>

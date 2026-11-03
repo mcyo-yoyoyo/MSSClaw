@@ -11,6 +11,7 @@ import {
   canUsePlatformDocsApi,
   fetchPlatformDoc,
   savePlatformDoc,
+  writeDocItem,
 } from '@/api/platformDocsApi';
 
 const DOC_KIND = 'internal-office-scenes' as const;
@@ -259,12 +260,36 @@ async function persistDatabaseSnapshot(
 
   let writeSucceeded = false;
   try {
-    await savePlatformDoc(DOC_KIND, {
-      version: DOCUMENT_VERSION,
-      revision,
-      expectedRevision: revision,
-      entries,
+    const previous = state.entries;
+    const created = entries.filter((entry) => !previous.some((row) => row.id === entry.id));
+    const removed = previous.filter((entry) => !entries.some((row) => row.id === entry.id));
+    const updated = entries.filter((entry) => {
+      const before = previous.find((row) => row.id === entry.id);
+      return before && JSON.stringify(before) !== JSON.stringify(entry);
     });
+    const orderChanged = previous.map((entry) => entry.id).join('\n') !== entries.map((entry) => entry.id).join('\n');
+    for (const entry of created) {
+      await writeDocItem('/api/v1/docs/internal-office-scenes/items', 'POST', entry);
+    }
+    for (const entry of updated) {
+      await writeDocItem(`/api/v1/docs/internal-office-scenes/items/${encodeURIComponent(entry.id)}`, 'PUT', entry);
+    }
+    for (const entry of removed) {
+      await writeDocItem(`/api/v1/docs/internal-office-scenes/items/${encodeURIComponent(entry.id)}`, 'DELETE');
+    }
+    if (orderChanged) {
+      await writeDocItem('/api/v1/docs/internal-office-scenes/order', 'PUT', {
+        ids: entries.map((entry) => entry.id),
+      });
+    }
+    if (!created.length && !updated.length && !removed.length && !orderChanged) {
+      await savePlatformDoc(DOC_KIND, {
+        version: DOCUMENT_VERSION,
+        revision,
+        expectedRevision: revision,
+        entries,
+      });
+    }
     writeSucceeded = true;
     // PUT 成功仍不直接发布草稿；fresh GET 的 canonical 文档才是正式状态。
     const fresh = await fetchFreshDocument();

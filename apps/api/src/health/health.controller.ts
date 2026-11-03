@@ -17,7 +17,7 @@ export class HealthController {
       sseActive: SseConcurrencyGuard.activeCount,
       sseLimit: Number(process.env.MAX_CONCURRENT_SSE ?? 200),
       apiKeyRequired: Boolean(process.env.API_KEY?.trim()),
-      /** 前端启动探活时顺带拿到登录模式，省一次请求 */
+      /** 部署检查读取登录模式 */
       auth: {
         mode: authMode(),
         ready: authMode() !== 'oauth' || configErrors(validateOAuthConfig()).length === 0,

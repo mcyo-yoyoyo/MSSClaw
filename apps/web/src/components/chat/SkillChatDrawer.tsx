@@ -379,7 +379,6 @@ export function SkillChatDrawer({ skill, open, onClose, onSkillChange }: SkillCh
       <div
         aria-hidden="true"
         className="fixed inset-0 z-[110] bg-black/20 backdrop-blur-[1px]"
-        onClick={onClose}
       />
       <aside
         ref={drawerRef}

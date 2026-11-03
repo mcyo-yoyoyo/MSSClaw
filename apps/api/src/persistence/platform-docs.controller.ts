@@ -4,13 +4,23 @@ import {
   ForbiddenException,
   Get,
   Headers,
+  HttpCode,
+  Delete,
   Param,
   Post,
   Put,
+  Req,
+  Res,
   UnauthorizedException,
 } from '@nestjs/common';
+import type { Request, Response } from 'express';
+import { PrismaService } from '../prisma/prisma.service';
 import { PlatformDocsService } from './platform-docs.service';
+import { assertAnyMenu } from './rbac-store';
 import { authMode } from '../auth/oauth.config';
+import { bearerToken } from '../auth/bearer-token';
+import { operationActorFrom } from './operation-log';
+import { clearRefreshCookie, readRefreshCookie, withRefreshCookie } from '../auth/refresh-cookie';
 // 单租户：原路由参数 workspaceId 固定为平台空间，方法体沿用这个名字（服务层还用它拼 center_record 的记录 id，对应文档迁到正式表时一起去掉）
 import { PLATFORM_WORKSPACE_ID as workspaceId } from '../common/platform-workspace';
 import { PLATFORM_WORKSPACE_ID } from '../common/platform-workspace';
@@ -18,14 +28,18 @@ import { PLATFORM_WORKSPACE_ID } from '../common/platform-workspace';
 /** 仅 super_admin 可读：内含全站密码 salt + hash */
 const ADMIN_ONLY_DOC_KINDS = new Set(['auth-credentials']);
 
-/** 仅 super_admin 可写：平台级配置与账号体系 */
+/** 仅 super_admin 可写：密码表和成员文档，不跟着菜单走 */
 const ADMIN_WRITABLE_DOC_KINDS = new Set([
   'auth-credentials',
   'members',
-  'external-tool-layout',
-  'internal-office-scenes',
-  'home-featured',
 ]);
+
+/** 勾选对应菜单即可写。办公场景同时挂在门户运营和配置办公场景下。 */
+const MENU_GATED_DOC_KINDS: Record<string, readonly string[]> = {
+  'external-tool-layout': ['portal-ops'],
+  'home-featured': ['portal-ops'],
+  'internal-office-scenes': ['portal-ops', 'office-scenes'],
+};
 
 /** 工作区成员才能访问的共享凭证文档；游客不得读写真实 API Key / Webhook 令牌。 */
 const MEMBER_REQUIRED_DOC_KINDS = new Set(['llm-config', 'warroom-webhook']);
@@ -37,7 +51,10 @@ const LEGACY_READ_ONLY_DOC_KINDS = new Set(['skill-reviews']);
 
 @Controller('docs')
 export class PlatformDocsController {
-  constructor(private readonly docs: PlatformDocsService) {}
+  constructor(
+    private readonly docs: PlatformDocsService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Get()
   async list(
@@ -56,7 +73,7 @@ export class PlatformDocsController {
 
   /**
    * 门户展示类文档（货架布局 / 内部办公场景等）对游客只读开放，
-   * 否则未登录访客的市场货架会整体空白；写入仍限 super_admin（见 PUT）。
+   * 否则未登录访客的市场货架会整体空白；写入认对应菜单（见 PUT）。
    *
    * 例外：auth-credentials 是全站密码表（salt + hash），只有 super_admin 能读。
    */
@@ -77,6 +94,113 @@ export class PlatformDocsController {
     return this.docs.getDoc(workspaceId, kind, memberId);
   }
 
+  @Post('station-announcements/items')
+  async createStationAnnouncement(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
+    return this.docs.saveStationAnnouncementItem(body);
+  }
+
+  @Put('station-announcements/items/:id')
+  async updateStationAnnouncement(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
+    const record = body && typeof body === 'object' && !Array.isArray(body) ? { ...body, id } : { id };
+    return this.docs.saveStationAnnouncementItem(record);
+  }
+
+  @Delete('station-announcements/items/:id')
+  async deleteStationAnnouncement(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
+    return this.docs.saveStationAnnouncementItem(undefined, id);
+  }
+
+  @Post('ai-news/items')
+  async createAiNews(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
+    return this.docs.saveAiNewsItem(body);
+  }
+
+  @Put('ai-news/items/:id')
+  async updateAiNews(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
+    const record = body && typeof body === 'object' && !Array.isArray(body) ? { ...body, id } : { id };
+    return this.docs.saveAiNewsItem(record);
+  }
+
+  @Delete('ai-news/items/:id')
+  async deleteAiNews(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
+    return this.docs.saveAiNewsItem(undefined, id);
+  }
+
+  @Put('internal-office-scenes/order')
+  async orderOfficeScenes(
+    @Body() body: { ids?: unknown },
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    await this.requireAnyMenu(MENU_GATED_DOC_KINDS['internal-office-scenes'], authorization, xSessionToken);
+    const ids = Array.isArray(body?.ids) ? body.ids.filter((id): id is string => typeof id === 'string') : [];
+    return this.docs.saveOfficeSceneOrder(ids);
+  }
+
+  @Post('internal-office-scenes/items')
+  async createOfficeScene(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    await this.requireAnyMenu(MENU_GATED_DOC_KINDS['internal-office-scenes'], authorization, xSessionToken);
+    return this.docs.saveOfficeSceneItem(body);
+  }
+
+  @Put('internal-office-scenes/items/:id')
+  async updateOfficeScene(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    await this.requireAnyMenu(MENU_GATED_DOC_KINDS['internal-office-scenes'], authorization, xSessionToken);
+    const record = body && typeof body === 'object' && !Array.isArray(body) ? { ...body, id } : { id };
+    return this.docs.saveOfficeSceneItem(record);
+  }
+
+  @Delete('internal-office-scenes/items/:id')
+  async deleteOfficeScene(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    await this.requireAnyMenu(MENU_GATED_DOC_KINDS['internal-office-scenes'], authorization, xSessionToken);
+    return this.docs.saveOfficeSceneItem(undefined, id);
+  }
+
   @Put(':kind')
   async putOne(
     @Param('kind') kind: string,
@@ -87,7 +211,12 @@ export class PlatformDocsController {
     if (LEGACY_READ_ONLY_DOC_KINDS.has(kind)) {
       throw new ForbiddenException(`${kind.replace(/-/g, '_')}_legacy_read_only`);
     }
-    if (ADMIN_WRITABLE_DOC_KINDS.has(kind)) {
+    let actor = undefined;
+    const menuIds = MENU_GATED_DOC_KINDS[kind];
+    if (menuIds) {
+      const user = await this.requireAnyMenu(menuIds, authorization, xSessionToken);
+      if (kind === 'internal-office-scenes') actor = operationActorFrom(user);
+    } else if (ADMIN_WRITABLE_DOC_KINDS.has(kind)) {
       await this.requireSuperAdmin(workspaceId, kind, authorization, xSessionToken);
     } else if (MEMBER_REQUIRED_DOC_KINDS.has(kind)) {
       await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
@@ -97,7 +226,17 @@ export class PlatformDocsController {
       : undefined;
     const payload =
       body && typeof body === 'object' && 'payload' in body ? body.payload : body;
-    return this.docs.putDoc(workspaceId, kind, payload ?? {}, memberId);
+    return this.docs.putDoc(workspaceId, kind, payload ?? {}, memberId, actor);
+  }
+
+  private async requireAnyMenu(
+    menuIds: readonly string[],
+    authorization?: string,
+    xSessionToken?: string,
+  ): Promise<Record<string, unknown>> {
+    const user = await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
+    await assertAnyMenu(this.prisma, String(user.platformRole ?? ''), menuIds);
+    return user;
   }
 
   private async requireSuperAdmin(
@@ -138,21 +277,16 @@ export class PlatformDocsController {
   }
 }
 
-function bearerToken(authorization?: string, xSessionToken?: string): string | undefined {
-  const raw = (authorization ?? '').trim();
-  if (raw.toLowerCase().startsWith('bearer ')) return raw.slice(7).trim() || undefined;
-  const alt = (xSessionToken ?? '').trim();
-  return alt || undefined;
-}
-
 @Controller('auth')
 export class AuthController {
   constructor(private readonly docs: PlatformDocsService) {}
 
   @Post('login')
-  login(
+  async login(
     @Body()
     body: { email?: string; password?: string; workspaceId?: string; visitorId?: string },
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ) {
     // 切到企业统一身份登录后必须关死密码通道，否则演示口令仍能绕过 SSO 拿到令牌。
     // 这是整套改造里最关键的一道闸，不要因为"方便调试"打开。
@@ -162,22 +296,37 @@ export class AuthController {
         message: '当前环境已启用企业统一身份登录，请从登录页跳转认证',
       });
     }
-    return this.docs.login(body ?? {});
+    return withRefreshCookie(req, res, await this.docs.withMenus(await this.docs.login(body ?? {}, req.headers['user-agent'])));
+  }
+
+  /** 访问令牌过期后用 Cookie 里的刷新令牌换新令牌；失败返回 401 并清掉 Cookie */
+  @Post('refresh')
+  @HttpCode(200)
+  async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const result = await this.docs.refresh(readRefreshCookie(req), req.headers['user-agent']);
+    if (!result.ok) {
+      clearRefreshCookie(req, res);
+      throw new UnauthorizedException({ ok: false, error: result.error });
+    }
+    return withRefreshCookie(req, res, await this.docs.withMenus(result));
   }
 
   @Get('me')
-  me(
+  async me(
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-session-token') xSessionToken: string | undefined,
   ) {
-    return this.docs.me(bearerToken(authorization, xSessionToken), PLATFORM_WORKSPACE_ID);
+    return this.docs.withMenus(await this.docs.me(bearerToken(authorization, xSessionToken), PLATFORM_WORKSPACE_ID));
   }
 
   @Post('logout')
-  logout(
+  async logout(
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-session-token') xSessionToken: string | undefined,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ) {
-    return this.docs.logout(bearerToken(authorization, xSessionToken), PLATFORM_WORKSPACE_ID);
+    clearRefreshCookie(req, res);
+    return this.docs.logout(bearerToken(authorization, xSessionToken), readRefreshCookie(req));
   }
 }

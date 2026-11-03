@@ -73,8 +73,9 @@ export function buildAppRoute(params: AppRouteParams): string {
 }
 
 /** 分享出去的完整地址 */
-export function assetDetailUrl(type: DetailAssetType, id: string): string {
-  return `${window.location.origin}${window.location.pathname}${buildAppRoute({ view: DETAIL_VIEW, type, id })}`;
+export function assetDetailUrl(type: DetailAssetType, id: string, shareCode?: string | null): string {
+  const route = buildAppRoute({ view: DETAIL_VIEW, type, id });
+  return `${window.location.origin}${window.location.pathname}${route}${shareCode ? `&share=${shareCode}` : ''}`;
 }
 
 /**

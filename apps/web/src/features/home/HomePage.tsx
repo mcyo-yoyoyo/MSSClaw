@@ -1,4 +1,7 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { fetchHomeShowcase, type HomeShowcasePayload } from '@/api/persistenceApi';
+import { parseExternalToolLayoutDocument } from '@/domain/externalToolLayout';
+import type { InternalOfficeSceneCatalogEntry } from '@/domain/internalOfficeScenes';
 import { canExecuteChat } from '@/domain/permissions';
 import { PageStageHero } from '@/components/layout/PageStageHero';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
@@ -40,12 +43,12 @@ import { useMarketHiddenStore } from '@/stores/marketHiddenStore';
 import { useExternalToolLayoutStore } from '@/stores/externalToolLayoutStore';
 import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
 import { useHomeFeaturedStore } from '@/stores/homeFeaturedStore';
+import { useStationAnnouncementStore } from '@/stores/stationAnnouncementStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { greetingForNow } from '@/domain/timeGreeting';
 import type { PrototypeAgentSeed, PrototypeSkillSeed } from '@/domain/prototype/types';
 import { resolveHomeProjectDetailTarget } from '@/domain/homeProjectDetail';
-import { allowsMarketScenarioRun } from '@/domain/marketRunCapability';
-import { useNavPresentationStore } from '@/stores/navPresentationStore';
+import { useAllowsTaskExecution } from '@/domain/marketRunCapability';
 
 export function HomePage({
   onInvokeAgent,
@@ -54,18 +57,20 @@ export function HomePage({
   onInvokeAgent?: (agent: PrototypeAgentSeed, prompt?: string) => void;
   onInvokeSkill?: (skill: PrototypeSkillSeed) => void;
 }) {
-  const agents = useMarketplaceStore((s) => s.agents);
-  const skills = useMarketplaceStore((s) => s.skills);
+  const storeAgents = useMarketplaceStore((s) => s.agents);
+  const storeSkills = useMarketplaceStore((s) => s.skills);
   const user = useSessionStore((s) => s.user);
   const isGuest = useSessionStore((s) => s.isGuest);
   const executeAllowed = canExecuteChat(user?.platformRole);
-  const navPreset = useNavPresentationStore((s) => s.preset);
-  const allowScenarioRun = allowsMarketScenarioRun(navPreset);
+  const taskExecutionAllowed = useAllowsTaskExecution();
+  const allowScenarioRun = taskExecutionAllowed;
   const canRunSkills = allowScenarioRun && (executeAllowed || isGuest) && Boolean(onInvokeSkill);
   const canRunAgents = allowScenarioRun && (executeAllowed || isGuest) && Boolean(onInvokeAgent);
   const engagementOf = useContentEngagementStore((s) => s.get);
   const engagementById = useContentEngagementStore((s) => s.byId);
-  const tools = useMarketplaceStore((s) => s.tools);
+  const storeTools = useMarketplaceStore((s) => s.tools);
+  const [homePayload, setHomePayload] = useState<HomeShowcasePayload | null>(null);
+  const [homeStatus, setHomeStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const marketSearch = useMarketFilterStore((s) => s.search);
   const favoritesOnly = useMarketFilterStore((s) => s.favoritesOnly);
   const setMarketBusinessFilter = useMarketFilterStore((s) => s.setBusinessFilter);
@@ -75,11 +80,11 @@ export function HomePage({
   const favoriteItems = useMarketFavoriteStore((s) => s.items);
   const hiddenKeys = useMarketHiddenStore((s) => s.keys);
   const hydrateHidden = useMarketHiddenStore((s) => s.hydrate);
-  const externalToolLayout = useExternalToolLayoutStore((s) => s.document);
+  const storeExternalToolLayout = useExternalToolLayoutStore((s) => s.document);
   const hydrateExternalToolLayout = useExternalToolLayoutStore((s) => s.hydrate);
   const apiConnected = useWorkspaceStore((s) => s.apiConnected);
-  const officeSceneEntries = useInternalOfficeSceneCatalogStore((s) => s.entries);
-  const homeFeaturedChannels = useHomeFeaturedStore((s) => s.channels);
+  const storeOfficeSceneEntries = useInternalOfficeSceneCatalogStore((s) => s.entries);
+  const storeHomeFeaturedChannels = useHomeFeaturedStore((s) => s.channels);
   const homeFeaturedLoaded = useHomeFeaturedStore((s) => s.loaded);
   const homeFeaturedError = useHomeFeaturedStore((s) => s.error);
   const hydrateHomeFeatured = useHomeFeaturedStore((s) => s.hydrate);
@@ -92,18 +97,44 @@ export function HomePage({
     hydrateFavorites();
     hydrateHidden();
     ensurePlazaToolGuidesBootstrapped();
-    if (apiConnected) {
-      void hydrateHomeFeatured();
-      void hydrateExternalToolLayout();
+  }, [hydrateRecent, hydrateFavorites, hydrateHidden]);
+
+  useEffect(() => {
+    if (!apiConnected) {
+      setHomePayload(null);
+      setHomeStatus('error');
+      if (!useStationAnnouncementStore.getState().loaded) {
+        useStationAnnouncementStore.getState().hydrate();
+      }
+      return;
     }
-  }, [
-    hydrateRecent,
-    hydrateFavorites,
-    hydrateHidden,
-    hydrateHomeFeatured,
-    hydrateExternalToolLayout,
-    apiConnected,
-  ]);
+    let cancelled = false;
+    setHomeStatus('loading');
+    void fetchHomeShowcase()
+      .then((payload) => {
+        if (cancelled) return;
+        setHomePayload(payload);
+        setHomeStatus('ready');
+        useStationAnnouncementStore.getState().show(payload.announcements, payload.announcementRevision);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setHomePayload(null);
+        setHomeStatus('error');
+        if (!useStationAnnouncementStore.getState().loaded) {
+          useStationAnnouncementStore.getState().hydrate();
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [apiConnected]);
+
+  useEffect(() => {
+    if (homeStatus !== 'error' || !apiConnected) return;
+    void hydrateHomeFeatured();
+    void hydrateExternalToolLayout();
+  }, [homeStatus, apiConnected, hydrateHomeFeatured, hydrateExternalToolLayout]);
 
   useEffect(() => {
     if (!pendingBusinessScenario) return;
@@ -129,6 +160,37 @@ export function HomePage({
     [user, affiliation],
   );
 
+  const homeReady = homeStatus === 'ready' ? homePayload : null;
+  const waitingForHome = apiConnected && homeStatus === 'loading';
+  const agents = homeReady ? homeReady.agents : waitingForHome ? [] : storeAgents;
+  const skills = homeReady ? homeReady.skills : waitingForHome ? [] : storeSkills;
+  const tools = homeReady ? homeReady.tools : waitingForHome ? [] : storeTools;
+  const homeFeaturedChannels = homeReady
+    ? homeReady.configured
+      ? homeReady.channels
+      : null
+    : storeHomeFeaturedChannels;
+  const externalToolLayout = useMemo(() => {
+    if (!homeReady || homeReady.configured) return storeExternalToolLayout;
+    try {
+      return parseExternalToolLayoutDocument(homeReady.externalToolLayout);
+    } catch {
+      return storeExternalToolLayout;
+    }
+  }, [homeReady, storeExternalToolLayout]);
+  const officeSceneEntries = useMemo((): InternalOfficeSceneCatalogEntry[] => {
+    if (!homeReady || homeReady.configured) return storeOfficeSceneEntries;
+    const payload = homeReady.officeScenes;
+    if (
+      payload &&
+      typeof payload === 'object' &&
+      Array.isArray((payload as { entries?: unknown }).entries)
+    ) {
+      return (payload as { entries: InternalOfficeSceneCatalogEntry[] }).entries;
+    }
+    return storeOfficeSceneEntries;
+  }, [homeReady, storeOfficeSceneEntries]);
+
   const howtoToolIds = useMemo(() => {
     const ids = new Set<string>();
     for (const r of guideRecords) ids.add(r.toolId);
@@ -150,9 +212,10 @@ export function HomePage({
     [tools, skills, agents, viewer, engagementOf, engagementById, howtoToolIds, canRunSkills, canRunAgents],
   );
 
-  // 首页三栏只读取「门户运营 → 首页配置」；从未保存过配置时才沿用旧规则，避免首页空白。
-  const homeFeaturedPending =
-    apiConnected && !homeFeaturedError && !homeFeaturedLoaded;
+  // 已保存首页配置时三栏按配置展示；还没保存时沿用旧规则。接口未返回前先留空。
+  const homeFeaturedPending = homeReady
+    ? false
+    : waitingForHome || (apiConnected && !homeFeaturedError && !homeFeaturedLoaded);
   const usesHomeFeaturedConfig = Boolean(homeFeaturedChannels) && !homeFeaturedPending;
 
   const scopedChannelCards = useMemo((): Record<MarketShelfKind, MarketShelfCardModel[]> => {

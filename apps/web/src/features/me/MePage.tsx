@@ -224,7 +224,7 @@ export function MePage() {
   };
 
   const initial = (user?.name?.trim()?.[0] ?? 'U').toUpperCase();
-  const roleLabel = user ? ROLE_LABELS[user.platformRole] : '';
+  const roleLabel = user ? (user.roleName ?? ROLE_LABELS[user.platformRole]) : '';
   const roleDesc = user ? ROLE_DESCRIPTIONS[user.platformRole] : '';
 
   const tabs: { id: MeTab; label: string; count?: number; hidden?: boolean }[] = [

@@ -11,10 +11,11 @@ import {
 } from '@/domain/appRoute';
 import type { AppView } from '@/domain/appView';
 import { setAiBriefContentMode } from '@/domain/aiBriefContentMode';
+import { fetchMarketShareCodeApi } from '@/api/marketEngagementApi';
 import { copyText } from '@/domain/assetShare';
 import { canViewAsset } from '@/domain/assetVisibility';
 import { takeDetailAction } from '@/domain/directEntry';
-import { allowsMarketScenarioRun } from '@/domain/marketRunCapability';
+import { useAllowsTaskExecution } from '@/domain/marketRunCapability';
 import { canExecuteChat } from '@/domain/permissions';
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
 import { relatedTools } from '@/domain/relatedTools';
@@ -29,7 +30,6 @@ import { useAppViewStore } from '@/stores/appViewStore';
 import { useAuthGateStore } from '@/stores/authGateStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
-import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { usePortalContentStore } from '@/stores/portalContentStore';
 import { useSessionStore } from '@/stores/sessionStore';
 
@@ -108,9 +108,10 @@ export function AssetDetailPage({ handlers }: { handlers: AppViewRouterHandlers 
   const agents = useMarketplaceStore((s) => s.agents);
   const showToast = useMarketplaceStore((s) => s.showToast);
   const portalContent = usePortalContentStore((s) => s.items);
-  const navPreset = useNavPresentationStore((s) => s.preset);
+  const taskExecutionAllowed = useAllowsTaskExecution();
   const caseState = useCaseInsightArticle(type === 'case' ? id : undefined);
   const bumpDetail = useContentEngagementStore((s) => s.bumpDetail);
+  const bumpShare = useContentEngagementStore((s) => s.bumpShare);
   const trackedRef = useRef<string | null>(null);
 
   const viewer = useMemo(
@@ -137,20 +138,34 @@ export function AssetDetailPage({ handlers }: { handlers: AppViewRouterHandlers 
   else if (!canViewAsset(asset, viewer)) access = user ? 'forbidden' : 'login';
   else access = 'ok';
 
-  const title = caseState.status === 'ready' ? caseState.article.title : asset?.name ?? '';
-
-  useEffect(() => {
-    if (access === 'ok' && title) document.title = `${title} - MSS AI提效平台`;
-  }, [access, title]);
-
-  // 每打开一个资产记一次详情浏览；页面新打开就落在这里的记直达（看板「分享浏览数」）
+  // 每打开一个资产记一次详情浏览；打开带分享编号的链接记分享进入（看板「分享链接进入浏览数」）
   useEffect(() => {
     if (access !== 'ok' || !type || !id) return;
     const key = `${type}:${id}`;
     if (trackedRef.current === key) return;
     trackedRef.current = key;
-    bumpDetail(id, type, takeDetailAction(type, id));
+    const { action, shareCode: openedShareCode } = takeDetailAction(type, id);
+    bumpDetail(id, type, action, openedShareCode);
   }, [access, bumpDetail, id, type]);
+
+  // 提前取好分享编号：点击时再请求，部分浏览器会因离开用户手势而拒绝写剪贴板
+  const [shareCode, setShareCode] = useState<string | null>(null);
+  useEffect(() => {
+    setShareCode(null);
+    // 游客不能分享，点分享时先登录，登录后这里会重新取
+    if (access !== 'ok' || !id || isGuest || !user?.id) return undefined;
+    let cancelled = false;
+    void fetchMarketShareCodeApi(id)
+      .then((code) => {
+        if (!cancelled) setShareCode(code);
+      })
+      .catch(() => {
+        // 取不到编号仍能分享，只是这条链接打开后算普通浏览
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [access, id, isGuest, user?.id]);
 
   const listView: AppView =
     type === 'case'
@@ -174,11 +189,16 @@ export function AssetDetailPage({ handlers }: { handlers: AppViewRouterHandlers 
 
   const share = async () => {
     if (!type || !id) return;
-    const copied = await copyText(assetDetailUrl(type as DetailAssetType, id));
+    if (isGuest || !user?.id) {
+      requestLogin('account');
+      return;
+    }
+    bumpShare(id, type);
+    const copied = await copyText(assetDetailUrl(type as DetailAssetType, id, shareCode));
     showToast(copied ? '已复制链接' : '复制失败，请手动复制地址栏链接');
   };
 
-  const allowRun = allowsMarketScenarioRun(navPreset) && (canExecuteChat(user?.platformRole) || isGuest);
+  const allowRun = taskExecutionAllowed && (canExecuteChat(user?.platformRole) || isGuest);
   const submittedCases = agent
     ? portalContent.filter(
         (item) =>

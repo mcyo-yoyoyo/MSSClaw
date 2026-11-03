@@ -1,7 +1,5 @@
-import { PROTOTYPE_PORTAL_CONTENT } from '@/domain/prototype/portalContent';
 import type { PortalContentItem } from '@/domain/prototype/portalContent';
 import { RETIRED_DEMO_TOOL_IDS } from '@/domain/prototype/tools';
-import { mergeCatalog } from '@/domain/persistence/keys';
 import {
   fetchPortalContentApi,
   savePortalContentApi,
@@ -9,7 +7,7 @@ import {
 } from '@/api/persistenceApi';
 import { externalizePortalItemAttachments } from '@/api/blobApi';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
-import { demoDefaults } from '@/domain/demoContentPolicy';
+import { useDataFetchNotice } from '@/domain/dataFetchNotice';
 import { reportShareSync } from '@/domain/shareSync';
 
 const RETIRED_TOOL_IDS = new Set<string>(RETIRED_DEMO_TOOL_IDS);
@@ -56,12 +54,7 @@ function readLocalPortalContent(): PortalContentSnapshot {
       revision: cached.revision ?? getPortalRevision(),
     };
   }
-  return {
-    items: pruneRetiredPortalToolRefs(
-      structuredClone(demoDefaults(PROTOTYPE_PORTAL_CONTENT)),
-    ),
-    revision: getPortalRevision(),
-  };
+  return { items: [], revision: getPortalRevision() };
 }
 
 function writeLocalPortalContent(snapshot: PortalContentSnapshot) {
@@ -79,15 +72,15 @@ export async function loadPortalContent(): Promise<PortalContentSnapshot> {
       if (remote?.items) {
         const revision = remote.revision ?? 0;
         setPortalRevision(revision);
-        const merged = pruneRetiredPortalToolRefs(
-          mergeCatalog(demoDefaults(PROTOTYPE_PORTAL_CONTENT), remote.items),
-        );
-        writeLocalPortalContent({ items: merged, revision });
-        return { items: merged, revision };
+        const items = pruneRetiredPortalToolRefs(remote.items);
+        writeLocalPortalContent({ items, revision });
+        return { items, revision };
       }
     } catch {
-      /* fall through to local cache */
+      useDataFetchNotice.getState().markFailed();
     }
+  } else {
+    useDataFetchNotice.getState().markFailed();
   }
   return readLocalPortalContent();
 }
@@ -137,9 +130,7 @@ export async function savePortalContent(
         if (remote?.items) {
           const revision = remote.revision ?? err.revision ?? getPortalRevision();
           setPortalRevision(revision);
-          const merged = pruneRetiredPortalToolRefs(
-          mergeCatalog(demoDefaults(PROTOTYPE_PORTAL_CONTENT), remote.items),
-        );
+          const merged = pruneRetiredPortalToolRefs(remote.items);
           writeLocalPortalContent({ items: merged, revision });
           reportShareSync({ kind: 'portal', synced: false, reason: 'conflict' });
           return {

@@ -5,9 +5,8 @@ import {
   subscribeAiBriefEmail,
   unsubscribeAiBriefEmail,
 } from '@/api/aiBriefSubscriptionsApi';
-import {
-  canUsePlatformDocsApi,
-  } from '@/api/platformDocsApi';
+import { canUsePlatformDocsApi } from '@/api/platformDocsApi';
+import { DATA_FETCH_FAILED_MESSAGE, useDataFetchNotice } from '@/domain/dataFetchNotice';
 
 export type AiNewsPreference = {
   /** WeLink 推送意向（接口待上线，暂不开放 UI） */
@@ -61,7 +60,8 @@ export const useAiNewsPreferenceStore = create<AiNewsPreferenceState>((set, get)
   hydrate: async () => {
     const generation = ++hydrateGeneration;
     if (!canUsePlatformDocsApi()) {
-      set({ pref: defaultPref(), loading: false, error: '共享服务未连接' });
+      useDataFetchNotice.getState().markFailed();
+      set({ loading: false, error: DATA_FETCH_FAILED_MESSAGE });
       return;
     }
     // 邮件订阅是个人态：游客不查，避免无谓的 401
@@ -84,7 +84,8 @@ export const useAiNewsPreferenceStore = create<AiNewsPreferenceState>((set, get)
       });
     } catch {
       if (generation !== hydrateGeneration) return;
-      set({ pref: defaultPref(), loading: false, error: '订阅状态加载失败' });
+      useDataFetchNotice.getState().markFailed();
+      set({ loading: false, error: DATA_FETCH_FAILED_MESSAGE });
     }
   },
 

@@ -42,11 +42,7 @@ import { LoginPage } from '@/features/auth/LoginPage';
 import { AuthGateOverlay } from '@/features/auth/AuthGateOverlay';
 import { isGuestBlockedView } from '@/domain/guestAccess';
 import { requireLogin, useAuthGateStore } from '@/stores/authGateStore';
-import {
-  LazyCommandPalette,
-  LazyExportModal,
-  LazySettingsDrawer,
-} from '@/features/lazyPages';
+import { LazyCommandPalette, LazyExportModal } from '@/features/lazyPages';
 import { useCommandPaletteStore } from '@/stores/commandPaletteStore';
 import { useNavPresentationStore } from '@/stores/navPresentationStore';
 import { getNavMetaLabel } from '@/domain/navPresentation';
@@ -61,7 +57,6 @@ import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
 import { AccessDeniedPanel } from '@/components/shell/AccessDeniedPanel';
 import { AppErrorBoundary } from '@/components/common/AppErrorBoundary';
 import { isApiEnabled } from '@/api/client';
-import { fetchApiHealthInfo } from '@/api/persistenceApi';
 import { cn } from '@/lib/utils';
 
 export function App() {
@@ -80,9 +75,6 @@ export function App() {
   const setAppView = useAppViewStore((s) => s.setAppView);
   const blockedOpsView = useAppViewStore((s) => s.blockedOpsView);
   const clearBlockedOpsView = useAppViewStore((s) => s.clearBlockedOpsView);
-  const closeSettings = useAppViewStore((s) => s.closeSettings);
-  const settingsOpen = useAppViewStore((s) => s.settingsOpen);
-  const openSettings = useAppViewStore((s) => s.openSettings);
   const paletteOpen = useCommandPaletteStore((s) => s.open);
 
   const loadChats = useConversationStore((s) => s.loadChats);
@@ -172,28 +164,17 @@ export function App() {
   }, [hydrateFromServer, resolveAuthMode]);
 
   useEffect(() => {
-    void (async () => {
-      if (!isApiEnabled()) {
-        useWorkspaceStore.setState({
-          apiConnected: false,
-          apiStatus: 'local-demo',
-        });
-        return;
-      }
-      const health = await fetchApiHealthInfo();
-      if (!health.ok) {
-        useWorkspaceStore.setState({
-          apiConnected: false,
-          apiStatus: 'unreachable',
-        });
-        return;
-      }
+    if (!isApiEnabled()) {
       useWorkspaceStore.setState({
-        apiConnected: true,
-        apiStatus: 'connected',
-        nestLlmEnvConfigured: health.llmEnvConfigured,
+        apiConnected: false,
+        apiStatus: 'local-demo',
       });
-    })();
+      return;
+    }
+    useWorkspaceStore.setState({
+      apiConnected: true,
+      apiStatus: 'connected',
+    });
   }, []);
 
   useEffect(() => {
@@ -470,9 +451,8 @@ export function App() {
         setAppView('task');
         void pushToGroup();
       },
-      openSettings: () => openSettings(),
     }),
-    [setAppView, handleInvokeAgent, handleInvokeSkill, handleNewTask, switchChat, openExport, pushToGroup, openSettings],
+    [setAppView, handleInvokeAgent, handleInvokeSkill, handleNewTask, switchChat, openExport, pushToGroup],
   );
 
   useEffect(() => {
@@ -486,16 +466,12 @@ export function App() {
         const { open, closePalette } = useCommandPaletteStore.getState();
         if (open) {
           closePalette();
-          return;
-        }
-        if (useAppViewStore.getState().settingsOpen) {
-          closeSettings();
         }
       }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [closeSettings]);
+  }, []);
 
   // 窄视口 / 高 DPI 缩放：首次进入时收起侧栏，给主内容更多横向空间
   useEffect(() => {
@@ -555,12 +531,6 @@ export function App() {
           )}
         </main>
       </div>
-
-      {settingsOpen && (
-        <Suspense fallback={null}>
-          <LazySettingsDrawer />
-        </Suspense>
-      )}
 
       {paletteOpen && (
         <Suspense fallback={null}>
