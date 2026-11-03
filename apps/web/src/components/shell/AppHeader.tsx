@@ -87,7 +87,7 @@ export function AppHeader({ apiConnected: _apiConnected }: AppHeaderProps) {
 
       <nav
         className="flex max-w-[min(100vw-8rem,760px)] items-center justify-center justify-self-center"
-        aria-label="平台导航"
+        aria-label="平台导航" data-guide="navigation"
       >
         <div className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-zinc-200/80 bg-zinc-50/80 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
           <div className="flex min-w-0 max-w-full items-center gap-0.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

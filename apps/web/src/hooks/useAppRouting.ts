@@ -52,7 +52,8 @@ export function useAppRouting() {
     const current = parseAppRoute(window.location.hash);
     const chat = appView === 'task' ? current.chat : undefined;
     const detail = appView === DETAIL_VIEW ? { type: current.type, id: current.id } : {};
-    writeAppRouteToLocation({ view: appView, chat, ...detail }, appView === current.view);
+    const news = appView === 'ai-brief' && current.view === appView ? { news: current.news, newsUrl: current.newsUrl } : {};
+    writeAppRouteToLocation({ view: appView, chat, ...detail, ...news }, appView === current.view);
   }, [appView, sessionBootstrapped, shellReady]);
 
   useEffect(() => {

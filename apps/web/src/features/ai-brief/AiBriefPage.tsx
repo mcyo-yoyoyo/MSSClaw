@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { BackButton } from '@/components/common/BackButton';
+import { buildAppRoute, readAppRouteFromLocation } from '@/domain/appRoute';
 import { getAiBriefContentMode, setAiBriefContentMode, type AiBriefContentMode } from '@/domain/aiBriefContentMode';
 import { cn } from '@/lib/utils';
 import { defaultAiNewsDateRange, flattenAiBotNews } from '@/domain/aiBotDailyNews';
@@ -298,9 +300,17 @@ function DateCalendarFilter({
   );
 }
 
+function readNewsLocation() {
+  const route = readAppRouteFromLocation();
+  return { id: route.view === 'ai-brief' ? route.news : undefined, url: route.view === 'ai-brief' ? route.newsUrl : undefined,
+    fromMax: Boolean((window.history.state as { maxOrigin?: boolean } | null)?.maxOrigin) };
+}
 export function AiBriefPage() {
   const payload = useAiBotDailyNewsStore((s) => s.payload);
   const hydrate = useAiBotDailyNewsStore((s) => s.hydrate);
+  const newsLoading = useAiBotDailyNewsStore(s => s.loading);
+  const newsError = useAiBotDailyNewsStore(s => s.error);
+  const [newsLocation, setNewsLocation] = useState(readNewsLocation);
   const consumeAiNewsOverview = useNavigationIntentStore((s) => s.consumeAiNewsOverview);
   const pref = useAiNewsPreferenceStore((s) => s.pref);
   const hydratePref = useAiNewsPreferenceStore((s) => s.hydrate);
@@ -317,6 +327,11 @@ export function AiBriefPage() {
   const [searchDraft, setSearchDraft] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [contentMode, setContentModeState] = useState(getAiBriefContentMode);
+  useEffect(() => {
+    const syncGuideMode = () => setContentModeState(getAiBriefContentMode());
+    window.addEventListener('mss-guide-brief-mode', syncGuideMode);
+    return () => window.removeEventListener('mss-guide-brief-mode', syncGuideMode);
+  }, []);
   const setContentMode = (mode: AiBriefContentMode) => {
     setAiBriefContentMode(mode);
     setContentModeState(mode);
@@ -340,6 +355,27 @@ export function AiBriefPage() {
   }, [consumeAiNewsOverview]);
 
   const flat = useMemo(() => flattenAiBotNews(payload), [payload]);
+  const hasNewsLocation = Boolean(newsLocation.id || newsLocation.url);
+  const focusedNews = useMemo(() => flat.find(item => item.id === newsLocation.id)
+    || flat.find(item => newsLocation.url && item.url === newsLocation.url), [flat, newsLocation.id, newsLocation.url]);
+  useEffect(() => {
+    const sync = () => setNewsLocation(readNewsLocation());
+    window.addEventListener('popstate', sync); window.addEventListener('hashchange', sync);
+    return () => { window.removeEventListener('popstate', sync); window.removeEventListener('hashchange', sync); };
+  }, []);
+  useEffect(() => {
+    if (!hasNewsLocation) return;
+    setAiBriefContentMode('news'); setContentModeState('news'); setCategoryFilter('all');
+    setDateRange({ startDate: '', endDate: '' }); setSearchDraft(''); setSearchQuery('');
+  }, [newsLocation.id, newsLocation.url]);
+  useEffect(() => {
+    if (hasNewsLocation) setHighlightId(focusedNews?.id || null);
+  }, [hasNewsLocation, focusedNews]);
+  const returnFromSource = () => {
+    if (newsLocation.fromMax) { window.history.back(); return; }
+    window.history.replaceState(null, '', buildAppRoute({ view: 'ai-brief' }));
+    setHighlightId(null); setNewsLocation(readNewsLocation());
+  };
 
   const datedGroups = useMemo(() => {
     return payload.groups.filter((group) => {
@@ -383,9 +419,9 @@ export function AiBriefPage() {
 
   useEffect(() => {
     if (!highlightId) return;
-    const el = document.querySelector(`[data-brief-id="${highlightId}"]`);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [highlightId, flat.length]);
+    const el = document.querySelector(`[data-brief-id="${CSS.escape(highlightId)}"]`);
+    el?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+  }, [highlightId, flat.length, contentMode]);
 
   const runtimeOrigin =
     typeof window !== 'undefined'
@@ -414,6 +450,8 @@ export function AiBriefPage() {
   return (
     <div className="center-surface scroll-hidden flex min-h-0 flex-1 flex-col overflow-y-auto">
       <PageCanvas className="flex flex-col py-5 pb-10 md:py-6">
+        {hasNewsLocation && <div className="sticky top-0 z-20 mb-3 shrink-0 bg-white/95 py-2 backdrop-blur"><BackButton label={newsLocation.fromMax ? '返回MAX' : '返回AI快讯'} onClick={returnFromSource}/></div>}
+        {hasNewsLocation && !focusedNews && <p className="mb-3 text-[12px] text-zinc-500" role="status">{newsError ? '资讯暂时无法读取，请稍后重试' : newsLoading ? '正在定位来源资讯…' : '这条来源资讯暂时不可用，可返回查看其他来源'}</p>}
         <PageStageHero
           className="mb-4 shrink-0"
           tone="brief"
@@ -530,7 +568,7 @@ export function AiBriefPage() {
             ))}
             <button
               type="button"
-              onClick={() => setContentMode('cases')}
+              data-guide="case-tab" onClick={() => setContentMode('cases')}
               className={cn(
                 'relative px-3 py-2 text-[13px] font-medium transition after:absolute after:inset-x-2 after:-bottom-[11px] after:h-0.5 after:rounded-full after:bg-transparent',
                 contentMode === 'cases'

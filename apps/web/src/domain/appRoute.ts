@@ -19,6 +19,9 @@ export interface AppRouteParams {
   view: AppView;
   /** Deep link to a task session: #/task?chat=<chatId> */
   chat?: string;
+  /** 指向平台 AI 快讯的来源条目；旧来源可按原文 URL 回查。 */
+  news?: string;
+  newsUrl?: string;
   /** 资产详情的资产 id */
   id?: string;
   /** 资产详情的资产类型 */
@@ -46,6 +49,7 @@ export function parseAppRoute(rawHash: string): AppRouteParams {
   return {
     view,
     chat: chat || undefined,
+    ...(view === 'ai-brief' ? { news: qs?.get('news') || undefined, newsUrl: qs?.get('newsUrl') || undefined } : {}),
   };
 }
 
@@ -59,6 +63,10 @@ export function buildAppRoute(params: AppRouteParams): string {
   }
   if (params.view === 'task' || params.view === 'ai-tasks') {
     if (params.chat) qs.set('chat', params.chat);
+  }
+  if (params.view === 'ai-brief') {
+    if (params.news) qs.set('news', params.news);
+    if (params.newsUrl) qs.set('newsUrl', params.newsUrl);
   }
   const query = qs.toString();
   return `#/${params.view}${query ? `?${query}` : ''}`;

@@ -160,7 +160,7 @@ export function MarketShelfCard({
 
   return (
     <article
-      className={cn(
+      data-guide="asset-card" className={cn(
         'group relative flex h-full flex-col rounded-2xl border border-zinc-200/90 bg-white transition duration-200',
         'hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-[0_10px_28px_-16px_rgba(24,24,27,0.35)]',
         featured ? 'p-5' : compact ? 'p-3' : homeDense ? 'p-3.5' : 'p-4',

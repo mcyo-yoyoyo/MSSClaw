@@ -62,7 +62,7 @@ export const NAV_PRESENTATION_META: NavPresentationMeta[] = [
   },
   {
     id: 'ai-knowledge',
-    label: 'AI智库',
+    label: 'MAX',
     subtitle: '业务问题诊断 · 案例与能力行动方案',
     icon: 'fa-book-open-reader',
     section: 'workspace',

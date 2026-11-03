@@ -2,10 +2,9 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { PageCanvas } from '@/components/layout/PageCanvas';
-import { canUseAiKnowledgeApi, listAiKnowledgeSolutions } from '@/api/aiKnowledgeApi';
+import { useSavedSolutions } from '@/features/ai-knowledge/useSavedSolutions';
 import {
   formatSolutionDate,
-  loadAiKnowledgeSolutions,
   type AiKnowledgeSolution,
 } from '@/domain/aiKnowledge';
 import { consumeMeAiKnowledgeTab, stageAiKnowledgeSolution } from '@/domain/aiKnowledgeEntry';
@@ -91,9 +90,7 @@ export function MePage() {
     { kind: 'skill' | 'agent'; id: string } | null
   >(null);
   const [kindFilter, setKindFilter] = useState<KindFilter>('all');
-  const [knowledgeSolutions, setKnowledgeSolutions] = useState<AiKnowledgeSolution[]>(() =>
-    loadAiKnowledgeSolutions(),
-  );
+  const { solutions: knowledgeSolutions, loading: solutionsLoading, error: solutionsError } = useSavedSolutions();
   const [tab, setTab] = useState<MeTab>(
     appView === 'ai-tasks' && showTasks ? 'tasks' : 'favorites',
   );
@@ -108,17 +105,8 @@ export function MePage() {
   }, [hydrateApprovals]);
 
   useEffect(() => {
-    if (!canUseAiKnowledgeApi()) return;
-    let cancelled = false;
-    void listAiKnowledgeSolutions().then((items) => {
-      if (!cancelled) setKnowledgeSolutions(items);
-    }).catch(() => {
-      if (!cancelled) showToast('AI智库方案暂时无法读取');
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [showToast, user?.id]);
+    if (solutionsError) showToast(solutionsError);
+  }, [showToast, solutionsError]);
 
   const submissionRows = useMemo(() => {
     if (!user) return [];
@@ -243,7 +231,7 @@ export function MePage() {
     { id: 'submissions', label: '我的提交', count: submissionRows.length },
     { id: 'favorites', label: '我的收藏', count: favRows.length },
     { id: 'recent', label: '最近浏览', count: recentRows.length },
-    { id: 'knowledge', label: 'AI智库', count: knowledgeSolutions.length },
+    { id: 'knowledge', label: '历史方案', count: knowledgeSolutions.length },
     { id: 'tasks', label: '任务记录', hidden: !showTasks },
   ];
 
@@ -334,7 +322,7 @@ export function MePage() {
             <AiTasksPage embedded />
           ) : tab === 'knowledge' ? (
             <MeShelfGrid
-              empty="还没有推荐方案。从任一栏目使用“智库帮找”后，生成的方案会保存在这里。"
+              empty={solutionsLoading ? '正在加载历史方案…' : solutionsError || '还没有解决方案。通过右下角MAX找方案，确认生成后会保存在这里。'}
               count={knowledgeSolutions.length}
             >
               {knowledgeSolutions.map((item) => (

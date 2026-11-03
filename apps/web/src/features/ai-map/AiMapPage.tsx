@@ -1,3 +1,4 @@
+import { BackButton } from '@/components/common/BackButton';
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type {
@@ -263,14 +264,7 @@ function ReturnToTaskButton() {
   const returnTarget = useNavigationIntentStore((s) => s.returnTarget);
   if (!returnTarget) return null;
   return (
-    <button
-      type="button"
-      onClick={() => returnFromResource()}
-      className="rounded-xl border border-zinc-900/15 bg-zinc-900 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-zinc-800"
-    >
-      <i className="fa-solid fa-arrow-left mr-1.5 text-[10px]" />
-      返回任务
-    </button>
+    <BackButton label="返回任务" onClick={() => returnFromResource()}/>
   );
 }
 

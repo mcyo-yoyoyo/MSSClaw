@@ -70,7 +70,7 @@ export function CaseInsightsView() {
   if (error) return <div className="py-14 text-center text-sm text-red-600">案例加载失败，请稍后重试</div>;
 
   return (
-    <section className="w-full">
+    <section data-guide="case-list" className="w-full">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-zinc-500">{visibleItems.length} 篇案例</p>
         <label className="relative block w-full sm:max-w-xs">
@@ -92,7 +92,7 @@ export function CaseInsightsView() {
             const card = presentation.get(item.id);
             const date = publishedDate(item.publishedAt);
             return (
-              <article key={item.id} className="grid gap-4 py-5 sm:grid-cols-[minmax(0,1fr)_208px] sm:items-center sm:gap-6">
+              <article data-guide="case-card" key={item.id} className="grid gap-4 py-5 sm:grid-cols-[minmax(0,1fr)_208px] sm:items-center sm:gap-6">
                 <div className="min-w-0">
                   <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-zinc-500">
                     {item.company ? <span className="font-medium text-zinc-700">{item.company}</span> : null}

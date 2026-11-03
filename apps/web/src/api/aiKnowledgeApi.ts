@@ -16,7 +16,7 @@ function endpoint(path: string): string {
   return apiUrl(`/api/v1/ai-knowledge${path}`);
 }
 
-async function request<T>(
+export async function knowledgeRequest<T>(
   path: string,
   init: RequestInit = {},
   timeoutMs = 15_000,
@@ -46,7 +46,7 @@ export function canUseAiKnowledgeApi(): boolean {
 }
 
 export async function startAiKnowledgeDraft(question: string, signal?: AbortSignal): Promise<DemandDraft> {
-  const body = await request<{ draft: DemandDraft }>('/drafts', {
+  const body = await knowledgeRequest<{ draft: DemandDraft }>('/drafts', {
     method: 'POST',
     body: JSON.stringify({ question }),
     signal,
@@ -59,7 +59,7 @@ export async function clarifyAiKnowledgeDraft(
   message: string,
   signal?: AbortSignal,
 ): Promise<DemandDraft> {
-  const body = await request<{ draft: DemandDraft }>(`/drafts/${encodeURIComponent(draftId)}/messages`, {
+  const body = await knowledgeRequest<{ draft: DemandDraft }>(`/drafts/${encodeURIComponent(draftId)}/messages`, {
     method: 'POST',
     body: JSON.stringify({ message }),
     signal,
@@ -72,7 +72,7 @@ export async function updateAiKnowledgeDemand(
   demand: DemandSummary,
   signal?: AbortSignal,
 ): Promise<DemandDraft> {
-  const body = await request<{ draft: DemandDraft }>(`/drafts/${encodeURIComponent(draftId)}/demand`, {
+  const body = await knowledgeRequest<{ draft: DemandDraft }>(`/drafts/${encodeURIComponent(draftId)}/demand`, {
     method: 'PATCH',
     body: JSON.stringify({ demand }),
     signal,
@@ -81,7 +81,7 @@ export async function updateAiKnowledgeDemand(
 }
 
 export async function generateAiKnowledgeSolution(draftId: string, signal?: AbortSignal): Promise<AiKnowledgeSolution> {
-  const body = await request<{ solution: AiKnowledgeSolution }>(
+  const body = await knowledgeRequest<{ solution: AiKnowledgeSolution }>(
     `/drafts/${encodeURIComponent(draftId)}/generate`,
     { method: 'POST', body: '{}', signal },
     90_000,
@@ -89,7 +89,7 @@ export async function generateAiKnowledgeSolution(draftId: string, signal?: Abor
   return body.solution;
 }
 
-export async function listAiKnowledgeSolutions(limit = 50): Promise<AiKnowledgeSolution[]> {
-  const body = await request<{ solutions: AiKnowledgeSolution[] }>(`/solutions?limit=${limit}`);
+export async function listAiKnowledgeSolutions(limit = 50, signal?: AbortSignal): Promise<AiKnowledgeSolution[]> {
+  const body = await knowledgeRequest<{ solutions: AiKnowledgeSolution[] }>(`/solutions?limit=${limit}`, { signal });
   return body.solutions;
 }

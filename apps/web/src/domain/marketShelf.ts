@@ -151,7 +151,7 @@ export const MARKET_SECURITY_LABEL: Record<
 };
 
 /** 外部工具卡：产品名为标题，卡片核心作用为描述（对齐 Demo） */
-function externalToolPresentation(tool: PrototypeToolSeed): {
+export function externalToolPresentation(tool: PrototypeToolSeed): {
   title: string;
   productName?: string;
   description: string;

@@ -1,3 +1,4 @@
+import { BackButton } from '@/components/common/BackButton';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   AI_KNOWLEDGE_CASE_LIBRARY_URL,
@@ -230,20 +231,21 @@ function solutionDocument(solution: AiKnowledgeSolution): string {
       <dt>使用工具</dt><dd>${escapeHtml((item.toolsUsed?.length ? item.toolsUsed : ['案例原文未明确说明']).join('、'))}</dd>
       <dt>可借鉴点</dt><dd><ul>${item.lessons.slice(0, 2).map((lesson) => `<li>${escapeHtml(conciseText(lesson, 100))}</li>`).join('')}</ul></dd>
       </dl></section>`).join('');
+  const planSection = solution.pilotPlan ? `<section class="layer"><h2>实施步骤与检查点</h2><p>${escapeHtml(solution.pilotPlan.summary)}</p>${solution.pilotPlan.steps.map((step, i) => `<section class="item"><h3>${i + 1}. ${escapeHtml(step.title)}</h3><dl><dt>输入</dt><dd>${escapeHtml(step.input)}</dd><dt>输出</dt><dd>${escapeHtml(step.output)}</dd><dt>人工检查</dt><dd>${escapeHtml(step.humanCheck)}</dd></dl></section>`).join('')}<h3>限制与待验证事项</h3><ul>${solution.pilotPlan.limitations.map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ul></section>` : '';
   const caseSection = cases
     ? `<section class="layer"><h2>03 参考案例</h2>${cases}</section>`
     : '';
   return `<!doctype html>
   <html lang="zh-CN"><head><meta charset="utf-8"><title>${escapeHtml(solution.title)}</title>
   <style>body{font-family:"Microsoft YaHei",sans-serif;color:#18181b;max-width:820px;margin:48px auto;line-height:1.65}h1{font-size:26px;margin:0 0 8px}.meta{color:#71717a;font-size:13px;border-bottom:1px solid #e4e4e7;padding-bottom:20px}.layer{padding:26px 0;border-bottom:1px solid #e4e4e7}.layer>h2{font-size:18px;color:#1d4ed8}.item{padding:16px 0;border-top:1px solid #e4e4e7}.item h3{font-size:16px}dl{display:grid;grid-template-columns:88px 1fr;gap:7px 12px;margin:0}dt{color:#71717a}dd{margin:0}ol,ul{margin:0;padding-left:20px}</style>
-  </head><body><h1>${escapeHtml(solution.title)}</h1><div class="meta">${escapeHtml(solution.domain)} · ${escapeHtml(solution.maturity)}${solution.generationSource ? ` · ${solution.generationSource === 'llm' ? `模型生成${solution.model ? `（${escapeHtml(solution.model)}）` : ''}` : '规则方案'}` : ''} · ${escapeHtml(formatSolutionDate(solution.createdAt))}</div><section class="layer"><h2>01 问题梳理</h2><p><strong>核心问题：</strong>${escapeHtml(conciseText(diagnosis.currentSituation, 220))}</p><p><strong>建议解法：</strong>${escapeHtml(conciseText(diagnosis.solutionDirection, 180))}</p></section><section class="layer"><h2>02 工具与使用路径</h2>${tools}</section>${caseSection}</body></html>`;
+  </head><body><h1>${escapeHtml(solution.title)}</h1><div class="meta">${escapeHtml(solution.domain)} · ${escapeHtml(solution.maturity)}${solution.generationSource ? ` · ${solution.generationSource === 'llm' ? `模型生成${solution.model ? `（${escapeHtml(solution.model)}）` : ''}` : '规则方案'}` : ''} · ${escapeHtml(formatSolutionDate(solution.createdAt))}</div><section class="layer"><h2>01 问题梳理</h2><p><strong>核心问题：</strong>${escapeHtml(conciseText(diagnosis.currentSituation, 220))}</p><p><strong>建议解法：</strong>${escapeHtml(conciseText(diagnosis.solutionDirection, 180))}</p></section><section class="layer"><h2>02 工具与使用路径</h2>${tools}</section>${caseSection}${planSection}</body></html>`;
 }
 
 function openExternal(url: string) {
   window.open(url, '_blank', 'noopener,noreferrer');
 }
 
-export function AiKnowledgePage() {
+export function LegacyAiKnowledgePage({ initialSolution, onNew }: { initialSolution?: AiKnowledgeSolution; onNew?: () => void } = {}) {
   const entryConsumed = useRef(false);
   const requestEpoch = useRef(0);
   const activeRequest = useRef<AbortController | null>(null);
@@ -265,7 +267,7 @@ export function AiKnowledgePage() {
   const [notice, setNotice] = useState('');
   const [skillDetailId, setSkillDetailId] = useState<string | null>(null);
   const [agentDetailId, setAgentDetailId] = useState<string | null>(null);
-  // 智库对话只存在本页状态里：资源详情用弹窗打开，不跳详情页，免得回来时对话丢失
+  // MAX对话只存在本页状态里：资源详情用弹窗打开，不跳详情页，免得回来时对话丢失
   const [toolDetailId, setToolDetailId] = useState<string | null>(null);
   const setAppView = useAppViewStore((state) => state.setAppView);
   const setMarketSearch = useMarketFilterStore((state) => state.setSearch);
@@ -285,7 +287,7 @@ export function AiKnowledgePage() {
     const clean = value.trim();
     if (starting) return;
     if (clean.length < 2) {
-      setInputError('请至少输入两个字，让智库了解你想解决的问题。');
+      setInputError('请至少输入两个字，让MAX了解你想解决的问题。');
       return;
     }
     activeRequest.current?.abort();
@@ -393,6 +395,7 @@ export function AiKnowledgePage() {
   };
 
   const startNew = () => {
+    if (onNew) { onNew(); return; }
     requestEpoch.current += 1;
     activeRequest.current?.abort();
     activeRequest.current = null;
@@ -427,7 +430,7 @@ export function AiKnowledgePage() {
   };
 
   useEffect(() => {
-    const incoming = consumeAiKnowledgeSolution();
+    const incoming = initialSolution ?? consumeAiKnowledgeSolution();
     if (!incoming) return;
     openSavedSolution(incoming);
   }, []);
@@ -514,7 +517,7 @@ export function AiKnowledgePage() {
       <div className="ak-toolbar">
         <div className="ak-toolbar__context">
           <button type="button" className="ak-toolbar__brand" onClick={startNew}>
-            AI智库
+            MAX
           </button>
           {mode !== 'home' ? <span className="ak-toolbar__divider">/</span> : null}
           {mode === 'chat' ? <span>需求对话</span> : null}
@@ -535,7 +538,7 @@ export function AiKnowledgePage() {
       {mode === 'home' ? (
         <main className="ak-home">
           <section className="ak-home__intro">
-            <p className="ak-home__eyebrow">MSS AI 智库</p>
+            <p className="ak-home__eyebrow">MSS MAX</p>
             <h1>把业务问题变成下一步行动</h1>
             <p>基于真实案例、AI工具和内部能力</p>
           </section>
@@ -597,7 +600,7 @@ export function AiKnowledgePage() {
           <section className={cn('ak-summary-pane', (starting || sending) && 'is-analyzing')} aria-busy={starting || sending}>
             <div className="ak-pane-heading">
               <div><p>需求摘要</p><h1>{draft.demand.title}</h1></div>
-              <div className="ak-pane-heading__end"><span>{starting || sending ? '正在分析并更新…' : canConfirmDemand(draft.demand) ? '需求卡已完成' : `还需确认 ${draft.demand.pendingKeys.length} 项`}</span><button type="button" className="ak-mobile-back" onClick={() => setMobileWorkspaceOpen(false)}><i className="fa-solid fa-arrow-left" />返回对话</button></div>
+              <div className="ak-pane-heading__end"><span>{starting || sending ? '正在分析并更新…' : canConfirmDemand(draft.demand) ? '需求卡已完成' : `还需确认 ${draft.demand.pendingKeys.length} 项`}</span><span className="ak-mobile-back"><BackButton label="返回对话" onClick={() => setMobileWorkspaceOpen(false)}/></span></div>
             </div>
             <div className="ak-demand-list">
               {DEMAND_FIELDS.map((key) => {
@@ -739,7 +742,7 @@ function ConversationPane({
       <div className="ak-message-list">
         {draft.messages.map((item) => (
           <article key={item.id} className={cn('ak-message', item.role === 'assistant' && 'is-assistant')}>
-            <span>{item.role === 'user' ? '你' : 'AI智库'}</span>
+            <span>{item.role === 'user' ? '你' : 'MAX'}</span>
             <p>{item.text}</p>
           </article>
         ))}
@@ -750,12 +753,12 @@ function ConversationPane({
         ) : null}
         {processing ? (
           <article className="ak-message is-assistant is-processing" role="status" aria-live="polite">
-            <span>AI智库</span><div className="ak-processing-line"><i className="fa-solid fa-circle-notch fa-spin" /><p>{processingLabel}</p></div>
+            <span>MAX</span><div className="ak-processing-line"><i className="fa-solid fa-circle-notch fa-spin" /><p>{processingLabel}</p></div>
           </article>
         ) : null}
         {error && !processing ? (
           <article className="ak-message is-assistant is-error" role="alert">
-            <span>AI智库</span><div className="ak-processing-line"><i className="fa-solid fa-circle-exclamation" /><p>{error}</p>{onRetry ? <button type="button" onClick={onRetry}>重新发送</button> : null}</div>
+            <span>MAX</span><div className="ak-processing-line"><i className="fa-solid fa-circle-exclamation" /><p>{error}</p>{onRetry ? <button type="button" onClick={onRetry}>重新发送</button> : null}</div>
           </article>
         ) : null}
       </div>
@@ -824,6 +827,7 @@ function SolutionView({
           </article>
         ))}</div>
       </section> : null}
+      {solution.pilotPlan && <section className="ak-diagnostic-layer"><h2>实施步骤与检查点</h2>{solution.pilotPlan.steps.map((step, i) => <article className="ak-tool-recommendation" key={i}><h3>{i + 1}. {step.title}</h3><dl><dt>输入</dt><dd>{step.input}</dd><dt>输出</dt><dd>{step.output}</dd><dt>人工检查</dt><dd>{step.humanCheck}</dd></dl></article>)}<h3>限制与待验证事项</h3><ul>{solution.pilotPlan.limitations.map((t, i) => <li key={i}>{t}</li>)}</ul></section>}
       <div className="ak-solution__footer"><button type="button" className="ak-button-secondary" onClick={onNew}><i className="fa-solid fa-plus" />发起新问题</button></div>
     </div>
   );

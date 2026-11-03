@@ -1,3 +1,4 @@
+import { BackButton } from '@/components/common/BackButton';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { AgentPortrait } from '@/components/brand/AgentPortrait';
@@ -171,18 +172,7 @@ export function AiTasksPage({ embedded = false }: { embedded?: boolean } = {}) {
       >
         <div className="flex min-w-0 items-center gap-2">
           {viewingChat || (composeFocus && showChat) ? (
-            <button
-              type="button"
-              onClick={() => {
-                setNarrowListFocus(true);
-                setComposeFocus(false);
-              }}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 xl:hidden"
-              title="返回任务列表"
-              aria-label="返回任务列表"
-            >
-              <i className="fa-solid fa-arrow-left text-[12px]" />
-            </button>
+            <span className="xl:hidden"><BackButton label="返回任务列表" onClick={() => { setNarrowListFocus(true); setComposeFocus(false); }}/></span>
           ) : null}
           <div className="min-w-0">
             {embedded ? (

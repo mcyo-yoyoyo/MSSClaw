@@ -60,6 +60,24 @@ function normalizedLimit(limit: number): number {
   return Math.min(Math.max(Math.floor(limit) || 1, 1), 8);
 }
 
+export type PilotAssetViewer = { userId?: string; name?: string; role?: string; deptIds?: string[]; regionId?: string | null };
+
+/** 与前端 canViewAsset 同口径：归属部门是元数据，public 不能被部门字段挡住。 */
+export function pilotAssetVisible(item: CatalogItem, viewer: PilotAssetViewer = {}): boolean {
+  if (item.published !== true) return false;
+  if (viewer.role === 'super_admin') return true;
+  const visibility = text(item, 'visibility') || 'public';
+  if (visibility === 'public') return true;
+  if (viewer.userId && text(item, 'publisherUserId') === viewer.userId) return true;
+  if (viewer.name && [text(item, 'publisher'), text(item, 'author')].includes(viewer.name)) return true;
+  if (visibility === 'private') return false;
+  const depts = strings(item, 'ownerDeptIds');
+  const regions = strings(item, 'ownerRegionIds');
+  if (!regions.length && text(item, 'ownerRegionId')) regions.push(text(item, 'ownerRegionId'));
+  return Boolean(viewer.deptIds?.some(dept => depts.includes(dept))
+    || (viewer.regionId && regions.includes(viewer.regionId)));
+}
+
 @Injectable()
 export class AiKnowledgeResourceService {
   private readonly logger = new Logger(AiKnowledgeResourceService.name);
@@ -96,6 +114,21 @@ export class AiKnowledgeResourceService {
       ...this.rank('agent', agents, query, perKind),
       ...this.rank('skill', skills, query, perKind),
     ].slice(0, normalizedLimit(limit));
+  }
+
+  async searchPilotAssets(query: string, viewer: PilotAssetViewer = {}): Promise<SolutionResource[]> {
+    const lists = await Promise.all((['skills', 'agents', 'tools'] as const)
+      .map(key => this.marketplaceItems('ws-cn-marketing', key)));
+    return lists.flatMap((items, index) => {
+      const kind = (['skill', 'agent', 'tool'] as const)[index];
+      const visible = items.filter(item => pilotAssetVisible(item, viewer));
+      return this.rank(kind, visible, query, kind === 'tool' ? 2 : 4).map(resource => {
+        const item = visible.find(item => item.id === resource.id);
+        const shelf = item ? text(item, 'marketShelf') : '';
+        return { ...resource, url: `http://localhost:5173/#/detail?type=${kind}&id=${encodeURIComponent(resource.id || '')}`, evidence: [resource.evidence,
+          shelf === 'internal' ? '内部工具' : shelf === 'external' ? '外部工具' : ''].filter(Boolean).join(' · ') };
+      });
+    });
   }
 
   async searchForDraft(workspaceId: string, draft: DemandDraft): Promise<SolutionResource[]> {

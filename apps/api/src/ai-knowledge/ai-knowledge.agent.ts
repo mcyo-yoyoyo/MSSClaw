@@ -1,3 +1,4 @@
+import { maxPersonaInstructions } from './ai-knowledge-reply-policy';
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { nestLlmStreamedText, type NestLlmRuntimeConfig } from '../executions/llm.client';
@@ -128,7 +129,7 @@ export class AiKnowledgeAgentRunner {
       messages: [
         {
           role: 'system',
-          content:
+          content: maxPersonaInstructions() + '\n' +
             '根据用户原始问题和对话历史，把需求整理成一条完整但不过度细化的用户故事。' +
             '只判断四项信息是否明确：1）使用AI的人的业务角色；2）希望达成的业务目标；3）可以交给AI的现有输入；4）希望AI产出的结果。' +
             '字段映射必须固定：humanCheckpoint填写使用者角色，goal填写业务目标，inputs填写现有输入，aiRole填写期望输出。problem概括任务，currentMethod统一填写“计划使用AI完成该任务”。' +
@@ -186,7 +187,7 @@ export class AiKnowledgeAgentRunner {
       messages: [
         {
           role: 'system',
-          content:
+          content: maxPersonaInstructions() + '\n' +
             AI_KNOWLEDGE_SOLUTION_INSTRUCTIONS +
             SOLUTION_OUTPUT_CONTRACT +
             (repair

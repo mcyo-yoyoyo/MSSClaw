@@ -3,10 +3,6 @@ import {
   intentSearchHintExamples,
   type IntentSearchScope,
 } from '@/domain/capabilityIntentSearch';
-import { writeAppRouteToLocation } from '@/domain/appRoute';
-import { stageAiKnowledgeEntry } from '@/domain/aiKnowledgeEntry';
-import { useAppViewStore } from '@/stores/appViewStore';
-import { requireLogin } from '@/stores/authGateStore';
 import { useMarketFilterStore } from '@/stores/marketFilterStore';
 
 /**
@@ -26,7 +22,6 @@ export function StageIntentDock({
 }) {
   const search = useMarketFilterStore((s) => s.search);
   const setSearch = useMarketFilterStore((s) => s.setSearch);
-  const setAppView = useAppViewStore((s) => s.setAppView);
 
   const examples = suggestions ?? intentSearchHintExamples(scope);
 
@@ -34,25 +29,13 @@ export function StageIntentDock({
     setSearch(next);
   };
 
-  const enterAiKnowledge = () => {
-    const question = search.trim();
-    if (!question) return;
-    const openAiKnowledge = () => {
-      stageAiKnowledgeEntry(question, scope);
-      writeAppRouteToLocation({ view: 'ai-knowledge' });
-      setAppView('ai-knowledge');
-    };
-    if (!requireLogin('chat', openAiKnowledge)) return;
-    openAiKnowledge();
-  };
-
   return (
-    <div className={cn('stage-intent-dock', className)}>
+    <div data-guide="market-search" className={cn('stage-intent-dock', className)}>
       <form
         className="stage-intent-dock__composer"
         onSubmit={(e) => {
           e.preventDefault();
-          enterAiKnowledge();
+          run(search);
         }}
       >
         <i
@@ -80,9 +63,9 @@ export function StageIntentDock({
           type="submit"
           disabled={!search.trim()}
           className="stage-intent-dock__submit"
-          aria-label="让 AI 智库帮我找"
+          aria-label="搜索当前列表"
         >
-          <span>智库帮找</span>
+          <span>搜索</span>
           <i className="fa-solid fa-arrow-right" aria-hidden />
         </button>
       </form>
