@@ -49,6 +49,7 @@ import { useExternalToolLayoutStore } from '@/stores/externalToolLayoutStore';
 import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { usePlazaToolGuideStore } from '@/stores/plazaToolGuideStore';
+import { useHasMenu } from '@/domain/currentUser';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
@@ -620,7 +621,7 @@ export function PortalToolOpsPanel() {
     [user],
   );
 
-  const canManageInternalOrder = user?.platformRole === 'super_admin';
+  const canManageInternalOrder = useHasMenu('portal-ops');
 
   const howtoToolIds = useMemo(
     () => new Set(guideRecords.map((record) => record.toolId)),
@@ -1405,7 +1406,7 @@ export function PortalToolOpsPanel() {
             <i className="fa-regular fa-hand" />
             {canManageInternalOrder
               ? '拖动卡片左下角手柄，松手后自动保存；点击卡片查看详情。'
-              : '当前账号只能点击卡片查看详情；仅超级管理员可调整顺序。'}
+              : '当前角色没有勾选门户运营，只能查看详情。'}
           </p>
         ) : (
           <p className="mt-2.5 flex items-center gap-1.5 text-[10px] leading-relaxed text-zinc-400">

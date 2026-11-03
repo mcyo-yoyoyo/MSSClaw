@@ -11,8 +11,10 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
+import { PrismaService } from '../prisma/prisma.service';
 import { PlatformDocsService } from './platform-docs.service';
 import { PortalAnalyticsService } from './portal-analytics.service';
+import { canAccessMenu } from './rbac-store';
 // 单租户：原路由参数 workspaceId 固定为平台空间，方法体沿用这个名字（服务层还用它拼 center_record 的记录 id，对应文档迁到正式表时一起去掉）
 import { PLATFORM_WORKSPACE_ID as workspaceId } from '../common/platform-workspace';
 
@@ -36,6 +38,7 @@ export class PortalAnalyticsController {
   constructor(
     private readonly analytics: PortalAnalyticsService,
     private readonly docs: PlatformDocsService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Post('views')
@@ -107,7 +110,8 @@ export class PortalAnalyticsController {
     @Query('to') to?: string,
   ) {
     const user = await this.requireSession(workspaceId, authorization, xSessionToken);
-    if (String(user.platformRole ?? '') !== 'super_admin') {
+    const roleId = String(user.platformRole ?? '');
+    if (!(await canAccessMenu(this.prisma, roleId, 'portal-dashboard'))) {
       throw new ForbiddenException('portal_analytics_admin_required');
     }
     return this.analytics.getReport(workspaceId, days, from, to);

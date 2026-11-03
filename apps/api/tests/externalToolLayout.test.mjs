@@ -567,7 +567,7 @@ test('controller lets guests read external tool layout without a session', async
   assert.equal(meCalls, 0);
 });
 
-test('controller allows members to read but only super admins to write the layout', async () => {
+test('controller allows members to read but only portal-ops menu holders to write the layout', async () => {
   let role = 'viewer';
   let savedPayload = null;
   const controller = new PlatformDocsController({
@@ -580,6 +580,9 @@ test('controller allows members to read but only super admins to write the layou
       savedPayload = payload;
       return { workspaceId, kind, payload };
     },
+  }, {
+    menu: { findUnique: async () => ({ fixed: false }) },
+    roleMenu: { findUnique: async () => null },
   });
 
   assert.deepEqual(await controller.getOne('external-tool-layout'), {
@@ -627,7 +630,7 @@ test('controller opens internal office scenes for guest reads but still guards w
   assert.equal(putCalls, 0);
 });
 
-test('controller lets workspace members read internal scenes but rejects non-admin writes', async () => {
+test('controller lets workspace members read internal scenes but rejects writes without the menu', async () => {
   let putCalls = 0;
   const controller = new PlatformDocsController({
     me: async () => ({
@@ -638,6 +641,9 @@ test('controller lets workspace members read internal scenes but rejects non-adm
     putDoc: async () => {
       putCalls += 1;
     },
+  }, {
+    menu: { findUnique: async () => ({ fixed: false }) },
+    roleMenu: { findUnique: async () => null },
   });
 
   assert.deepEqual(
@@ -652,7 +658,7 @@ test('controller lets workspace members read internal scenes but rejects non-adm
     ),
     (error) => {
       assert.equal(error?.getStatus?.(), 403);
-      assert.equal(error?.getResponse?.().message, 'internal_office_scenes_admin_required');
+      assert.equal(error?.getResponse?.().message, 'menu_forbidden:portal-ops|office-scenes');
       return true;
     },
   );

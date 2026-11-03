@@ -25,6 +25,7 @@ import { useHomeFeaturedStore } from '@/stores/homeFeaturedStore';
 import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 import { usePlazaToolGuideStore } from '@/stores/plazaToolGuideStore';
+import { useHasMenu } from '@/domain/currentUser';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
@@ -71,7 +72,7 @@ export function PortalHomeFeaturedPanel() {
   const hydrate = useHomeFeaturedStore((s) => s.hydrate);
   const save = useHomeFeaturedStore((s) => s.save);
 
-  const canManage = user?.platformRole === 'super_admin';
+  const canManage = useHasMenu('portal-ops');
   const [edits, setEdits] = useState<HomeFeaturedChannels | null>(null);
   const [searchByKind, setSearchByKind] = useState<Record<MarketShelfKind, string>>({
     external: '',
@@ -217,7 +218,7 @@ export function PortalHomeFeaturedPanel() {
           </p>
         ) : null}
         {!canManage ? (
-          <p className="mt-3 text-[11px] text-zinc-400">当前账号只能查看；仅超级管理员可修改首页配置。</p>
+          <p className="mt-3 text-[11px] text-zinc-400">当前角色没有勾选门户运营，不能修改首页配置。</p>
         ) : null}
         {error ? (
           <p

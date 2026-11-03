@@ -22,6 +22,10 @@ function createController(role) {
         return { ok: true, user: { id: 'user-test', platformRole: role } };
       },
     },
+    {
+      menu: { findUnique: async () => ({ fixed: false }) },
+      roleMenu: { findUnique: async () => null },
+    },
   );
   return {
     controller,
@@ -47,7 +51,7 @@ test('manual AI news sync rejects non-admin members', async () => {
     controller.syncNow('Bearer member-token'),
     (error) =>
       error?.getStatus?.() === 403 &&
-      error?.getResponse?.().message === 'ai_news_sync_admin_required',
+      error?.getResponse?.().message === 'menu_forbidden:portal-ops',
   );
   assert.equal(state().syncCalls, 0);
   assert.equal(state().receivedToken, 'member-token');

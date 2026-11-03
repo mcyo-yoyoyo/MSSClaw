@@ -95,6 +95,14 @@ export async function canAccessMenu(db: Db, roleId: string, menuId: string, edit
   return Boolean(grant && (!edit || grant.canEdit));
 }
 
+/** 角色拥有其中任一菜单即可；超级管理员不查表 */
+export async function assertAnyMenu(db: Db, roleId: string, menuIds: readonly string[]): Promise<void> {
+  for (const menuId of menuIds) {
+    if (await canAccessMenu(db, roleId, menuId)) return;
+  }
+  throw new ForbiddenException(`menu_forbidden:${menuIds.join('|')}`);
+}
+
 export async function listRoles(db: Db) {
   const [roles, counts, menus] = await Promise.all([
     db.role.findMany({

@@ -25,7 +25,7 @@ import {
   SHOWCASE_TABS,
   type ShowcaseTabId,
 } from '@/domain/scenarioShowcase';
-import { isSystemAdmin } from '@/domain/currentUser';
+import { useHasMenu } from '@/domain/currentUser';
 import { getPortalItemById, resolveScenarioCaseItems } from '@/domain/portalCase';
 import {
   resolvePipelineStepTargets,
@@ -333,7 +333,7 @@ export function AiMapPage({
   const [narrativeKind, setNarrativeKind] = useState<'all' | ShowcaseTabId>('all');
   const [teamPlan, setTeamPlan] = useState<ScenarioDemoPlan | null>(null);
   const [inspectTarget, setInspectTarget] = useState<ScenarioLayerInspectTarget | null>(null);
-  const isAdmin = isSystemAdmin(user?.platformRole);
+  const isAdmin = useHasMenu('portal-ops');
   const bumpExposure = useContentEngagementStore((state) => state.bumpExposure);
   const bumpDetail = useContentEngagementStore((state) => state.bumpDetail);
   const bumpRedirect = useContentEngagementStore((state) => state.bumpRedirect);

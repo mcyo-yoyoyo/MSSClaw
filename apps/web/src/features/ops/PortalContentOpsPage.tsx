@@ -8,7 +8,7 @@ import {
 import { CaseEditorModal } from '@/components/center/CaseEditorModal';
 import { OrgAssetFilterBar } from '@/components/center/OrgAssetFilters';
 import { formatEngagementLine } from '@/components/content/EngagementActions';
-import { isSystemAdmin } from '@/domain/currentUser';
+import { useHasMenu } from '@/domain/currentUser';
 import { ASSET_VISIBILITY_LABELS } from '@/domain/orgTaxonomy';
 import type { DeptFilter, RegionFilter } from '@/domain/assetFilters';
 import { heatScore } from '@/domain/contentEngagement';
@@ -220,7 +220,8 @@ export function PortalContentOpsPage() {
     setEditorTarget('new');
   };
 
-  if (!isSystemAdmin()) {
+  const allowed = useHasMenu('portal-ops');
+  if (!allowed) {
     return (
       <div className="center-surface center-page scroll-hidden flex-1 overflow-y-auto">
         <div className="mx-auto max-w-lg py-16 text-center">
@@ -228,7 +229,7 @@ export function PortalContentOpsPage() {
             <i className="fa-solid fa-lock text-xl" />
           </div>
           <h2 className="text-lg font-semibold text-zinc-900">无权访问门户运营</h2>
-          <p className="mt-2 text-[13px] text-zinc-500">仅系统管理员可维护场景方案包内容。</p>
+          <p className="mt-2 text-[13px] text-zinc-500">当前角色没有勾选门户运营，无法查看。</p>
           <button
             type="button"
             onClick={() => setAppView('home')}
