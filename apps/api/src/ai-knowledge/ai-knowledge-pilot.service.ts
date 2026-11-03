@@ -238,9 +238,9 @@ export class AiKnowledgePilotService {
   async search(query: string, actor?: AiKnowledgeActor): Promise<Source[]> {
     let viewer: PilotAssetViewer = {};
     if (actor?.type === 'user' && actor.userId) {
-      const member = await this.prisma.member.findUnique({ where: { id: actor.userId } });
+      const member = await this.prisma.member.findUnique({ where: { id: actor.userId }, include: { domains: true } });
       if (member?.status === 'active') viewer = { userId: member.id, name: member.name,
-        role: member.role, deptIds: Array.isArray(member.deptIds) ? member.deptIds.filter((d): d is string => typeof d === 'string') : [], regionId: member.regionId };
+        role: member.roleId, deptIds: member.domains.map(d => d.domainId), regionId: member.regionId };
     }
     const terms = [...new Set([...(query.match(/[a-zA-Z][a-zA-Z0-9-]{1,}/g) || []),
       ...(query.match(/[\u3400-\u9fff]{2,}/g) || []).flatMap(s => Array.from({ length: s.length - 1 }, (_, i) => s.slice(i, i + 2)))])]

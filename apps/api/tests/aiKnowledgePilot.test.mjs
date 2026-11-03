@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { AiKnowledgePilotService } = require('../dist/ai-knowledge/ai-knowledge-pilot.service.js');
+const { aiContext } = require('../dist/common/ai-usage-context.js');
 const { pilotAssetVisible } = require('../dist/ai-knowledge/ai-knowledge.resources.js');
 
 const actor = { key: 'guest:test-a', type: 'guest' };
@@ -23,7 +24,7 @@ function fixture(turns = []) {
     aiKnowledgeSolution: { create: async ({ data: row }) => solutions.push(row) },
   };
   db.$transaction = fn => fn(db);
-  const service = new AiKnowledgePilotService(db, {});
+  const service = new AiKnowledgePilotService(db, {}, {}, { operation: (_actor, _id, _purpose, fn) => aiContext.run({}, fn) });
   service.search = async q => { calls.push(q); return [candidate]; };
   service.complete = async () => ({ value: turns.shift(), model: 'test-model' });
   return { service, data, solutions, calls };

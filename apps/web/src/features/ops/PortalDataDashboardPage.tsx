@@ -1,7 +1,7 @@
 import { PortalAiUsagePanel } from './PortalAiUsagePanel';
 import { useEffect, useMemo, useState } from 'react';
 import { CenterPageHeader } from '@/components/center/CenterShell';
-import { useHasMenu } from '@/domain/currentUser';
+import { useHasMenu, isSystemAdmin } from '@/domain/currentUser';
 import { buildPortalToolInventory } from '@/domain/portalToolInventory';
 import { PortalTrafficPanel } from '@/features/ops/PortalTrafficPanel';
 import { useAppViewStore } from '@/stores/appViewStore';
@@ -68,7 +68,7 @@ function PortalDataDashboardContent() {
           }
         />
 
-        <div className="aiu-tabs" role="tablist" aria-label="数据看板分类"><button role="tab" aria-selected={tab==='traffic'} className={tab==='traffic'?'active':''} onClick={()=>setTab('traffic')}>平台运营统计</button><button role="tab" aria-selected={tab==='ai'} className={tab==='ai'?'active':''} onClick={()=>setTab('ai')}>AI 使用统计</button></div>
+        <div className="aiu-tabs" role="tablist" aria-label="数据看板分类"><button role="tab" aria-selected={tab==='traffic'} className={tab==='traffic'?'active':''} onClick={()=>setTab('traffic')}>平台运营统计</button>{isSystemAdmin() && <button role="tab" aria-selected={tab==='ai'} className={tab==='ai'?'active':''} onClick={()=>setTab('ai')}>AI 使用统计</button>}</div>
         {tab==='ai'?<PortalAiUsagePanel/>:<PortalTrafficPanel
           inventory={inventory}
           inventoryLoading={
