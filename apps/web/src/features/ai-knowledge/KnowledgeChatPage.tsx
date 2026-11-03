@@ -18,6 +18,7 @@ import { consumeAiKnowledgeEntry, consumeAiKnowledgeSolution, stageMeAiKnowledge
 import { loadAiKnowledgeSolutions, type AiKnowledgeSolution } from '@/domain/aiKnowledge';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useSessionStore } from '@/stores/sessionStore';
+import { requireLogin } from '@/stores/authGateStore';
 import { LegacyAiKnowledgePage } from './AiKnowledgePage';
 import type { KnowledgeMode } from './KnowledgeDock';
 import './knowledgeChat.css';
@@ -124,6 +125,8 @@ export function AiKnowledgePage() {
   const mounted = useRef(true);
   const sessionOwner = useRef<string | null>(null);
   const lock = useRef(false);
+  /** 游客点发送时写下的问题：登录会切换身份并清空页面，登录后放回输入框 */
+  const loginDraft = useRef<{ text: string; mode: KnowledgeMode } | null>(null);
   const userId = useSessionStore(s => s.user?.id || 'guest');
   const setView = useAppViewStore(s => s.setAppView);
   const activeView = useAppViewStore(s => s.appView);
@@ -146,11 +149,13 @@ export function AiKnowledgePage() {
       sessionStorage.removeItem('mss-knowledge-mode');
     }
     const { selected, incoming, entry } = bootstrap.current;
+    const draft = userId === 'guest' ? null : loginDraft.current;
+    loginDraft.current = null;
     if(selected) sessionStorage.removeItem(`mss-knowledge-current:${userId}`);
-    setSession(null); setReading(null); setHistory([]); setLegacy(incoming); setLocalPlan(Boolean(incoming && loadAiKnowledgeSolutions().some(s => s.id === incoming.id))); setSource(null); setConfirm(false); setError(''); setInput(entry?.question || '');
-    setToolSearch({ draft: '', query: '' }); setMode(entryMode(selected));
+    setSession(null); setReading(null); setHistory([]); setLegacy(incoming); setLocalPlan(Boolean(incoming && loadAiKnowledgeSolutions().some(s => s.id === incoming.id))); setSource(null); setConfirm(false); setError(''); setInput(draft?.text || entry?.question || '');
+    setToolSearch({ draft: '', query: '' }); setMode(draft?.mode || entryMode(selected));
     const last = sessionStorage.getItem(`mss-knowledge-current:${userId}`);
-    if (!selected && !incoming && !entry && last) api<Session>(`/sessions/${encodeURIComponent(last)}`).then(s => { if (mounted.current && requestEpoch === epoch.current) { sessionOwner.current = userId; setSession(s); setMode(s.mode || 'solution'); } }).catch(() => { if (requestEpoch === epoch.current) sessionStorage.removeItem(`mss-knowledge-current:${userId}`); });
+    if (!selected && !incoming && !entry && !draft && last) api<Session>(`/sessions/${encodeURIComponent(last)}`).then(s => { if (mounted.current && requestEpoch === epoch.current) { sessionOwner.current = userId; setSession(s); setMode(s.mode || 'solution'); } }).catch(() => { if (requestEpoch === epoch.current) sessionStorage.removeItem(`mss-knowledge-current:${userId}`); });
     refresh().catch(e => { if (mounted.current && requestEpoch === epoch.current) setError(e.message); });
     return () => { mounted.current = false; epoch.current++; };
   }, [userId]);
@@ -177,6 +182,7 @@ export function AiKnowledgePage() {
   const send = async (retryText?: string) => {
     if (mode === 'search') return;
     const text = (retryText ?? input).trim(); if (!text || lock.current) return;
+    if (!requireLogin('chat')) { loginDraft.current = { text, mode }; return; }
     lock.current = true; setBusy(true); setError(''); setPendingMessage({ text, status: 'sending' });
     if (retryText === undefined) setInput('');
     const currentEpoch = epoch.current;
@@ -190,7 +196,7 @@ export function AiKnowledgePage() {
     finally { if (mounted.current && currentEpoch === epoch.current) { lock.current = false; setBusy(false); } }
   };
   const openHistory = async (h: History) => {
-    if (lock.current) return; setReading(null); setOpenedFromHome(false); setPendingMessage(null); lock.current = true; setBusy(true); setError(''); const currentEpoch = ++epoch.current;
+    if (lock.current || (h.kind === 'draft' && !requireLogin('chat'))) return; setReading(null); setOpenedFromHome(false); setPendingMessage(null); lock.current = true; setBusy(true); setError(''); const currentEpoch = ++epoch.current;
     try {
       if (h.kind === 'solution') {
         const data = await knowledgeRequest<{solution: AiKnowledgeSolution}>(`/solutions/${encodeURIComponent(h.id)}`);
@@ -209,19 +215,21 @@ export function AiKnowledgePage() {
     createdAt: s.plan.createdAt || new Date().toISOString(), sourceSessionId:s.id, understanding:s.understanding,
     originalQuestion:s.messages.find(m=>m.role==='user')?.text, deliverables:[...new Set(s.plan.steps.map(step=>step.output).filter(Boolean))] }) : null;
   const generate = async () => {
-    if (!session || lock.current || pendingMessage) return; lock.current = true; setBusy(true); setGeneratingPlan(true); setConfirm(false); setError(''); const currentEpoch = epoch.current;
+    if (!session || lock.current || pendingMessage) return;
+    if (!requireLogin('chat')) { setConfirm(false); return; }
+    lock.current = true; setBusy(true); setGeneratingPlan(true); setConfirm(false); setError(''); const currentEpoch = epoch.current;
     try { const next = await api<Session>(`/sessions/${session.id}/plan`, { confirmed: true }); if (mounted.current && currentEpoch === epoch.current) { accept(next); setReading(documentFromSession(next)); void refresh().catch(() => { if (mounted.current && currentEpoch === epoch.current) setError('方案已保存，历史列表暂未刷新，请稍后重新打开。'); }); } }
     catch(e) { if (mounted.current && currentEpoch === epoch.current) setError((e as Error).message); }
     finally { if (mounted.current && currentEpoch === epoch.current) { lock.current = false; setBusy(false); setGeneratingPlan(false); } }
   };
   const resumeSolution = async () => {
-    if (!legacy || lock.current) return; lock.current = true; setBusy(true); setError(''); const requestEpoch = epoch.current;
+    if (!legacy || lock.current || !requireLogin('chat')) return; lock.current = true; setBusy(true); setError(''); const requestEpoch = epoch.current;
     try { const next = localPlan ? await api<Session>('/import-local', { originalQuestion: legacy.originalQuestion, demand: legacy.demand, messages: legacy.messages.map(({role,text}) => ({role,text})) }) : await api<Session>(`/legacy/solution/${encodeURIComponent(legacy.id)}/resume`, {}); if (mounted.current && requestEpoch === epoch.current) { accept(next); setLegacy(null); await refresh(); } }
     catch(e) { setError((e as Error).message); }
     finally { lock.current = false; setBusy(false); }
   };
   const importPreview = async () => {
-    if (!previewVisitor || lock.current) return; lock.current = true; setBusy(true); setError(''); const requestEpoch = epoch.current;
+    if (!previewVisitor || lock.current || !requireLogin('chat')) return; lock.current = true; setBusy(true); setError(''); const requestEpoch = epoch.current;
     try { await api('/import-preview', { visitorId: previewVisitor }); if (mounted.current && requestEpoch === epoch.current) { await refresh(); setPreviewVisitor(null); } }
     catch(e) { setError((e as Error).message); }
     finally { lock.current = false; setBusy(false); }

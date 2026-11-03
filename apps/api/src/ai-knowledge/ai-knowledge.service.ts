@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
@@ -108,6 +109,12 @@ export function solutionFromRow(row: SolutionRow): AiKnowledgeSolution {
 
 function hash(value: string): string {
   return createHash('sha256').update(value).digest('hex');
+}
+
+/** MAX 对话只给登录成员：游客（含令牌失效）能看页面和历史，不能发起或继续对话 */
+export function requireLoggedInActor(actor: AiKnowledgeActor): AiKnowledgeActor {
+  if (actor.type !== 'user') throw new UnauthorizedException('请先登录后再使用 MAX 对话');
+  return actor;
 }
 
 @Injectable()

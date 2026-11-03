@@ -11,7 +11,7 @@ import {
   Req,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { AiKnowledgeService } from './ai-knowledge.service';
+import { AiKnowledgeService, requireLoggedInActor } from './ai-knowledge.service';
 import type { DemandSummary } from './ai-knowledge.types';
 // 单租户：原路由参数 workspaceId 固定为平台空间，方法体沿用这个名字（服务层还用它拼 center_record 的记录 id，对应文档迁到正式表时一起去掉）
 import { PLATFORM_WORKSPACE_ID as workspaceId } from '../common/platform-workspace';
@@ -34,7 +34,7 @@ export class AiKnowledgeController {
     @Headers('x-session-token') xSessionToken?: string,
     @Headers('x-visitor-id') visitorId?: string,
   ) {
-    const actor = await this.actor(workspaceId, req, authorization, xSessionToken, visitorId);
+    const actor = requireLoggedInActor(await this.actor(workspaceId, req, authorization, xSessionToken, visitorId));
     return this.aiKnowledge.startDraft(workspaceId, actor, body?.question ?? '');
   }
 
@@ -59,7 +59,7 @@ export class AiKnowledgeController {
     @Headers('x-session-token') xSessionToken?: string,
     @Headers('x-visitor-id') visitorId?: string,
   ) {
-    const actor = await this.actor(workspaceId, req, authorization, xSessionToken, visitorId);
+    const actor = requireLoggedInActor(await this.actor(workspaceId, req, authorization, xSessionToken, visitorId));
     return this.aiKnowledge.clarify(workspaceId, actor, draftId, body?.message ?? '');
   }
 
@@ -72,7 +72,7 @@ export class AiKnowledgeController {
     @Headers('x-session-token') xSessionToken?: string,
     @Headers('x-visitor-id') visitorId?: string,
   ) {
-    const actor = await this.actor(workspaceId, req, authorization, xSessionToken, visitorId);
+    const actor = requireLoggedInActor(await this.actor(workspaceId, req, authorization, xSessionToken, visitorId));
     return this.aiKnowledge.updateDemand(workspaceId, actor, draftId, body?.demand ?? {});
   }
 
@@ -84,7 +84,7 @@ export class AiKnowledgeController {
     @Headers('x-session-token') xSessionToken?: string,
     @Headers('x-visitor-id') visitorId?: string,
   ) {
-    const actor = await this.actor(workspaceId, req, authorization, xSessionToken, visitorId);
+    const actor = requireLoggedInActor(await this.actor(workspaceId, req, authorization, xSessionToken, visitorId));
     return this.aiKnowledge.generate(workspaceId, actor, draftId);
   }
 
