@@ -822,7 +822,7 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
           <FormField label="名称">
             <FormInput value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </FormField>
-          <FormField label="创建人" hint="展示在卡片和详情">
+          <FormField label="创建人">
             <FormInput
               value={form.author ?? ''}
               placeholder={getCurrentUserName() || '当前用户'}

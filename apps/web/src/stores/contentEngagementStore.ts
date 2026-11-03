@@ -27,7 +27,6 @@ interface ContentEngagementState {
   hydrate: () => void;
   get: (id: string) => ContentEngagement;
   userVote: (id: string) => UserVote;
-  bumpExposure: (id: string, assetType?: MarketAssetType) => void;
   /** 打开分享链接时 action 传 detail_direct 并带上编号（见 domain/directEntry） */
   bumpDetail: (id: string, assetType?: MarketAssetType, action?: 'detail' | 'detail_direct', shareCode?: string) => void;
   /** 点击分享按钮 +1，不看复制是否成功 */
@@ -136,7 +135,6 @@ export const useContentEngagementStore = create<ContentEngagementState>((set, ge
 
   get: (id) => get().byId[id] ?? emptyEngagement(id),
   userVote: (id) => get().userVotes[id] ?? null,
-  bumpExposure: (id, assetType) => runMutation(set, id, 'exposure', undefined, assetType),
   bumpDetail: (id, assetType, action = 'detail', shareCode) => runMutation(set, id, action, undefined, assetType, shareCode),
   bumpShare: (id, assetType) => runMutation(set, id, 'share', undefined, assetType),
   bumpView: (id, assetType) => runMutation(set, id, 'view', undefined, assetType),

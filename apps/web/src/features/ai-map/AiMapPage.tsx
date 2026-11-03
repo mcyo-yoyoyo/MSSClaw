@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type {
   PrototypeAgentSeed,
@@ -124,7 +124,6 @@ function Quadrant({
   onCard,
   hint,
   trackEngagement = false,
-  exposureScope,
 }: {
   title: string;
   emptyHint: string;
@@ -132,44 +131,9 @@ function Quadrant({
   onCard: (card: PortalMapCard) => void;
   hint?: string;
   trackEngagement?: boolean;
-  exposureScope?: string;
 }) {
-  const bumpExposure = useContentEngagementStore((state) => state.bumpExposure);
   const bumpDetail = useContentEngagementStore((state) => state.bumpDetail);
-  const listRef = useRef<HTMLUListElement | null>(null);
-  const exposedRef = useRef(new Set<string>());
   const visibleCards = useMemo(() => cards.slice(0, 6), [cards]);
-
-  useEffect(() => {
-    exposedRef.current.clear();
-  }, [exposureScope]);
-
-  useEffect(() => {
-    if (!trackEngagement || !listRef.current || typeof IntersectionObserver === 'undefined') {
-      return;
-    }
-    const cardById = new Map(visibleCards.map((card) => [card.id, card]));
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          const cardId = (entry.target as HTMLElement).dataset.capabilityCard;
-          const card = cardId ? cardById.get(cardId) : undefined;
-          const target = card ? capabilityEngagementTarget(card) : null;
-          if (!target) continue;
-          const key = `${target.assetType}:${target.id}`;
-          if (exposedRef.current.has(key)) continue;
-          exposedRef.current.add(key);
-          bumpExposure(target.id, target.assetType);
-        }
-      },
-      { threshold: 0.1 },
-    );
-    listRef.current
-      .querySelectorAll<HTMLElement>('[data-capability-card]')
-      .forEach((node) => observer.observe(node));
-    return () => observer.disconnect();
-  }, [bumpExposure, exposureScope, trackEngagement, visibleCards]);
 
   const handleCard = (card: PortalMapCard) => {
     if (trackEngagement) {
@@ -193,7 +157,7 @@ function Quadrant({
           {emptyHint}
         </p>
       ) : (
-        <ul ref={listRef} className="space-y-1.5">
+        <ul className="space-y-1.5">
           {visibleCards.map((card) => (
             <li key={card.id} data-capability-card={card.id}>
               <button
@@ -334,11 +298,8 @@ export function AiMapPage({
   const [teamPlan, setTeamPlan] = useState<ScenarioDemoPlan | null>(null);
   const [inspectTarget, setInspectTarget] = useState<ScenarioLayerInspectTarget | null>(null);
   const isAdmin = useHasMenu('portal-ops');
-  const bumpExposure = useContentEngagementStore((state) => state.bumpExposure);
   const bumpDetail = useContentEngagementStore((state) => state.bumpDetail);
   const bumpRedirect = useContentEngagementStore((state) => state.bumpRedirect);
-  const envToolsListRef = useRef<HTMLDivElement | null>(null);
-  const exposedEnvToolsRef = useRef(new Set<string>());
 
   const openPortalEdit = (id: string) => {
     useNavigationIntentStore.getState().focusPortalEdit(id);
@@ -496,43 +457,6 @@ export function AiMapPage({
   }, [pendingScenarioId, allBundles, consumeScenarioId, showToast]);
 
   const selected: ScenarioBundle | null = bundles.find((b) => b.id === selectedId) ?? null;
-
-  useEffect(() => {
-    exposedEnvToolsRef.current.clear();
-  }, [selected?.id]);
-
-  useEffect(() => {
-    const cards = selected?.envTools.slice(0, 6) ?? [];
-    if (
-      isAdmin ||
-      cards.length === 0 ||
-      !envToolsListRef.current ||
-      typeof IntersectionObserver === 'undefined'
-    ) {
-      return;
-    }
-    const cardById = new Map(cards.map((card) => [card.id, card]));
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          const cardId = (entry.target as HTMLElement).dataset.capabilityCard;
-          const card = cardId ? cardById.get(cardId) : undefined;
-          const target = card ? capabilityEngagementTarget(card) : null;
-          if (!target) continue;
-          const key = `${target.assetType}:${target.id}`;
-          if (exposedEnvToolsRef.current.has(key)) continue;
-          exposedEnvToolsRef.current.add(key);
-          bumpExposure(target.id, target.assetType);
-        }
-      },
-      { threshold: 0.1 },
-    );
-    envToolsListRef.current
-      .querySelectorAll<HTMLElement>('[data-capability-card]')
-      .forEach((node) => observer.observe(node));
-    return () => observer.disconnect();
-  }, [bumpExposure, isAdmin, selected?.envTools, selected?.id]);
 
   const narrativeCards = useMemo(() => {
     if (!selected) return [];
@@ -1025,7 +949,7 @@ export function AiMapPage({
                       <p className="mb-1.5 text-[11px] font-medium text-zinc-500">
                         {SCENARIO_JOURNEY_COPY.envToolsCaption}
                       </p>
-                      <div ref={envToolsListRef} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         {selected.envTools.slice(0, 6).map((card) => (
                           <button
                             key={card.id}
@@ -1070,7 +994,6 @@ export function AiMapPage({
                       cards={selected.agents}
                       onCard={openCapabilityInspect}
                       trackEngagement={!isAdmin}
-                      exposureScope={selected.id}
                     />
                     <Quadrant
                       title="Skill"
@@ -1079,7 +1002,6 @@ export function AiMapPage({
                       cards={selected.skills}
                       onCard={openCapabilityInspect}
                       trackEngagement={!isAdmin}
-                      exposureScope={selected.id}
                     />
                     <Quadrant
                       title="Tool"
@@ -1088,7 +1010,6 @@ export function AiMapPage({
                       cards={selected.tools}
                       onCard={openCapabilityInspect}
                       trackEngagement={!isAdmin}
-                      exposureScope={selected.id}
                     />
                   </div>
                   <div className="mt-3 border-t border-zinc-100 pt-3">

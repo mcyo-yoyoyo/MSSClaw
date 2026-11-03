@@ -122,7 +122,6 @@ export interface InboxMessageInput {
 }
 
 export type MarketEngagementAction =
-  | 'exposure'
   | 'detail'
   /** 打开带有效分享编号的链接；看板「分享链接进入浏览数」只数它 */
   | 'detail_direct'
@@ -150,7 +149,6 @@ export type MarketEngagementEventAction =
   | 'call';
 
 export const MARKET_ENGAGEMENT_EVENT_ACTIONS = new Set<MarketEngagementEventAction>([
-  'exposure',
   'detail',
   'detail_direct',
   'share',
@@ -743,9 +741,8 @@ export class PersistenceService {
       }
 
       if (!metric) {
-        // Exposure and call facts do not create a zero-valued market card. They remain
-        // queryable in the event table while the aggregate stays an interaction metric.
-        if (action !== 'exposure' && action !== 'call' && action !== 'share') {
+        // call 和 share 只留在事件表，不新建卡片累计行。
+        if (action !== 'call' && action !== 'share') {
           metric = await tx.marketEngagement.upsert({
             where: { contentId },
             create: { contentId },
@@ -754,17 +751,14 @@ export class PersistenceService {
         }
       }
 
-      if (action === 'exposure') {
-        behaviorAction = 'exposure';
-      } else if (action === 'detail' || action === 'detail_direct' || action === 'view' || action === 'use' || action === 'redirect' || action === 'download') {
+      if (action === 'detail' || action === 'detail_direct' || action === 'view' || action === 'use' || action === 'redirect' || action === 'download') {
         const field =
           action === 'detail' || action === 'detail_direct' || action === 'view'
             ? 'views'
             : action === 'use' || action === 'redirect'
               ? 'uses'
               : 'downloads';
-        // The branch is unreachable for an exposure/call event, for which metric remains
-        // null. Keeping the guard makes malformed imported events fail closed.
+        // call / share 不建累计行。这里兜住缺失的累计记录，避免把计数写飞。
         if (!metric) {
           throw new BadRequestException('market_engagement_metric_unavailable');
         }

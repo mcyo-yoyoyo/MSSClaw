@@ -325,7 +325,6 @@ export function InternalOfficeSceneGrid({
     mode: PickerMode;
   } | null>(null);
   const sceneEntries = useInternalOfficeSceneCatalogStore((s) => s.entries);
-  const bumpExposure = useContentEngagementStore((s) => s.bumpExposure);
   const bumpView = useContentEngagementStore((s) => s.bumpView);
   const bumpUse = useContentEngagementStore((s) => s.bumpUse);
   const getEngagement = useContentEngagementStore((s) => s.get);
@@ -344,7 +343,6 @@ export function InternalOfficeSceneGrid({
     rotation: 0,
   });
   const internalCardNodesRef = useRef(new Map<string, HTMLElement>());
-  const exposedSceneIdsRef = useRef(new Set<string>());
   const internalPreviousRectsRef = useRef(new Map<string, DOMRect>());
   const internalReflowAnimationsRef = useRef(new Map<string, Animation>());
   const internalDragGenerationRef = useRef(0);
@@ -456,29 +454,6 @@ export function InternalOfficeSceneGrid({
     ? scenes.find((scene) => scene.id === pointerDraggingSceneId) ?? null
     : null;
   const internalLayoutSignature = shownScenes.map((scene) => scene.id).join('|');
-
-  useEffect(() => {
-    if (interactionMode !== 'user' || typeof IntersectionObserver === 'undefined') return;
-    const grid = internalSceneGridRef.current;
-    if (!grid) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          const sceneId = (entry.target as HTMLElement).dataset.internalSceneCardId;
-          if (!sceneId || exposedSceneIdsRef.current.has(sceneId)) continue;
-          exposedSceneIdsRef.current.add(sceneId);
-          observer.unobserve(entry.target);
-          bumpExposure(sceneEngagementId(sceneId), 'office-scene');
-        }
-      },
-      { threshold: 0.1 },
-    );
-    grid
-      .querySelectorAll<HTMLElement>('[data-internal-scene-card-id]')
-      .forEach((node) => observer.observe(node));
-    return () => observer.disconnect();
-  }, [bumpExposure, interactionMode, internalLayoutSignature]);
 
   useLayoutEffect(() => {
     internalPreviousRectsRef.current = animateInternalSceneGridReflow(

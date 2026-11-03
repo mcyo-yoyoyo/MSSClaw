@@ -1964,12 +1964,12 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
             {/* 9 张卡片：每排 3 张 */}
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <HeroStat
-                label="资产浏览总数"
+                label="系统进入浏览数 PV"
                 value={formatCount(inAppViews(behavior.total))}
                 note="平台内点击进入详情，不含分享链接进入"
               />
               <HeroStat
-                label="资产分享总数"
+                label="分享链接进入浏览数 PV"
                 value={formatCount(behavior.total.shareViews)}
                 note="打开分享链接进入详情"
               />
