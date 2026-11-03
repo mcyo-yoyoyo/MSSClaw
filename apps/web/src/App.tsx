@@ -1,3 +1,6 @@
+import { isOpsOnlyView } from '@/domain/shellPerspective';
+import { KnowledgeGuide } from '@/features/ai-knowledge/KnowledgeGuide';
+import { KnowledgeDock } from '@/features/ai-knowledge/KnowledgeDock';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppHeader } from '@/components/shell/AppHeader';
 import { AppShellSidebar } from '@/components/shell/AppShellSidebar';
@@ -583,6 +586,8 @@ export function App() {
         onClose={closeSkillChatDrawer}
         onSkillChange={changeSkillChatDrawer}
       />
+      {!isOpsOnlyView(appView) && appView !== 'ai-knowledge' && <KnowledgeDock />}
+      {!isOpsOnlyView(appView) && <KnowledgeGuide />}
       <GlobalToastHost />
       <AssetApprovalModal />
       <AuthGateOverlay />

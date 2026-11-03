@@ -1,4 +1,6 @@
-import { Suspense } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useState } from 'react';
+import { useSessionStore } from '@/stores/sessionStore';
+import { clearKnowledgeScroll, restoreKnowledgeScroll } from '@/features/ai-knowledge/knowledgeNavigation';
 import type { ReactNode } from 'react';
 import type { AppView } from '@/domain/appView';
 import { isAppViewPlaceholder } from '@/domain/appView';
@@ -57,7 +59,7 @@ const VIEW_LABELS: Partial<Record<AppView, string>> = {
   'market-projects': 'AI工具Hub',
   'ai-tasks': 'AI任务',
   'ai-brief': 'AI快讯',
-  'ai-knowledge': 'AI智库',
+  'ai-knowledge': 'MAX',
   task: '任务记录',
   messages: '我的消息',
   'ai-map': '场景案例',
@@ -85,7 +87,17 @@ function LazyView({ label, children }: { label: string; children: ReactNode }) {
 }
 
 export function AppViewRouter({ appView, handlers }: AppViewRouterProps) {
-  return <AppViewRouterContent appView={appView} handlers={handlers} />;
+  const [visitedMax, setVisitedMax] = useState(appView === 'ai-knowledge');
+  const owner = useSessionStore(s => s.user?.id || 'guest');
+  useEffect(() => { if (appView === 'ai-knowledge') setVisitedMax(true); }, [appView]);
+  useEffect(() => { clearKnowledgeScroll(); }, [owner]);
+  useLayoutEffect(() => { if (appView === 'ai-knowledge') restoreKnowledgeScroll(); }, [appView]);
+  return <>
+    {(visitedMax || appView === 'ai-knowledge') && <div data-max-panel="" aria-hidden={appView !== 'ai-knowledge'} inert={appView !== 'ai-knowledge'} className="min-h-0 flex-1 flex-col overflow-hidden" style={{ display: appView === 'ai-knowledge' ? 'flex' : 'none' }}>
+      <LazyView label="MAX"><LazyAiKnowledgePage key={owner}/></LazyView>
+    </div>}
+    {appView !== 'ai-knowledge' && <AppViewRouterContent appView={appView} handlers={handlers}/>}
+  </>;
 }
 
 function AppViewRouterContent({ appView, handlers }: AppViewRouterProps) {

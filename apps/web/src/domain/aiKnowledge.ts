@@ -1,3 +1,4 @@
+import type { SolutionDocument, DocumentSource } from './solutionDocument';
 export type AiKnowledgeScenarioId = 'gtm-sellout' | 'ecommerce-voc' | 'mkt-campaign' | 'generic';
 
 export type AiKnowledgeMessage = {
@@ -85,6 +86,9 @@ export type SolutionCaseInsight = {
 };
 
 export type AiKnowledgeSolution = {
+  document?: SolutionDocument;
+  sourceSessionId?: string;
+  pilotPlan?: { sources?: DocumentSource[]; summary: string; steps: { title: string; input: string; output: string; humanCheck: string; resourceIds: string[] }[]; limitations: string[] };
   id: string;
   scenarioId: AiKnowledgeScenarioId;
   title: string;

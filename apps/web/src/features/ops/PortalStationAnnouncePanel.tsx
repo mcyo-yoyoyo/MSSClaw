@@ -1,3 +1,4 @@
+import { BackButton } from '@/components/common/BackButton';
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
 import { cn } from '@/lib/utils';
 import { uploadWorkspaceBlob } from '@/api/blobApi';
@@ -197,14 +198,7 @@ export function PortalStationAnnouncePanel() {
       <div ref={editorRef} className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <button
-              type="button"
-              onClick={() => setDraft(null)}
-              className="mb-1.5 inline-flex items-center gap-1.5 text-[12px] font-medium text-zinc-500 transition hover:text-zinc-900"
-            >
-              <i className="fa-solid fa-arrow-left text-[11px]" />
-              返回公告列表
-            </button>
+            <BackButton label="返回公告列表" onClick={() => setDraft(null)}/>
             <h3 className="text-[16px] font-semibold text-zinc-900">
               {editing ? '编辑公告' : '新建公告'}
             </h3>

@@ -25,3 +25,4 @@ deploy/windows/backup/
 
 # 本地导出与检查产物
 /outputs/
+/.runlogs/

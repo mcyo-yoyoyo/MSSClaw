@@ -1,3 +1,4 @@
+import { captureModelUsage, trackedModelCall, persistStreamUsage } from '../common/ai-usage-context';
 import type {
   AgentType,
   ExecutionStep,
@@ -217,7 +218,7 @@ function firstUsableModelId(payload: Record<string, unknown>): string {
   return firstEnabled;
 }
 
-export async function nestLlmChatCompletion(params: {
+async function nestLlmChatCompletionImpl(params: {
   messages: LlmChatMessage[];
   config: NestLlmRuntimeConfig;
   maxTokens?: number;
@@ -255,6 +256,7 @@ export async function nestLlmChatCompletion(params: {
       message?: { content?: string; reasoning_content?: string };
     }>;
   };
+  captureModelUsage((data as unknown as {usage?: unknown}).usage);
   const choice = data.choices?.[0];
   const content = choice?.message?.content?.trim() ?? '';
   if (!content && choice?.finish_reason === 'length') {
@@ -270,7 +272,7 @@ export async function nestLlmChatCompletion(params: {
  * 或者不支持 tools，于是出现「测试能通、帮找 404」。同形请求把这个差异消掉——
  * 后台测试能通，帮找就能通。
  */
-export async function nestLlmStreamedText(params: {
+async function nestLlmStreamedTextImpl(params: {
   messages: LlmChatMessage[];
   config: NestLlmRuntimeConfig;
   maxTokens?: number;
@@ -333,6 +335,7 @@ export async function nestLlmStreamedText(params: {
               finish_reason?: string;
             }>;
           };
+          captureModelUsage((parsed as unknown as {usage?: unknown}).usage);
           const choice = parsed.choices?.[0];
           const delta = choice?.delta;
           if (typeof delta?.content === 'string') text += delta.content;
@@ -623,7 +626,7 @@ function mergeUsage(
 }
 
 /** OpenAI-compatible SSE chat completions → StreamEvent */
-export async function* nestLlmExecutionStream(params: {
+async function* nestLlmExecutionStreamImpl(params: {
   message: string;
   actionType: AgentType;
   agentName: string;
@@ -889,4 +892,17 @@ export async function* nestLlmExecutionStream(params: {
     source: 'llm',
     ...(usage ? { usage } : {}),
   };
+}
+
+export function nestLlmChatCompletion(params: Parameters<typeof nestLlmChatCompletionImpl>[0]): Promise<string> { return trackedModelCall(params.config.model, () => nestLlmChatCompletionImpl(params)); }
+
+export function nestLlmStreamedText(params: Parameters<typeof nestLlmStreamedTextImpl>[0]): Promise<string> { return trackedModelCall(params.config.model, () => nestLlmStreamedTextImpl(params)); }
+
+export async function* nestLlmExecutionStream(params: Parameters<typeof nestLlmExecutionStreamImpl>[0]): AsyncGenerator<StreamEvent> {
+ const started=Date.now(); let usage:ExecutionUsage|undefined;let status='failed';
+ try { for await (const event of nestLlmExecutionStreamImpl(params)) {
+   if('usage' in event && event.usage) usage=event.usage;
+   if(event.type==='done')status='completed';
+   yield event;
+ } } finally { await persistStreamUsage(params.config.model,usage,status,started); }
 }

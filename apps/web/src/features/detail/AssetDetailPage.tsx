@@ -1,3 +1,4 @@
+import { BackButton } from '@/components/common/BackButton';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { MssZhishuMark } from '@/components/brand/MssZhishuMark';
 import { ToolLogo } from '@/components/brand/ToolLogo';
@@ -277,14 +278,7 @@ export function AssetDetailPage({ handlers }: { handlers: AppViewRouterHandlers 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#fbfbfd]">
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-black/[0.06] bg-white px-4 md:px-6">
-        <button
-          type="button"
-          onClick={goBack}
-          className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[13px] text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900"
-        >
-          <i className="fa-solid fa-arrow-left text-[12px]" />
-          返回
-        </button>
+        <BackButton label="返回上一页" onClick={goBack}/>
         <button
           type="button"
           onClick={() => setAppView('home')}

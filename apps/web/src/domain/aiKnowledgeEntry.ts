@@ -20,6 +20,7 @@ export function stageAiKnowledgeEntry(question: string, source: IntentSearchScop
     createdAt: new Date().toISOString(),
   };
   window.sessionStorage.setItem(AI_KNOWLEDGE_ENTRY_KEY, JSON.stringify(intent));
+  window.dispatchEvent(new Event('mss-max-question'));
 }
 
 export function consumeAiKnowledgeEntry(): AiKnowledgeEntryIntent | null {
@@ -41,6 +42,7 @@ export function consumeAiKnowledgeEntry(): AiKnowledgeEntryIntent | null {
 
 export function stageAiKnowledgeSolution(solution: AiKnowledgeSolution): void {
   window.sessionStorage.setItem(AI_KNOWLEDGE_SOLUTION_KEY, JSON.stringify(solution));
+  window.dispatchEvent(new Event('mss-max-solution'));
 }
 
 export function consumeAiKnowledgeSolution(): AiKnowledgeSolution | null {
@@ -49,7 +51,7 @@ export function consumeAiKnowledgeSolution(): AiKnowledgeSolution | null {
   if (!raw) return null;
   try {
     const solution = JSON.parse(raw) as Partial<AiKnowledgeSolution>;
-    if (typeof solution.id !== 'string' || typeof solution.title !== 'string' || !solution.demand) {
+    if (typeof solution.id !== 'string' || typeof solution.title !== 'string' || (!solution.demand && !solution.document && !solution.pilotPlan)) {
       return null;
     }
     return solution as AiKnowledgeSolution;
