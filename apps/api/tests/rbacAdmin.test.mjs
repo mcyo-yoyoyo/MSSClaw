@@ -68,12 +68,12 @@ const reason = (promise) =>
     (error) => `${error.getStatus?.()}:${error.message}`,
   );
 
-test('启动引导：按邮箱建出唯一超管并设初始密码，原超管降为能力开发', async () => {
+test('启动引导：按邮箱建出超管并设初始密码，已有超管保持不变', async () => {
   await prisma.member.create({ data: { id: 'u-mcyo', name: 'Mcyo', email: 'mcyo@huawei.com', roleId: 'super_admin' } });
   const first = await ensureSuperAdmin(prisma, { email: 'Admin@Huawei.com', password: 'admin654321' });
-  assert.deepEqual({ ...first, memberId: undefined }, { memberId: undefined, created: true, demoted: ['mcyo@huawei.com'], passwordSet: true });
+  assert.deepEqual({ ...first, memberId: undefined }, { memberId: undefined, created: true, demoted: [], passwordSet: true });
   const members = await prisma.member.findMany({ orderBy: { email: 'asc' } });
-  assert.deepEqual(members.map((m) => [m.email, m.roleId]), [['admin@huawei.com', 'super_admin'], ['mcyo@huawei.com', 'capability_ops']]);
+  assert.deepEqual(members.map((m) => [m.email, m.roleId]), [['admin@huawei.com', 'super_admin'], ['mcyo@huawei.com', 'super_admin']]);
   assert.equal((await docs().login({ email: 'admin@huawei.com', password: 'admin654321' })).user.platformRole, 'super_admin');
 
   // 页面上改过密码后重启，不会被环境变量改回去
@@ -110,13 +110,13 @@ test('菜单：两层结构，超管拿全部二级菜单，其他角色按 role
   assert.deepEqual(login.editableMenus, all);
 });
 
-test('普通用户：新成员默认角色，系统角色不能删', async () => {
+test('普通用户：新成员默认角色，有人占用的角色不能删', async () => {
   await bootstrapAdmin();
   const created = await admin().createUser({ name: 'N', email: 'n@huawei.com' });
   assert.equal(created.roleId, 'member');
   const role = (await admin().roles()).roles.find((r) => r.id === 'member');
   assert.deepEqual([role.name, role.isSystem, role.memberCount], ['普通用户', true, 1]);
-  assert.equal(await reason(admin().deleteRole('member')), '400:system_role_cannot_be_deleted');
+  assert.equal(await reason(admin().deleteRole('member')), '409:role_in_use');
 });
 
 test('守卫：未登录 401，没有成员菜单 403；只读能看不能改，可编辑才能改', async () => {
@@ -144,7 +144,7 @@ test('守卫：未登录 401，没有成员菜单 403；只读能看不能改，
   assert.equal((await guard(await tokenFor('admin@huawei.com', 'admin654321'), create)).platformRole, 'super_admin');
 });
 
-test('成员：邮箱不分大小写去重，不能直接设成超管，密码至少 8 位', async () => {
+test('成员：邮箱不分大小写去重，可以直接设成超管，密码至少 8 位', async () => {
   await bootstrapAdmin();
   const created = await admin().createUser({ name: 'Jacky', email: 'Jacky@huawei.com', roleId: 'capability_ops', regionId: 'apac', domainIds: ['mkt', 'hr'] });
   assert.deepEqual(
@@ -155,7 +155,7 @@ test('成员：邮箱不分大小写去重，不能直接设成超管，密码�
     },
   );
   assert.equal(await reason(admin().createUser({ name: 'J2', email: 'JACKY@huawei.com' })), '409:member_email_exists');
-  assert.equal(await reason(admin().createUser({ name: 'X', email: 'x@huawei.com', roleId: 'super_admin' })), '400:super_admin_via_transfer_only');
+  assert.equal((await admin().createUser({ name: 'X', email: 'x@huawei.com', roleId: 'super_admin' })).roleId, 'super_admin');
   assert.equal(await reason(admin().createUser({ name: 'X', email: 'x@huawei.com', regionId: 'mars' })), '400:unknown_region_mars');
   assert.equal(await reason(admin().createUser({ name: 'X', email: 'x@huawei.com', password: 'short' })), '400:password_min_length_8');
   assert.equal(await reason(admin().updateUser(created.id, { email: 'admin@HUAWEI.com' }, { id: 'actor' })), '409:member_email_exists');
@@ -187,10 +187,11 @@ test('成员：改资料、改密码都会让旧登录失效，停用同时作�
   assert.equal(await prisma.refreshToken.count({ where: { memberId: member.id, revokedAt: null } }), 0);
 });
 
-test('成员：超管不能被改角色、停用、删除；不能删自己；强制下线', async () => {
+test('成员：超管可以改角色，但不能停用或删除；不能删自己；强制下线', async () => {
   const superAdmin = await bootstrapAdmin();
   const other = await admin().createUser({ name: 'C', email: 'c@huawei.com', roleId: 'capability_ops', password: 'cccccccc' });
-  assert.equal(await reason(admin().updateUser(superAdmin.id, { roleId: 'viewer' }, other)), '400:super_admin_via_transfer_only');
+  assert.equal((await admin().updateUser(superAdmin.id, { roleId: 'viewer' }, other)).roleId, 'viewer');
+  await admin().updateUser(superAdmin.id, { roleId: 'super_admin' }, other);
   assert.equal(await reason(admin().updateUser(superAdmin.id, { status: 'suspended' }, other)), '400:super_admin_cannot_be_suspended');
   assert.equal(await reason(admin().deleteUser(superAdmin.id, other)), '400:super_admin_cannot_be_deleted');
   assert.equal(await reason(admin().deleteUser(other.id, other)), '400:cannot_delete_self');
@@ -213,7 +214,7 @@ test('超管移交：只有超管本人能移交，移交后自己降为能力�
   );
 });
 
-test('角色：自定义角色可增改删，内置角色不能删，有成员的角色不能删，超管菜单不可改', async () => {
+test('角色：内置和自定义角色都能删，有成员的角色不能删，超管菜单不可改', async () => {
   const superAdmin = await bootstrapAdmin();
   const role = await admin().createRole({ id: 'auditor', name: '审计员' });
   assert.deepEqual([role.id, role.isSystem, role.menuIds, role.editMenuIds, role.memberCount], ['auditor', false, [], [], 0]);
@@ -234,7 +235,7 @@ test('角色：自定义角色可增改删，内置角色不能删，有成员�
 
   const member = await admin().createUser({ name: 'E', email: 'e@huawei.com', roleId: 'auditor' });
   assert.equal(await reason(admin().deleteRole('auditor')), '409:role_in_use');
-  assert.equal(await reason(admin().deleteRole('viewer')), '400:system_role_cannot_be_deleted');
+  await prisma.role.update({ where: { id: 'auditor' }, data: { isSystem: true } });
   await admin().deleteUser(member.id, superAdmin);
   await admin().deleteRole('auditor');
   assert.equal((await admin().roles()).roles.some((r) => r.id === 'auditor'), false);

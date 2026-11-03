@@ -190,12 +190,15 @@ export const orgAdminApi = {
   setRoleMenus: (id: string, menuIds: string[], editMenuIds: string[]) =>
     request<OrgRole>(`/roles/${encodeURIComponent(id)}/menus`, json('PUT', { menuIds, editMenuIds })),
   listMenus: () => request<{ menus: OrgMenu[] }>('/menus').then((r) => r.menus),
-  listOperationLogs: (module?: string, query?: string) => {
+  listOperationLogs: (module?: string, query?: string, page = 1, pageSize = 20) => {
     const params = new URLSearchParams();
     if (module && module !== 'all') params.set('module', module);
     if (query?.trim()) params.set('q', query.trim());
-    const qs = params.toString();
-    return request<{ logs: OperationLogEntry[] }>(`/operation-logs${qs ? `?${qs}` : ''}`).then((r) => r.logs);
+    params.set('page', String(page));
+    params.set('pageSize', String(pageSize));
+    return request<{ logs: OperationLogEntry[]; total: number; page: number; pageSize: number }>(
+      `/operation-logs?${params.toString()}`,
+    );
   },
 
   taxonomy: () => request<OrgTaxonomy>('/taxonomy'),

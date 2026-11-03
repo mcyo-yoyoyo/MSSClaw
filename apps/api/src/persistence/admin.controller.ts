@@ -138,8 +138,20 @@ export class AdminController {
   /** Skill / Agent / 工具 / 办公场景的增删改。只读。 */
   @Get('operation-logs')
   @RequireMenu(AUDIT)
-  async operationLogs(@Query('module') module?: string, @Query('q') query?: string) {
-    return { logs: await listOperationLogs(this.prisma, { module, query }) };
+  async operationLogs(
+    @Query('module') module?: string,
+    @Query('q') query?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    const parsedPage = Number(page);
+    const parsedSize = Number(pageSize);
+    return listOperationLogs(this.prisma, {
+      module,
+      query,
+      page: Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1,
+      pageSize: Number.isFinite(parsedSize) && parsedSize > 0 ? parsedSize : undefined,
+    });
   }
 
   @RequireMenu(ANY_ORG)

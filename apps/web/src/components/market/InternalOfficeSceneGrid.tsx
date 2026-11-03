@@ -836,7 +836,6 @@ export function InternalOfficeSceneGrid({
                   {assistantTool.name || '员工助手'}
                 </p>
               </div>
-              <span className="internal-assistant-chat__badge">待上线</span>
             </div>
             <div className="internal-assistant-chat__composer" aria-hidden>
               <span className="min-w-0 flex-1 truncate">给员工助手发送消息…</span>

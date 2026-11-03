@@ -32,19 +32,27 @@ function formatTime(iso: string): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
+const PAGE_SIZE = 20;
+
 export function OrgAuditPage() {
   const [module, setModule] = useState<(typeof MODULES)[number]['id']>('all');
   const [query, setQuery] = useState('');
   const [appliedQuery, setAppliedQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [logs, setLogs] = useState<OperationLogEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const reload = async (nextModule = module, nextQuery = appliedQuery) => {
+  const reload = async (nextModule = module, nextQuery = appliedQuery, nextPage = page) => {
     setLoading(true);
     setError(null);
     try {
-      setLogs(await orgAdminApi.listOperationLogs(nextModule, nextQuery));
+      const result = await orgAdminApi.listOperationLogs(nextModule, nextQuery, nextPage, PAGE_SIZE);
+      setLogs(result.logs);
+      setTotal(result.total);
+      setPage(result.page);
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -53,10 +61,10 @@ export function OrgAuditPage() {
   };
 
   useEffect(() => {
-    void reload(module, appliedQuery);
-    // 筛选条件变化时重拉；reload 读的就是这次的参数
+    void reload(module, appliedQuery, page);
+    // 筛选或页码变化时重拉；reload 读的就是这次的参数
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [module, appliedQuery]);
+  }, [module, appliedQuery, page]);
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-auto p-4 md:p-6">
@@ -70,7 +78,10 @@ export function OrgAuditPage() {
           <button
             key={item.id}
             type="button"
-            onClick={() => setModule(item.id)}
+            onClick={() => {
+              setPage(1);
+              setModule(item.id);
+            }}
             className={cn(
               'rounded-lg px-2.5 py-1 text-[12px] font-medium',
               module === item.id ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200',
@@ -83,6 +94,7 @@ export function OrgAuditPage() {
           className="ml-auto flex min-w-[220px] flex-1 items-center gap-2 sm:max-w-sm"
           onSubmit={(event) => {
             event.preventDefault();
+            setPage(1);
             setAppliedQuery(query.trim());
           }}
         >
@@ -133,6 +145,30 @@ export function OrgAuditPage() {
         {loading && logs.length === 0 ? (
           <p className="px-3 py-8 text-center text-[12px] text-zinc-400">正在加载…</p>
         ) : null}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[12px] text-zinc-500">
+        <span>共 {total} 条</span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className={btn.secondary}
+            disabled={page <= 1 || loading}
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+          >
+            上一页
+          </button>
+          <span>
+            第 {page} / {pageCount} 页
+          </span>
+          <button
+            type="button"
+            className={btn.secondary}
+            disabled={page >= pageCount || loading}
+            onClick={() => setPage((current) => current + 1)}
+          >
+            下一页
+          </button>
+        </div>
       </div>
     </div>
   );

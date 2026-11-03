@@ -80,7 +80,7 @@ export function OrgMembersPage() {
   const roleName = useMemo(() => new Map(roles.map((r) => [r.id, r.name])), [roles]);
   const regionName = useMemo(() => new Map(taxonomy.regions.map((r) => [r.id, r.name])), [taxonomy.regions]);
   const domainName = useMemo(() => new Map(taxonomy.domains.map((d) => [d.id, d.name])), [taxonomy.domains]);
-  const assignableRoles = roles.filter((r) => r.id !== SUPER_ADMIN);
+  const assignableRoles = roles;
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -117,7 +117,7 @@ export function OrgMembersPage() {
     const editingSelf = Boolean(draft.id && draft.id === me?.id);
     const ok = draft.id
       ? await run(
-          () => orgAdminApi.updateMember(draft.id!, draft.roleId === SUPER_ADMIN ? { ...body, roleId: undefined } : body),
+          () => orgAdminApi.updateMember(draft.id!, body),
           editingSelf ? '资料已更新，请重新登录' : '成员已更新，对方需要重新登录',
         )
       : await run(() => orgAdminApi.createMember({ ...body, password: draft.password || undefined }), '成员已创建');
@@ -353,9 +353,8 @@ function MemberEditor({
         <FormField label="邮箱（登录账号）">
           <FormInput value={draft.email} onChange={(e) => set({ email: e.target.value })} placeholder="zhangsan@huawei.com" />
         </FormField>
-        <FormField label="角色" hint={isSuper ? '超级管理员的角色不能在这里修改' : undefined}>
-          <FormSelect value={draft.roleId} onChange={(e) => set({ roleId: e.target.value })} disabled={isSuper}>
-            {isSuper ? <option value={SUPER_ADMIN}>超级管理员</option> : null}
+        <FormField label="角色">
+          <FormSelect value={draft.roleId} onChange={(e) => set({ roleId: e.target.value })}>
             {roles.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name}

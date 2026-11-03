@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
+import { isEmployeeAssistantTool, launchEmployeeAssistant } from '@/domain/employeeAssistantLaunch';
 import { listExternalCategoryRankedMore } from '@/domain/externalFeaturedOrder';
 import { orderExternalToolsByLayoutIds } from '@/domain/externalToolLayout';
 import {
@@ -1440,6 +1441,24 @@ export function MarketShelfPage({
                 showToast(`「${scene.label}」暂无已上架工具，请运营完成绑定`)
               }
               onExperience={(tool) => {
+                if (isEmployeeAssistantTool(tool.id)) {
+                  pushRecent({
+                    id: tool.id,
+                    kind: 'internal',
+                    title: tool.name,
+                    icon: 'fa-cube',
+                    logoUrl: tool.logoUrl,
+                    assetType: 'tool',
+                  });
+                  bumpToolInvokes(tool.id);
+                  bumpRedirect(tool.id, 'tool');
+                  launchEmployeeAssistant({
+                    name: tool.name,
+                    fallbackUrl: tool.homepageUrl && tool.homepageUrl !== '#' ? tool.homepageUrl : '',
+                    notify: showToast,
+                  });
+                  return;
+                }
                 if (!tool.homepageUrl || tool.homepageUrl === '#') {
                   showToast('暂无可用链接，请查看快速上手');
                   openInternalToolDetail(tool);
@@ -1455,31 +1474,6 @@ export function MarketShelfPage({
                 });
                 bumpToolInvokes(tool.id);
                 bumpRedirect(tool.id, 'tool');
-
-                // 员工助手：先尝试唤起本地桌面应用，未安装则回退到下载页
-                if (tool.id === 'tool-hw-assistant') {
-                  const fallbackUrl = tool.homepageUrl;
-                  const hiddenFrame = document.createElement('iframe');
-                  hiddenFrame.style.display = 'none';
-                  hiddenFrame.src = 'weclaw://';
-                  document.body.appendChild(hiddenFrame);
-                  const cleanup = () => {
-                    document.body.removeChild(hiddenFrame);
-                    window.removeEventListener('blur', onBlur);
-                    clearTimeout(timer);
-                  };
-                  const onBlur = () => cleanup();
-                  const timer = setTimeout(() => {
-                    cleanup();
-                    if (!document.hidden) {
-                      showToast('未检测到员工助手桌面端，正在打开下载页…');
-                      window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
-                    }
-                  }, 2000);
-                  window.addEventListener('blur', onBlur);
-                  showToast(`正在打开：${tool.name}`);
-                  return;
-                }
 
                 const win = window.open(tool.homepageUrl, '_blank', 'noopener,noreferrer');
                 if (!win) showToast('浏览器拦截了弹窗，请允许后重试');

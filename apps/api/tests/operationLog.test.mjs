@@ -40,7 +40,7 @@ test('目录增删改记下操作人和对象', async () => {
   await service.updateCatalogItem('skills', 'skill-a', skill('skill-a', { name: '评分采集 v2' }), actor);
   await service.deleteCatalogItem('skills', 'skill-a', actor);
 
-  const logs = await listOperationLogs(prisma);
+  const logs = (await listOperationLogs(prisma)).logs;
   assert.deepEqual(logs.map((item) => [item.action, item.targetName, item.userName, item.userEmail]), [
     ['delete', '评分采集 v2', 'Admin', 'admin@huawei.com'],
     ['update', '评分采集 v2', 'Admin', 'admin@huawei.com'],
@@ -57,16 +57,16 @@ test('只调整顺序不记成修改；改名才记修改', async () => {
     kbDocs: [],
   };
   await service.putMarketplace(WS, first, actor);
-  const created = (await listOperationLogs(prisma)).length;
+  const created = (await listOperationLogs(prisma)).logs.length;
   await service.putMarketplace(WS, first, actor);
-  assert.equal((await listOperationLogs(prisma)).length, created, '内容没变时不追加日志');
+  assert.equal((await listOperationLogs(prisma)).logs.length, created, '内容没变时不追加日志');
   await service.putMarketplace(WS, {
     skills: [skill('skill-b', { name: '乙' }), skill('skill-a', { name: '甲' })],
     agents: [],
     automations: [],
     kbDocs: [],
   }, actor);
-  assert.deepEqual((await listOperationLogs(prisma, { module: 'skill' })).map((item) => item.action), ['create', 'create']);
+  assert.deepEqual((await listOperationLogs(prisma, { module: 'skill' })).logs.map((item) => item.action), ['create', 'create']);
 
   await service.putMarketplace(WS, {
     skills: [skill('skill-b', { name: '乙改' }), skill('skill-a', { name: '甲' })],
@@ -74,7 +74,7 @@ test('只调整顺序不记成修改；改名才记修改', async () => {
     automations: [],
     kbDocs: [],
   }, actor);
-  const latest = (await listOperationLogs(prisma, { module: 'skill' }))[0];
+  const latest = (await listOperationLogs(prisma, { module: 'skill' })).logs[0];
   assert.equal(latest.detail, '修改了Skill「乙改」');
 });
 

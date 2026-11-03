@@ -162,8 +162,6 @@ export async function updateRole(db: Db, id: string, body: unknown) {
 export async function deleteRole(db: Db, id: string): Promise<void> {
   const role = await db.role.findUnique({ where: { id } });
   if (!role) throw new NotFoundException('role_not_found');
-  if (role.isSystem) throw new BadRequestException('system_role_cannot_be_deleted');
-  if (id === DEFAULT_ROLE) throw new BadRequestException('default_role_cannot_be_deleted');
   if (await db.member.count({ where: { roleId: id } })) throw new ConflictException('role_in_use');
   await db.role.delete({ where: { id } });
 }
@@ -329,7 +327,6 @@ async function memberFields(db: Db, input: JsonRecord, creating: boolean) {
   }
   if (input.roleId !== undefined || creating) {
     const roleId = text(input.roleId, 'roleId') || DEFAULT_ROLE;
-    if (roleId === SUPER_ADMIN_ROLE) throw new BadRequestException('super_admin_via_transfer_only');
     if (!(await db.role.findUnique({ where: { id: roleId } }))) throw new BadRequestException(`unknown_role_${roleId}`);
     data.roleId = roleId;
   }
@@ -414,10 +411,6 @@ export async function updateMember(prisma: PrismaService, id: string, body: unkn
   const input = isRecord(body) ? body : {};
   const before = await prisma.member.findUnique({ where: { id } });
   if (!before) throw new NotFoundException('member_not_found');
-  if (before.roleId === SUPER_ADMIN_ROLE && input.roleId !== undefined && input.roleId !== SUPER_ADMIN_ROLE) {
-    throw new BadRequestException('super_admin_via_transfer_only');
-  }
-  if (before.roleId === SUPER_ADMIN_ROLE && input.roleId === SUPER_ADMIN_ROLE) delete input.roleId;
   if (before.roleId === SUPER_ADMIN_ROLE && input.status !== undefined && input.status !== 'active') {
     throw new BadRequestException('super_admin_cannot_be_suspended');
   }
@@ -525,7 +518,6 @@ export async function importMembers(prisma: PrismaService, body: unknown) {
     if (roleKey) {
       const role = findRole(roleKey);
       if (!role) fail('role', `角色不存在：${roleKey}`);
-      else if (role.id === SUPER_ADMIN_ROLE) fail('role', '超级管理员只能通过移交产生');
       else roleId = role.id;
     } else if (!existing) roleId = DEFAULT_ROLE;
 
@@ -660,7 +652,7 @@ export async function transferSuperAdmin(prisma: PrismaService, actorId: string,
 // 启动引导
 
 /**
- * SUPER_ADMIN_EMAIL 指定的成员成为唯一超管：不存在就新建，其他超管降为能力开发。
+ * SUPER_ADMIN_EMAIL 指定的成员成为超管：不存在就新建。已经是超管的其他成员保持不变。
  * SUPER_ADMIN_PASSWORD 只在该成员还没有密码时写入，之后在页面上改的密码不会被重启覆盖。
  */
 export async function ensureSuperAdmin(
@@ -671,10 +663,6 @@ export async function ensureSuperAdmin(
   if (!email) return null;
   const password = config.password?.trim() ? config.password : undefined;
   return prisma.$transaction(async (tx) => {
-    const others = await tx.member.findMany({ where: { roleId: SUPER_ADMIN_ROLE, NOT: { email } } });
-    for (const other of others) {
-      await tx.member.update({ where: { id: other.id }, data: { roleId: DEMOTED_ROLE, tokenVersion: { increment: 1 } } });
-    }
     let member = await tx.member.findUnique({ where: { email }, include: { credential: true } });
     const created = !member;
     const promoted = Boolean(member && (member.roleId !== SUPER_ADMIN_ROLE || member.status !== 'active'));
@@ -698,7 +686,7 @@ export async function ensureSuperAdmin(
     }
     const passwordSet = Boolean(password && !member.credential);
     if (passwordSet) await setPassword(tx, member.id, password!);
-    if (created || promoted || others.length || passwordSet) await touchRevision(tx, 'members');
-    return { memberId: member.id, created, demoted: others.map((other) => other.email), passwordSet };
+    if (created || promoted || passwordSet) await touchRevision(tx, 'members');
+    return { memberId: member.id, created, demoted: [], passwordSet };
   });
 }

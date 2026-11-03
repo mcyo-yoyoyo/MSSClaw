@@ -108,40 +108,56 @@ export async function appendOperationLogs(
   });
 }
 
+export const OPERATION_LOG_PAGE_SIZE = 20;
+
 export async function listOperationLogs(
   db: Db,
-  filter: { module?: string; query?: string } = {},
-): Promise<OperationLogEntry[]> {
+  filter: { module?: string; query?: string; page?: number; pageSize?: number } = {},
+): Promise<{ logs: OperationLogEntry[]; total: number; page: number; pageSize: number }> {
   const module = filter.module && isModule(filter.module) ? filter.module : undefined;
-  const rows = await db.auditLog.findMany({
-    where: {
-      category: 'asset',
-      action: { in: ACTIONS },
-      module: module ?? { in: MODULES },
-    },
-    orderBy: [{ occurredAt: 'desc' }, { no: 'desc' }],
-    take: 300,
-  });
-  const query = filter.query?.trim().toLowerCase();
-  return rows.flatMap((row) => {
+  const query = filter.query?.trim();
+  const paginate = filter.page !== undefined || filter.pageSize !== undefined;
+  const page = Math.max(1, Math.floor(filter.page ?? 1) || 1);
+  const pageSize = Math.min(100, Math.max(1, Math.floor(filter.pageSize ?? OPERATION_LOG_PAGE_SIZE) || OPERATION_LOG_PAGE_SIZE));
+  const where = {
+    category: 'asset' as const,
+    action: { in: [...ACTIONS] },
+    module: module ?? { in: [...MODULES] },
+    ...(query
+      ? {
+          OR: [
+            { actorName: { contains: query, mode: 'insensitive' as const } },
+            { actorEmail: { contains: query, mode: 'insensitive' as const } },
+            { detail: { contains: query, mode: 'insensitive' as const } },
+          ],
+        }
+      : {}),
+  };
+  const [total, rows] = await Promise.all([
+    db.auditLog.count({ where }),
+    db.auditLog.findMany({
+      where,
+      orderBy: [{ occurredAt: 'desc' }, { no: 'desc' }],
+      ...(paginate ? { skip: (page - 1) * pageSize, take: pageSize } : {}),
+    }),
+  ]);
+  const logs = rows.flatMap((row) => {
     if (!isModule(row.module) || !isAction(row.action)) return [];
-    const targetName = nameFromDetail(row.detail, row.action, row.module);
     const entry: OperationLogEntry = {
       id: row.entryId,
       at: row.occurredAt.toISOString(),
       module: row.module,
       action: row.action,
       targetId: '',
-      targetName,
+      targetName: nameFromDetail(row.detail, row.action, row.module),
       detail: row.detail,
       userName: row.actorName,
       userEmail: row.actorEmail,
       role: row.actorRole,
     };
-    if (!query) return [entry];
-    const haystack = `${entry.userName} ${entry.userEmail ?? ''} ${entry.detail} ${entry.targetName}`.toLowerCase();
-    return haystack.includes(query) ? [entry] : [];
+    return [entry];
   });
+  return { logs, total, page: paginate ? page : 1, pageSize: paginate ? pageSize : Math.max(total, 1) };
 }
 
 function nameFromDetail(detail: string, action: string, module: string): string {

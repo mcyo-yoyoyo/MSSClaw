@@ -199,11 +199,9 @@ export function OrgRolesPage() {
                       复制
                     </button>
                   )}
-                  {selected.isSystem || selected.id === DEFAULT_ROLE ? null : (
-                    <button type="button" className={btn.secondary} onClick={() => void remove()}>
-                      删除
-                    </button>
-                  )}
+                  <button type="button" className={btn.secondary} onClick={() => void remove()}>
+                    删除
+                  </button>
                   {isSuper ? null : (
                     <button type="button" className={btn.primary} disabled={!dirty || saving} onClick={() => void save()}>
                       {saving ? '保存中…' : '保存'}
