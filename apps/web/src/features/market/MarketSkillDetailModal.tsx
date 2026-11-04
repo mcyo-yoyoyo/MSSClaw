@@ -33,7 +33,7 @@ import {
 } from '@/domain/skillRuntime';
 import { evaluateAndPersistSkill } from '@/domain/skillEvaluation';
 
-type DetailTab = 'overview' | 'guide' | 'files' | 'versions' | 'evaluation' | 'reviews' | 'security';
+type DetailTab = 'overview' | 'files' | 'versions' | 'evaluation' | 'reviews' | 'security';
 
 function stripCategoryPrefix(text: string): string {
   return (text || '').replace(/^【[^】]+】/, '').trim();
@@ -304,9 +304,6 @@ export function MarketSkillDetailModal({
   const desc = stripCategoryPrefix(skillDisplayDesc(skill));
   const instructions = (skill.instructions || '').trim();
   const planSteps = skill.planSteps ?? [];
-  const demoPrompt = skill.command?.trim()
-    ? `${skill.command.trim()} 请按此 Skill 的说明完成任务并输出可交付结果。`
-    : '';
   const bizLabel = getSkillBusinessLabel(skill);
   const deptLabel = skill.ownerDeptIds?.[0] ? getDeptLabel(skill.ownerDeptIds[0]) : '';
   const regionLabel = getAssetRegionLabel(skill.ownerRegionId);
@@ -432,7 +429,6 @@ export function MarketSkillDetailModal({
 
   const tabs: { id: DetailTab; label: string; badge?: string }[] = [
     { id: 'overview', label: '概览' },
-    ...(hasUploadedCases ? [{ id: 'guide' as const, label: '快速上手' }] : []),
     { id: 'files', label: '文件' },
     { id: 'versions' as const, label: '版本' },
     {
@@ -444,15 +440,14 @@ export function MarketSkillDetailModal({
     { id: 'evaluation', label: '评测报告', badge: skill.traceEvaluation ? undefined : '待生成' },
   ];
 
-  /**
-   * 生效版本若没单独归档包，回落到当前 skill.packageBlob——
-   * 存量 Skill 的 versions 是历史遗留数据，行里本来就没有包引用。
-   */
-  const activeTab = tab === 'guide' && !hasUploadedCases ? 'overview' : tab;
-
   const uploadedCases = (
     <section>
-      <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">快速上手</h4>
+      <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">使用案例</h4>
+      {!hasUploadedCases ? (
+        <p className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-4 py-6 text-center text-[12px] text-zinc-400">
+          暂无使用案例
+        </p>
+      ) : null}
       {cases.length ? (
         <div className="space-y-3">
           {cases.map((c, i) => (
@@ -473,6 +468,10 @@ export function MarketSkillDetailModal({
     </section>
   );
 
+  /**
+   * 生效版本若没单独归档包，回落到当前 skill.packageBlob——
+   * 存量 Skill 的 versions 是历史遗留数据，行里本来就没有包引用。
+   */
   const versionRows: SkillVersionRecord[] = (
     skill.versions?.length
       ? skill.versions
@@ -614,7 +613,7 @@ export function MarketSkillDetailModal({
                 onClick={() => setTab(t.id)}
                 className={cn(
                   'inline-flex shrink-0 items-center gap-1.5 rounded-t-lg px-3.5 py-2 text-[12px] font-semibold transition',
-                  activeTab === t.id
+                  tab === t.id
                     ? 'bg-white text-zinc-900 shadow-[inset_0_-2px_0_0_#18181b]'
                     : 'text-zinc-400 hover:text-zinc-700',
                 )}
@@ -630,7 +629,7 @@ export function MarketSkillDetailModal({
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-5 md:py-5">
-            {activeTab === 'overview' ? (
+            {tab === 'overview' ? (
               <div className="flex min-h-full flex-col gap-5">
                 {skill.descEn && skill.descEn !== desc ? (
                   <section>
@@ -656,6 +655,13 @@ export function MarketSkillDetailModal({
                     </ol>
                   </section>
                 ) : null}
+                {usageNotes ? (
+                  <section>
+                    <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">使用须知</h4>
+                    <pre className="whitespace-pre-wrap rounded-xl bg-amber-50/50 p-3 text-[12px] leading-relaxed text-amber-950/80">{usageNotes}</pre>
+                  </section>
+                ) : null}
+                {uploadedCases}
                 {(skill.tags?.length || skill.hubTags || skill.searchKeywords?.length) ? (
                   <section>
                     <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">标签与关键词</h4>
@@ -687,99 +693,6 @@ export function MarketSkillDetailModal({
                     ) : null}
                   </section>
                 ) : null}
-                {hasUploadedCases ? (
-                  uploadedCases
-                ) : instructions ? (
-                  <section className="flex min-h-0 flex-1 flex-col">
-                    <h4 className="mb-2 shrink-0 text-[12px] font-semibold text-zinc-800">
-                      Skill 正文摘要
-                      <span className="ml-2 font-normal text-zinc-400">对话执行时注入</span>
-                    </h4>
-                    <pre className="min-h-[10rem] flex-1 overflow-y-auto whitespace-pre-wrap rounded-xl border border-zinc-100 bg-zinc-50/80 px-3.5 py-3 text-[12px] leading-relaxed text-zinc-700">
-                      {instructions.slice(0, 800)}
-                      {instructions.length > 800 ? '…' : ''}
-                    </pre>
-                  </section>
-                ) : null}
-              </div>
-            ) : null}
-
-            {activeTab === 'guide' ? (
-              <div className="space-y-5">
-                <section>
-                  <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">使用须知</h4>
-                  {usageNotes ? (
-                    <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-4">
-                      <pre className="whitespace-pre-wrap text-[12px] leading-relaxed text-amber-950/80">
-                        {usageNotes}
-                      </pre>
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-4 py-6 text-center text-[12px] text-zinc-400">
-                      管理员尚未录入使用须知。可在「配置 Skill → 编辑 → 高级项」中补充。
-                    </div>
-                  )}
-                </section>
-                {uploadedCases}
-                <section>
-                  <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">权限要求</h4>
-                  <p className="text-[13px] leading-relaxed text-zinc-600">
-                    {getSkillVisibilityLabel(skill.visibility)}
-                    {deptLabel ? ` · ${deptLabel}` : ''}
-                    {regionLabel ? ` · ${regionLabel}` : ''}
-                  </p>
-                </section>
-                <section>
-                  <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">注意事项</h4>
-                  <ul className="list-disc space-y-1.5 pl-4 text-[12px] leading-relaxed text-zinc-600">
-                    <li>输出结果需人工复核后再用于对外决策或客户材料。</li>
-                    <li>勿在提示中粘贴未脱敏的客户隐私与密钥。</li>
-                  </ul>
-                </section>
-                <section className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-4">
-                  <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">调用方式</h4>
-                  <p className="text-[12px] leading-relaxed text-zinc-600">
-                    请下载 Skill 包使用，推荐将 Skill 部署在员工助手执行。
-                  </p>
-                  {skill.command ? (
-                    <code className="mt-3 block rounded-xl bg-zinc-900 px-3 py-2.5 font-mono text-[13px] text-emerald-300">
-                      {skill.command}
-                    </code>
-                  ) : (
-                    <p className="mt-2 text-[12px] text-zinc-400">暂未配置命令</p>
-                  )}
-                </section>
-                {demoPrompt ? (
-                  <section>
-                    <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">调用示例</h4>
-                    <pre className="whitespace-pre-wrap rounded-xl border border-sky-100 bg-sky-50/60 px-3 py-3 text-[12px] leading-relaxed text-zinc-700">
-                      {demoPrompt}
-                    </pre>
-                  </section>
-                ) : null}
-                <section>
-                  <h4 className="mb-2 text-[12px] font-semibold text-zinc-800">分步操作</h4>
-                  <ol className="list-decimal space-y-2 pl-4 text-[12px] leading-relaxed text-zinc-600">
-                    <li>确认业务场景与权限范围符合当前任务。</li>
-                    <li>点「下载」本地预览，或直接在平台对话中调用。</li>
-                    <li>按执行计划核对输出，必要时补充上下文后重跑。</li>
-                  </ol>
-                </section>
-                <details className="rounded-xl border border-zinc-100 bg-white px-3.5 py-2.5">
-                  <summary className="cursor-pointer text-[12px] font-semibold text-zinc-800">
-                    常见问题
-                  </summary>
-                  <ul className="mt-2 space-y-2 text-[12px] leading-relaxed text-zinc-600">
-                    <li>
-                      <span className="font-semibold text-zinc-800">看不到该 Skill？</span>
-                      检查账号领域 / 区域归属与可见性设置。
-                    </li>
-                    <li>
-                      <span className="font-semibold text-zinc-800">无法「执行」？</span>
-                      需已上架且当前部署支持执行；否则请先下载学习。
-                    </li>
-                  </ul>
-                </details>
               </div>
             ) : null}
 

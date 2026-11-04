@@ -1027,7 +1027,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
               </FormField>
               <FormField
                 label="使用案例附件"
-                hint="支持 PDF / PPTX；详情「快速上手 · 使用案例」可在线预览"
+                hint="支持 PDF / PPTX；详情「概览 · 使用案例」可在线预览"
               >
                 <div className="space-y-2">
                   <input

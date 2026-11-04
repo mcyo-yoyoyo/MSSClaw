@@ -273,7 +273,7 @@ export interface PrototypeSkillSeed extends AssetOwnershipFields {
   /** 使用案例（标题、输入、输出，运营录入） */
   cases?: SkillCaseItem[];
   /**
-   * 使用案例附件（详情「快速上手 · 使用案例」可在线预览）。
+   * 使用案例附件（详情「概览 · 使用案例」可在线预览）。
    * 仅支持 PDF / PPTX：blob 上传走 JSON base64，受 JSON_BODY_LIMIT 限制，
    * 视频类体积普遍超限，暂不开放。
    */
