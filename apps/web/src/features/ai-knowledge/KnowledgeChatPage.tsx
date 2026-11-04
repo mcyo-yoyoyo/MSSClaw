@@ -97,6 +97,8 @@ const entryMode = (value: string | null): KnowledgeMode => value === 'insight' |
 const api = <T,>(path: string, body?: unknown) => knowledgeRequest<T>('/pilot' + path, body === undefined ? {} : { method: 'POST', body: JSON.stringify(body) }, 120000);
 
 export function AiKnowledgePage() {
+  const [autoEntry,setAutoEntry]=useState<{question:string;mode:'solution'|'insight'}|null>(null);
+  const [returnHome,setReturnHome]=useState(false);
   const [mode, setMode] = useState<KnowledgeMode>(() => entryMode(sessionStorage.getItem('mss-knowledge-mode')));
   const [toolSearch, setToolSearch] = useState<ToolSearchState>({ draft: '', query: '' });
   const [homeRevision, setHomeRevision] = useState(0);
@@ -148,7 +150,7 @@ export function AiKnowledgePage() {
     const { selected, incoming, entry } = bootstrap.current;
     if(selected) sessionStorage.removeItem(`mss-knowledge-current:${userId}`);
     setSession(null); setReading(null); setHistory([]); setLegacy(incoming); setLocalPlan(Boolean(incoming && loadAiKnowledgeSolutions().some(s => s.id === incoming.id))); setSource(null); setConfirm(false); setError(''); setInput(entry?.question || '');
-    setToolSearch({ draft: '', query: '' }); setMode(entryMode(selected));
+    setToolSearch({ draft: '', query: '' }); setMode(entry?.mode || entryMode(selected)); setReturnHome(entry?.returnHome===true); if(entry?.autoSend) setAutoEntry({question:entry.question,mode:entry.mode||'solution'});
     const last = sessionStorage.getItem(`mss-knowledge-current:${userId}`);
     if (!selected && !incoming && !entry && last) api<Session>(`/sessions/${encodeURIComponent(last)}`).then(s => { if (mounted.current && requestEpoch === epoch.current) { sessionOwner.current = userId; setSession(s); setMode(s.mode || 'solution'); } }).catch(() => { if (requestEpoch === epoch.current) sessionStorage.removeItem(`mss-knowledge-current:${userId}`); });
     refresh().catch(e => { if (mounted.current && requestEpoch === epoch.current) setError(e.message); });
@@ -157,7 +159,7 @@ export function AiKnowledgePage() {
   useEffect(() => {
     const open = () => {
       const next = entryMode(sessionStorage.getItem('mss-knowledge-mode'));
-      sessionStorage.removeItem('mss-knowledge-mode'); clearKnowledgeScroll(); reset(next);
+      sessionStorage.removeItem('mss-knowledge-mode'); clearKnowledgeScroll();setReturnHome(false);setAutoEntry(null); reset(next);
     };
     const solution = () => {
       const saved = consumeAiKnowledgeSolution(); if (!saved) return;
@@ -166,7 +168,7 @@ export function AiKnowledgePage() {
     };
     const question = () => {
       const entry = consumeAiKnowledgeEntry(); if (!entry) return;
-      clearKnowledgeScroll(); reset('solution'); setInput(entry.question);
+      clearKnowledgeScroll(); reset(entry.mode||'solution'); setInput(entry.question);setReturnHome(entry.returnHome===true);if(entry.autoSend)setAutoEntry({question:entry.question,mode:entry.mode||'solution'});
     };
     window.addEventListener('mss-max-open', open); window.addEventListener('mss-max-solution', solution); window.addEventListener('mss-max-question', question);
     return () => { window.removeEventListener('mss-max-open', open); window.removeEventListener('mss-max-solution', solution); window.removeEventListener('mss-max-question', question); };
@@ -189,6 +191,7 @@ export function AiKnowledgePage() {
     } catch (e) { if (mounted.current && currentEpoch === epoch.current) setPendingMessage({ text, status: 'failed', error: (e as Error).message || '暂时未能获得回复，请重试。' }); }
     finally { if (mounted.current && currentEpoch === epoch.current) { lock.current = false; setBusy(false); } }
   };
+  useEffect(()=>{if(autoEntry&&mode===autoEntry.mode&&!busy){const text=autoEntry.question;setAutoEntry(null);void send(text);}},[autoEntry,mode]);
   const openHistory = async (h: History) => {
     if (lock.current) return; setReading(null); setOpenedFromHome(false); setPendingMessage(null); lock.current = true; setBusy(true); setError(''); const currentEpoch = ++epoch.current;
     try {
@@ -239,7 +242,7 @@ export function AiKnowledgePage() {
   if (legacy) return <div className="knowledge-legacy"><div className="knowledge-legacy-bar"><BackButton label={openedFromHome ? '返回MAX首页' : '返回MAX对话'} onClick={() => reset()}/><button disabled={busy} onClick={resumeSolution}>继续此方案的对话</button><button onClick={myPlans}>我的方案</button></div>{error && <p role="alert">{error}</p>}<LegacyAiKnowledgePage key={legacy.id} initialSolution={legacy} onNew={() => reset('solution')}/></div>;
   return <div className={`knowledge-chat ${hasConversation ? '' : 'empty'}`}>
     <main className="knowledge-main">
-      <header className="knowledge-top"><BackButton label={hasConversation || busy ? "返回MAX首页" : "返回平台"} onClick={() => { if(hasConversation || busy) reset('solution'); else setView('home'); }}/><span className={`knowledge-mode-label ${mode==='insight' ? 'is-insight' : ''}`}>{labels[mode]}</span></header>
+      <header className="knowledge-top"><BackButton label={returnHome ? "返回首页搜索" : hasConversation || busy ? "返回MAX首页" : "返回平台"} onClick={() => { if(returnHome) setView('home'); else if(hasConversation || busy) reset('solution'); else setView('home'); }}/><span className={`knowledge-mode-label ${mode==='insight' ? 'is-insight' : ''}`}>{labels[mode]}</span></header>
       <div className="knowledge-scroll" ref={scroll}>
         {session && <KnowledgeMessages messages={session.messages}/>}
         {session?.plan && <section className="knowledge-plan-summary"><small>解决方案 · 已保存</small><h2>{session.plan.title}</h2><p>{session.plan.summary}</p><button onClick={() => setReading(documentFromSession(session))}>查看完整方案 ↗</button></section>}

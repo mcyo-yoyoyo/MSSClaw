@@ -556,7 +556,7 @@ export function App() {
         onClose={closeSkillChatDrawer}
         onSkillChange={changeSkillChatDrawer}
       />
-      {!isOpsOnlyView(appView) && appView !== 'ai-knowledge' && <KnowledgeDock />}
+      {!isOpsOnlyView(appView) && appView !== 'home' && appView !== 'ai-knowledge' && <KnowledgeDock />}
       {!isOpsOnlyView(appView) && <KnowledgeGuide />}
       <GlobalToastHost />
       <AssetApprovalModal />

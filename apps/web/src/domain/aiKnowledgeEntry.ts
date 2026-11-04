@@ -7,14 +7,18 @@ const ME_AI_KNOWLEDGE_TAB_KEY = 'mss-me-ai-knowledge-tab-v1';
 
 export type AiKnowledgeEntryIntent = {
   question: string;
+  mode?: 'solution'|'insight';
+  autoSend?: boolean;
+  returnHome?: boolean;
   source: IntentSearchScope;
   createdAt: string;
 };
 
-export function stageAiKnowledgeEntry(question: string, source: IntentSearchScope): void {
+export function stageAiKnowledgeEntry(question: string, source: IntentSearchScope, options: {mode?: 'solution'|'insight';autoSend?:boolean;returnHome?:boolean} = {}): void {
   const clean = question.trim();
   if (!clean) return;
   const intent: AiKnowledgeEntryIntent = {
+    ...options,
     question: clean,
     source,
     createdAt: new Date().toISOString(),
@@ -32,6 +36,7 @@ export function consumeAiKnowledgeEntry(): AiKnowledgeEntryIntent | null {
     if (typeof intent.question !== 'string' || !intent.question.trim()) return null;
     return {
       question: intent.question.trim(),
+      mode: intent.mode==='insight'?'insight':intent.mode==='solution'?'solution':undefined,autoSend:intent.autoSend===true,returnHome:intent.returnHome===true,
       source: intent.source ?? 'home',
       createdAt: typeof intent.createdAt === 'string' ? intent.createdAt : new Date().toISOString(),
     };

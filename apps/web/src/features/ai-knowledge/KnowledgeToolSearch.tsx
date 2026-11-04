@@ -25,29 +25,19 @@ import { openKnowledgeAsset } from './knowledgeNavigation';
 import type { KnowledgeMode } from './KnowledgeDock';
 import './knowledgeToolSearch.css';
 
-export type ToolSearchState = { draft: string; query: string };
-export function KnowledgeToolSearch({ state, onChange, onModeChange }: {
-  state: ToolSearchState; onChange: (state: ToolSearchState) => void; onModeChange: (mode: KnowledgeMode) => void;
-}) {
-  const tools = useMarketplaceStore(s => s.tools), agents = useMarketplaceStore(s => s.agents), skills = useMarketplaceStore(s => s.skills);
-  const ready = useMarketplaceStore(s => s.ready), error = useMarketplaceStore(s => s.loadError);
-  const bootstrap = useMarketplaceStore(s => s.bootstrap);
-  const scenes = useInternalOfficeSceneCatalogStore(s => s.entries);
-  const user = useSessionStore(s => s.user);
-  const setView = useAppViewStore(s => s.setAppView);
-  const activeView = useAppViewStore(s => s.appView);
-  const input = useRef<HTMLInputElement>(null);
-  const pendingSearch = useRef<{id:string;query:string} | null>(null);
+export function useKnowledgeToolResults(query: string) {
+ const tools=useMarketplaceStore(s=>s.tools),agents=useMarketplaceStore(s=>s.agents),skills=useMarketplaceStore(s=>s.skills);
+ const scenes=useInternalOfficeSceneCatalogStore(s=>s.entries),user=useSessionStore(s=>s.user);
   const results = useMemo(() => {
-    if (!state.query) return [];
+    if (!query) return [];
     const viewer = { userId: user?.id, userName: user?.name, role: user?.platformRole, affiliation: { deptIds: user?.deptIds || [], regionId: user?.regionId ?? null } };
     const visibleTools = tools.filter(t => t.published && canViewAsset(t, viewer));
     const toolIds = new Set(visibleTools.map(t => t.id));
     const toolCards = [...listMarketToolCards(visibleTools, 'external', viewer), ...listMarketToolCards(visibleTools, 'internal', viewer),
       ...listInternalOfficeMarketCards(visibleTools, undefined, undefined, scenes.filter(s => s.visible)).filter(c => toolIds.has(c.id))];
     const uniqueTools = [...new Map(toolCards.map(c => [c.id, c])).values()];
-    const matchedTools = searchCapabilitiesByIntent(state.query, uniqueTools, uniqueTools.length).map(hit => hit.card);
-    const sceneToolIds = new Set(filterInternalOfficeScenesBySearch(materializeOfficeScenes(scenes, visibleTools), state.query, visibleTools).flatMap(scene => scene.tools.map(tool => tool.id)));
+    const matchedTools = searchCapabilitiesByIntent(query, uniqueTools, uniqueTools.length).map(hit => hit.card);
+    const sceneToolIds = new Set(filterInternalOfficeScenesBySearch(materializeOfficeScenes(scenes, visibleTools), query, visibleTools).flatMap(scene => scene.tools.map(tool => tool.id)));
     const toolResults = [...new Map([...matchedTools, ...uniqueTools.filter(card => card.kind === 'internal' && sceneToolIds.has(card.id))].map(card => [card.id, card])).values()];
     const capability = (id: string, title: string, description: string, icon: string | undefined, assetType: 'skill' | 'agent', createdAt?: string): Card => ({
       id, title, description, icon: icon || (assetType === 'skill' ? 'fa-cube' : 'fa-robot'), assetType, kind: 'projects',
@@ -57,16 +47,31 @@ export function KnowledgeToolSearch({ state, onChange, onModeChange }: {
     const skillResults = skills.filter(s => s.published && canViewAsset(s, viewer)).filter(s => matchesSkillHubSearch({
       title: [skillDisplayName(s), s.name, s.nameZh, s.nameEn].filter(Boolean).join(' '),
       description: [skillDisplayDesc(s), s.desc, s.descZh, s.descEn, assetCreatorName(s)].filter(Boolean).join(' '), instructions: s.instructions,
-    }, state.query)).map(s => capability(s.id, skillDisplayName(s), skillDisplayDesc(s), s.icon, 'skill', s.createdAt));
+    }, query)).map(s => capability(s.id, skillDisplayName(s), skillDisplayDesc(s), s.icon, 'skill', s.createdAt));
     const agentResults = agents.filter(a => a.published && canViewAsset(a, viewer)).filter(a => matchesAgentHubSearch({
       title: a.name, description: a.desc, tags: [
         ...(a.scenarioTags || []), a.bizLine, a.businessScenarioId ? getBusinessScenarioMeta(a.businessScenarioId).label : '',
         ...(a.ownerDeptIds || []).map(getDeptLabel), ...(a.ownerRegionIds || []).map(getRegionLabel),
         ...resolveAgentCapabilityTypes(a).map(getAgentCapabilityTypeLabel), ...(a.targetUsers || []), ...(a.environment?.platforms || []), assetCreatorName(a),
       ].filter((value): value is string => Boolean(value)),
-    }, state.query)).map(a => capability(a.id, a.name, a.desc, a.icon, 'agent', a.createdAt));
+    }, query)).map(a => capability(a.id, a.name, a.desc, a.icon, 'agent', a.createdAt));
     return [...toolResults, ...skillResults, ...agentResults];
-  }, [tools, agents, skills, scenes, user, state.query]);
+  }, [tools, agents, skills, scenes, user, query]);
+
+ return results;
+}
+
+export type ToolSearchState = { draft: string; query: string };
+export function KnowledgeToolSearch({ state, onChange, onModeChange }: {
+  state: ToolSearchState; onChange: (state: ToolSearchState) => void; onModeChange: (mode: KnowledgeMode) => void;
+}) {
+  const ready = useMarketplaceStore(s => s.ready), error = useMarketplaceStore(s => s.loadError);
+  const bootstrap = useMarketplaceStore(s => s.bootstrap);
+  const setView = useAppViewStore(s => s.setAppView);
+  const activeView = useAppViewStore(s => s.appView);
+  const input = useRef<HTMLInputElement>(null);
+  const pendingSearch = useRef<{id:string;query:string} | null>(null);
+  const results = useKnowledgeToolResults(state.query);
 
   useEffect(() => {
     const pending=pendingSearch.current;

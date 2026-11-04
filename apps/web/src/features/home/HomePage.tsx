@@ -23,7 +23,7 @@ import { openAssetDetail } from '@/domain/appRoute';
 import { openMarketShelf, openMarketToolDetail } from '@/domain/openHomeJourney';
 import { HomeMarketChannels } from '@/components/home/HomeMarketChannels';
 import { StationAnnounceBanner } from '@/components/home/StationAnnounceBanner';
-import { StageIntentDock } from '@/components/market/StageIntentDock';
+import { HomeMaxSearch } from '@/features/ai-knowledge/HomeMaxSearch';
 import {
   capabilityKey,
   searchCapabilitiesByIntent,
@@ -45,7 +45,6 @@ import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeScene
 import { useHomeFeaturedStore } from '@/stores/homeFeaturedStore';
 import { useStationAnnouncementStore } from '@/stores/stationAnnouncementStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
-import { greetingForNow } from '@/domain/timeGreeting';
 import type { PrototypeAgentSeed, PrototypeSkillSeed } from '@/domain/prototype/types';
 import { resolveHomeProjectDetailTarget } from '@/domain/homeProjectDetail';
 import { useAllowsTaskExecution } from '@/domain/marketRunCapability';
@@ -316,12 +315,6 @@ export function HomePage({
             tone="home"
             layout="stack"
             className="home-portal-hero"
-            eyebrow={
-              <>
-                {greetingForNow()}
-                {user?.name ? `，${user.name}` : ''}
-              </>
-            }
             title={
               <span className="home-hero-pillars" aria-label="学工具 用工具 造工具">
                 <span className="home-hero-pillars__item home-hero-pillars__item--learn">
@@ -340,10 +333,7 @@ export function HomePage({
             }
             subtitle="从工作场景出发，找工具 / Skill / Agent"
           >
-            <StageIntentDock
-              scope="home"
-              placeholder="描述你要做的事，或输入工具 / Skill 名称…"
-            />
+            <HomeMaxSearch />
           </PageStageHero>
 
           <HomeMarketChannels
