@@ -8,6 +8,21 @@ import { isOAuthCallbackPath } from '@/domain/authMode';
 import { captureDirectEntry, invalidateDirectEntry } from '@/domain/directEntry';
 import './index.css';
 
+// crypto.randomUUID only exists in secure contexts (HTTPS or localhost).
+// Polyfill for non-secure access via IP address.
+if (typeof crypto !== 'undefined' && typeof crypto.randomUUID !== 'function') {
+  Object.defineProperty(crypto, 'randomUUID', {
+    value: (): `${string}-${string}-${string}-${string}-${string}` =>
+      'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        const v = c === 'x' ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      }) as `${string}-${string}-${string}-${string}-${string}`,
+    writable: true,
+    configurable: true,
+  });
+}
+
 // 直达判定只看页面加载那一刻，必须在任何路由跳转之前记下
 captureDirectEntry({
   hash: window.location.hash,
