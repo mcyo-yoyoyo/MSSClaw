@@ -16,7 +16,8 @@ import {
   deleteAsset,
   readAsset,
   readAssetIds,
-  orgScopeWhere,
+  catalogScope,
+  type CatalogViewer,
   readAssets,
   readToolCatalogMeta,
   replaceAssets,
@@ -61,14 +62,7 @@ const CATALOG_RESOURCES = {
   automations: { kind: 'automation', listKey: 'automations', writeMenu: 'automation' },
 } as const satisfies Record<string, { kind: AssetKind; listKey: string; writeMenu: string }>;
 
-export type CatalogViewer = { id: string; platformRole: string; regionId: string | null; deptIds: string[] } | null;
-
-/** Skill / Agent 按查看人的区域、领域过滤；超管和其他资产类型不过滤 */
-function catalogScope(kind: AssetKind, viewer: CatalogViewer): OrgScopeWhere | undefined {
-  if (kind !== 'skill' && kind !== 'agent') return undefined;
-  if (viewer?.platformRole === SUPER_ADMIN_ROLE) return undefined;
-  return orgScopeWhere(viewer && { id: viewer.id, regionId: viewer.regionId, domainIds: viewer.deptIds });
-}
+export type { CatalogViewer };
 
 export function catalogResource(segment: string): { kind: AssetKind; listKey: string; writeMenu: string } {
   const spec = CATALOG_RESOURCES[segment as keyof typeof CATALOG_RESOURCES];
@@ -122,7 +116,6 @@ export interface InboxMessageInput {
 }
 
 export type MarketEngagementAction =
-  | 'exposure'
   | 'detail'
   /** 打开带有效分享编号的链接；看板「分享链接进入浏览数」只数它 */
   | 'detail_direct'
@@ -150,7 +143,6 @@ export type MarketEngagementEventAction =
   | 'call';
 
 export const MARKET_ENGAGEMENT_EVENT_ACTIONS = new Set<MarketEngagementEventAction>([
-  'exposure',
   'detail',
   'detail_direct',
   'share',
@@ -743,9 +735,8 @@ export class PersistenceService {
       }
 
       if (!metric) {
-        // Exposure and call facts do not create a zero-valued market card. They remain
-        // queryable in the event table while the aggregate stays an interaction metric.
-        if (action !== 'exposure' && action !== 'call' && action !== 'share') {
+        // call 和 share 只留在事件表，不新建卡片累计行。
+        if (action !== 'call' && action !== 'share') {
           metric = await tx.marketEngagement.upsert({
             where: { contentId },
             create: { contentId },
@@ -754,17 +745,14 @@ export class PersistenceService {
         }
       }
 
-      if (action === 'exposure') {
-        behaviorAction = 'exposure';
-      } else if (action === 'detail' || action === 'detail_direct' || action === 'view' || action === 'use' || action === 'redirect' || action === 'download') {
+      if (action === 'detail' || action === 'detail_direct' || action === 'view' || action === 'use' || action === 'redirect' || action === 'download') {
         const field =
           action === 'detail' || action === 'detail_direct' || action === 'view'
             ? 'views'
             : action === 'use' || action === 'redirect'
               ? 'uses'
               : 'downloads';
-        // The branch is unreachable for an exposure/call event, for which metric remains
-        // null. Keeping the guard makes malformed imported events fail closed.
+        // call / share 不建累计行。这里兜住缺失的累计记录，避免把计数写飞。
         if (!metric) {
           throw new BadRequestException('market_engagement_metric_unavailable');
         }

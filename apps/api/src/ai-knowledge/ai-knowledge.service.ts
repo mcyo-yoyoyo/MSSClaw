@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
@@ -28,6 +29,7 @@ import {
   sanitizeLlmSolution,
   updateDraftDemand,
 } from './ai-knowledge.domain';
+import type { CatalogViewer } from '../persistence/asset-catalog';
 import { AiKnowledgeResourceService } from './ai-knowledge.resources';
 import type {
   AiKnowledgeActor,
@@ -109,6 +111,12 @@ function hash(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
+/** MAX 对话只给登录成员：游客（含令牌失效）能看页面和历史，不能发起或继续对话 */
+export function requireLoggedInActor(actor: AiKnowledgeActor): AiKnowledgeActor {
+  if (actor.type !== 'user') throw new UnauthorizedException('请先登录后再使用 MAX 对话');
+  return actor;
+}
+
 @Injectable()
 export class AiKnowledgeService {
   private readonly logger = new Logger(AiKnowledgeService.name);
@@ -185,7 +193,8 @@ export class AiKnowledgeService {
     if (!canConfirmDemand(draft.demand)) {
       throw new BadRequestException('ai_knowledge_demand_incomplete');
     }
-    const resources = await this.resourceCatalog.searchForDraft(workspaceId, draft);
+    const viewer = await this.resourceCatalog.viewerFor(actor);
+    const resources = await this.resourceCatalog.searchForDraft(workspaceId, draft, viewer);
     const base = buildRuleSolution(draft, resources);
     const { config: llmConfig, status: llmStatus } = await this.resolveLlmRuntime(workspaceId);
     let solution = base;
@@ -207,6 +216,8 @@ export class AiKnowledgeService {
           resources,
           llmConfig,
           signal,
+          false,
+          viewer,
         );
         if (generated) solution = generated;
         else throw new BadRequestException('ai_knowledge_llm_invalid_solution');
@@ -231,6 +242,7 @@ export class AiKnowledgeService {
             llmConfig,
             signal,
             true,
+            viewer,
           );
           if (!fallback) throw new BadRequestException('ai_knowledge_llm_invalid_solution');
           solution = fallback;
@@ -437,6 +449,7 @@ export class AiKnowledgeService {
     config: NestLlmRuntimeConfig,
     signal?: AbortSignal,
     repair = false,
+    viewer: CatalogViewer = null,
   ) {
     const generated = await this.agentRunner.generate(
       workspaceId,
@@ -444,6 +457,7 @@ export class AiKnowledgeService {
       config,
       signal,
       repair,
+      viewer,
     );
     const parsedResources = generated.resources.length ? generated.resources : resources;
     const solution = sanitizeLlmSolution(generated.solution, base, parsedResources, config.model);

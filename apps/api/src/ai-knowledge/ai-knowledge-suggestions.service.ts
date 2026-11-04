@@ -3,8 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { PrismaService } from '../prisma/prisma.service';
-import { readAssets } from '../persistence/asset-catalog';
-import { pilotAssetVisible } from './ai-knowledge.resources';
+import { readVisibleAssets } from './ai-knowledge.resources';
 import { AiKnowledgePilotService } from './ai-knowledge-pilot.service';
 
 type Mode='solution'|'insight';
@@ -27,9 +26,9 @@ export class AiKnowledgeSuggestionsService implements OnApplicationBootstrap {
  private async sources(mode:Mode):Promise<Source[]>{
    if(mode==='solution'){
      const groups=await Promise.all((['skill','agent','tool'] as const).map(async kind=>{
-       const rows=await readAssets(this.prisma,kind);
+       const rows=await readVisibleAssets(this.prisma,kind);
        // Shared prompts contain public assets only. Final answers still use the actor's permissions.
-       return rows.filter(row=>pilotAssetVisible(row,{})).slice(0,kind==='tool'?12:40).map(row=>({id:`${kind}:${row.id}`,label:String(row.nameZh||row.name||row.title||''),description:String(row.descZh||row.desc||row.description||'').slice(0,800)}));
+       return rows.slice(0,kind==='tool'?12:40).map(row=>({id:`${kind}:${row.id}`,label:String(row.nameZh||row.name||row.title||''),description:String(row.descZh||row.desc||row.description||'').slice(0,800)}));
      }));return groups.flat().filter(s=>s.label);
    }
    const [news,posts,cases]=await Promise.all([

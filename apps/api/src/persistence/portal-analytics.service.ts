@@ -962,7 +962,7 @@ export class PortalAnalyticsService {
           COUNT(DISTINCT e."visitor_hash") AS "uv"
         FROM "market_engagement_event" AS e
         WHERE e."date_key" BETWEEN ${from} AND ${to}
-          AND e."action" IN ('exposure', 'view', 'detail', 'detail_direct', 'download', 'request:download', 'like', 'dislike', 'favorite', 'redirect')
+          AND e."action" IN ('view', 'detail', 'detail_direct', 'download', 'request:download', 'like', 'dislike', 'favorite', 'redirect')
         GROUP BY e."content_id", e."asset_type", e."action"
       `),
       optionalRows(this.prisma.$queryRaw<BehaviorDownloadRow[]>`
@@ -1379,10 +1379,6 @@ export class PortalAnalyticsService {
       const events = count(row.events);
       const uv = count(row.uv);
       switch (row.action) {
-        case 'exposure':
-          asset.exposurePv += events;
-          asset.exposureUv += uv;
-          break;
         case 'view':
         case 'detail':
         case 'detail_direct':
@@ -1482,7 +1478,7 @@ export class PortalAnalyticsService {
         ),
       }))
       .sort((a, b) =>
-        b.detailPv - a.detailPv || b.exposurePv - a.exposurePv || a.contentId.localeCompare(b.contentId),
+        b.detailPv - a.detailPv || a.contentId.localeCompare(b.contentId),
       );
     // `total/published` cover the black asset inventory (tool/Skill/Agent and
     // office scenes).  The split cards below are tool-inventory dimensions: an

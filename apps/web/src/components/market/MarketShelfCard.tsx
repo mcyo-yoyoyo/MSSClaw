@@ -14,7 +14,7 @@ import { useContentEngagementStore } from '@/stores/contentEngagementStore';
 import { useMarketCompareStore } from '@/stores/marketCompareStore';
 import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 
 export function MarketShelfCard({
   card,
@@ -91,32 +91,8 @@ export function MarketShelfCard({
   const userVote = useContentEngagementStore((s) => s.userVotes[card.id] ?? null);
   const toggleLike = useContentEngagementStore((s) => s.toggleLike);
   const toggleDislike = useContentEngagementStore((s) => s.toggleDislike);
-  const bumpExposure = useContentEngagementStore((s) => s.bumpExposure);
   const bumpDownload = useContentEngagementStore((s) => s.bumpDownload);
   const canDownload = card.kind === 'projects';
-  const exposureRef = useRef<HTMLElement | null>(null);
-  const exposureTrackedRef = useRef(false);
-
-  useEffect(() => {
-    if (previewOnly || typeof IntersectionObserver === 'undefined') return;
-    const node = exposureRef.current;
-    if (!node) return;
-    let disposed = false;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (disposed || exposureTrackedRef.current || !entries.some((entry) => entry.isIntersecting)) return;
-        exposureTrackedRef.current = true;
-        observer.disconnect();
-        if (assetType) bumpExposure(card.id, assetType);
-      },
-      { threshold: 0.1 },
-    );
-    observer.observe(node);
-    return () => {
-      disposed = true;
-      observer.disconnect();
-    };
-  }, [assetType, bumpExposure, card.id, previewOnly]);
 
   const outcomeLine =
     card.kind === 'external' ? card.description : card.outcomeHint?.trim() || card.description;
@@ -184,7 +160,6 @@ export function MarketShelfCard({
 
   return (
     <article
-      ref={exposureRef}
       data-guide="asset-card" className={cn(
         'group relative flex h-full flex-col rounded-2xl border border-zinc-200/90 bg-white transition duration-200',
         'hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-[0_10px_28px_-16px_rgba(24,24,27,0.35)]',

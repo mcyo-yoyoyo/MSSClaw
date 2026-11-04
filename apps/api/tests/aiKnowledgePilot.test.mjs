@@ -6,6 +6,9 @@ const { AiKnowledgePilotService } = require('../dist/ai-knowledge/ai-knowledge-p
 const { aiContext } = require('../dist/common/ai-usage-context.js');
 const { pilotAssetVisible } = require('../dist/ai-knowledge/ai-knowledge.resources.js');
 
+const { AiKnowledgePilotController } = require('../dist/ai-knowledge/ai-knowledge-pilot.controller.js');
+const { AiKnowledgeController } = require('../dist/ai-knowledge/ai-knowledge.controller.js');
+
 const actor = { key: 'guest:test-a', type: 'guest' };
 const candidate = { id: 'skill:real', kind: 'skill', label: '真实能力' };
 function fixture(turns = []) {
@@ -33,7 +36,43 @@ const reply = (overrides = {}) => ({ reply: '你希望先得到清单还是完�
   understanding: { task: '写需求文档', goal: '', inputs: '', output: '完整需求文档', constraints: '' },
   needsClarification: false, citedIds: ['skill:real'], ...overrides });
 
-test('访客可读公开能力，归属部门不影响公开可见性；领域/私有仍按权限', () => {
+test('MAX 对话只给登录成员：游客发起、继续、生成、导入都 401，且不碰服务；能看历史和建议问题', async () => {
+  const calls = [];
+  const record = (name) => async () => { calls.push(name); return { ok: name }; };
+  const pilot = { message: record('message'), generate: record('generate'), resumeLegacy: record('resume'),
+    importPreview: record('importPreview'), importLocal: record('importLocal'), list: record('list') };
+  const knowledge = { resolveActor: async () => current, startDraft: record('startDraft'), clarify: record('clarify'),
+    updateDemand: record('updateDemand'), generate: record('draftGenerate') };
+  let current = { key: 'guest:x', type: 'guest' };
+  const req = { header: () => undefined, ip: '127.0.0.1' };
+  const controller = new AiKnowledgePilotController(pilot, knowledge, { list: record('suggestions') });
+  const legacy = new AiKnowledgeController(knowledge);
+  const gated = [
+    () => controller.create(req, { message: 'hi' }),
+    () => controller.message(req, 'id', { message: 'hi' }),
+    () => controller.plan(req, 'id', { confirmed: true }),
+    () => controller.resume(req, 'draft', 'id'),
+    () => controller.importPreview(req, { visitorId: 'v' }),
+    () => controller.importLocal(req, {}),
+    () => legacy.start({ question: 'hi' }, req),
+    () => legacy.clarify('id', { message: 'hi' }, req),
+    () => legacy.updateDemand('id', { demand: {} }, req),
+    () => legacy.generate('id', req),
+  ];
+  for (const call of gated) await assert.rejects(call(), (error) => error.getStatus?.() === 401);
+  assert.deepEqual(calls, []);
+
+  await controller.list(req);
+  await controller.prompts('solution');
+  assert.deepEqual(calls, ['list', 'suggestions']);
+
+  calls.length = 0;
+  current = { key: 'user:u1', type: 'user', userId: 'u1' };
+  for (const call of gated) await call();
+  assert.equal(calls.length, gated.length);
+});
+
+test('工具可见范围：公开工具都能看，组织和私有工具按权限；同名不算发布方', () => {
   assert.equal(pilotAssetVisible({ published: true }), true);
   assert.equal(pilotAssetVisible({ published: false }), false);
   assert.equal(pilotAssetVisible({ published: true, visibility: 'private' }), false);
@@ -42,9 +81,11 @@ test('访客可读公开能力，归属部门不影响公开可见性；领域/�
   assert.equal(pilotAssetVisible({ published: true, ownerDeptIds: ['mkt'] }), true);
   const org = { published: true, visibility: 'org', ownerDeptIds: ['mkt'] };
   assert.equal(pilotAssetVisible(org), false);
-  assert.equal(pilotAssetVisible(org, { userId: 'a', deptIds: ['mkt'] }), true);
-  assert.equal(pilotAssetVisible(org, { userId: 'b', deptIds: ['rd'] }), false);
-  assert.equal(pilotAssetVisible({ ...org, visibility: 'private', publisherUserId: 'a' }, { userId: 'a' }), true);
+  const viewer = (id, deptIds) => ({ id, platformRole: 'business_user', regionId: null, deptIds });
+  assert.equal(pilotAssetVisible(org, viewer('a', ['mkt'])), true);
+  assert.equal(pilotAssetVisible(org, viewer('b', ['rd'])), false);
+  assert.equal(pilotAssetVisible({ ...org, visibility: 'private', publisherUserId: 'a' }, viewer('a', [])), true);
+  assert.equal(pilotAssetVisible({ published: true, visibility: 'private', author: '张三' }, viewer('b', [])), false);
 });
 
 test('无角色和非关键字段时可以形成方向，历史按访问者隔离', async () => {

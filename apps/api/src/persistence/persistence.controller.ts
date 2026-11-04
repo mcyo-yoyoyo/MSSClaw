@@ -37,7 +37,6 @@ import { PlatformDocsService } from './platform-docs.service';
 import { PLATFORM_WORKSPACE_ID as workspaceId } from '../common/platform-workspace';
 
 const MARKET_ENGAGEMENT_ACTIONS = new Set([
-  'exposure',
   'detail',
   'detail_direct',
   'share',
@@ -59,7 +58,6 @@ const MARKET_ENGAGEMENT_ACTIONS = new Set([
 
 /** 纯计数动作：游客浏览也应计入，无个人态写入 */
 const ANONYMOUS_MARKET_ENGAGEMENT_ACTIONS = new Set([
-  'exposure',
   'detail',
   'detail_direct',
   'view',
@@ -221,7 +219,7 @@ export class PersistenceController {
   }
 
   /**
-   * exposure / detail / view / use 允许游客计数；download / favorite / like / dislike 必须登录，
+   * detail / view / use 允许游客计数；download / favorite / like / dislike 必须登录，
    * 且 userId 只从会话解析，防止伪造他人身份写互动。
   */
   @Post('market-engagement/:contentId/actions')

@@ -45,8 +45,8 @@ test('工具运营内部页复用用户侧卡片并启用精简自动保存视�
   );
   assert.match(
     portalPanelSource,
-    /const canManageInternalOrder = user\?\.platformRole === 'super_admin';/,
-    '交互升级不能扩大内部工具排序权限',
+    /const canManageInternalOrder = useHasMenu\('portal-ops'\);/,
+    '内部工具排序权限跟门户运营菜单走',
   );
   assert.match(
     portalPanelSource,
