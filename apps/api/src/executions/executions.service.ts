@@ -234,8 +234,9 @@ export class ExecutionsService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async list(workspaceId: string, limit = 50) {
+  async list(workspaceId: string, userId: string, limit = 50) {
     const rows = await this.prisma.execution.findMany({
+      where: { userId },
       orderBy: { updatedAt: 'desc' },
       take: Math.min(Math.max(limit, 1), 200),
     });

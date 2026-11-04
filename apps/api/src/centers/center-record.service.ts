@@ -6,7 +6,7 @@ import {
   getNextWorkflowStatus,
   type CenterKind,
 } from './center-lifecycle';
-import { readAssets } from '../persistence/asset-catalog';
+import { readAssets, catalogScope, type CatalogViewer } from '../persistence/asset-catalog';
 import {
   mapMarketplaceAgentToCenter,
   mapMarketplaceSkillToCenter,
@@ -31,8 +31,8 @@ const ASSET_MANAGED_IN_MARKET = '上下架和资产信息请到货架运营里�
 export class CenterRecordService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(workspaceId: string, kind: CenterKind) {
-    if (isAssetCenterKind(kind)) return this.listAssets(kind);
+  async list(workspaceId: string, kind: CenterKind, viewer?: CatalogViewer) {
+    if (isAssetCenterKind(kind)) return this.listAssets(kind, viewer);
     const rows = await this.prisma.centerResource.findMany({
       where: { kind },
       orderBy: { updatedAt: 'desc' },
@@ -40,16 +40,16 @@ export class CenterRecordService {
     return rows.map((row) => row.payload as Record<string, unknown>);
   }
 
-  private async listAssets(kind: AssetCenterKind) {
-    const items = await readAssets(this.prisma, kind);
+  private async listAssets(kind: AssetCenterKind, viewer?: CatalogViewer) {
+    const items = await readAssets(this.prisma, kind, viewer === undefined ? undefined : catalogScope(kind, viewer));
     return items
       .map((item) => ASSET_CENTER_KINDS[kind](item))
       .filter((item): item is Record<string, unknown> => Boolean(item));
   }
 
-  async findOne(workspaceId: string, kind: CenterKind, id: string) {
+  async findOne(workspaceId: string, kind: CenterKind, id: string, viewer?: CatalogViewer) {
     if (isAssetCenterKind(kind)) {
-      const item = (await this.listAssets(kind)).find((candidate) => String(candidate.id) === id);
+      const item = (await this.listAssets(kind, viewer)).find((candidate) => String(candidate.id) === id);
       if (!item) throw new NotFoundException(`${kind} ${id} not found`);
       return item;
     }
@@ -65,8 +65,9 @@ export class CenterRecordService {
     kind: CenterKind,
     id: string,
     patch: Record<string, unknown>,
+    viewer?: CatalogViewer,
   ) {
-    if (isAssetCenterKind(kind)) return this.updateAsset(workspaceId, kind, id, patch);
+    if (isAssetCenterKind(kind)) return this.updateAsset(workspaceId, kind, id, patch, viewer);
     const current = await this.findOne(workspaceId, kind, id);
     const next = {
       ...current,
@@ -88,14 +89,15 @@ export class CenterRecordService {
     kind: AssetCenterKind,
     id: string,
     patch: Record<string, unknown>,
+    viewer?: CatalogViewer,
   ) {
     const keys = Object.keys(patch).filter((key) => patch[key] !== undefined);
     if (kind !== 'agent' || keys.some((key) => key !== 'persona') || typeof patch.persona !== 'string') {
       throw new ConflictException(ASSET_MANAGED_IN_MARKET);
     }
-    await this.findOne(workspaceId, kind, id);
-    await this.prisma.agent.update({ where: { id }, data: { systemPrompt: patch.persona } });
-    return this.findOne(workspaceId, kind, id);
+    await this.findOne(workspaceId, kind, id, viewer);
+    await this.prisma.agent.update({ where: { id, AND: viewer === undefined ? undefined : catalogScope(kind, viewer) }, data: { systemPrompt: patch.persona } });
+    return this.findOne(workspaceId, kind, id, viewer);
   }
 
   async advancePromptLifecycle(workspaceId: string, id: string) {

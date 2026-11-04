@@ -1,3 +1,4 @@
+import { MenuGuard } from '../persistence/menu.guard';
 import { Module } from '@nestjs/common';
 import {
   AgentsController,
@@ -20,7 +21,7 @@ import { PersistenceModule } from '../persistence/persistence.module';
     KnowledgeController,
     MemoryController,
   ],
-  providers: [CenterRecordService],
+  providers: [CenterRecordService, MenuGuard],
   exports: [CenterRecordService],
 })
 export class CentersModule {}

@@ -19,6 +19,7 @@ import { loadAiKnowledgeSolutions, type AiKnowledgeSolution } from '@/domain/aiK
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { requireLogin } from '@/stores/authGateStore';
+import { stageKnowledgeLoginDraft, takeKnowledgeLoginDraft } from './knowledgeLoginDraft';
 import { LegacyAiKnowledgePage } from './AiKnowledgePage';
 import type { KnowledgeMode } from './KnowledgeDock';
 import './knowledgeChat.css';
@@ -108,7 +109,7 @@ export function AiKnowledgePage() {
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [localPlan, setLocalPlan] = useState(false);
   const [previewVisitor, setPreviewVisitor] = useState<string | null>(() => localStorage.getItem('mss-pilot-visitor'));
-  const bootstrap = useRef<{userId: string; selected: string | null; incoming: AiKnowledgeSolution | null; entry: ReturnType<typeof consumeAiKnowledgeEntry>} | null>(null);
+  const bootstrap = useRef<{userId: string; selected: string | null; incoming: AiKnowledgeSolution | null; entry: ReturnType<typeof consumeAiKnowledgeEntry>; draft: ReturnType<typeof takeKnowledgeLoginDraft>} | null>(null);
   const [input, setInput] = useState('');
   const [inputFocused,setInputFocused]=useState(false);
   const inputRef=useRef<HTMLTextAreaElement>(null);
@@ -127,8 +128,6 @@ export function AiKnowledgePage() {
   const mounted = useRef(true);
   const sessionOwner = useRef<string | null>(null);
   const lock = useRef(false);
-  /** 游客点发送时写下的问题：登录会切换身份并清空页面，登录后放回输入框 */
-  const loginDraft = useRef<{ text: string; mode: KnowledgeMode } | null>(null);
   const userId = useSessionStore(s => s.user?.id || 'guest');
   const setView = useAppViewStore(s => s.setAppView);
   const activeView = useAppViewStore(s => s.appView);
@@ -147,16 +146,14 @@ export function AiKnowledgePage() {
     sessionOwner.current = null;
     lock.current = false; setBusy(false); setPendingMessage(null); setGeneratingPlan(false); setOpenedFromHome(false);
     if (!bootstrap.current || bootstrap.current.userId !== userId) {
-      bootstrap.current = { userId, selected: sessionStorage.getItem('mss-knowledge-mode'), incoming: consumeAiKnowledgeSolution(), entry: consumeAiKnowledgeEntry() };
+      bootstrap.current = { userId, selected: sessionStorage.getItem('mss-knowledge-mode'), incoming: consumeAiKnowledgeSolution(), entry: consumeAiKnowledgeEntry(), draft: takeKnowledgeLoginDraft(userId) };
       sessionStorage.removeItem('mss-knowledge-mode');
     }
-    const { selected, incoming, entry } = bootstrap.current;
-    const draft = userId === 'guest' ? null : loginDraft.current;
-    loginDraft.current = null;
+    const { selected, incoming, entry, draft } = bootstrap.current;
     if(selected) sessionStorage.removeItem(`mss-knowledge-current:${userId}`);
     setSession(null); setReading(null); setHistory([]); setLegacy(incoming); setLocalPlan(Boolean(incoming && loadAiKnowledgeSolutions().some(s => s.id === incoming.id))); setSource(null); setConfirm(false); setError(''); setInput(draft?.text || entry?.question || '');
     setToolSearch({ draft: '', query: '' }); setMode(draft?.mode || entry?.mode || entryMode(selected));
-    setReturnHome(entry?.returnHome===true);
+    setReturnHome(draft?.returnHome ?? entry?.returnHome===true);
     setAutoEntry(!draft && entry?.autoSend ? {question:entry.question,mode:entry.mode||'solution'} : null);
     const last = sessionStorage.getItem(`mss-knowledge-current:${userId}`);
     if (!selected && !incoming && !entry && !draft && last) api<Session>(`/sessions/${encodeURIComponent(last)}`).then(s => { if (mounted.current && requestEpoch === epoch.current) { sessionOwner.current = userId; setSession(s); setMode(s.mode || 'solution'); } }).catch(() => { if (requestEpoch === epoch.current) sessionStorage.removeItem(`mss-knowledge-current:${userId}`); });
@@ -183,12 +180,12 @@ export function AiKnowledgePage() {
   useEffect(() => { if (useAppViewStore.getState().appView === 'ai-knowledge') scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: 'smooth' }); }, [session, busy, pendingMessage]);
   useEffect(() => { if (session?.id && sessionOwner.current === userId) sessionStorage.setItem(`mss-knowledge-current:${userId}`, session.id); }, [session?.id, userId]);
   const accept = (s: Session) => { sessionOwner.current = userId; setSession(s); setPendingMessage(null); setOpenedFromHome(false); setMode(s.mode || 'solution'); setSource(null); };
-  const send = async (retryText?: string) => {
+  const send = async (submittedText = input, kind: 'first' | 'retry' = 'first') => {
     if (mode === 'search') return;
-    const text = (retryText ?? input).trim(); if (!text || lock.current) return;
-    if (!requireLogin('chat')) { loginDraft.current = { text, mode }; return; }
+    const text = submittedText.trim(); if (!text || lock.current) return;
+    if (!requireLogin('chat')) { stageKnowledgeLoginDraft({ text, mode, returnHome }); return; }
     lock.current = true; setBusy(true); setError(''); setPendingMessage({ text, status: 'sending' });
-    if (retryText === undefined) setInput('');
+    if (kind === 'first') setInput('');
     const currentEpoch = epoch.current;
     try {
       const next = await api<Session>(session ? `/sessions/${session.id}/messages` : '/sessions', { message: text, mode });
@@ -260,7 +257,7 @@ export function AiKnowledgePage() {
         {session && !pendingMessage && mode === 'insight' && <button className="knowledge-confirm-button" disabled={busy} onClick={() => { reset('solution'); setInput(('基于刚才的洞察，帮我找落地方案：' + (session.messages.filter(m => m.role === 'user').at(-1)?.text || '') + '\n洞察参考：' + (session.messages.at(-1)?.text || '')).slice(0,4000)); }}>找适合我的方案</button>}
         {pendingMessage && <article className="knowledge-message user"><p>{pendingMessage.text}</p></article>}
         {busy && <div className="knowledge-reply-status" role="status" aria-live="polite" aria-atomic="true"><strong>MAX</strong><span>{generatingPlan ? '正在生成方案' : pendingMessage?.status === 'sending' ? '正在回复' : '正在处理'}</span><span className="knowledge-reply-dots" aria-hidden="true"><i/><i/><i/></span></div>}
-        {pendingMessage?.status === 'failed' && <div className="knowledge-send-failure" role="alert"><p><strong>回复失败</strong><span>{pendingMessage.error}</span></p><button type="button" disabled={busy} onClick={() => void send(pendingMessage.text)}>重新发送</button></div>}
+        {pendingMessage?.status === 'failed' && <div className="knowledge-send-failure" role="alert"><p><strong>回复失败</strong><span>{pendingMessage.error}</span></p><button type="button" disabled={busy} onClick={() => void send(pendingMessage.text, 'retry')}>重新发送</button></div>}
       </div>
       <div className="knowledge-compose-area">
         {!hasConversation && activeView === 'ai-knowledge' && <MaxRobot className="knowledge-perched"/>}

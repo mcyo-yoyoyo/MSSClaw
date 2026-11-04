@@ -5,7 +5,7 @@ import { PromptSchema, type Prompt } from '@/domain/prompt';
 import { SkillSchema, type Skill } from '@/domain/skill';
 import { PlatformToolSchema, type PlatformTool } from '@/domain/tool';
 import { WorkflowSchema, type Workflow } from '@/domain/workflow';
-import { apiUrl } from '@/api/client';
+import { apiUrl, apiAuthHeaders } from '@/api/client';
 import { DATA_FETCH_FAILED_MESSAGE, useDataFetchNotice } from '@/domain/dataFetchNotice';
 import { fetchToolsApi } from '@/api/persistenceApi';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -24,7 +24,7 @@ async function fetchJson<T>(url: string): Promise<T> {
   }
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { headers: apiAuthHeaders() });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     useDataFetchNotice.getState().markOk();
     return (await response.json()) as T;
@@ -42,7 +42,7 @@ async function mutateJson<T>(url: string, init: RequestInit): Promise<T> {
   }
 
   try {
-    const response = await fetch(url, init);
+    const response = await fetch(url, { ...init, headers: { ...init.headers, ...apiAuthHeaders() } });
     if (!response.ok) {
       throw new CenterApiError(`保存失败（HTTP ${response.status}）`);
     }
@@ -274,6 +274,7 @@ export async function fetchExecutionHistory(
   try {
     const res = await fetch(
       apiUrl(`/api/v1/executions?limit=${limit}`),
+      { headers: apiAuthHeaders() },
     );
     if (!res.ok) return [];
     const body = (await res.json()) as { executions?: Array<Record<string, unknown>> };

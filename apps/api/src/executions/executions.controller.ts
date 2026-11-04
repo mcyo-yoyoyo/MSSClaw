@@ -9,7 +9,8 @@ import {
   Req,
   Res,
   UnauthorizedException,
-  UseGuards,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ExecutionsService } from './executions.service';
@@ -97,15 +98,17 @@ export class ExecutionsController {
   }
 
   @Get('executions')
-  list(
+  async list(
     @Query('limit') limit?: string,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
   ) {
+    const user = await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
     const n = limit ? Number(limit) : 50;
-    return this.executionsService.list(workspaceId, Number.isFinite(n) ? n : 50);
+    return this.executionsService.list(workspaceId, String(user.id), Number.isFinite(n) ? n : 50);
   }
 
   @Post('executions/stream')
-  @UseGuards(SseConcurrencyGuard)
   async stream(
     @Body() body: StreamExecutionDto,
     @Req() req: Request,
@@ -113,13 +116,13 @@ export class ExecutionsController {
     @Headers('authorization') authorization?: string,
     @Headers('x-session-token') xSessionToken?: string,
   ) {
-    if (!body?.chatId || !body?.message) {
-      SseConcurrencyGuard.release();
+    const user = await this.requireWorkspaceMember(workspaceId, authorization, xSessionToken);
+    if (!body?.chatId || typeof body.chatId !== 'string' || !body?.message || typeof body.message !== 'string') {
       res.status(400).json({ message: 'chatId and message are required' });
       return;
     }
 
-    const userId = await this.resolveSessionUserId(workspaceId, authorization, xSessionToken);
+    const userId = String(user.id);
     // Build a fresh object so a caller-supplied `userId` (even if added to a future
     // wire DTO) can never become trusted execution identity.
     const execution: StreamExecutionRequest = {
@@ -137,6 +140,7 @@ export class ExecutionsController {
       userId,
     };
 
+    if (!SseConcurrencyGuard.acquire()) throw new HttpException('Too many concurrent execution streams', HttpStatus.TOO_MANY_REQUESTS);
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
@@ -162,25 +166,6 @@ export class ExecutionsController {
       req.off('close', onClose);
       SseConcurrencyGuard.release();
       if (!res.writableEnded) res.end();
-    }
-  }
-
-  private async resolveSessionUserId(
-    workspaceId: string,
-    authorization?: string,
-    xSessionToken?: string,
-  ): Promise<string | undefined> {
-    const token = sessionToken(authorization, xSessionToken);
-    if (!token) return undefined;
-    try {
-      const session = await this.docs.me(token, workspaceId);
-      if (!session.ok) return undefined;
-      const userId = String(session.user?.id ?? '').trim();
-      return userId || undefined;
-    } catch {
-      // Execution remains available to unauthenticated callers; no untrusted
-      // identity is attached when session lookup fails.
-      return undefined;
     }
   }
 
