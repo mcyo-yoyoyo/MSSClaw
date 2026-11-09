@@ -14,7 +14,7 @@ export const ManifestSchema = z.object({
   timeoutSec: z.number().int().min(1).max(1800).default(120),
   memoryMb: z.number().int().min(64).max(4096).default(512),
   inputs: z.object({ extensions: z.array(z.string().regex(/^\.[a-z0-9]+$/)).min(1), maxCount: z.number().int().min(1).max(20) }),
-  outputs: z.array(z.object({ pattern: relativePath, mime: z.enum(['text/markdown', 'text/plain', 'application/json', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'image/png']) })).min(1).max(20),
+  outputs: z.array(z.object({ pattern: relativePath.refine((v) => !v.includes('/'), 'output_must_be_top_level'), mime: z.enum(['text/markdown', 'text/plain', 'application/json', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'image/png']) })).min(1).max(20),
   platforms: z.array(z.enum(['linux', 'darwin', 'win32'])).min(1),
 });
 export type SkillManifest = z.infer<typeof ManifestSchema>;
@@ -38,7 +38,7 @@ export function unpackZip(data: Buffer): Map<string, Buffer> {
     const mode = data.readUInt32LE(offset + 38) >>> 16, local = data.readUInt32LE(offset + 42);
     const name = data.subarray(offset + 46, offset + 46 + nameLength).toString('utf8');
     offset += 46 + nameLength + extra + comment;
-    if (!safePath(name.replace(/\/$/, '')) || (mode & 0xf000) === 0xa000 || (flags & 1)) throw new Error('unsafe_zip_entry');
+    if (!safePath(name.replace(/\/$/, '')) || ![0, 0x8000, 0x4000].includes(mode & 0xf000) || (flags & 1)) throw new Error('unsafe_zip_entry');
     if (name.endsWith('/')) continue;
     total += size;
     if (total > MAX_PACKAGE_BYTES || files.has(name) || ![0, 8].includes(method)) throw new Error('zip_limits');

@@ -27,10 +27,12 @@ export function dockerArgs(o: SandboxOptions, name: string): string[] {
 }
 function cliCommand(cli: string, args: string[]) {
   return new Promise<void>((resolve, reject) => {
-    const child = spawn(cli, args, { stdio: 'ignore' });
+    const child = spawn(cli, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    child.stderr.on('data', (chunk: Buffer) => { if (stderr.length < 2048) stderr += chunk.toString(); });
     const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('sandbox_cleanup_timeout')); }, 10000);
     child.once('error', (error) => { clearTimeout(timer); reject(error); });
-    child.once('close', (code) => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error('sandbox_cleanup_failed')); });
+    child.once('close', (code) => { clearTimeout(timer); code === 0 || (args[0] === 'rm' && /no such container|no container with (?:name|ID)/i.test(stderr)) ? resolve() : reject(new Error('sandbox_cleanup_failed')); });
   });
 }
 async function execute(cli: string, args: string[], o: SandboxOptions, dockerName?: string): Promise<SandboxResult> {
@@ -73,7 +75,8 @@ export class DockerSandboxDriver implements SandboxDriver {
   async run(o: SandboxOptions) {
     const cli = process.env.SKILL_SANDBOX_CLI || 'docker';
     const name = `mss-skill-${o.runId}`;
-    return execute(cli, dockerArgs(o, name), o, name);
+    try { return await execute(cli, dockerArgs(o, name), o, name); }
+    finally { await this.cleanup(o.runId); }
   }
 }
 export class LocalSandboxDriver implements SandboxDriver {

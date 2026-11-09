@@ -4,7 +4,7 @@ import { basename, extname, join } from 'path';
 import type { SkillRun } from '@prisma/client';
 import { BlobStoreService } from '../persistence/blob-store.service';
 import { SkillRunService } from './skill-run.service';
-import { extractPackage, MAX_PACKAGE_BYTES } from './package';
+import { extractPackage, unpackZip, MAX_PACKAGE_BYTES } from './package';
 import type { SandboxDriver } from './sandbox-driver';
 
 export async function blobBytes(blobs: BlobStoreService, id: string) {
@@ -93,8 +93,14 @@ export class SkillWorker {
             const extensions: Record<string, string[]> = { 'text/markdown': ['.md'], 'text/plain': ['.txt'], 'application/json': ['.json'], 'image/png': ['.png'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] };
             if (!extensions[expected.mime].includes(extname(name))) throw new Error('artifact_mime_mismatch');
             if (expected.mime === 'image/png' && bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') throw new Error('artifact_mime_mismatch');
-            if (name.endsWith('.xlsx') && bytes.readUInt32LE(0) !== 0x04034b50) throw new Error('artifact_mime_mismatch');
-            if (expected.mime.startsWith('text/') && bytes.includes(0)) throw new Error('artifact_mime_mismatch');
+            if (name.endsWith('.xlsx')) {
+              const workbook = unpackZip(bytes);
+              if (!workbook.has('[Content_Types].xml') || !workbook.has('xl/workbook.xml')) throw new Error('artifact_mime_mismatch');
+            }
+            if (expected.mime.startsWith('text/')) {
+              new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+              if (bytes.includes(0)) throw new Error('artifact_mime_mismatch');
+            }
             if (expected.mime === 'application/json') JSON.parse(bytes.toString('utf8'));
             const blob = await this.blobs.putBase64({ name, mimeType: expected.mime, dataBase64: bytes.toString('base64'), privateOwner: run.memberId });
             results.push({ id: blob.id, name, mimeType: blob.mimeType, size: blob.size });
