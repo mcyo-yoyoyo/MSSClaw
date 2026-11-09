@@ -1,7 +1,7 @@
 import { apiUrl, apiAuthHeaders } from '@/api/client';
 import { SkillRunSchema, SkillRunEventSchema } from '@/domain/skillRun';
 async function request(path: string, body?: unknown) {
-  const response = await fetch(apiUrl(`/skill-runs${path}`), { method: body === undefined ? 'GET' : 'POST', headers: { ...apiAuthHeaders(), 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  const response = await fetch(apiUrl(`/api/v1/skill-runs${path}`), { method: body === undefined ? 'GET' : 'POST', headers: { ...apiAuthHeaders(), 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message || `HTTP ${response.status}`);
   return response.json();
 }
@@ -21,7 +21,7 @@ export async function getSkillRun(id: string) { return SkillRunSchema.parse(awai
 export async function getSkillRunEvents(id: string, after: number) { return SkillRunEventSchema.array().parse(await request(`/${id}/events?afterSeq=${after}`)); }
 export async function cancelSkillRun(id: string) { return request(`/${id}/cancel`, {}); }
 export async function downloadSkillArtifact(id: string, blobId: string, name: string) {
-  const response = await fetch(apiUrl(`/skill-runs/${id}/artifacts/${blobId}`), { headers: apiAuthHeaders() });
+  const response = await fetch(apiUrl(`/api/v1/skill-runs/${id}/artifacts/${blobId}`), { headers: apiAuthHeaders() });
   if (!response.ok) throw new Error(`下载失败：HTTP ${response.status}`);
   const url = URL.createObjectURL(await response.blob());
   const anchor = document.createElement('a'); anchor.href = url; anchor.download = name; anchor.click();

@@ -154,7 +154,9 @@ export function SkillChatDrawer({ skill, open, onClose, onSkillChange }: SkillCh
       {
         role: 'agent',
         name: initialName,
-        text: `已打开「${initialName}」对话，请描述你的目标或问题。`,
+        text: skill?.executionMode === 'script'
+          ? `已打开「${initialName}」，请在下方选择输入文件后运行。`
+          : `已打开「${initialName}」对话，请描述你的目标或问题。`,
       },
     ];
     setMessages(initialMessages);
