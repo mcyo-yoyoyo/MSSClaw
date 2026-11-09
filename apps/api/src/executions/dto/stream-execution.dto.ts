@@ -10,6 +10,7 @@ export interface StreamExecutionDto {
   actionType?: AgentType;
   kbContext?: string;
   /** 由前端选择的可执行资产；用户身份由控制器会话解析，不接受 body userId。 */
+  inputBlobIds?: string[];
   assetId?: string;
   assetType?: ExecutionAssetType;
 }

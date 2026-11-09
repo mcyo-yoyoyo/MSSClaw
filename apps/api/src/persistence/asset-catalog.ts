@@ -63,7 +63,7 @@ const SPECS: Record<AssetKind, AssetSpec> = {
       ...OWNERSHIP,
       nameZh: 'string', nameEn: 'string', descZh: 'string', descEn: 'string', callable: 'bool',
       featuredInDoTask: 'bool', featuredInMssMarket: 'bool', businessScenarioId: 'string', homepageUrl: 'string', invokes: 'int', iconUrl: 'string', accentColor: 'string',
-      searchKeywords: 'json', instructions: 'string', planSteps: 'json', usageNotes: 'string', packageBlob: 'json',
+      executionMode: 'string', searchKeywords: 'json', instructions: 'string', planSteps: 'json', usageNotes: 'string', packageBlob: 'json',
       traceEvaluation: 'json', updatedBy: 'string', createdAt: 'string', updatedAt: 'string',
     },
     detailKeys: ['cases', 'caseAttachments', 'envInfo', 'securityScan', 'hubTags'],
@@ -107,7 +107,7 @@ const SPECS: Record<AssetKind, AssetSpec> = {
 };
 
 const SKILL_VERSION_FIELDS: Record<string, FieldType> = {
-  version: 'string', notes: 'string', status: 'string', packageBlob: 'json', publishedAt: 'string',
+  executionMode: 'string', version: 'string', notes: 'string', status: 'string', packageBlob: 'json', publishedAt: 'string',
 };
 
 function isRecord(value: unknown): value is JsonRecord {
