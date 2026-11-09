@@ -18,6 +18,7 @@ export type BlobMeta = {
   sha256: string;
   createdAt: string;
   deleteCapabilityHash?: string;
+  privateOwner?: string;
 };
 
 export type UploadedBlob = Omit<BlobMeta, 'deleteCapabilityHash'> & { url: string };
@@ -135,7 +136,7 @@ export class BlobStoreService implements OnModuleInit {
   }
 
   async putBase64(
-    input: { name: string; mimeType?: string; dataBase64: string },
+    input: { name: string; mimeType?: string; dataBase64: string; privateOwner?: string },
   ): Promise<UploadedDeletableBlob> {
     const raw = Buffer.from(input.dataBase64, 'base64');
     if (!raw.length) throw new Error('empty_blob');
@@ -154,6 +155,7 @@ export class BlobStoreService implements OnModuleInit {
       sha256: createHash('sha256').update(raw).digest('hex'),
       createdAt: new Date().toISOString(),
       deleteCapabilityHash,
+      ...(input.privateOwner ? { privateOwner: input.privateOwner } : {}),
     };
     await this.s3.send(
       new PutObjectCommand({
