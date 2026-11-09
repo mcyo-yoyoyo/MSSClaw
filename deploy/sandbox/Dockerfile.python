@@ -1,0 +1,8 @@
+FROM python:3.12.8-slim-bookworm
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir pandas==2.2.3 openpyxl==3.1.5 xlsxwriter==3.2.0 matplotlib==3.9.3 \
+    && useradd --uid 10001 --create-home skill
+ENV PYTHONDONTWRITEBYTECODE=1 MPLCONFIGDIR=/tmp/matplotlib
+USER 10001:10001
+WORKDIR /skill

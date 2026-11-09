@@ -39,7 +39,10 @@
     "migrate:blob-refs": "npm run build --silent && node --env-file-if-exists=.env scripts/migrate-blob-refs.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "import:marketplace": "ts-node --project tsconfig.json scripts/import-marketplace-catalog.ts"
+    "import:marketplace": "ts-node --project tsconfig.json scripts/import-marketplace-catalog.ts",
+    "probe:llm-tools": "node scripts/probe-llm-tool-calls.mjs",
+    "start:skill-worker": "node dist/skill-worker/skill-worker.main.js",
+    "test:skill-sandbox": "npm run build --silent && node --test tests/skillSandbox.test.mjs tests/llmToolProbe.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1153.0",
