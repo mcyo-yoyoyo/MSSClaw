@@ -1,3 +1,4 @@
+import { ScriptRunPanel } from '@/features/skill/ScriptRunPanel';
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { streamExecution } from '@/api/agentRuntime';
 import { MessageBubble } from '@/components/chat/MessageBubble';
@@ -100,6 +101,7 @@ export function SkillChatDrawer({ skill, open, onClose, onSkillChange }: SkillCh
   const [resizing, setResizing] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
+  const [promptFallback, setPromptFallback] = useState(false);
   const [running, setRunning] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [historyChats, setHistoryChats] = useState<ChatConfig[]>([]);
@@ -142,6 +144,7 @@ export function SkillChatDrawer({ skill, open, onClose, onSkillChange }: SkillCh
       setDraft('');
       return;
     }
+    setPromptFallback(false);
     runRef.current?.controller.abort();
     runRef.current = null;
     setRunning(false);
@@ -486,7 +489,8 @@ export function SkillChatDrawer({ skill, open, onClose, onSkillChange }: SkillCh
           )}
         </div>
 
-        {!showHistory ? <footer className="shrink-0 border-t border-zinc-200/90 bg-white p-3">
+        {skill?.executionMode === 'script' && !promptFallback ? <ScriptRunPanel key={skill.id} skillId={skill.id} onFallback={() => { setPromptFallback(true); setMessages((old) => [...old, { role: 'agent', name: displayName, text: '脚本执行未启用，已回退 prompt。' }]); }} /> : null}
+        {!showHistory && (skill?.executionMode !== 'script' || promptFallback) ? <footer className="shrink-0 border-t border-zinc-200/90 bg-white p-3">
           <div className="mb-2 flex items-center gap-1.5 px-1 text-[10px] text-zinc-400">
             <i className="fa-solid fa-robot text-zinc-500" />
             <label className="sr-only" htmlFor="skill-chat-drawer-skill">选择 Skill</label>
