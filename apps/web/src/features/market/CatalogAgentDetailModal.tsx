@@ -563,16 +563,18 @@ export function CatalogAgentDetailModal({
                     >
                       {scopeLabel}
                     </span>
-                    <span
-                      className={cn(
-                        'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold',
-                        lifecycleMeta.badgeClass,
-                      )}
-                      title="Agent 当前成熟度：决定主操作入口"
-                    >
-                      <span className={cn('h-1.5 w-1.5 rounded-full', lifecycleMeta.dotClass)} />
-                      {lifecycleMeta.badgeText({ hasDemo, hasSolutionDoc })}
-                    </span>
+                    {lifecycle !== 'building' && (
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold',
+                          lifecycleMeta.badgeClass,
+                        )}
+                        title="Agent 当前成熟度：决定主操作入口"
+                      >
+                        <span className={cn('h-1.5 w-1.5 rounded-full', lifecycleMeta.dotClass)} />
+                        {lifecycleMeta.badgeText({ hasDemo, hasSolutionDoc })}
+                      </span>
+                    )}
                     <span className="rounded-md bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-800">
                       {version}
                     </span>
