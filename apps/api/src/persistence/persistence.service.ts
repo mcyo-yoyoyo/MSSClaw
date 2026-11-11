@@ -1,7 +1,11 @@
+import { BlobStoreService } from './blob-store.service';
+import { validatePackage } from '../skill-worker/package';
+import { blobBytes } from '../skill-worker/skill-worker';
 import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Optional,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -291,7 +295,7 @@ export class PersistenceService {
   /** 行为写事务按进程排队：上限检查是先计数再插入，排队后同一实例内的并发请求不会一起穿过上限。 */
   private marketEngagementWriteTail: Promise<void> = Promise.resolve();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, @Optional() private readonly blobs?: BlobStoreService) {}
 
   getSessions(memberId: string) {
     return readChats(this.prisma, memberId).then((chats) => ({ chats }));
@@ -444,6 +448,7 @@ export class PersistenceService {
    */
   async putMarketplace(workspaceId: string, payload: MarketplacePayload, actor?: OperationActor) {
     if (Array.isArray(payload?.skills)) {
+      for (const skill of payload.skills) await this.validateScriptSkill(skill);
       const nextIds = new Set(payload.skills.map((item) => (item as { id?: string })?.id));
       const removed = (await readAssets(this.prisma, 'skill')).filter((item) => !nextIds.has(item.id as string));
       if (removed.length) {
@@ -497,8 +502,21 @@ export class PersistenceService {
     return spec.kind === 'agent' ? this.withLinkedSkills(item) : item;
   }
 
+  private async validateScriptSkill(body: unknown) {
+    const input = body as Record<string, unknown>;
+    for (const item of [input, ...(Array.isArray(input.versions) ? input.versions as Record<string, unknown>[] : [])]) {
+      if (item.executionMode !== undefined && !['prompt', 'script', 'agent'].includes(String(item.executionMode))) throw new BadRequestException('invalid_execution_mode');
+      if (item.executionMode !== 'script') continue;
+      const reference = item.packageBlob as { id?: string } | undefined;
+      if (!reference?.id) throw new BadRequestException('script_package_required');
+      try { validatePackage((await blobBytes(this.blobs!, reference.id)).bytes); }
+      catch { throw new BadRequestException('invalid_script_package'); }
+    }
+  }
+
   async createCatalogItem(segment: string, body: unknown, actor?: OperationActor): Promise<Record<string, unknown>> {
     const spec = catalogResource(segment);
+    if (spec.kind === 'skill') await this.validateScriptSkill(body);
     const item = await this.prisma.$transaction((tx) => createAsset(tx, spec.kind, this.catalogBody(body)));
     await this.logCatalogChange(actor, spec.kind, 'create', item);
     return spec.kind === 'agent' ? this.withLinkedSkills(item) : item;
@@ -506,6 +524,7 @@ export class PersistenceService {
 
   async updateCatalogItem(segment: string, id: string, body: unknown, actor?: OperationActor): Promise<Record<string, unknown>> {
     const spec = catalogResource(segment);
+    if (spec.kind === 'skill') await this.validateScriptSkill({ ...(await readAsset(this.prisma, spec.kind, id)), ...(this.catalogBody(body, id) as Record<string, unknown>) });
     const item = await this.prisma.$transaction((tx) =>
       updateAsset(tx, spec.kind, id, this.catalogBody(body, id)),
     );

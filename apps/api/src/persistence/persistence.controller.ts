@@ -554,6 +554,7 @@ export class PersistenceController {
     @Res() res: Response,
   ) {
     const { meta, size, stream } = await this.blobs.get(blobId);
+    if (meta.privateOwner) { stream.destroy(); throw new NotFoundException('blob_not_found'); }
     const storedMimeType = meta.mimeType || 'application/octet-stream';
     // 守卫对本路由放行：栅格图片凭不可猜的随机 ID 公开读取（供 <img> 使用），其余类型仍要 API Key。
     if (!PUBLIC_IMAGE_MIME_TYPES.has(storedMimeType.split(';', 1)[0].trim().toLowerCase()) && !hasValidApiKey(req)) {

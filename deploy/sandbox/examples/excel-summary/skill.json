@@ -1,0 +1,27 @@
+{
+  "entry": "scripts/main.py",
+  "runtime": "python3",
+  "timeoutSec": 60,
+  "memoryMb": 512,
+  "inputs": {
+    "extensions": [
+      ".xlsx"
+    ],
+    "maxCount": 1
+  },
+  "outputs": [
+    {
+      "pattern": "summary.xlsx",
+      "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    },
+    {
+      "pattern": "summary.md",
+      "mime": "text/markdown"
+    }
+  ],
+  "platforms": [
+    "linux",
+    "darwin",
+    "win32"
+  ]
+}

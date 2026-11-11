@@ -210,6 +210,7 @@ export interface PrototypeAgentSeed {
 }
 
 export interface PrototypeSkillSeed extends AssetOwnershipFields {
+  executionMode?: 'prompt' | 'script' | 'agent';
   id: string;
   /**
    * 主展示名（兼容旧数据）——写入时与 nameZh 同步；列表默认展示中文。

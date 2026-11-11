@@ -28,7 +28,7 @@ interface AssetSpec {
 /** 资产 JSON 自带的时间字符串；行时间 createdAt / updatedAt 由库维护 */
 const SOURCE_TIME: Record<string, string> = { createdAt: 'sourceCreatedAt', updatedAt: 'sourceUpdatedAt' };
 /** 非空且有库默认值的列：快照缺省时写默认值 */
-const COLUMN_DEFAULTS: Record<string, unknown> = { invokes: 0 };
+const COLUMN_DEFAULTS: Record<string, unknown> = { invokes: 0, executionMode: 'prompt' };
 
 const OWNERSHIP = {
   publisher: 'string',
@@ -63,7 +63,7 @@ const SPECS: Record<AssetKind, AssetSpec> = {
       ...OWNERSHIP,
       nameZh: 'string', nameEn: 'string', descZh: 'string', descEn: 'string', callable: 'bool',
       featuredInDoTask: 'bool', featuredInMssMarket: 'bool', businessScenarioId: 'string', homepageUrl: 'string', invokes: 'int', iconUrl: 'string', accentColor: 'string',
-      searchKeywords: 'json', instructions: 'string', planSteps: 'json', usageNotes: 'string', packageBlob: 'json',
+      executionMode: 'string', searchKeywords: 'json', instructions: 'string', planSteps: 'json', usageNotes: 'string', packageBlob: 'json',
       traceEvaluation: 'json', updatedBy: 'string', createdAt: 'string', updatedAt: 'string',
     },
     detailKeys: ['cases', 'caseAttachments', 'envInfo', 'securityScan', 'hubTags'],
@@ -107,7 +107,7 @@ const SPECS: Record<AssetKind, AssetSpec> = {
 };
 
 const SKILL_VERSION_FIELDS: Record<string, FieldType> = {
-  version: 'string', notes: 'string', status: 'string', packageBlob: 'json', publishedAt: 'string',
+  executionMode: 'string', version: 'string', notes: 'string', status: 'string', packageBlob: 'json', publishedAt: 'string',
 };
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -171,6 +171,7 @@ function fromColumns(kind: AssetKind, row: JsonRecord): JsonRecord {
   const out: JsonRecord = {};
   for (const key of [...Object.keys(spec.required), ...Object.keys(spec.optional)]) {
     const value = row[SOURCE_TIME[key] ?? key];
+    if (key === 'executionMode' && value === 'prompt') continue;
     if (value !== null && value !== undefined) out[key] = value;
   }
   if (spec.detailKeys && isRecord(row.detail)) {
@@ -289,7 +290,7 @@ export function assetFromRow(kind: AssetKind, row: JsonRecord): JsonRecord {
     out.versions = (row.versions as JsonRecord[]).map((version) =>
       Object.fromEntries(
         Object.keys(SKILL_VERSION_FIELDS)
-          .filter((key) => version[key] !== null && version[key] !== undefined)
+          .filter((key) => version[key] !== null && version[key] !== undefined && !(key === 'executionMode' && version[key] === 'prompt'))
           .map((key) => [key, version[key]]),
       ),
     );

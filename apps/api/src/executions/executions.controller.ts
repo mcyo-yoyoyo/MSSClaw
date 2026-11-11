@@ -1,3 +1,7 @@
+import { SkillRunLauncher } from './skill-run-launcher';
+import { SkillRunService, terminal } from '../skill-worker/skill-run.service';
+import { executionRoute } from './executor-registry';
+import { PrismaService } from '../prisma/prisma.service';
 import {
   BadRequestException,
   Body,
@@ -19,6 +23,7 @@ import type {
   StreamExecutionRequest,
 } from './dto/stream-execution.dto';
 import { SseConcurrencyGuard } from '../common/sse-concurrency.guard';
+import type { CatalogViewer } from '../persistence/persistence.service';
 import { PlatformDocsService } from '../persistence/platform-docs.service';
 // 单租户：原路由参数 workspaceId 固定为平台空间，方法体沿用这个名字（服务层还用它拼 center_record 的记录 id，对应文档迁到正式表时一起去掉）
 import { PLATFORM_WORKSPACE_ID as workspaceId } from '../common/platform-workspace';
@@ -35,6 +40,9 @@ export class ExecutionsController {
   constructor(
     private readonly executionsService: ExecutionsService,
     private readonly docs: PlatformDocsService,
+    private readonly prisma: PrismaService,
+    private readonly launcher: SkillRunLauncher,
+    private readonly skillRuns: SkillRunService,
   ) {}
 
   /**
@@ -122,6 +130,36 @@ export class ExecutionsController {
       return;
     }
 
+    let fallback = false;
+    let script = false;
+    if (body.assetType === 'skill' && body.assetId) {
+      const skill = await this.prisma.skill.findUnique({ where: { id: body.assetId } });
+      if (skill) {
+        const route = executionRoute(skill.executionMode);
+        fallback = route.fallback;
+        script = route.mode === 'script';
+      }
+    }
+    if (script) {
+      const run = await this.launcher.create({ skillId: body.assetId, inputBlobIds: body.inputBlobIds ?? [] }, user);
+      if (!('id' in run)) throw new BadRequestException('script_execution_unavailable');
+      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('X-Accel-Buffering', 'no'); res.flushHeaders?.();
+      let closed = false, seq = 0;
+      const close = () => { closed = true; };
+      res.on('close', close);
+      try {
+        while (!closed) {
+          const events = await this.skillRuns.events(run.id, String(user.id), seq);
+          for (const event of events) { res.write(`data: ${JSON.stringify(event)}\n\n`); seq = event.seq; }
+          const current = await this.skillRuns.owned(run.id, String(user.id));
+          if (terminal(current.status) && events.length < 200) break;
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+      } finally { res.off('close', close); if (!res.writableEnded) res.end(); }
+      return;
+    }
     const userId = String(user.id);
     // Build a fresh object so a caller-supplied `userId` (even if added to a future
     // wire DTO) can never become trusted execution identity.
@@ -146,6 +184,7 @@ export class ExecutionsController {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders?.();
+    if (fallback) res.write(`data: ${JSON.stringify({ type: 'token', content: '脚本执行未启用，回退 prompt。\n' })}\n\n`);
 
     const abortController = new AbortController();
     const onClose = () => abortController.abort();
@@ -173,7 +212,7 @@ export class ExecutionsController {
     workspaceId: string,
     authorization?: string,
     xSessionToken?: string,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<NonNullable<CatalogViewer>> {
     const session = await this.docs.me(sessionToken(authorization, xSessionToken), workspaceId);
     if (!session.ok) {
       throw new UnauthorizedException(session.error || 'platform_docs_login_required');

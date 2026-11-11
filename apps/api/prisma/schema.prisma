@@ -254,6 +254,7 @@ model Tool {
 
 /// Skill：原 marketplace.skills[]
 model Skill {
+  executionMode String @default("prompt") @map("execution_mode")
   no                  BigInt         @id @default(autoincrement())
   id                  String         @unique
   position            Int
@@ -305,6 +306,7 @@ model Skill {
 
 /// Skill 版本：原 skill.versions[]，position 保持数组顺序
 model SkillVersion {
+  executionMode String @default("prompt") @map("execution_mode")
   skillNo     BigInt  @map("skill_no")
   version     String
   position    Int
@@ -905,6 +907,7 @@ model AiNewsFeedItem {
 
 /// 执行记录：原 center_record kind=execution
 model Execution {
+  skillRuns SkillRun[]
   id           String    @id
   userId       String?   @map("member_id")
   chatId       String    @map("chat_id")
@@ -1011,4 +1014,46 @@ model ChatSession {
 
   @@index([ownerUserId, updatedAt], map: "chat_session_owner_idx")
   @@map("chat_session")
+}
+
+model SkillRun {
+  id String @id
+  memberId String @map("member_id")
+  skillId String @map("skill_id")
+  skillVersion String @map("skill_version")
+  executionId String? @map("execution_id")
+  execution Execution? @relation(fields: [executionId], references: [id], onDelete: SetNull)
+  status String @default("queued")
+  inputBlobIds Json @map("input_blob_ids")
+  artifacts Json @default("[]")
+  packageBlob Json @map("package_blob")
+  error String?
+  attempt Int @default(0)
+  lockedBy String? @map("locked_by")
+  lockedUntil DateTime? @map("locked_until") @db.Timestamptz(3)
+  cancelRequested Boolean @default(false) @map("cancel_requested")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  startedAt DateTime? @map("started_at") @db.Timestamptz(3)
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(3)
+  events SkillRunEvent[]
+  @@index([status, createdAt])
+  @@index([memberId, createdAt])
+  @@map("skill_run")
+}
+
+model SkillRunEvent {
+  runId String @map("run_id")
+  seq Int
+  type String
+  payload Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  run SkillRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  @@id([runId, seq])
+  @@map("skill_run_event")
+}
+
+model SkillRunInput {
+  blobId String @id @map("blob_id")
+  memberId String @map("member_id")
+  @@map("skill_run_input")
 }
