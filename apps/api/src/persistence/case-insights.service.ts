@@ -60,7 +60,7 @@ function coverImageField(value: unknown): string | null {
 function parseInput(body: ArticleInput) {
   const sourceCaseId = body.sourceCaseId == null ? null : stringField(body.sourceCaseId, 180, 'source_id');
   const title = stringField(body.title, 180, 'title');
-  const summary = stringField(body.summary, 600, 'summary');
+  const summary = stringField(body.summary, 2_000, 'summary');
   const company = stringField(body.company, 120, 'company');
   const sourceUrl = stringField(body.sourceUrl, 2000, 'source_url');
   const html = stringField(body.html, 1_000_000, 'html');
