@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: Agent 目录、生命周期与下载入口。
+ * [OUTPUT]: CatalogAgentDetailModal；展示平台及自定义适配流程。
+ * [POS]: Agent 详情视图，侧栏不展示当前状态。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { GuestGateLock } from '@/components/auth/GuestGateLock';
@@ -84,7 +90,7 @@ function MetaRow({ label, value }: { label: string; value?: string | null }) {
   return (
     <div className="flex items-start justify-between gap-3 py-2">
       <dt className="shrink-0 text-[11px] text-zinc-400">{label}</dt>
-      <dd className="text-right text-[12px] font-medium leading-relaxed text-zinc-700">{value}</dd>
+      <dd className="min-w-0 whitespace-pre-wrap break-words text-right text-[12px] font-medium leading-relaxed text-zinc-700">{value}</dd>
     </div>
   );
 }
@@ -1167,11 +1173,11 @@ export function CatalogAgentDetailModal({
             <section className="rounded-2xl border border-zinc-200/80 bg-zinc-50/60 p-3">
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-400">关键状态</p>
               <dl className="divide-y divide-zinc-200/70">
-                <MetaRow label="当前状态" value={lifecycleMeta.badgeText({ hasDemo, hasSolutionDoc })} />
                 <MetaRow label="当前版本" value={version} />
                 <MetaRow label="更新时间" value={updatedAt} />
                 <MetaRow label="创建时间" value={createdAt} />
                 <MetaRow label="适配平台" value={platforms.join('、')} />
+                {environment?.adaptationProcess?.trim() ? <MetaRow label="适配流程" value={environment.adaptationProcess} /> : null}
                 <MetaRow label="开放范围" value={scopeLabel} />
                 <MetaRow label="创建人" value={assetCreatorName(agent)} />
                 <MetaRow label="维护团队" value={maintainer} />

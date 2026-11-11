@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: Agent 目录保存接口、表单组件与附件上传能力。
+ * [OUTPUT]: AgentEditorModal；编辑适配平台和适配流程。
+ * [POS]: Agent 后台编辑入口，环境信息写入 environment。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import type { AssetApprovalReason } from '@/domain/assetApproval';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CenterModal } from '@/components/center/CenterShell';
@@ -600,6 +606,7 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
       .filter((item) => item.title);
     const environment = compactObject({
       platforms: cleanList(form.environment?.platforms),
+      adaptationProcess: clean(form.environment?.adaptationProcess),
       usageModes: cleanList(form.environment?.usageModes),
       requirements: cleanList(form.environment?.requirements),
       configuration: cleanList(form.environment?.configuration),
@@ -859,6 +866,29 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
             placeholder={`@${form.name || 'Agent名'} /技能指令 请基于演示样例…`}
             value={form.demoPrompt ?? ''}
             onChange={(e) => setForm({ ...form, demoPrompt: e.target.value })}
+          />
+        </FormField>
+            <FormField
+              label="适配平台（每行一个）"
+              hint={`用于详情页运行环境信息；建议：${AGENT_PLATFORM_PRESETS.join('、')}`}
+            >
+              <FormTextarea
+                rows={3}
+                value={(form.environment?.platforms ?? []).join('\n')}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    environment: { ...form.environment, platforms: splitLines(e.target.value) },
+                  })
+                }
+              />
+            </FormField>
+        <FormField label="适配流程" hint="填写此 Agent 适用的业务流程，支持换行">
+          <FormTextarea
+            rows={3}
+            placeholder="如：需求收集 → 方案生成 → 人工审核"
+            value={form.environment?.adaptationProcess ?? ''}
+            onChange={(e) => setForm({ ...form, environment: { ...form.environment, adaptationProcess: e.target.value } })}
           />
         </FormField>
         <FormField label="编排计划（每行一步）" hint="多 Skill 编排步骤；留空则用主 Skill 计划">
@@ -1525,21 +1555,6 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
             详情页 · 运行环境与入口
           </summary>
           <div className="mt-3 space-y-3">
-            <FormField
-              label="适配平台（每行一个）"
-              hint={`用于详情页运行环境信息；建议：${AGENT_PLATFORM_PRESETS.join('、')}`}
-            >
-              <FormTextarea
-                rows={3}
-                value={(form.environment?.platforms ?? []).join('\n')}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    environment: { ...form.environment, platforms: splitLines(e.target.value) },
-                  })
-                }
-              />
-            </FormField>
             <FormField label="使用方式（每行一个）" hint="如平台在线使用、员工助手导入、本地执行包">
               <FormTextarea
                 rows={3}

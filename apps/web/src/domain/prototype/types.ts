@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 平台资产及组织归属的类型定义。
+ * [OUTPUT]: Skill、Agent、Tool 等业务类型。
+ * [POS]: 前端目录数据契约，AgentEnvironmentInfo 包含适配流程。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 /** 与根目录 index.html 设计稿对齐的原始种子类型（单一数据源） */
 
 import type { AgentCapabilityTypeId } from '@/domain/agentHubFilters';
@@ -92,6 +98,8 @@ export interface AgentCaseItem {
 }
 
 export interface AgentEnvironmentInfo {
+  /** 后台自由填写的适配业务流程。 */
+  adaptationProcess?: string;
   platforms?: string[];
   usageModes?: string[];
   requirements?: string[];
