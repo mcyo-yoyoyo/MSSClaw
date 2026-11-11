@@ -28,6 +28,7 @@ export function createOfficeSceneId(existingIds: string[]): string {
 }
 
 export interface InternalOfficeSceneTool {
+  sceneId?: string;
   id: string;
   name: string;
   blurb: string;
@@ -47,6 +48,8 @@ export interface InternalOfficeScene {
 
 /** 运营可持久化的场景字典条目 */
 export interface InternalOfficeSceneCatalogEntry {
+  /** 场景专属使用指导，未填写时使用工具 docsUrl。 */
+  guideUrl?: string;
   id: InternalOfficeSceneId;
   label: string;
   english: string;
@@ -154,7 +157,7 @@ export function materializeOfficeScenes(
         const catalog = byId.get(toolId);
         if (!isOfficeCatalogToolEligible(catalog)) return [];
         return [
-          seedToolOrFallback(toolId, entry.toolBlurbs?.[toolId], catalog),
+          { ...seedToolOrFallback(toolId, entry.toolBlurbs?.[toolId], catalog), sceneId: entry.id },
         ];
       }),
     }));
@@ -165,4 +168,19 @@ export function resolveOfficeScenesWithCatalog(
   entries: InternalOfficeSceneCatalogEntry[] = getInternalOfficeSceneCatalog(),
 ): InternalOfficeScene[] {
   return materializeOfficeScenes(entries, catalogTools);
+}
+
+export function isValidOfficeGuideUrl(value: string): boolean {
+  if (!value.trim()) return true;
+  if (value.trim().length > 2048) return false;
+  try {
+    const url = new URL(value.trim());
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
+  } catch { return false; }
+}
+
+export function resolveOfficeGuideUrl(toolId: string, docsUrl: string | undefined, sceneId: string | undefined, entries: InternalOfficeSceneCatalogEntry[]): string {
+  const scene = sceneId ? entries.find(entry => entry.id === sceneId && entry.visible && entry.toolIds.includes(toolId)) : undefined;
+  const guide = scene?.guideUrl?.trim();
+  return guide && isValidOfficeGuideUrl(guide) ? guide : docsUrl?.trim() || '';
 }

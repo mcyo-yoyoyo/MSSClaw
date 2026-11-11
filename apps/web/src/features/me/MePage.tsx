@@ -1,3 +1,4 @@
+import { formatVersion } from '@/domain/formatVersion';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { ToolLogo } from '@/components/brand/ToolLogo';
@@ -504,7 +505,7 @@ function SubmissionCard({
           </span>
           <span className="mt-1 block text-[11px] text-zinc-400">
             {item.kind === 'skill' ? 'Skill' : 'Agent'}
-            {item.version ? ` · v${item.version}` : ''}
+            {item.version ? ` · ${formatVersion(item.version)}` : ''}
             {item.approval?.targetVersion ? ` · 目标 v${item.approval.targetVersion}` : ''}
           </span>
           {item.approval?.rejectNote ? (

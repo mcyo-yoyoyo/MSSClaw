@@ -210,6 +210,8 @@ export interface PrototypeAgentSeed {
 }
 
 export interface PrototypeSkillSeed extends AssetOwnershipFields {
+  /** 配置后详情页下载优先跳转此地址；留空使用 Skill 包。 */
+  downloadUrl?: string;
   id: string;
   /**
    * 主展示名（兼容旧数据）——写入时与 nameZh 同步；列表默认展示中文。

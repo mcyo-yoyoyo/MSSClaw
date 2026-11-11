@@ -1,3 +1,5 @@
+import { resolveOfficeGuideUrl } from '@/domain/internalOfficeScenes';
+import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
@@ -46,12 +48,14 @@ function SectionTitle({ children, large = false }: { children: string; large?: b
 
 export function MarketToolDetailModal({
   toolId,
+  sceneId,
   onClose,
   interactionMode = 'user',
   asPage = false,
   pageHeaderAction,
 }: {
   toolId: string;
+  sceneId?: string;
   onClose: () => void;
   /** 资产详情页整页呈现：去掉遮罩和关闭按钮，返回由页面顶栏负责 */
   asPage?: boolean;
@@ -60,6 +64,10 @@ export function MarketToolDetailModal({
   /** 运营侧只读详情：保留内容与文档链接，不写入收藏、使用或最近访问。 */
   interactionMode?: 'user' | 'preview';
 }) {
+  const sceneEntries = useInternalOfficeSceneCatalogStore(s => s.entries);
+  const scenesLoaded = useInternalOfficeSceneCatalogStore(s => s.loaded);
+  const hydrateScenes = useInternalOfficeSceneCatalogStore(s => s.hydrate);
+  useEffect(() => { if (sceneId && !scenesLoaded) void hydrateScenes(); }, [sceneId, scenesLoaded, hydrateScenes]);
   const tools = useMarketplaceStore((s) => s.tools);
   const showToast = useMarketplaceStore((s) => s.showToast);
   const bumpToolInvokes = useMarketplaceStore((s) => s.bumpToolInvokes);
@@ -167,7 +175,8 @@ export function MarketToolDetailModal({
   const chipText = asPage ? 'text-[12px]' : 'text-[11px]';
   const kindLabel = kind === 'internal' ? '公司工具' : '外部工具';
   const hasHome = Boolean(tool.homepageUrl && tool.homepageUrl !== '#');
-  const hasDocs = Boolean(tool.docsUrl?.trim());
+  const guideUrl = resolveOfficeGuideUrl(tool.id, tool.docsUrl, sceneId, sceneEntries);
+  const hasDocs = Boolean(guideUrl);
   const regionLabel =
     kind === 'external'
       ? tool.region === 'domestic'
@@ -297,7 +306,7 @@ export function MarketToolDetailModal({
               )}
               {hasDocs ? (
                 <a
-                  href={tool.docsUrl}
+                  href={guideUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 rounded-xl border border-black/8 px-3.5 py-2 text-[12px] font-medium text-zinc-600 transition hover:bg-black/[0.03]"

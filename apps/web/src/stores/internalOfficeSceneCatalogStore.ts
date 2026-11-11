@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import {
   createOfficeSceneId,
+  isValidOfficeGuideUrl,
   isInternalOfficeSceneId,
   setInternalOfficeSceneCatalog,
   type InternalOfficeSceneCatalogEntry,
@@ -113,6 +114,7 @@ function normalizeEntries(
         return invalid('toolBlurbs');
       }
     }
+    if (entry.guideUrl != null && (typeof entry.guideUrl !== 'string' || !isValidOfficeGuideUrl(entry.guideUrl))) return invalid('guideUrl');
     // hydrate 不修剪、不去重、不补默认值；读取到的正式状态与数据库保持一致。
     return {
       id: entry.id,
@@ -123,6 +125,7 @@ function normalizeEntries(
       visible: entry.visible,
       toolIds: [...toolIds],
       toolBlurbs: { ...entry.toolBlurbs },
+      guideUrl: entry.guideUrl || '',
     };
   });
 }
@@ -142,6 +145,7 @@ function patchEntry(
   return {
     ...entry,
     ...patch,
+    guideUrl: (patch.guideUrl ?? entry.guideUrl ?? '').trim(),
     label: (patch.label ?? entry.label).trim() || entry.label,
     english: patch.english === undefined ? entry.english : patch.english.trim(),
     description:
@@ -446,6 +450,7 @@ export const useInternalOfficeSceneCatalogStore =
         visible: input?.visible ?? false,
         toolIds: [...new Set((input?.toolIds ?? []).filter(Boolean))],
         toolBlurbs: {},
+        guideUrl: input?.guideUrl?.trim() || '',
       };
       entry.toolBlurbs = normalizeToolBlurbs(entry.toolIds, input?.toolBlurbs);
       let next = [...list, entry];

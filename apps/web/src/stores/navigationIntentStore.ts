@@ -21,6 +21,9 @@ export type MessageFilterIntent =
   | 'ai_news';
 
 interface NavigationIntentState {
+  pendingMarketSurface: 'projects' | 'skills' | null;
+  focusMarketSurface: (surface: 'projects' | 'skills') => void;
+  consumeMarketSurface: () => 'projects' | 'skills' | null;
   pendingToolId: string | null;
   /** 打开工具详情时默认落在哪个 Tab */
   pendingToolDetailTab: MarketToolDetailTab | null;
@@ -91,6 +94,13 @@ interface NavigationIntentState {
 }
 
 export const useNavigationIntentStore = create<NavigationIntentState>((set, get) => ({
+  pendingMarketSurface: null,
+  focusMarketSurface: (surface) => set({ pendingMarketSurface: surface }),
+  consumeMarketSurface: () => {
+    const surface = get().pendingMarketSurface;
+    if (surface) set({ pendingMarketSurface: null });
+    return surface;
+  },
   pendingToolId: null,
   pendingToolDetailTab: null,
   pendingKbDocId: null,
@@ -212,6 +222,7 @@ export const useNavigationIntentStore = create<NavigationIntentState>((set, get)
 
   clearAll: () =>
     set({
+      pendingMarketSurface: null,
       pendingToolId: null,
       pendingToolDetailTab: null,
       pendingKbDocId: null,

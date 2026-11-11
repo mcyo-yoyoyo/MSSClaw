@@ -186,7 +186,7 @@ export function MarketSkillSubmitModal({
       return;
     }
     if (visibility === 'org' && ownerDeptIds.length === 0) {
-      showToast('选择“部门可见”时，请选择一个归属职能');
+      showToast('选择“部门可见”时，请选择一个应用领域');
       return;
     }
 
@@ -444,6 +444,8 @@ export function MarketSkillSubmitModal({
           </label>
         </div>
         <OwnershipFormFields
+          deptLabel="应用领域"
+          regionLabel="应用区域"
           singleDept
           singleDeptHint={visibility === 'org' ? '单选 · 部门可见时必选' : '单选 · 用于资产归属'}
           ownerDeptIds={ownerDeptIds}

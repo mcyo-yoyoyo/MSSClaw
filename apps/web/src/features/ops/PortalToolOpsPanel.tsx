@@ -552,6 +552,7 @@ export function PortalToolOpsPanel() {
   const [externalListMode, setExternalListMode] = useState<ExternalListMode>('listed');
   const [externalRankMode, setExternalRankMode] = useState<RankMode>('excel_order');
   const [externalRankDirection, setExternalRankDirection] = useState<RankDirection>('asc');
+  const [previewSceneId, setPreviewSceneId] = useState<string | undefined>();
   const [previewToolId, setPreviewToolId] = useState<string | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
@@ -1506,8 +1507,8 @@ export function PortalToolOpsPanel() {
               setInternalDrag(null);
             }}
             onSceneDrop={dropInternalScene}
-            onOpenDetail={(tool) => setPreviewToolId(tool.id)}
-            onHowTo={(tool) => setPreviewToolId(tool.id)}
+            onOpenDetail={(tool) => { setPreviewSceneId(tool.sceneId); setPreviewToolId(tool.id); }}
+            onHowTo={(tool) => { setPreviewSceneId(tool.sceneId); setPreviewToolId(tool.id); }}
             onExperience={(tool) => setPreviewToolId(tool.id)}
             onEmptyAction={(scene) =>
               showToast(
@@ -1807,8 +1808,9 @@ export function PortalToolOpsPanel() {
       {previewToolId ? (
         <MarketToolDetailModal
           toolId={previewToolId}
+          sceneId={previewSceneId}
           interactionMode="preview"
-          onClose={() => setPreviewToolId(null)}
+          onClose={() => { setPreviewToolId(null); setPreviewSceneId(undefined); }}
         />
       ) : null}
     </div>

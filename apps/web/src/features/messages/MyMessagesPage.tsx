@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { announcementDetail, announcementEvent, shareAnnouncement } from '@/api/announcementApi';
+import { readAppRouteFromLocation } from '@/domain/appRoute';
+import type { InboxMessage } from '@/domain/inbox';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { AnnouncementBody } from '@/components/common/AnnouncementBody';
 import {
@@ -28,6 +31,27 @@ export function MyMessagesPage() {
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showOlder, setShowOlder] = useState(false);
+  const [link, setLink] = useState(readAppRouteFromLocation);
+  const [linkedMessage, setLinkedMessage] = useState<InboxMessage | null>(null);
+  const [linkError, setLinkError] = useState('');
+  const [shareNotice, setShareNotice] = useState('');
+  const viewed = useRef<string | null>(null);
+  useEffect(() => {
+    const sync = () => { setLink(readAppRouteFromLocation()); viewed.current = null; };
+    window.addEventListener('hashchange', sync); window.addEventListener('popstate', sync);
+    return () => { window.removeEventListener('hashchange', sync); window.removeEventListener('popstate', sync); };
+  }, []);
+  useEffect(() => {
+    setLinkedMessage(null); setLinkError('');
+    if (!link.announcement || !userId) return;
+    let cancelled = false;
+    void announcementDetail(link.announcement).then(a => {
+      if (cancelled) return;
+      setLinkedMessage({id:a.id,kind:'announce',title:a.title,body:a.body,fromName:'能力运营',toUserId:'*',createdAt:a.publishedAt,read:true});
+      setSelectedId(a.id); markRead(a.id);
+    }).catch(() => { if (!cancelled) setLinkError('该公告未上架、已删除或无权查看'); });
+    return () => { cancelled = true; };
+  }, [link.announcement, userId, markRead]);
 
   useEffect(() => {
     // 运营刚发布的公告是服务端落库的广播消息，进页面拉一次才能直接展开全文。
@@ -91,7 +115,13 @@ export function MyMessagesPage() {
   }, [matchedMessages, recentMessages, selectedId, showOlder]);
 
   const selected =
-    platformMessages.find((m) => m.id === selectedId) ?? platformMessages[0] ?? null;
+    link.announcement ? linkedMessage : platformMessages.find((m) => m.id === selectedId) ?? platformMessages[0] ?? null;
+
+  useEffect(() => {
+    if (!userId || !selected || selected.kind !== 'announce' || viewed.current === selected.id) return;
+    viewed.current = selected.id;
+    void announcementEvent(selected.id, 'view', link.announcement === selected.id && link.source === 'share' ? 'share' : 'system').catch(() => undefined);
+  }, [selected?.id, userId, link.announcement, link.source]);
 
   return (
     <div className="center-surface center-page scroll-hidden flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -136,6 +166,9 @@ export function MyMessagesPage() {
                     key={m.id}
                     type="button"
                     onClick={() => {
+                      setLink({view:'messages'});
+                      window.history.replaceState(null, '', '#/messages');
+                      viewed.current = null;
                       setSelectedId(m.id);
                       if (!m.read) markRead(m.id);
                     }}
@@ -207,6 +240,10 @@ export function MyMessagesPage() {
                     </p>
                   </div>
                 </div>
+                {selected.kind === 'announce' && <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => { void shareAnnouncement(selected.id).then(() => setShareNotice('链接已复制')).catch(error => setShareNotice(error.message)); }} className="rounded-lg border px-3 py-1.5 text-[12px]">分享链接</button>
+                  <span className="text-[12px] text-zinc-500">{shareNotice}</span>
+                </div>}
                 {/* 公告正文可带图片，其它消息仍是纯文本 */}
                 {selected.kind === 'announce' ? (
                   <AnnouncementBody body={selected.body} />
@@ -235,7 +272,7 @@ export function MyMessagesPage() {
               </div>
             ) : (
               <div className="flex h-full items-center justify-center text-[12px] text-zinc-400">
-                选择左侧公告查看全文
+                {linkError || (link.announcement ? '正在加载公告…' : '选择左侧公告查看全文')}
               </div>
             )}
           </main>

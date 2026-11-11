@@ -33,10 +33,12 @@ const OFFICE_SCENE: TableSpec = {
     visible: { type: 'bool', required: true },
     toolId: { type: 'string' },
     toolBlurb: { type: 'string' },
+    guideUrl: { type: 'string' },
   },
 };
 
 type OfficeSceneEntry = {
+  guideUrl?: string;
   id: string;
   label: string;
   english: string;

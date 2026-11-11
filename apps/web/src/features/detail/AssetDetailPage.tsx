@@ -26,6 +26,7 @@ import { useCaseInsightArticle } from '@/features/ai-brief/useCaseInsightArticle
 import { CatalogAgentDetailModal } from '@/features/market/CatalogAgentDetailModal';
 import { MarketSkillDetailModal } from '@/features/market/MarketSkillDetailModal';
 import { MarketToolDetailModal } from '@/features/market/MarketToolDetailModal';
+import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useAppViewStore } from '@/stores/appViewStore';
 import { useAuthGateStore } from '@/stores/authGateStore';
 import { useContentEngagementStore } from '@/stores/contentEngagementStore';
@@ -97,7 +98,7 @@ function StatePanel({ icon, title, children }: { icon: string; title: string; ch
  * 在应用外壳里渲染但不带平台导航；正文复用各类资产原来的详情弹窗，以整页方式呈现。
  */
 export function AssetDetailPage({ handlers }: { handlers: AppViewRouterHandlers }) {
-  const { type, id } = useDetailRoute();
+  const { type, id, sceneId } = useDetailRoute();
   const setAppView = useAppViewStore((s) => s.setAppView);
   const requestLogin = useAuthGateStore((s) => s.requestLogin);
   const user = useSessionStore((s) => s.user);
@@ -178,11 +179,16 @@ export function AssetDetailPage({ handlers }: { handlers: AppViewRouterHandlers 
 
   const goToList = () => {
     if (type === 'case') setAiBriefContentMode('cases');
+    if (type === 'agent') useNavigationIntentStore.getState().focusMarketSurface('projects');
     setAppView(listView);
   };
 
-  // 平台内点进来的回上一页；直达（分享链接、书签、新标签）回该类列表
+  // Agent 明确返回 AgentHub；其余资产保留站内返回与直达列表逻辑。
   const goBack = () => {
+    if (type === 'agent') {
+      goToList();
+      return;
+    }
     if ((window.history.state as { fromApp?: boolean } | null)?.fromApp) window.history.back();
     else goToList();
   };
@@ -194,7 +200,7 @@ export function AssetDetailPage({ handlers }: { handlers: AppViewRouterHandlers 
       return;
     }
     bumpShare(id, type);
-    const copied = await copyText(assetDetailUrl(type as DetailAssetType, id, shareCode));
+    const copied = await copyText(assetDetailUrl(type as DetailAssetType, id, shareCode, sceneId));
     showToast(copied ? '已复制链接' : '复制失败，请手动复制地址栏链接');
   };
 
@@ -249,7 +255,7 @@ export function AssetDetailPage({ handlers }: { handlers: AppViewRouterHandlers 
     body = <StatePanel icon="fa-ban" title="暂无权限查看" />;
   } else if (tool) {
     const related = relatedTools(tool, tools, (item) => canViewAsset(item, viewer));
-    const detail = <MarketToolDetailModal toolId={tool.id} onClose={goBack} asPage pageHeaderAction={shareButton} />;
+    const detail = <MarketToolDetailModal sceneId={sceneId} toolId={tool.id} onClose={goBack} asPage pageHeaderAction={shareButton} />;
     // 左详情、右推荐（右栏窄一些）；窄屏时推荐排到详情下方，整页滚动；没有可推荐的工具时只显示详情
     body = related.length ? (
       <div className="mx-auto flex h-full max-w-6xl flex-col gap-4 overflow-y-auto lg:flex-row lg:overflow-visible">

@@ -134,6 +134,7 @@ const EXTERNAL_TOOL_LAYOUT_UNSAFE_CATEGORY_IDS = new Set([
 type JsonObject = Record<string, unknown>;
 
 interface CanonicalOfficeSceneEntry {
+  guideUrl: string;
   id: string;
   label: string;
   english: string;
@@ -615,6 +616,13 @@ function canonicalizeOfficeSceneInput(payload: unknown): CanonicalOfficeSceneInp
     if (seenIds.has(id)) invalidOfficeScenes(`${path}.id`, 'duplicate');
     seenIds.add(id);
 
+    const guideUrl = boundedString(rawEntry.guideUrl ?? '', `${path}.guideUrl`, 2048, { allowEmpty: true });
+    if (guideUrl) {
+      try {
+        const url = new URL(guideUrl);
+        if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('invalid_url');
+      } catch { invalidOfficeScenes(`${path}.guideUrl`, 'http_url_required'); }
+    }
     const label = boundedString(rawEntry.label, `${path}.label`, OFFICE_SCENE_LIMITS.label);
     const english = boundedString(
       rawEntry.english,
@@ -679,6 +687,7 @@ function canonicalizeOfficeSceneInput(payload: unknown): CanonicalOfficeSceneInp
       visible: rawEntry.visible,
       toolIds,
       toolBlurbs,
+      guideUrl,
     };
   });
 

@@ -89,7 +89,7 @@ function persistFromState(
   persistDoc(items, map);
 }
 
-function applyApproval(kind: AssetApprovalKind, assetId: string, req: AssetApprovalRequest) {
+async function applyApproval(kind: AssetApprovalKind, assetId: string, req: AssetApprovalRequest) {
   const reasons = req.reasons?.length ? req.reasons : (['publish_executable'] as AssetApprovalReason[]);
   const market = useMarketplaceStore.getState();
   const wantUnpublish = reasons.includes('unpublish_skill');
@@ -102,7 +102,7 @@ function applyApproval(kind: AssetApprovalKind, assetId: string, req: AssetAppro
   if (kind === 'agent') {
     const agent = market.agents.find((a) => a.id === assetId);
     if (agent) {
-      market.upsertAgent({
+      await market.saveAgentNow({
         ...agent,
         ...(wantUnpublish ? { published: false } : {}),
         ...(wantPublish ? { published: true } : {}),
@@ -308,13 +308,18 @@ export const useAssetApprovalStore = create<AssetApprovalState>((set, get) => ({
     set({ current: req, currentRecordId: rec.id });
   },
 
-  advance: () => {
+  advance: async () => {
     const cur = get().current;
     const recordId = get().currentRecordId;
     if (!cur) return;
     const next = cur.stepIndex + 1;
     if (next >= 3) {
-      applyApproval(cur.kind, cur.assetId, cur);
+      try {
+        await applyApproval(cur.kind, cur.assetId, cur);
+      } catch (error) {
+        useMarketplaceStore.getState().showToast(`审批未生效：${error instanceof Error ? error.message : '保存失败'}，请重试`);
+        return;
+      }
       const now = Date.now();
       const history = get().history.map((h) =>
         (recordId ? h.id === recordId : h.assetId === cur.assetId && h.status === 'pending')

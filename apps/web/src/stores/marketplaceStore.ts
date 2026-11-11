@@ -89,9 +89,11 @@ interface MarketplaceState {
   persist: () => void;
   persistTools: () => void;
   upsertAgent: (agent: PrototypeAgentSeed, isNew?: boolean) => void;
+  saveAgentNow: (agent: PrototypeAgentSeed) => Promise<void>;
   upsertSkill: (skill: PrototypeSkillSeed, isNew?: boolean) => void;
   upsertTool: (tool: PrototypeToolSeed, isNew?: boolean) => void;
   saveToolNow: (tool: PrototypeToolSeed, isNew?: boolean) => Promise<MarketplaceSaveResult>;
+  saveSkillNow: (skill: PrototypeSkillSeed, isNew: boolean, expectedUpdatedAt?: string) => Promise<MarketplaceSaveResult>;
   deleteSkillNow: (id: string) => Promise<MarketplaceSaveResult>;
   deleteToolNow: (id: string) => Promise<MarketplaceSaveResult>;
   upsertAutomation: (automation: PrototypeAutomation, isNew?: boolean) => void;
@@ -289,6 +291,10 @@ async function writeCatalogItem(
   isNew: boolean,
   expectedUpdatedAt?: string,
 ) {
+  if (resource === 'agents') {
+    const { linkedSkills: _linkedSkills, ...writable } = item;
+    item = writable;
+  }
   const body =
     !isNew && expectedUpdatedAt
       ? { ...item, expectedUpdatedAt }
@@ -439,6 +445,13 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     persistLatest();
   },
 
+  saveAgentNow: async (agent) => {
+    if (!catalogOnline()) throw new Error('后端未连接，审批尚未生效');
+    const previous = get().agents.find(item => item.id === agent.id);
+    const saved = await writeCatalogItem('agents', agent as unknown as Record<string, unknown>, false, previous?.updatedAt);
+    set(state => ({ agents: state.agents.map(item => item.id === agent.id ? { ...agent, ...saved } : item) }));
+  },
+
   upsertAgent: (agent, isNew = false) => {
     const previous = get().agents.find((item) => item.id === agent.id);
     const stamped = stampIfNew(agent, isNew);
@@ -518,6 +531,19 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
       },
     );
     return operation;
+  },
+
+  saveSkillNow: async (skill, isNew, expectedUpdatedAt) => {
+    if (!catalogOnline()) return { synced: false, reason: 'offline' };
+    try {
+      const stamped = stampIfNew(skill, isNew);
+      const saved = await writeCatalogItem('skills', stamped as unknown as Record<string, unknown>, isNew, expectedUpdatedAt);
+      const item = { ...stamped, ...saved } as PrototypeSkillSeed;
+      set(state => ({ skills: [item, ...state.skills.filter(s => s.id !== item.id)] }));
+      return { synced: true };
+    } catch (error) {
+      return { synced: false, reason: 'failed', detail: error instanceof Error ? error.message : '保存失败' };
+    }
   },
 
   deleteSkillNow: async (id) => {

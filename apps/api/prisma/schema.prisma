@@ -278,6 +278,7 @@ model Skill {
   sourceType          String?        @map("source_type")
   visibility          String?
   homepageUrl         String?        @map("homepage_url")
+  downloadUrl         String?        @map("download_url")
   scenarioTags        Json?          @map("scenario_tags")
   invokes             Int            @default(0)
   icon                String
@@ -727,6 +728,7 @@ model SkillReview {
 
 /// 内部办公场景：原 doc:internal-office-scenes.entries[]；整表替换用 collection_revision('office-scenes')
 model OfficeScene {
+  guideUrl    String?  @map("guide_url")
   id          String   @id
   position    Int
   label       String
@@ -1011,4 +1013,16 @@ model ChatSession {
 
   @@index([ownerUserId, updatedAt], map: "chat_session_owner_idx")
   @@map("chat_session")
+}
+
+/// 公告浏览与分享事件；eventId 用于重复请求去重。
+model AnnouncementEvent {
+  id String @id
+  announcementId String @map("announcement_id")
+  memberId String @map("member_id")
+  kind String
+  source String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  @@index([announcementId, kind, memberId])
+  @@map("announcement_event")
 }

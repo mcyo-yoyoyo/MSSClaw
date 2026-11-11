@@ -1,3 +1,4 @@
+import { AnnouncementMetricsController } from './announcement-metrics.controller';
 import { Module } from '@nestjs/common';
 import { CatalogController } from './catalog.controller';
 import { HomeController } from './home.controller';
@@ -21,6 +22,7 @@ import { MenuGuard } from './menu.guard';
 
 @Module({
   controllers: [
+    AnnouncementMetricsController,
     PersistenceController,
     CatalogController,
     HomeController,

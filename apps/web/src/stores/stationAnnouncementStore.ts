@@ -192,7 +192,7 @@ function commit(
         }
         return;
       }
-      set({ toast: '保存失败：公告改动未写入服务器，请检查登录状态后重试' });
+      set({ items: previous, toast: '保存失败：公告改动未写入服务器，请检查登录状态后重试' });
     }
   })();
 }

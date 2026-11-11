@@ -301,7 +301,8 @@ export function toggleSkillHubTag(
   actor: string,
 ): SkillHubTags {
   const base = current ?? emptySkillHubTags();
-  if (!VOCAB[field].has(label)) return base;
+  label = label.trim();
+  if (!label || label.length > 50) return base;
   const selected = new Set(base[field]);
   const adding = !selected.has(label);
   if (adding) selected.add(label);
@@ -386,7 +387,7 @@ function keepKnown(field: SkillHubTagField, value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return ordered(
     field,
-    new Set(value.filter((item): item is string => typeof item === 'string' && VOCAB[field].has(item))),
+    new Set(value.filter((item): item is string => typeof item === 'string').map(item => item.trim()).filter(item => item.length > 0 && item.length <= 50)),
   );
 }
 
@@ -409,7 +410,7 @@ function ordered(field: SkillHubTagField, selected: Set<string>): string[] {
             : field === 'entities'
               ? SKILL_ENTITIES
               : SKILL_REGIONS;
-  return vocab.filter((term) => selected.has(term));
+  return [...vocab.filter((term) => selected.has(term)), ...[...selected].filter(term => !VOCAB[field].has(term))];
 }
 
 function matchGroupTerms(text: string, groups: readonly SkillHubTermGroup[]): string[] {

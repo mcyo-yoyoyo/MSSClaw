@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { suggestSkillSearchKeywords } from '../src/domain/skillKeywords.ts';
 import {
+  readSkillHubTags,
   recognizeSkillHubTags,
   skillHubGroupsFor,
   skillHubSearchTerms,
@@ -92,10 +93,12 @@ test('语义相近词条可以同时保留', () => {
   assert.ok(tags.purposes.includes('竞品分析'));
 });
 
-test('人工只能改词表内标签，并留下记录', () => {
+test('人工可添加自定义标签，读取保留并留下记录', () => {
   const recognized = recognizeSkillHubTags({ descZh: SAMPLE_INSIGHT });
   const rejected = toggleSkillHubTag(recognized, 'roles', '自定义岗位', '张三');
-  assert.deepEqual(rejected.roles, recognized.roles);
+  assert.ok(rejected.roles.includes('自定义岗位'));
+  assert.ok(readSkillHubTags(JSON.parse(JSON.stringify(rejected)))?.roles.includes('自定义岗位'));
+  assert.deepEqual(toggleSkillHubTag(rejected, 'roles', '自定义岗位', '张三').roles, recognized.roles);
   const edited = toggleSkillHubTag(recognized, 'roles', '上市经理', '张三');
   assert.ok(edited.roles.includes('上市经理'));
   assert.equal(edited.source, 'human');

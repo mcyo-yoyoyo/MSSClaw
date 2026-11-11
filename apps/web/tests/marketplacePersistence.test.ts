@@ -43,6 +43,7 @@ type MarketplaceStoreState = {
     tool: Record<string, unknown>,
     isNew?: boolean,
   ) => Promise<MarketplaceSaveResult>;
+  saveSkillNow: (skill: Record<string, unknown>, isNew: boolean, expectedUpdatedAt?: string) => Promise<MarketplaceSaveResult>;
   deleteSkillNow: (id: string) => Promise<MarketplaceSaveResult>;
   deleteToolNow: (id: string) => Promise<MarketplaceSaveResult>;
   persist: () => void;
@@ -548,4 +549,24 @@ test('Skill deletion waits for persistence and restores the record and bindings 
   globalThis.fetch = (async () => new Response('{}', { status: 200 })) as typeof fetch;
   assert.equal((await marketplaceStore.getState().deleteSkillNow('skill-delete')).synced, true);
   assert.deepEqual(marketplaceStore.getState().skills, []);
+});
+
+
+test('batch skill save waits for server, preserves local state on failure, sends version guard', async () => {
+  workspaceStore.setState({ apiConnected: true });
+  const original = { id: 'batch-save', name: 'Before', updatedAt: 'old-version' };
+  marketplaceStore.setState({ skills: [original] });
+  let sent: Record<string, unknown> = {};
+  globalThis.fetch = async (_url, init) => {
+    sent = JSON.parse(String(init?.body));
+    return new Response('conflict', { status: 409 });
+  };
+  const failed = await marketplaceStore.getState().saveSkillNow({ ...original, name: 'After' }, false, 'old-version');
+  assert.equal(failed.synced, false);
+  assert.equal(sent.expectedUpdatedAt, 'old-version');
+  assert.equal(marketplaceStore.getState().skills[0].name, 'Before');
+  globalThis.fetch = async () => new Response(JSON.stringify({ ...original, name: 'Saved', updatedAt: 'new-version' }), { status: 200 });
+  assert.equal((await marketplaceStore.getState().saveSkillNow({ ...original, name: 'After' }, false, 'old-version')).synced, true);
+  assert.equal(marketplaceStore.getState().skills[0].name, 'Saved');
+  globalThis.fetch = originalFetch;
 });

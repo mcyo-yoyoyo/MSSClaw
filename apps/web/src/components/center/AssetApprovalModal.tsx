@@ -1,3 +1,4 @@
+import { formatVersion } from '@/domain/formatVersion';
 import { cn } from '@/lib/utils';
 import {
   ASSET_APPROVAL_KIND_LABELS,
@@ -64,7 +65,7 @@ export function AssetApprovalModal() {
             ) : null}
             {current.unpublishMode === 'versions' && current.unpublishVersions?.length ? (
               <p className="mt-1 text-[11px] text-zinc-500">
-                下架版本：{current.unpublishVersions.map((version) => `v${version}`).join('、')}
+                下架版本：{current.unpublishVersions.map((version) => formatVersion(version)).join('、')}
               </p>
             ) : null}
             {current.packageName ? (

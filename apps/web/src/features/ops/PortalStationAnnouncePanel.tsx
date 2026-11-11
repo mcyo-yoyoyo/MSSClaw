@@ -1,3 +1,5 @@
+import { announcementStats, shareAnnouncement, type AnnouncementStats } from '@/api/announcementApi';
+import { CenterModal } from '@/components/center/CenterShell';
 import { BackButton } from '@/components/common/BackButton';
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
 import { cn } from '@/lib/utils';
@@ -29,7 +31,7 @@ function newDraft(): StationAnnouncement {
     badge: '',
     publishedAt: new Date().toISOString(),
     pinned: false,
-    listed: true,
+    listed: false,
   };
 }
 
@@ -90,6 +92,13 @@ export function PortalStationAnnouncePanel() {
   const toggleListed = useStationAnnouncementStore((s) => s.toggleListed);
   const listTags = useStationAnnouncementStore((s) => s.listTags);
 
+  const [stats, setStats] = useState<Record<string, AnnouncementStats>>({});
+  const [statsError, setStatsError] = useState('');
+  const [statsLoaded, setStatsLoaded] = useState(false);
+  const [preview, setPreview] = useState<StationAnnouncement | null>(null);
+  const [notice, setNotice] = useState('');
+  const refreshStats = () => { void announcementStats().then(value => { setStats(value); setStatsLoaded(true); setStatsError(''); }).catch(() => { setStatsLoaded(false); setStatsError('统计加载失败，请重试'); }); };
+  useEffect(refreshStats, []);
   const [draft, setDraft] = useState<StationAnnouncement | null>(null);
   const [pendingDelete, setPendingDelete] = useState<StationAnnouncement | null>(null);
   const [uploadingImages, setUploadingImages] = useState(0);
@@ -203,7 +212,7 @@ export function PortalStationAnnouncePanel() {
               {editing ? '编辑公告' : '新建公告'}
             </h3>
             <p className="mt-0.5 text-[12px] text-zinc-500">
-              保存即对全部用户生效，首页公告条与「我的消息」同步更新
+              新公告保存为待上架；上架后同步到首页公告条与「我的消息」
             </p>
           </div>
           <div className="flex gap-2">
@@ -351,9 +360,15 @@ export function PortalStationAnnouncePanel() {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center gap-3 text-[12px] text-zinc-500">
+        <button type="button" onClick={refreshStats} className="rounded-lg border px-3 py-1.5">刷新统计</button>
+        <span>{statsError || 'PV 按正文打开次数统计；UV 按登录用户去重；后台预览不计数。'}</span>
+        <span>{notice}</span>
+      </div>
+      {preview && <CenterModal open title="公告预览" size="xl" onClose={() => setPreview(null)}><div className="space-y-4 p-6"><h2 className="text-lg font-semibold">{preview.title}</h2><AnnouncementBody body={preview.body} /></div></CenterModal>}
       <div className="rounded-2xl border border-zinc-200/90 bg-white p-4">
         <p className="text-[12px] leading-relaxed text-zinc-500">
-          配置首页「站内公告」。公告保存后对
+          配置首页「站内公告」。新公告保存为待上架，确认上架后对
           <strong className="font-semibold text-zinc-700">全部用户</strong>
           可见：首页一次滚动一条标题，点标题进「我的消息」看全文；用户点 ×
           擦掉即视为已读，之后不再滚动。
@@ -405,7 +420,7 @@ export function PortalStationAnnouncePanel() {
                   ) : null}
                   {a.listed === false ? (
                     <span className="rounded-full bg-zinc-200 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600">
-                      已下架
+                      待上架
                     </span>
                   ) : null}
                 </div>
@@ -413,8 +428,13 @@ export function PortalStationAnnouncePanel() {
                 <p className="mt-1 text-[10px] text-zinc-400">
                   {a.publishedAt.slice(0, 10)} · {a.id}
                 </p>
+                <p className="mt-2 text-[11px] text-zinc-600">
+                  分享 {statsLoaded ? stats[a.id]?.shares ?? 0 : '—'} · 总浏览 PV {statsLoaded ? stats[a.id]?.pv ?? 0 : '—'}（系统 {statsLoaded ? stats[a.id]?.systemPv ?? 0 : '—'} / 分享链接 {statsLoaded ? stats[a.id]?.sharePv ?? 0 : '—'}）· 用户 UV {statsLoaded ? stats[a.id]?.uv ?? 0 : '—'}
+                </p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-1.5">
+                <button type="button" onClick={() => setPreview(a)} className="rounded-lg border px-2.5 py-1.5 text-[11px]">预览</button>
+                {a.listed !== false && <button type="button" onClick={() => { void shareAnnouncement(a.id).then(() => { setNotice('分享链接已复制'); refreshStats(); }).catch(error => setNotice(error.message)); }} className="rounded-lg border px-2.5 py-1.5 text-[11px]">分享</button>}
                 <button
                   type="button"
                   onClick={() => togglePinned(a.id)}
@@ -429,7 +449,7 @@ export function PortalStationAnnouncePanel() {
                   aria-pressed={a.listed !== false}
                   className="rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"
                 >
-                  {a.listed === false ? '重新上架' : '下架'}
+                  {a.listed === false ? '上架' : '下架'}
                 </button>
                 <button
                   type="button"

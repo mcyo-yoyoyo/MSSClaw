@@ -62,7 +62,7 @@ const SPECS: Record<AssetKind, AssetSpec> = {
     optional: {
       ...OWNERSHIP,
       nameZh: 'string', nameEn: 'string', descZh: 'string', descEn: 'string', callable: 'bool',
-      featuredInDoTask: 'bool', featuredInMssMarket: 'bool', businessScenarioId: 'string', homepageUrl: 'string', invokes: 'int', iconUrl: 'string', accentColor: 'string',
+      featuredInDoTask: 'bool', featuredInMssMarket: 'bool', businessScenarioId: 'string', homepageUrl: 'string', downloadUrl: 'string', invokes: 'int', iconUrl: 'string', accentColor: 'string',
       searchKeywords: 'json', instructions: 'string', planSteps: 'json', usageNotes: 'string', packageBlob: 'json',
       traceEvaluation: 'json', updatedBy: 'string', createdAt: 'string', updatedAt: 'string',
     },
@@ -150,6 +150,16 @@ function toColumns(kind: AssetKind, raw: unknown, specials: readonly string[]): 
     } else {
       invalid(kind, id, `unknown_field_${key}`);
     }
+  }
+  if (kind === 'skill' && typeof data.downloadUrl === 'string') {
+    const value = data.downloadUrl.trim();
+    if (value) {
+      try {
+        const url = new URL(value);
+        if (value.length > 2048 || !['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error();
+      } catch { invalid(kind, id, 'downloadUrl_http_url_required'); }
+    }
+    data.downloadUrl = value || null;
   }
   if (!id) invalid(kind, id, 'id_required');
   for (const key of Object.keys(spec.required)) {
@@ -374,6 +384,14 @@ export type CatalogViewer = { id: string; platformRole: string; regionId: string
 export function catalogScope(kind: AssetKind, viewer: CatalogViewer): OrgScopeWhere | undefined {
   if (kind !== 'skill' && kind !== 'agent') return undefined;
   if (viewer?.platformRole === SUPER_ADMIN_ROLE) return undefined;
+  if (kind === 'agent') {
+    const allowed: OrgScopeWhere[] = [{ visibility: 'public' }, { visibility: null }];
+    if (viewer) {
+      allowed.push({ publisherUserId: viewer.id });
+      allowed.push({ AND: [{ visibility: 'org' }, { domains: { some: { domainId: { in: viewer.deptIds } } } }] });
+    }
+    return { OR: allowed };
+  }
   return orgScopeWhere(viewer && { id: viewer.id, regionId: viewer.regionId, domainIds: viewer.deptIds });
 }
 

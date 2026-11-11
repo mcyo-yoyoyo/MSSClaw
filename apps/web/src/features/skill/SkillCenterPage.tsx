@@ -1,3 +1,4 @@
+import { SkillBatchTransfer } from './SkillBatchTransfer';
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
@@ -328,6 +329,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
                 <i className="fa-solid fa-file-export mr-1 text-[10px] text-zinc-400" />
                 导出全部清单
               </button>
+              <SkillBatchTransfer />
               <button
                 type="button"
                 onClick={() => setEditorTarget('new')}

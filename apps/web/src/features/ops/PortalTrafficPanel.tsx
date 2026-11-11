@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 统计 API、组织名称映射和 xlsx 文件生成能力。
+ * [OUTPUT]: PortalTrafficPanel，提供四类看板及用户明细 Excel 导出。
+ * [POS]: 运营数据看板主体；用户导出复用当前筛选的完整明细。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import {
   useCallback,
   useEffect,
@@ -1430,6 +1436,8 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
     : undefined;
 
   /* 02 用户分析 */
+  const [exportingUsers, setExportingUsers] = useState(false);
+  const [userExportError, setUserExportError] = useState<string | null>(null);
   const usersTraffic = usersState.report?.totals ?? EMPTY_TRAFFIC;
   const pageMetrics = useMemo(() => {
     const pages = new Map((usersState.report?.pages ?? []).map((page) => [page.routeKey, page]));
@@ -1446,6 +1454,33 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
         return bVisit - aVisit || a.userId.localeCompare(b.userId);
       });
   }, [usersState.report?.users?.rows]);
+  async function exportUserDetails() {
+    if (exportingUsers || usersState.loading || usersState.error || !usersState.report || !userRows.length) return;
+    setExportingUsers(true);
+    setUserExportError(null);
+    try {
+      const XLSX = await import('xlsx');
+      const sheet = XLSX.utils.json_to_sheet(userRows.map((row) => ({
+        用户名: row.name || row.userId,
+        领域: row.department ? row.department.split(',').map((id) => getDeptLabel(id.trim())).join('、') : '未设置',
+        区域: row.regionId ? getRegionLabel(row.regionId) : '未设置',
+        首次登录时间: formatDateTime(row.firstLoginAt),
+        活跃时间: formatDateTime(row.lastVisitAt),
+        '页面浏览数 PV': row.pv,
+        累计登录次数: row.loginCount,
+      })));
+      sheet['!cols'] = [24, 24, 18, 22, 22, 20, 18].map((wch) => ({ wch }));
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, sheet, '用户明细');
+      const { from, to } = usersState.report.range;
+      XLSX.writeFile(workbook, `用户明细_${from}_${to}.xlsx`);
+    } catch {
+      setUserExportError('用户明细导出失败，请重试');
+    } finally {
+      setExportingUsers(false);
+    }
+  }
+
   // activeUv 是服务端算好的所选区间内访问过页面的人数，和用户明细的活跃时间同一口径。
   // 不过滤零活跃：没人来过的领域也是结论，隐藏它会让人误以为名册里没有这个领域。
   const departmentRows = useMemo(
@@ -1680,8 +1715,20 @@ export function PortalTrafficPanel({ inventory, inventoryLoading, inventoryError
           <BandItem label="游客数 UV" value={formatOptionalCount(usersTraffic.guestUv)} note="按访客 ID 去重" />
         </StatBand>
 
+        {userExportError ? <Notice tone="error">{userExportError}</Notice> : null}
         <TableShell
           title="用户明细"
+          actions={
+            <button
+              type="button"
+              onClick={() => { void exportUserDetails(); }}
+              disabled={exportingUsers || usersState.loading || Boolean(usersState.error) || !userRows.length}
+              title="导出当前时间范围内的全部用户明细"
+              className="rounded-lg border border-zinc-200 px-3 py-1.5 text-[12px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {exportingUsers ? '导出中…' : '导出 Excel'}
+            </button>
+          }
           subtitle={`${formatCount(userRows.length)} 名登录用户 · 所选区间内访问过页面，按活跃时间排序`}
           footer={
             <Pagination

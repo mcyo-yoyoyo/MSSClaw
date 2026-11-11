@@ -1,3 +1,4 @@
+import type { AssetApprovalReason } from '@/domain/assetApproval';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CenterModal } from '@/components/center/CenterShell';
 import {
@@ -32,7 +33,6 @@ import {
   uploadWorkspacePackage,
 } from '@/api/blobApi';
 import {
-  ASSET_VISIBILITY_LABELS,
   HQ_DEPTS,
   REGIONS,
   type AssetVisibility,
@@ -118,7 +118,7 @@ function emptyAgent(): PrototypeAgentSeed {
     avatarUrl: undefined,
     systemPrompt: '',
     caseAttachments: [],
-    visibility: 'public',
+    visibility: 'org',
     businessScenarioId: undefined,
   };
 }
@@ -139,9 +139,7 @@ function normalizeAgent(agent: PrototypeAgentSeed): PrototypeAgentSeed {
     avatarUrl: agent.avatarUrl,
     featuredInDoTask: resolveAgentFeaturedInDoTask(agent),
     visibility:
-      agent.visibility === 'org' || agent.visibility === 'private'
-        ? agent.visibility
-        : 'public',
+      agent.visibility === 'public' ? 'public' : 'org',
     businessScenarioId: resolveAgentBusinessScenario(agent) ?? undefined,
   };
 }
@@ -545,10 +543,14 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
     const previousCreator = prev ? assetCreatorName(prev) : '';
     const creatorEdited = !prev || creator !== previousCreator;
     const id = isNew ? `agent-${Date.now()}` : (target as string);
-    const needsApproval = isNew || (form.published && !prev?.published);
+    const reasons: AssetApprovalReason[] = [];
+    if (isNew || (form.published && !prev?.published)) reasons.push('publish_executable');
+    const expandingVisibility = form.visibility === 'public' && prev?.visibility !== 'public';
+    if (expandingVisibility) reasons.push('visibility_public');
+    const needsApproval = reasons.length > 0;
     const planSteps = (form.planSteps ?? []).map((s) => s.trim()).filter(Boolean);
     const visibility: AssetVisibility =
-      form.visibility === 'org' || form.visibility === 'private' ? form.visibility : 'public';
+      form.visibility === 'public' ? 'public' : 'org';
     const businessScenarioId = form.businessScenarioId as BusinessScenarioId;
     const scenarioLabel = getBusinessScenarioMeta(businessScenarioId).label;
     // 空字符串 / 空数组不落库，避免前台把"已配置但为空"当成有内容而不再走兜底
@@ -660,8 +662,8 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
           ? undefined
           : form.avatarPresetId || DEFAULT_AGENT_AVATAR_PRESET_ID,
         avatarUrl: form.avatarUrl?.trim() || undefined,
-        published: needsApproval ? false : form.published,
-        visibility,
+        published: reasons.includes('publish_executable') ? false : form.published,
+        visibility: expandingVisibility ? prev?.visibility ?? 'org' : visibility,
       },
       isNew,
     );
@@ -671,6 +673,7 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
     if (needsApproval) {
       useAssetApprovalStore.getState().openApproval({
         kind: 'agent',
+        reasons,
         assetId: id,
         assetName: name,
       });
@@ -684,12 +687,12 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
     <CenterModal
       open
       elevate
-      size="lg"
+      size="2xl"
       title={title}
       onClose={handleClose}
       actions={<ModalActions onCancel={handleClose} onSave={handleSave} />}
     >
-      <div className="space-y-3 text-left">
+      <div className="space-y-3 p-4 text-left sm:p-6">
         <div>
           <p className="text-[11px] font-semibold text-[#86868b]">数字员工形象</p>
           <p className="mb-1 text-[10px] text-[#86868b]">
@@ -1881,49 +1884,37 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
           </div>
         </FormField>
 
-        <div className="rounded-xl border border-zinc-200 px-3 py-2.5 space-y-2">
-          <p className="text-[13px] font-semibold text-zinc-800">发布权限范围</p>
-          <p className="text-[11px] text-zinc-500">
-            默认公开可见；组织内按成员归属控制；仅发布方用于个人草稿或受限资产。
-          </p>
-          <label className="flex cursor-pointer items-center gap-2">
-            <input
-              type="radio"
-              name="agent-vis"
-              className="accent-claw-600"
-              checked={(form.visibility ?? 'public') === 'public'}
-              onChange={() => setForm({ ...form, visibility: 'public' })}
-            />
-            <span className="text-[13px] font-medium text-zinc-800">
-              {ASSET_VISIBILITY_LABELS.public}
-              <span className="ml-1.5 text-[11px] font-normal text-zinc-400">（默认）</span>
-            </span>
-          </label>
-          <label className="flex cursor-pointer items-center gap-2">
-            <input
-              type="radio"
-              name="agent-vis"
-              className="accent-claw-600"
-              checked={form.visibility === 'org'}
-              onChange={() => setForm({ ...form, visibility: 'org' })}
-            />
-            <span className="text-[13px] font-medium text-zinc-800">
-              {ASSET_VISIBILITY_LABELS.org}
-            </span>
-          </label>
-          <label className="flex cursor-pointer items-center gap-2">
-            <input
-              type="radio"
-              name="agent-vis"
-              className="accent-claw-600"
-              checked={form.visibility === 'private'}
-              onChange={() => setForm({ ...form, visibility: 'private' })}
-            />
-            <span className="text-[13px] font-medium text-zinc-800">
-              {ASSET_VISIBILITY_LABELS.private}
-            </span>
-          </label>
-        </div>
+            <div className="rounded-xl border border-zinc-200 px-3 py-2.5 space-y-2">
+              <p className="text-[13px] font-semibold text-zinc-800">发布权限范围</p>
+              <p className="text-[11px] text-zinc-500">
+                部门可见：仅归属职能与登录用户部门匹配时可见；发布方与平台运营可管理全部。
+                全部门可见：不区分登录用户所属部门，需通过审批。
+              </p>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="radio"
+                  name="agent-vis"
+                  className="accent-claw-600"
+                  checked={(form.visibility === 'public' ? 'public' : 'org') === 'org'}
+                  onChange={() => setForm({ ...form, visibility: 'org' })}
+                />
+                <span className="text-[13px] font-medium text-zinc-800">
+                  部门可见
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="radio"
+                  name="agent-vis"
+                  className="accent-claw-600"
+                  checked={(form.visibility === 'public' ? 'public' : 'org') === 'public'}
+                  onChange={() => setForm({ ...form, visibility: 'public' })}
+                />
+                <span className="text-[13px] font-medium text-zinc-800">
+                  全部门可见
+                </span>
+              </label>
+            </div>
 
         <label className="flex cursor-pointer items-center gap-2">
           <input

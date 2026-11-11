@@ -1,3 +1,4 @@
+import { formatVersion } from '@/domain/formatVersion';
 import { useEffect, useState } from 'react';
 import { CenterModal } from '@/components/center/CenterShell';
 import { FormField, FormInput, FormTextarea } from '@/components/center/CenterFormFields';
@@ -246,7 +247,7 @@ export function SkillOpsRequestModal({
                           onChange={() => setUnpublishVersions((items) => items.includes(version) ? items.filter((item) => item !== version) : [...items, version])}
                           className="accent-zinc-900"
                         />
-                        v{version}
+                        {formatVersion(version)}
                       </label>
                     ))}
                   </div>

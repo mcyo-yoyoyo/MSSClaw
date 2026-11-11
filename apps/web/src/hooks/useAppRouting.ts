@@ -53,7 +53,7 @@ export function useAppRouting() {
     const chat = appView === 'task' ? current.chat : undefined;
     const detail = appView === DETAIL_VIEW ? { type: current.type, id: current.id } : {};
     const news = appView === 'ai-brief' && current.view === appView ? { news: current.news, newsUrl: current.newsUrl } : {};
-    writeAppRouteToLocation({ view: appView, chat, ...detail, ...news }, appView === current.view);
+    writeAppRouteToLocation({ view: appView, chat, ...detail, ...news, ...(appView === 'messages' && current.view === appView ? { announcement: current.announcement, source: current.source } : {}) }, appView === current.view);
   }, [appView, sessionBootstrapped, shellReady]);
 
   useEffect(() => {

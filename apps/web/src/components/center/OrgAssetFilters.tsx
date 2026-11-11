@@ -326,6 +326,8 @@ export function OwnershipFormFields({
   alwaysShowHomepage = false,
   singleDept = false,
   singleDeptHint,
+  deptLabel = '归属职能',
+  regionLabel = '归属区域',
   lockSource = false,
   visibilityOptions = DEFAULT_OWNERSHIP_VISIBILITY_OPTIONS,
   onChange,
@@ -344,6 +346,8 @@ export function OwnershipFormFields({
   singleDept?: boolean;
   /** 单选状态旁的说明；Skill 可见性可覆盖“不选则不限”的通用提示。 */
   singleDeptHint?: string;
+  deptLabel?: string;
+  regionLabel?: string;
   /** 来源由入口决定时隐藏来源选择（如“登记外部工具”） */
   lockSource?: boolean;
   /** 按资产类型收敛可见性选项；默认保留通用三档。 */
@@ -374,7 +378,7 @@ export function OwnershipFormFields({
     <div className="space-y-3 rounded-xl border border-black/[0.06] bg-[#fafafa]/80 p-3">
       <div>
         <p className="mb-1.5 text-[11px] font-semibold text-zinc-600">
-          归属职能
+          {deptLabel}
           {singleDept ? (
             <span className="ml-1.5 font-normal text-zinc-400">
               {singleDeptHint ?? '单选 · 不选则不限'}
@@ -400,7 +404,7 @@ export function OwnershipFormFields({
         </div>
       </div>
       <div>
-        <p className="mb-1.5 text-[11px] font-semibold text-zinc-600">归属区域</p>
+        <p className="mb-1.5 text-[11px] font-semibold text-zinc-600">{regionLabel}</p>
         <OwnershipSelect
           value={ownerRegionId ?? ''}
           onChange={(e) => onChange({ ownerRegionId: e.target.value || null })}

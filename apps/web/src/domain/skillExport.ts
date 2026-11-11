@@ -1,3 +1,4 @@
+import { formatVersion } from '@/domain/formatVersion';
 import { strToU8, zipSync, unzipSync, strFromU8 } from 'fflate';
 import * as XLSX from 'xlsx';
 import type { EfficiencyCategory, PrototypeSkillSeed } from '@/domain/prototype/types';
@@ -250,7 +251,7 @@ export function downloadAllSkillsFile(
             创建时间: r.createdAt || '—',
             更新者: r.updatedBy || '—',
             最近更新日期: r.updatedAt || '—',
-            历史版本更新记录: r.version ? `当前 v${r.version}` : '—',
+            历史版本更新记录: r.version ? `当前 ${formatVersion(r.version)}` : '—',
             领域信息: (r.ownerDeptIds as DeptId[]).map(getDeptLabel).join('、') || '',
             区域信息: r.ownerRegionId ? getRegionLabel(r.ownerRegionId as RegionId) : '',
             业务场景: r.businessScenarioId ?? '',

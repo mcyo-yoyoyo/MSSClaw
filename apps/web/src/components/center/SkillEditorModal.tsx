@@ -1,3 +1,5 @@
+import { archiveSkillVersion } from '@/domain/skillVersionArchive';
+import { skillDownloadUrl } from '@/domain/skillDownload';
 import { useEffect, useRef, useState } from 'react';
 import { SkillHubTagEditor } from '@/components/center/SkillHubTagFields';
 import { CenterModal } from '@/components/center/CenterShell';
@@ -206,7 +208,7 @@ interface SkillEditorModalProps {
 }
 
 export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
-  const { skills, upsertSkill, showToast } = useMarketplaceStore();
+  const { skills, saveSkillNow, showToast } = useMarketplaceStore();
   const temporaryPackageBlobs = useTemporaryWorkspaceBlobs(target);
   const [form, setForm] = useState<PrototypeSkillSeed>(emptySkill());
   const [uploadingCase, setUploadingCase] = useState(false);
@@ -442,11 +444,11 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       }
       const visibility = normalizeSkillVisibility(form.visibility, 'org');
       if (visibility === 'org' && !form.ownerDeptIds?.length) {
-        showToast('选择“部门可见”时，请选择一个所属职能');
+        showToast('选择“部门可见”时，请选择一个应用领域');
         return false;
       }
       if (!(form.ownerDeptIds?.length || form.ownerRegionId)) {
-        showToast('请至少选择所属职能或区域（用于资产归属）');
+        showToast('请至少选择应用领域或应用区域（用于资产归属）');
         return false;
       }
       if (!isPlatformOps) {
@@ -470,7 +472,11 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     if (step < 3) setStep((step + 1) as WizardStep);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (form.downloadUrl?.trim() && !skillDownloadUrl(form.downloadUrl)) {
+      showToast('下载链接请填写有效的 HTTP/HTTPS 地址（最多 2048 字符）');
+      return;
+    }
     if (uploadingPackage || uploadingCase || parsing || recognizingTags) {
       showToast(recognizingTags ? '标签还在用模型提炼，请稍候' : uploadingCase ? '样例附件正在上传，请稍候' : '技能包正在解析或上传，请稍候');
       return;
@@ -587,6 +593,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       // 与历史多区域字段保持同一口径；选择“不限区域”时必须清空旧值。
       ownerRegionIds: form.ownerRegionId ? [form.ownerRegionId] : [],
       homepageUrl: undefined,
+      downloadUrl: form.downloadUrl?.trim() || undefined,
       // 新建/未上架 Skill 在终审通过前不可调用；已上架 Skill 编辑时保持上架。
       published: Boolean(prev?.published),
       // 可调用/精选不参与是否提审的判断，也不直接改变 published。
@@ -603,7 +610,17 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       searchKeywords: draft.hubTags ? skillHubSearchTerms(draft.hubTags) : (draft.searchKeywords ?? []),
     };
 
-    upsertSkill(draft, isNew);
+    try {
+      draft.versions = archiveSkillVersion(prev ?? undefined, draft);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '版本归档失败');
+      return;
+    }
+    const saved = await saveSkillNow(draft, isNew, prev?.updatedAt);
+    if (!saved.synced) {
+      showToast(`保存失败：${saved.detail || '请检查后端连接'}`);
+      return;
+    }
     void evaluateAndPersistSkill(draft, (status, report) => {
       if (status === 'started') showToast('技能已保存，正在自动生成 TRACE 评测报告…');
       else if (status === 'completed') {
@@ -648,7 +665,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     <CenterModal
       open
       elevate
-      size="lg"
+      size="2xl"
       title={isNew ? '提报 Skill' : '编辑 Skill'}
       onClose={handleClose}
       actions={
@@ -698,7 +715,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
         </div>
       }
     >
-      <div className="space-y-4 text-left">
+      <div className="space-y-4 p-4 text-left sm:p-6">
         {/* step tabs */}
         <div className="flex flex-wrap gap-1.5">
           {STEPS.filter((s) => (isNew ? true : s.id !== 0)).map((s) => (
@@ -857,13 +874,22 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                   onChange={(e) => setForm({ ...form, command: e.target.value })}
                 />
               </FormField>
-              <FormField label="版本">
+              <FormField label="版本号" hint="重新上传包时填写新版本号，旧包将保留在详情页的版本列表中。">
                 <FormInput
                   value={form.version}
                   onChange={(e) => setForm({ ...form, version: e.target.value })}
                 />
               </FormField>
             </div>
+            <FormField label="下载链接" hint="填写后，详情页下载会跳转到此链接；留空则下载 Skill 包。">
+              <FormInput
+                type="url"
+                maxLength={2048}
+                value={form.downloadUrl ?? ''}
+                onChange={(e) => setForm({ ...form, downloadUrl: e.target.value })}
+                placeholder="https://…"
+              />
+            </FormField>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <FormField label="创建人">
                 <FormInput
@@ -892,71 +918,9 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                 onChange={(e) => setForm({ ...form, instructions: e.target.value })}
               />
             </FormField>
-            <button
-              type="button"
-              onClick={() => setShowAdvanced((v) => !v)}
-              className="text-[12px] font-medium text-zinc-500 hover:text-zinc-800"
-            >
-              {showAdvanced ? '收起高级项' : '展开高级项（计划 / 须知 / 案例 / 环境）'}
-            </button>
-            {showAdvanced ? (
-              <>
-              <FormField label="执行计划步骤（每行一步）" hint="1.0 可选">
-                <FormTextarea
-                  rows={4}
-                  className="font-mono text-[12px] leading-relaxed"
-                  value={(form.planSteps ?? []).join('\n')}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      planSteps: e.target.value
-                        .split('\n')
-                        .map((s) => s.trimEnd())
-                        .filter((s) => s.trim().length > 0),
-                    })
-                  }
-                />
-              </FormField>
-              <FormField
-                label="使用须知"
-                hint="前置条件、权限要求、注意事项与限制规则（详情「使用须知」Tab）"
-              >
-                <FormTextarea
-                  rows={4}
-                  value={form.usageNotes ?? ''}
-                  onChange={(e) => setForm({ ...form, usageNotes: e.target.value })}
-                  placeholder={'1. 前置条件…\n2. 权限要求…\n3. 注意事项…'}
-                />
-              </FormField>
-              <FormField
-                label="案例（每行一条：标题|输入|输出）"
-                hint="详情「案例」Tab；竖线分隔，可只填标题"
-              >
-                <FormTextarea
-                  rows={3}
-                  className="font-mono text-[12px]"
-                  value={(form.cases ?? [])
-                    .map((c) => [c.title, c.input || '', c.output || ''].join('|'))
-                    .join('\n')}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      cases: e.target.value
-                        .split('\n')
-                        .map((line) => line.trim())
-                        .filter(Boolean)
-                        .map((line) => {
-                          const [title, input, output] = line.split('|').map((s) => s.trim());
-                          return { title: title || line, input, output };
-                        }),
-                    })
-                  }
-                  placeholder="周报生成|输入本周要点…|输出结构化周报…"
-                />
-              </FormField>
               <FormField
                 label="Skill 压缩包"
-                hint="上传 .zip 或 .rar（RAR 会自动转为 ZIP）；详情页「文件」将解压展示完整目录树，并可下载原包"
+                hint="上传 .zip 或 .rar（RAR 会自动转为 ZIP）；重新上传请同时填写新版本号，保存后可在详情页「版本」下载历史包"
               >
                 <div className="space-y-2">
                   <input
@@ -1024,6 +988,68 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                     </div>
                   ) : null}
                 </div>
+              </FormField>
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((v) => !v)}
+              className="text-[12px] font-medium text-zinc-500 hover:text-zinc-800"
+            >
+              {showAdvanced ? '收起高级项' : '展开高级项（计划 / 须知 / 案例 / 环境）'}
+            </button>
+            {showAdvanced ? (
+              <>
+              <FormField label="执行计划步骤（每行一步）" hint="1.0 可选">
+                <FormTextarea
+                  rows={4}
+                  className="font-mono text-[12px] leading-relaxed"
+                  value={(form.planSteps ?? []).join('\n')}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      planSteps: e.target.value
+                        .split('\n')
+                        .map((s) => s.trimEnd())
+                        .filter((s) => s.trim().length > 0),
+                    })
+                  }
+                />
+              </FormField>
+              <FormField
+                label="使用须知"
+                hint="前置条件、权限要求、注意事项与限制规则（详情「使用须知」Tab）"
+              >
+                <FormTextarea
+                  rows={4}
+                  value={form.usageNotes ?? ''}
+                  onChange={(e) => setForm({ ...form, usageNotes: e.target.value })}
+                  placeholder={'1. 前置条件…\n2. 权限要求…\n3. 注意事项…'}
+                />
+              </FormField>
+              <FormField
+                label="案例（每行一条：标题|输入|输出）"
+                hint="详情「案例」Tab；竖线分隔，可只填标题"
+              >
+                <FormTextarea
+                  rows={3}
+                  className="font-mono text-[12px]"
+                  value={(form.cases ?? [])
+                    .map((c) => [c.title, c.input || '', c.output || ''].join('|'))
+                    .join('\n')}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      cases: e.target.value
+                        .split('\n')
+                        .map((line) => line.trim())
+                        .filter(Boolean)
+                        .map((line) => {
+                          const [title, input, output] = line.split('|').map((s) => s.trim());
+                          return { title: title || line, input, output };
+                        }),
+                    })
+                  }
+                  placeholder="周报生成|输入本周要点…|输出结构化周报…"
+                />
               </FormField>
               <FormField
                 label="使用案例附件"
@@ -1224,7 +1250,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
             </FormField>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <FormField
-                label="所属职能（单选）"
+                label="应用领域（单选）"
                 hint={
                   isPlatformOps
                     ? '每个技能只挂一个领域，避免 MSS 场景技能列表出现多职能误会'
@@ -1238,7 +1264,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                     setForm({ ...form, ownerDeptIds: v ? [v] : [] });
                   }}
                 >
-                  <option value="">选择职能</option>
+                  <option value="">选择应用领域</option>
                   {HQ_DEPTS.filter((d) => selectableDepts.includes(d.id)).map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.label}
@@ -1247,7 +1273,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                 </FormSelect>
               </FormField>
               <FormField
-                label="所属区域"
+                label="应用区域"
                 hint={
                   isPlatformOps
                     ? '不选表示适用于全部区域；也可指定单一区域'

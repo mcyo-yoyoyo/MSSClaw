@@ -1,3 +1,4 @@
+import { formatVersion } from '@/domain/formatVersion';
 import type { Agent } from '@/domain/agent';
 import type { KnowledgeBase, KnowledgeDocument } from '@/domain/knowledge';
 import type { Skill } from '@/domain/skill';
@@ -66,7 +67,7 @@ export function prototypeSkillToDomain(seed: PrototypeSkillSeed): Skill {
     name: seed.name,
     displayName: seed.name,
     description: seed.desc,
-    version: seed.version.startsWith('v') ? `v${seed.version}` : `v${seed.version}`,
+    version: formatVersion(seed.version),
     lifecycle: seed.published ? 'online' : 'create',
     updatedAt: '2026-07-08',
     author: seed.author,

@@ -1,3 +1,4 @@
+import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { canExecuteChat, READONLY_EXECUTE_HINT } from '@/domain/permissions';
@@ -194,7 +195,9 @@ export function MarketShelfPage({
   const [submitOpen, setSubmitOpen] = useState(false);
   const [externalType, setExternalType] = useState<ExternalToolTypeId | 'all'>('all');
   /** MSS 集市二级面：Skill Hub | Agent Hub（默认 Skill Hub） */
-  const [mssSurface, setMssSurface] = useState<'projects' | 'skills'>('skills');
+  const [mssSurface, setMssSurface] = useState<'projects' | 'skills'>(() =>
+    kind === 'projects' ? useNavigationIntentStore.getState().pendingMarketSurface ?? 'skills' : 'skills',
+  );
   /** 三个用户货架默认采用后台保存的目录顺序。 */
   const [rankMode, setRankMode] = useState<RankMode>('excel_order');
   const [rankDirection, setRankDirection] = useState<RankDirection>('asc');
@@ -254,7 +257,10 @@ export function MarketShelfPage({
 
   useEffect(() => {
     setExternalType('all');
-    setMssSurface('skills');
+    const requestedSurface = kind === 'projects'
+      ? useNavigationIntentStore.getState().consumeMarketSurface()
+      : null;
+    setMssSurface(current => kind === 'projects' ? requestedSurface ?? current : 'skills');
     // 外部/内部读取各自后台布局；AI 工具 Hub 读取 marketplace 快照数组顺序。
     setRankMode('excel_order');
     setRankDirection(defaultRankDirection('excel_order'));
@@ -1045,7 +1051,7 @@ export function MarketShelfPage({
     openAssetDetail('agent', agent.id);
   };
 
-  const openInternalToolDetail = (tool: { id: string; name: string; logoUrl?: string }) => {
+  const openInternalToolDetail = (tool: { id: string; name: string; logoUrl?: string; sceneId?: string }) => {
     const catalog = tools.find((t) => t.id === tool.id);
     if (!catalog || catalog.published !== true) {
       showToast('该工具主数据不存在或已下架');
@@ -1059,7 +1065,7 @@ export function MarketShelfPage({
       logoUrl: tool.logoUrl || catalog?.logoUrl,
       assetType: 'tool',
     });
-    openMarketToolDetail(tool.id);
+    openMarketToolDetail(tool.id, tool.sceneId);
   };
 
   const downloadUseProject = (card: MarketShelfCardModel) => {

@@ -292,7 +292,7 @@ export function PortalContentOpsPage() {
               </>
             ) : opsSurface === 'announce' ? (
               <>
-                公告保存后对全部用户生效，置顶公告优先展示。
+                公告保存为待上架，上架后对全部用户生效，置顶公告优先展示。
               </>
             ) : opsSurface === 'ainews' ? (
               <>

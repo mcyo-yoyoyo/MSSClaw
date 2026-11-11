@@ -16,6 +16,8 @@ export function isDetailAssetType(value: unknown): value is DetailAssetType {
 export const DETAIL_VIEW: AppView = 'market-tool';
 
 export interface AppRouteParams {
+  announcement?: string;
+  source?: string;
   view: AppView;
   /** Deep link to a task session: #/task?chat=<chatId> */
   chat?: string;
@@ -24,6 +26,8 @@ export interface AppRouteParams {
   newsUrl?: string;
   /** 资产详情的资产 id */
   id?: string;
+  /** 办公场景来源，用于选择对应的使用指导。 */
+  sceneId?: string;
   /** 资产详情的资产类型 */
   type?: DetailAssetType;
 }
@@ -40,7 +44,7 @@ export function parseAppRoute(rawHash: string): AppRouteParams {
 
   if (path === 'detail' || path === 'market-tool' || path === 'case-insight') {
     const type = path === 'detail' ? qs?.get('type') : path === 'case-insight' ? 'case' : 'tool';
-    return { view: DETAIL_VIEW, type: isDetailAssetType(type) ? type : undefined, id };
+    return { view: DETAIL_VIEW, type: isDetailAssetType(type) ? type : undefined, id, ...(qs?.get('sceneId') ? { sceneId: qs.get('sceneId')! } : {}) };
   }
 
   const viewCandidate = path as AppView;
@@ -49,6 +53,7 @@ export function parseAppRoute(rawHash: string): AppRouteParams {
   return {
     view,
     chat: chat || undefined,
+    ...(view === 'messages' ? { announcement: qs?.get('announcement') || undefined, source: qs?.get('source') || undefined } : {}),
     ...(view === 'ai-brief' ? { news: qs?.get('news') || undefined, newsUrl: qs?.get('newsUrl') || undefined } : {}),
   };
 }
@@ -58,11 +63,16 @@ export function buildAppRoute(params: AppRouteParams): string {
   if (params.view === DETAIL_VIEW) {
     if (params.type) qs.set('type', params.type);
     if (params.id) qs.set('id', params.id);
+    if (params.type === 'tool' && params.sceneId) qs.set('sceneId', params.sceneId);
     const query = qs.toString();
     return `#/detail${query ? `?${query}` : ''}`;
   }
   if (params.view === 'task' || params.view === 'ai-tasks') {
     if (params.chat) qs.set('chat', params.chat);
+  }
+  if (params.view === 'messages' && params.announcement) {
+    qs.set('announcement', params.announcement);
+    if (params.source === 'share') qs.set('source', 'share');
   }
   if (params.view === 'ai-brief') {
     if (params.news) qs.set('news', params.news);
@@ -73,8 +83,8 @@ export function buildAppRoute(params: AppRouteParams): string {
 }
 
 /** 分享出去的完整地址 */
-export function assetDetailUrl(type: DetailAssetType, id: string, shareCode?: string | null): string {
-  const route = buildAppRoute({ view: DETAIL_VIEW, type, id });
+export function assetDetailUrl(type: DetailAssetType, id: string, shareCode?: string | null, sceneId?: string): string {
+  const route = buildAppRoute({ view: DETAIL_VIEW, type, id, sceneId });
   return `${window.location.origin}${window.location.pathname}${route}${shareCode ? `&share=${shareCode}` : ''}`;
 }
 
@@ -82,8 +92,8 @@ export function assetDetailUrl(type: DetailAssetType, id: string, shareCode?: st
  * 平台内打开资产详情：当前标签页跳到详情页。history.state 记下 fromApp，
  * 详情页据此决定「返回」是回上一页还是回该类列表（直达）。
  */
-export function openAssetDetail(type: DetailAssetType, id: string): void {
-  const hash = buildAppRoute({ view: DETAIL_VIEW, type, id });
+export function openAssetDetail(type: DetailAssetType, id: string, sceneId?: string): void {
+  const hash = buildAppRoute({ view: DETAIL_VIEW, type, id, sceneId });
   window.history.pushState({ fromApp: true }, '', `${window.location.pathname}${window.location.search}${hash}`);
   // pushState 不触发事件；补发一次让路由同步和详情页跟上
   window.dispatchEvent(new PopStateEvent('popstate', { state: { fromApp: true } }));

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   hasSkillHubSecondaryTags,
@@ -20,7 +21,6 @@ function statusLabel(status: SkillHubTagStatus): string | null {
 }
 
 function GroupChips({
-  groups,
   selected,
   field,
   onToggle,
@@ -30,50 +30,36 @@ function GroupChips({
   field: SkillHubTagField;
   onToggle?: (field: SkillHubTagField, label: string) => void;
 }) {
-  const chosen = new Set(selected);
-  return (
-    <div className="space-y-2">
-      {groups.map((group) => (
-        <div key={group.group}>
-          <p className="mb-1 text-[10px] font-medium text-zinc-400">{group.group}</p>
-          <div className="flex flex-wrap gap-1.5">
-            {group.terms.map((term) => (
-              <TagChip
-                key={term}
-                label={term}
-                active={chosen.has(term)}
-                onClick={onToggle ? () => onToggle(field, term) : undefined}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+  return <FlatChips terms={[]} selected={selected} field={field} onToggle={onToggle} />;
 }
 
-function FlatChips({
-  terms,
-  selected,
-  field,
-  onToggle,
-}: {
+function FlatChips({ selected, field, onToggle }: {
   terms: readonly string[];
   selected: readonly string[];
   field: SkillHubTagField;
   onToggle?: (field: SkillHubTagField, label: string) => void;
 }) {
-  const chosen = new Set(selected);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState('');
+  const add = () => {
+    const label = draft.trim();
+    if (!label) return;
+    if (!selected.includes(label)) onToggle?.(field, label);
+    setDraft('');
+    setAdding(false);
+  };
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {terms.map((term) => (
-        <TagChip
-          key={term}
-          label={term}
-          active={chosen.has(term)}
-          onClick={onToggle ? () => onToggle(field, term) : undefined}
-        />
-      ))}
+    <div className="flex flex-wrap items-center gap-1.5">
+      {selected.map(term => <TagChip key={term} label={term} active onClick={onToggle ? () => onToggle(field, term) : undefined} />)}
+      {onToggle && (adding ? (
+        <div className="flex items-center gap-1">
+          <input autoFocus aria-label="新标签" maxLength={50} value={draft} onChange={event => setDraft(event.target.value)}
+            onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); add(); } if (event.key === 'Escape') { setAdding(false); setDraft(''); } }}
+            placeholder="输入标签" className="w-32 rounded border border-zinc-300 px-2 py-1 text-[11px]" />
+          <button type="button" onClick={add} className="text-[11px]">添加</button>
+          <button type="button" onClick={() => { setAdding(false); setDraft(''); }} className="text-[11px] text-zinc-500">取消</button>
+        </div>
+      ) : <button type="button" aria-label="添加标签" title="添加标签" onClick={() => setAdding(true)} className="rounded-md border border-dashed border-zinc-300 px-2 py-0.5 text-[11px] text-zinc-600"><i className="fa-solid fa-plus" /></button>)}
     </div>
   );
 }
@@ -161,7 +147,7 @@ export function SkillHubTagEditor({
         <div>
           <p className="text-[13px] font-semibold text-zinc-800">SkillHub 标签</p>
           <p className="text-[11px] text-zinc-500">
-            用当前工作区模型阅读 Skill.md，只从词表里提炼。置信度不足的不打标。
+            模型识别后仅展示已选标签；点击标签可移除，点击 ＋ 可手动添加。
           </p>
         </div>
         <button

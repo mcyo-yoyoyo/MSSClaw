@@ -86,5 +86,8 @@ export function canViewAsset(asset: OwnableAsset, viewer: AssetViewerContext): b
   if (!ORG_DATA_PERMISSION_ENABLED) {
     return true;
   }
+  if ('skillIds' in asset) {
+    return (asset.ownerDeptIds ?? []).some(id => viewer.affiliation.deptIds.includes(id));
+  }
   return matchesAssetOrgScope(asset, viewer.affiliation);
 }

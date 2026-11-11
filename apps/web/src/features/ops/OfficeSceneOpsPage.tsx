@@ -1,3 +1,4 @@
+import { isValidOfficeGuideUrl } from '@/domain/internalOfficeScenes';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { CenterPageHeader, StatCardGrid } from '@/components/center/CenterShell';
@@ -11,6 +12,7 @@ import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeScene
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 
 interface SceneDraft {
+  guideUrl: string;
   label: string;
   english: string;
   description: string;
@@ -60,6 +62,7 @@ const SCENE_LIMIT = 100;
 
 function draftOf(entry: InternalOfficeSceneCatalogEntry): SceneDraft {
   return {
+    guideUrl: entry.guideUrl || '',
     label: entry.label,
     english: entry.english,
     description: entry.description,
@@ -73,6 +76,7 @@ function sameDraft(a: SceneDraft | null, b: SceneDraft | null): boolean {
   return Boolean(
     a &&
       b &&
+      a.guideUrl === b.guideUrl &&
       a.label === b.label &&
       a.english === b.english &&
       a.description === b.description &&
@@ -370,9 +374,14 @@ export function OfficeSceneOpsPage({
       setEditorError('请填写场景名。');
       return;
     }
+    if (!isValidOfficeGuideUrl(draft.guideUrl)) {
+      setEditorError('场景使用指导请填写有效的 http:// 或 https:// URL（最长 2048 字符）');
+      return;
+    }
     const tool = toolById.get(draft.toolId) ?? null;
     const patch: Partial<Omit<InternalOfficeSceneCatalogEntry, 'id'>> = {
       label,
+      guideUrl: draft.guideUrl.trim(),
       english: draft.english.trim(),
       description: draft.description.trim(),
       visible: draft.visible,
@@ -620,6 +629,12 @@ export function OfficeSceneOpsPage({
                     />
                   </label>
                 </div>
+
+                <label className="mb-3 block text-[11px] text-zinc-600">
+                  场景使用指导
+                  <input type="url" placeholder="https://…" maxLength={2048} disabled={editorUnavailable} readOnly={readOnly} value={draft.guideUrl} onChange={event => patchDraft({ guideUrl: event.target.value })} className="mt-1 w-full rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[12px] outline-none focus:border-zinc-400" />
+                  <span className="mt-1 block text-zinc-400">填写后优先打开此地址；留空使用工具的使用指导链接。</span>
+                </label>
 
                 <ToolBindingEditor
                   draft={draft}

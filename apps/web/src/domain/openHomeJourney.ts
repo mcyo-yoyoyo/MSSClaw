@@ -104,6 +104,6 @@ export function openCaseMap() {
 }
 
 /** 打开工具详情页（当前标签页跳转） */
-export function openMarketToolDetail(toolId: string) {
-  openAssetDetail('tool', toolId);
+export function openMarketToolDetail(toolId: string, sceneId?: string) {
+  openAssetDetail('tool', toolId, sceneId);
 }

@@ -1,3 +1,5 @@
+import { formatVersion } from '@/domain/formatVersion';
+import { skillDownloadUrl } from '@/domain/skillDownload';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { GuestGateLock } from '@/components/auth/GuestGateLock';
@@ -356,6 +358,11 @@ export function MarketSkillDetailModal({
 
   const handleDownload = async () => {
     if (!adminActions) bumpDownload(skill.id, 'skill');
+    const downloadUrl = skillDownloadUrl(skill.downloadUrl);
+    if (downloadUrl) {
+      window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
     if (skill.packageBlob) {
       try {
         await downloadPackageBlob(skill.packageBlob);
@@ -410,15 +417,15 @@ export function MarketSkillDetailModal({
   /** 历史版本各下各自归档的包；此前所有行都调 handleDownload，下到的都是当前包 */
   const downloadVersion = async (row: SkillVersionRecord) => {
     if (!row.packageBlob) {
-      onToast(`v${row.version} 未归档安装包，无法下载`);
+      onToast(`${formatVersion(row.version)} 未归档安装包，无法下载`);
       return;
     }
     if (!adminActions) bumpDownload(skill.id, 'skill');
     try {
       await downloadPackageBlob(row.packageBlob);
-      onToast(`已下载 v${row.version}：${row.packageBlob.name}`);
+      onToast(`已下载 ${formatVersion(row.version)}：${row.packageBlob.name}`);
     } catch {
-      onToast(`v${row.version} 包下载失败，请检查登录状态或后端连接`);
+      onToast(`${formatVersion(row.version)} 包下载失败，请检查登录状态或后端连接`);
     }
   };
 
@@ -580,7 +587,7 @@ export function MarketSkillDetailModal({
                 ))}
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-zinc-500">
-                <span className="tabular-nums">v{skill.version}</span>
+                <span className="tabular-nums">{formatVersion(skill.version)}</span>
                 <span title="访问量"><i className="fa-regular fa-eye mr-1" />{formatToolInvokes(eng.views)}</span>
                 <span title="收藏量"><i className="fa-regular fa-star mr-1" />{formatToolInvokes(eng.favorites)}</span>
                 <span title="下载数"><i className="fa-solid fa-download mr-1" />{formatToolInvokes(eng.downloads)}</span>
@@ -752,7 +759,7 @@ export function MarketSkillDetailModal({
                     {versionRows.map((v) => (
                       <tr key={v.version} className="border-b border-zinc-50">
                         <td className="px-2 py-2.5 font-mono font-semibold text-zinc-800">
-                          v{v.version}
+                          {formatVersion(v.version)}
                         </td>
                         <td className="px-2 py-2.5 text-zinc-600">{v.notes || '—'}</td>
                         <td className="px-2 py-2.5 tabular-nums text-zinc-500">
@@ -952,7 +959,7 @@ export function MarketSkillDetailModal({
             <p className="mb-2 text-[11px] font-semibold text-zinc-500">运行与环境</p>
             <dl className="divide-y divide-zinc-50">
               <MetaRow label="连接器" value={skill.connector || '平台默认'} />
-              <MetaRow label="版本" value={`v${skill.version}`} />
+              <MetaRow label="版本" value={formatVersion(skill.version)} />
               <MetaRow
                 label="运行状态"
                 value={
