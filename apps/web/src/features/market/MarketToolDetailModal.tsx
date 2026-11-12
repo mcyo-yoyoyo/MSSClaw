@@ -7,6 +7,7 @@ import { GuestGateLock } from '@/components/auth/GuestGateLock';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { CenterModal } from '@/components/center/CenterShell';
 import { isEmployeeAssistantTool, launchEmployeeAssistant } from '@/domain/employeeAssistantLaunch';
+import { isOfficeAceTool, launchOfficeAce } from '@/domain/officeAceLaunch';
 import { resolveToolLogoUrl } from '@/domain/toolLogo';
 import type { MarketShelfKind } from '@/domain/marketShelf';
 import type { PrototypeToolSeed } from '@/domain/prototype/types';
@@ -118,6 +119,14 @@ export function MarketToolDetailModal({
     });
     if (isEmployeeAssistantTool(tool.id)) {
       launchEmployeeAssistant({
+        name: tool.name,
+        fallbackUrl: tool.homepageUrl,
+        notify: showToast,
+      });
+      return;
+    }
+    if (isOfficeAceTool(tool.id)) {
+      launchOfficeAce({
         name: tool.name,
         fallbackUrl: tool.homepageUrl,
         notify: showToast,
