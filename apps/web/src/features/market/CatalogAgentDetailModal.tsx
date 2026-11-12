@@ -36,7 +36,6 @@ import {
   resolveDownloadOriginalFile,
   resolveOnlinePreviewFile,
 } from '@/domain/casePreview';
-import { downloadAgentFile } from '@/domain/agentExport';
 import { PackageFileTree } from '@/components/market/PackageFileTree';
 import { formatBytes } from '@/domain/packageFileTree';
 import { downloadPackageBlob } from '@/api/blobApi';
@@ -475,22 +474,18 @@ export function CatalogAgentDetailModal({
     bumpDetail(agent.id, 'agent');
   }, [agent.id, bumpDetail, trackDetail]);
 
-  /** 有运营上传的执行包就下发原包；没有才回落到前端即时生成的资源包 */
+  /** 没有运营上传的执行包时不允许下载 */
   const handleDownload = async () => {
     const currentAgent = useMarketplaceStore.getState().agents.find((item) => item.id === agent.id) ?? agent;
     const packageBlob = currentAgent.packageBlob;
+    if (!packageBlob) return;
     if (!adminActions) bumpDownload(currentAgent.id, 'agent');
-    if (packageBlob) {
-      try {
-        await downloadPackageBlob(packageBlob);
-        onToast(`已下载执行包：${packageBlob.name}`);
-      } catch {
-        onToast('执行包下载失败，请检查登录状态或后端连接');
-      }
-      return;
+    try {
+      await downloadPackageBlob(packageBlob);
+      onToast(`已下载执行包：${packageBlob.name}`);
+    } catch {
+      onToast('执行包下载失败，请检查登录状态或后端连接');
     }
-    downloadAgentFile(currentAgent);
-    onToast(`已下载 Agent 资源包：${currentAgent.name}`);
   };
 
   const requestDownload = () => {
@@ -842,7 +837,8 @@ export function CatalogAgentDetailModal({
                           icon="fa-download"
                           label="下载执行包"
                           desc="获取可在本地复用的材料"
-                          onClick={requestDownload}
+                          missing="暂无执行包，无法下载"
+                          onClick={packageBlob ? requestDownload : undefined}
                         />
                         <PathRow
                           icon="fa-comment-dots"
@@ -998,7 +994,8 @@ export function CatalogAgentDetailModal({
                           ? `${formatBytes(packageBlob.size)} · 上传于 ${packageBlob.uploadedAt.slice(0, 10)}`
                           : `资源更新时间：${updatedAt}`
                       }
-                      onClick={requestDownload}
+                      missing="暂无执行包，无法下载"
+                      onClick={packageBlob ? requestDownload : undefined}
                     />
                   </div>
                   {packageBlob ? (
@@ -1059,7 +1056,11 @@ export function CatalogAgentDetailModal({
                         <button
                           type="button"
                           onClick={requestDownload}
-                          className="text-[11px] font-semibold text-sky-700 hover:underline"
+                          disabled={!packageBlob}
+                          className={cn(
+                            'text-[11px] font-semibold',
+                            packageBlob ? 'text-sky-700 hover:underline' : 'cursor-not-allowed text-zinc-300',
+                          )}
                         >
                           下载
                         </button>
@@ -1133,8 +1134,18 @@ export function CatalogAgentDetailModal({
                     {favorited ? '已收藏' : '收藏'}
                     <GuestGateLock />
                   </button>
-                  <button type="button" onClick={requestDownload} className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-50">
-                    <i className="fa-solid fa-download text-[10px] text-zinc-400" />
+                  <button
+                    type="button"
+                    onClick={requestDownload}
+                    disabled={!packageBlob}
+                    className={cn(
+                      'inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-medium transition',
+                      packageBlob
+                        ? 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
+                        : 'cursor-not-allowed border-zinc-200 bg-zinc-50 text-zinc-300',
+                    )}
+                  >
+                    <i className={cn('fa-solid fa-download text-[10px]', packageBlob ? 'text-zinc-400' : 'text-zinc-300')} />
                     下载资源包
                   </button>
                 </>
