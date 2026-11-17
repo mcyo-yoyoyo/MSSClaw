@@ -48,7 +48,7 @@ import { SharedCatalogEmptyHint } from '@/components/common/SharedCatalogEmptyHi
 import { MarketShelfCard } from '@/components/market/MarketShelfCard';
 import { MarketSkillDetailModal } from '@/features/market/MarketSkillDetailModal';
 import type { MarketShelfCard as MarketShelfCardModel } from '@/domain/marketShelf';
-import { downloadAllSkillsFile, downloadSkillFile } from '@/domain/skillExport';
+import { downloadAllSkillsZip, downloadSkillFile } from '@/domain/skillExport';
 import { skillDisplayDesc, skillDisplayName } from '@/domain/skillDisplay';
 import {
   findHomogenizationHits,
@@ -316,15 +316,15 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
                         return [s.id, { likes: e.likes, dislikes: e.dislikes, downloads: e.downloads }];
                       }),
                     );
-                    downloadAllSkillsFile(skills, engMap);
-                    showToast(`已导出 Excel：${skills.length} 个 Skill（调用/Token 列预留为 —）`);
+                    downloadAllSkillsZip(skills, engMap);
+                    showToast(`已导出 Skill 包：${skills.length} 个 Skill`);
                   } catch (err) {
                     console.error(err);
-                    showToast('导出 Excel 失败，请重试或检查浏览器下载权限');
+                    showToast('导出失败，请重试或检查浏览器下载权限');
                   }
                 }}
                 className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03]"
-                title="导出运营分析清单"
+                title="导出全部 Skill 包（含运营清单，可导入）"
               >
                 <i className="fa-solid fa-file-export mr-1 text-[10px] text-zinc-400" />
                 导出全部清单

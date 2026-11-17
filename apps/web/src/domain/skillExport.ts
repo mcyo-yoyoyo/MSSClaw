@@ -181,6 +181,8 @@ export function skillOpsAnalyticsRow(
     id: skill.id,
     nameZh: skill.nameZh || skill.name,
     nameEn: skill.nameEn || '',
+    descZh: skill.descZh || skill.desc || '',
+    descEn: skill.descEn || '',
     command: skill.command,
     category: skill.category,
     version: skill.version || '1.0.0',
@@ -214,11 +216,8 @@ export function skillOpsAnalyticsRow(
   };
 }
 
-/**
- * 导出全部 Skill 运营清单（Excel .xlsx）。
- * MVP 字段对齐需求；调用总量/Token 列预留为「—」（暂无模型计量）。
- */
-export function downloadAllSkillsFile(
+/** 构建 Skill 运营清单 workbook（供导出和打包复用） */
+function buildSkillsOpsWorkbook(
   skills: PrototypeSkillSeed[],
   engagementById?: Record<string, { likes: number; dislikes: number; downloads: number }>,
 ) {
@@ -247,6 +246,8 @@ export function downloadAllSkillsFile(
           return {
             Skill名称: r.nameZh,
             SkillID: r.id,
+            中文描述: r.descZh,
+            英文描述: r.descEn,
             创建者: r.author,
             创建时间: r.createdAt || '—',
             更新者: r.updatedBy || '—',
@@ -314,9 +315,57 @@ export function downloadAllSkillsFile(
   XLSX.utils.book_append_sheet(wb, wsSummary, '汇总');
   XLSX.utils.book_append_sheet(wb, wsDetail, '技能明细');
   XLSX.utils.book_append_sheet(wb, wsTop, '调用Top10');
+  return wb;
+}
 
+/**
+ * 导出全部 Skill 运营清单（Excel .xlsx）。
+ * MVP 字段对齐需求；调用总量/Token 列预留为「—」（暂无模型计量）。
+ */
+export function downloadAllSkillsFile(
+  skills: PrototypeSkillSeed[],
+  engagementById?: Record<string, { likes: number; dislikes: number; downloads: number }>,
+) {
+  const wb = buildSkillsOpsWorkbook(skills, engagementById);
   const stamp = new Date().toISOString().slice(0, 10);
   XLSX.writeFile(wb, `mssclaw-skills-ops-${stamp}.xlsx`);
+}
+
+/**
+ * 导出全部 Skill 为可导入的 ZIP 包，内含运营清单 Excel + 各 Skill 独立包 + 总清单 manifest。
+ */
+export function downloadAllSkillsZip(
+  skills: PrototypeSkillSeed[],
+  engagementById?: Record<string, { likes: number; dislikes: number; downloads: number }>,
+) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  const zipped: Record<string, Uint8Array> = {};
+
+  /* 1. 运营清单 Excel */
+  const wb = buildSkillsOpsWorkbook(skills, engagementById);
+  const xlsxBuf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
+  zipped[`mssclaw-skills-ops-${stamp}.xlsx`] = new Uint8Array(xlsxBuf);
+
+  /* 2. 各 Skill 独立包 */
+  for (const skill of skills) {
+    const files = buildPackageFiles(skill);
+    for (const [path, content] of Object.entries(files)) {
+      zipped[`skills/${path}`] = strToU8(content);
+    }
+  }
+
+  /* 3. 总清单 manifest */
+  const bulkManifest = {
+    manifestVersion: '2.1',
+    format: 'mssclaw-skills-bulk-export',
+    exportedAt: new Date().toISOString(),
+    skillCount: skills.length,
+    skills: skills.map((s) => skillManifest(s)),
+  };
+  zipped['manifest.json'] = strToU8(JSON.stringify(bulkManifest, null, 2));
+
+  const bytes = zipSync(zipped, { level: 6 });
+  downloadBinary(`mssclaw-skills-export-${stamp}.zip`, bytes, 'application/zip');
 }
 
 export function parseSkillImport(raw: unknown): PrototypeSkillSeed | null {
@@ -557,6 +606,39 @@ function parseSkillZipFiles(files: Record<string, Uint8Array>): PrototypeSkillSe
   return skill;
 }
 
+/** 从批量导出 ZIP 中解析所有 Skill 子包 */
+function parseSkillsBulkZip(files: Record<string, Uint8Array>): PrototypeSkillSeed[] {
+  /* 按 skills/ 下的目录前缀分组 */
+  const skillDirs = new Set<string>();
+  for (const path of Object.keys(files)) {
+    const normalized = path.replace(/\\/g, '/');
+    if (normalized.startsWith('skills/')) {
+      const segments = normalized.slice('skills/'.length).split('/');
+      if (segments.length >= 2) {
+        skillDirs.add(`skills/${segments[0]}`);
+      }
+    }
+  }
+
+  const results: PrototypeSkillSeed[] = [];
+  for (const dir of skillDirs) {
+    /* 收集该子目录下的所有文件 */
+    const subFiles: Record<string, Uint8Array> = {};
+    const prefix = dir + '/';
+    for (const [path, data] of Object.entries(files)) {
+      const normalized = path.replace(/\\/g, '/');
+      if (normalized.startsWith(prefix)) {
+        /* 将 skills/{slug}/xxx 截取为 {slug}/xxx，与 parseSkillZipFiles 期望的结构一致 */
+        const relPath = normalized.slice('skills/'.length);
+        subFiles[relPath] = data;
+      }
+    }
+    const skill = parseSkillZipFiles(subFiles);
+    if (skill) results.push(skill);
+  }
+  return results;
+}
+
 /** 统一导入入口：ZIP 包 / SKILL.md / JSON */
 export async function parseSkillUpload(
   file: File,
@@ -566,7 +648,37 @@ export async function parseSkillUpload(
 
   if (name.endsWith('.zip') || name.endsWith('.skill.zip')) {
     const buf = new Uint8Array(await file.arrayBuffer());
-    const skill = await parseSkillZipAsync(buf, options);
+
+    /* 先提取文件列表，判断是否为批量导出包 */
+    const bulkOptions: PackageArchiveInspectionOptions = {
+      ...options,
+      maxCompressedBytes: null,
+    };
+    const files = await readPackageZipMetadata(buf, (path) => {
+      const n = path.replace(/\\/g, '/');
+      return (
+        n === 'manifest.json' ||
+        n.endsWith('/mssclaw.manifest.json') ||
+        n.endsWith('/SKILL.md') ||
+        n === 'SKILL.md' ||
+        n.endsWith('reference/plan.md')
+      );
+    }, bulkOptions);
+
+    const bulkManifestText = files['manifest.json'] ? strFromU8(files['manifest.json']) : null;
+    if (bulkManifestText) {
+      try {
+        const parsed = JSON.parse(bulkManifestText) as Record<string, unknown>;
+        if (parsed.format === 'mssclaw-skills-bulk-export') {
+          return parseSkillsBulkZip(files);
+        }
+      } catch {
+        /* not a bulk export, fall through to single-skill parsing */
+      }
+    }
+
+    /* 单个 Skill 包 */
+    const skill = parseSkillZipFiles(files);
     return skill ? [skill] : [];
   }
 
