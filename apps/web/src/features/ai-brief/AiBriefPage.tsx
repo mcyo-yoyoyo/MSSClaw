@@ -1,9 +1,15 @@
+/**
+ * [INPUT]: 读取快讯归档、分类、订阅和来源跳转信息。
+ * [OUTPUT]: 导出 AiBriefPage，按日期分批展示新闻。
+ * [POS]: AI 快讯页面入口，与案例洞察共用导航。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BackButton } from '@/components/common/BackButton';
 import { buildAppRoute, readAppRouteFromLocation } from '@/domain/appRoute';
 import { getAiBriefContentMode, setAiBriefContentMode, type AiBriefContentMode } from '@/domain/aiBriefContentMode';
 import { cn } from '@/lib/utils';
-import { defaultAiNewsDateRange, flattenAiBotNews } from '@/domain/aiBotDailyNews';
+import { flattenAiBotNews } from '@/domain/aiBotDailyNews';
 import {
   AI_BRIEF_CATEGORIES,
   classifyAiBriefItem,
@@ -22,6 +28,8 @@ import { useAiBriefEmailCopyStore } from '@/stores/aiBriefEmailCopyStore';
 import { PageCanvas } from '@/components/layout/PageCanvas';
 import { PageStageHero } from '@/components/layout/PageStageHero';
 import { CaseInsightsView } from './CaseInsightsView';
+
+const DAYS_PER_PAGE = 3;
 
 type CalendarMonth = { year: number; month: number };
 
@@ -323,7 +331,9 @@ export function AiBriefPage() {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [emailDraft, setEmailDraft] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<AiBriefCategoryId | 'all'>('all');
-  const [dateRange, setDateRange] = useState(defaultAiNewsDateRange);
+  const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
+  const [dayCount, setDayCount] = useState(DAYS_PER_PAGE);
+  const moreRef = useRef<HTMLDivElement>(null);
   const [searchDraft, setSearchDraft] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [contentMode, setContentModeState] = useState(getAiBriefContentMode);
@@ -366,7 +376,8 @@ export function AiBriefPage() {
   useEffect(() => {
     if (!hasNewsLocation) return;
     setAiBriefContentMode('news'); setContentModeState('news'); setCategoryFilter('all');
-    setDateRange({ startDate: '', endDate: '' }); setSearchDraft(''); setSearchQuery('');
+    setDateRange({ startDate: '', endDate: '' });
+    setSearchDraft(''); setSearchQuery('');
   }, [newsLocation.id, newsLocation.url]);
   useEffect(() => {
     if (hasNewsLocation) setHighlightId(focusedNews?.id || null);
@@ -396,7 +407,7 @@ export function AiBriefPage() {
     [datedGroups],
   );
 
-  const visibleGroups = useMemo(() => {
+  const matchingGroups = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
     return datedGroups
       .map((g) => ({
@@ -416,6 +427,26 @@ export function AiBriefPage() {
       }))
       .filter((g) => g.items.length > 0);
   }, [datedGroups, categoryFilter, searchQuery]);
+
+  const focusDay = highlightId
+    ? matchingGroups.findIndex(group => group.items.some(item => item.id === highlightId)) + 1
+    : 0;
+  const shownDays = Math.max(dayCount, focusDay);
+  const visibleGroups = matchingGroups.slice(0, shownDays);
+  const hasMore = matchingGroups.length > shownDays;
+
+  useEffect(() => {
+    const marker = moreRef.current;
+    if (!marker || !hasMore || contentMode !== 'news') return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        observer.disconnect();
+        setDayCount(shownDays + DAYS_PER_PAGE);
+      }
+    });
+    observer.observe(marker);
+    return () => observer.disconnect();
+  }, [hasMore, shownDays, contentMode]);
 
   useEffect(() => {
     if (!highlightId) return;
@@ -555,6 +586,7 @@ export function AiBriefPage() {
                 onClick={() => {
                   setContentMode('news');
                   setCategoryFilter(category.id);
+                  setDayCount(DAYS_PER_PAGE);
                 }}
                 className={cn(
                   'relative px-3 py-2 text-[13px] font-medium transition after:absolute after:inset-x-2 after:-bottom-[11px] after:h-0.5 after:rounded-full after:bg-transparent',
@@ -585,13 +617,17 @@ export function AiBriefPage() {
               startDate={dateRange.startDate}
               endDate={dateRange.endDate}
               initialMonthKey={payload.groups[0]?.dateKey}
-              onChange={(startDate, endDate) => setDateRange({ startDate, endDate })}
+              onChange={(startDate, endDate) => {
+                setDateRange({ startDate, endDate });
+                setDayCount(DAYS_PER_PAGE);
+              }}
             />
             <form
               className="flex min-w-0 flex-1 gap-2 lg:flex-none"
               onSubmit={(event) => {
                 event.preventDefault();
                 setSearchQuery(searchDraft);
+                setDayCount(DAYS_PER_PAGE);
               }}
             >
               <label className="relative min-w-0 flex-1 lg:w-64">
@@ -629,7 +665,7 @@ export function AiBriefPage() {
             ) : (
               <div className="space-y-8">
                 {visibleGroups.map((group) => (
-                  <section key={group.dateLabel} className="scroll-mt-4">
+                  <section key={group.dateKey ?? group.dateLabel} className="scroll-mt-4">
                     <div className="mb-3 flex items-baseline gap-2 px-1">
                       <h2 className="text-[18px] font-bold tracking-tight text-zinc-900">
                         {group.dateLabel}
@@ -722,6 +758,7 @@ export function AiBriefPage() {
                     </div>
                   </section>
                 ))}
+                {hasMore && <div ref={moreRef} className="h-px" aria-hidden="true" />}
               </div>
             )}
           </main>

@@ -278,19 +278,12 @@ test('早于三天的快讯仍进入数据，时间范围由页面筛选决定',
   assert.equal(newsStore.getState().payload.groups[0]?.items[0]?.title, '过期快讯');
 });
 
-test('快讯页默认把时间筛选设成最近三个上海自然日', async () => {
-  const news = (await vite.ssrLoadModule('/src/domain/aiBotDailyNews.ts')) as {
-    defaultAiNewsDateRange: (now?: Date) => { startDate: string; endDate: string };
-  };
-  assert.deepEqual(news.defaultAiNewsDateRange(new Date('2026-10-30T16:00:00.000Z')), {
-    startDate: '2026-10-29',
-    endDate: '2026-10-31',
-  });
-  assert.deepEqual(news.defaultAiNewsDateRange(new Date('2026-10-30T15:59:00.000Z')), {
-    startDate: '2026-10-28',
-    endDate: '2026-10-30',
-  });
-  assert.match(briefPageSource, /useState\(defaultAiNewsDateRange\)/);
+test('快讯页每次展示三个新闻日期，滚动到底继续追加', () => {
+  assert.match(briefPageSource, /const DAYS_PER_PAGE = 3/);
+  assert.match(briefPageSource, /matchingGroups.slice\(0, shownDays\)/);
+  assert.match(briefPageSource, /setDayCount\(shownDays \+ DAYS_PER_PAGE\)/);
+  assert.match(briefPageSource, /<DateCalendarFilter/);
+  assert.match(briefPageSource, /useState\(\{ startDate: '', endDate: '' \}\)/);
 });
 
 test('接口返回快讯后结束加载', async () => {
