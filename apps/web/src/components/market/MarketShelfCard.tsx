@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 读取市场货架条目和对应的 Skill 或 Agent。
+ * [OUTPUT]: 导出 MarketShelfCard，提供详情入口和卡片操作。
+ * [POS]: 市场货架共用卡片，访客可下载单个资源包。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import { cn } from '@/lib/utils';
 import { ToolLogo } from '@/components/brand/ToolLogo';
 import { formatToolInvokes } from '@/domain/aiToolCategories';
@@ -123,33 +129,30 @@ export function MarketShelfCard({
   const onDownload = (e: { stopPropagation: () => void }) => {
     e.stopPropagation();
     const contentId = card.id;
-    const run = () => {
-      const market = useMarketplaceStore.getState();
-      const skill = assetType === 'skill'
-        ? market.skills.find((s) => s.id === contentId)
-        : assetType === 'agent'
-          ? undefined
-          : market.skills.find((s) => s.id === contentId);
-      if (skill) {
-        bumpDownload(contentId, 'skill');
-        downloadSkillFile(skill);
-        market.showToast(`已下载技能包：${skill.name}`);
-        return;
-      }
-      const agent = assetType === 'agent'
-        ? market.agents.find((a) => a.id === contentId)
-        : assetType === 'skill'
-          ? undefined
-          : market.agents.find((a) => a.id === contentId);
-      if (agent) {
-        bumpDownload(contentId, 'agent');
-        downloadAgentFile(agent);
-        market.showToast(`已下载 Agent 包：${agent.name}`);
-        return;
-      }
-      market.showToast('请打开详情后下载');
-    };
-    if (requireLogin('download', run)) run();
+    const market = useMarketplaceStore.getState();
+    const skill = assetType === 'skill'
+      ? market.skills.find((s) => s.id === contentId)
+      : assetType === 'agent'
+        ? undefined
+        : market.skills.find((s) => s.id === contentId);
+    if (skill) {
+      bumpDownload(contentId, 'skill');
+      downloadSkillFile(skill);
+      market.showToast(`已下载技能包：${skill.name}`);
+      return;
+    }
+    const agent = assetType === 'agent'
+      ? market.agents.find((a) => a.id === contentId)
+      : assetType === 'skill'
+        ? undefined
+        : market.agents.find((a) => a.id === contentId);
+    if (agent) {
+      bumpDownload(contentId, 'agent');
+      downloadAgentFile(agent);
+      market.showToast(`已下载 Agent 包：${agent.name}`);
+      return;
+    }
+    market.showToast('请打开详情后下载');
   };
 
   const onToggleCompare = (e: { stopPropagation: () => void }) => {

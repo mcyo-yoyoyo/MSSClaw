@@ -1,6 +1,6 @@
 /**
- * [INPUT]: Agent 目录、生命周期与下载入口。
- * [OUTPUT]: CatalogAgentDetailModal；展示平台及自定义适配流程。
+ * [INPUT]: Agent 目录、生命周期与执行包。
+ * [OUTPUT]: CatalogAgentDetailModal；展示适配流程并提供访客下载。
  * [POS]: Agent 详情视图，侧栏不展示当前状态。
  * [PROTOCOL]: Update this header on change, then check AGENTS.md
  */
@@ -484,13 +484,8 @@ export function CatalogAgentDetailModal({
       await downloadPackageBlob(packageBlob);
       onToast(`已下载执行包：${packageBlob.name}`);
     } catch {
-      onToast('执行包下载失败，请检查登录状态或后端连接');
+      onToast('执行包下载失败，请稍后重试');
     }
-  };
-
-  const requestDownload = () => {
-    const run = () => void handleDownload();
-    if (requireLogin('download', run)) run();
   };
 
   const requestFavorite = () => {
@@ -838,7 +833,7 @@ export function CatalogAgentDetailModal({
                           label="下载执行包"
                           desc="获取可在本地复用的材料"
                           missing="暂无执行包，无法下载"
-                          onClick={packageBlob ? requestDownload : undefined}
+                          onClick={packageBlob ? handleDownload : undefined}
                         />
                         <PathRow
                           icon="fa-comment-dots"
@@ -995,7 +990,7 @@ export function CatalogAgentDetailModal({
                           : `资源更新时间：${updatedAt}`
                       }
                       missing="暂无执行包，无法下载"
-                      onClick={packageBlob ? requestDownload : undefined}
+                      onClick={packageBlob ? handleDownload : undefined}
                     />
                   </div>
                   {packageBlob ? (
@@ -1055,7 +1050,7 @@ export function CatalogAgentDetailModal({
                       <td className="px-2 py-2.5">
                         <button
                           type="button"
-                          onClick={requestDownload}
+                          onClick={handleDownload}
                           disabled={!packageBlob}
                           className={cn(
                             'text-[11px] font-semibold',
@@ -1136,7 +1131,7 @@ export function CatalogAgentDetailModal({
                   </button>
                   <button
                     type="button"
-                    onClick={requestDownload}
+                    onClick={handleDownload}
                     disabled={!packageBlob}
                     className={cn(
                       'inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-medium transition',

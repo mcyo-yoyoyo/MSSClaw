@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 读取资源包地址、归档内容和运营角色。
+ * [OUTPUT]: 提供包文件树、文件预览和原包下载。
+ * [POS]: 市场详情页与运营审核共用的归档预览组件。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
@@ -168,7 +174,7 @@ export function PackageFileTree({
     try {
       await downloadPackageBlob(source);
     } catch {
-      setDownloadError('原包下载失败，请检查登录状态或后端连接。');
+      setDownloadError('原包下载失败，请稍后重试。');
     } finally {
       setDownloading(false);
     }

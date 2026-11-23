@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 读取 Skill 目录、版本归档与互动状态。
+ * [OUTPUT]: 导出 MarketSkillDetailModal，提供详情和访客下载。
+ * [POS]: 市场 Skill 详情入口，按所选版本下载对应安装包。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import { formatVersion } from '@/domain/formatVersion';
 import { skillDownloadUrl } from '@/domain/skillDownload';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -368,17 +374,12 @@ export function MarketSkillDetailModal({
         await downloadPackageBlob(skill.packageBlob);
         onToast(`已下载：${skill.packageBlob.name}`);
       } catch {
-        onToast('Skill 包下载失败，请检查登录状态或后端连接');
+        onToast('Skill 包下载失败，请稍后重试');
       }
       return;
     }
     downloadSkillFile(skill);
     onToast(`已下载：${name}`);
-  };
-
-  const requestDownload = () => {
-    const run = () => void handleDownload();
-    if (requireLogin('download', run)) run();
   };
 
   const generateEvaluation = () => {
@@ -425,13 +426,8 @@ export function MarketSkillDetailModal({
       await downloadPackageBlob(row.packageBlob);
       onToast(`已下载 ${formatVersion(row.version)}：${row.packageBlob.name}`);
     } catch {
-      onToast(`${formatVersion(row.version)} 包下载失败，请检查登录状态或后端连接`);
+      onToast(`${formatVersion(row.version)} 包下载失败，请稍后重试`);
     }
-  };
-
-  const requestVersionDownload = (row: SkillVersionRecord) => {
-    const run = () => void downloadVersion(row);
-    if (requireLogin('download', run)) run();
   };
 
   const tabs: { id: DetailTab; label: string; badge?: string }[] = [
@@ -780,7 +776,7 @@ export function MarketSkillDetailModal({
                         <td className="px-2 py-2.5">
                           <button
                             type="button"
-                            onClick={() => requestVersionDownload(v)}
+                            onClick={() => downloadVersion(v)}
                             disabled={!v.packageBlob}
                             title={v.packageBlob ? v.packageBlob.name : '该版本未归档安装包'}
                             className={cn(
@@ -876,7 +872,7 @@ export function MarketSkillDetailModal({
                 </button>
                 <button
                   type="button"
-                  onClick={requestDownload}
+                  onClick={handleDownload}
                   className="w-full rounded-xl bg-zinc-900 px-3 py-2 text-[12px] font-semibold text-white"
                 >
                   <i className="fa-solid fa-download mr-1.5" />下载 Skill 包
