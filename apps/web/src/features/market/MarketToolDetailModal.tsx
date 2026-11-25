@@ -1,4 +1,10 @@
-import { resolveOfficeGuideUrl } from '@/domain/internalOfficeScenes';
+/**
+ * [INPUT]: 从工具目录读取工具资料、办公场景和访问权限。
+ * [OUTPUT]: 导出 MarketToolDetailModal，供详情页与运营预览使用。
+ * [POS]: 分别展示工具与来源场景的指导链接，记录访问并分派桌面启动。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
+import { resolveOfficeSceneGuideUrl } from '@/domain/internalOfficeScenes';
 import { useInternalOfficeSceneCatalogStore } from '@/stores/internalOfficeSceneCatalogStore';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
@@ -125,7 +131,7 @@ export function MarketToolDetailModal({
       });
       return;
     }
-    if (isOfficeAceTool(tool.id)) {
+    if (kind === 'internal' && isOfficeAceTool(tool.name)) {
       launchOfficeAce({
         name: tool.name,
         fallbackUrl: tool.homepageUrl,
@@ -184,8 +190,10 @@ export function MarketToolDetailModal({
   const chipText = asPage ? 'text-[12px]' : 'text-[11px]';
   const kindLabel = kind === 'internal' ? '公司工具' : '外部工具';
   const hasHome = Boolean(tool.homepageUrl && tool.homepageUrl !== '#');
-  const guideUrl = resolveOfficeGuideUrl(tool.id, tool.docsUrl, sceneId, sceneEntries);
-  const hasDocs = Boolean(guideUrl);
+  const guideLinks = [
+    { label: '工具使用指导', href: tool.docsUrl?.trim() },
+    { label: '场景使用指导', href: resolveOfficeSceneGuideUrl(tool.id, sceneId, sceneEntries) },
+  ].filter(({ href }) => href && href !== '#');
   const regionLabel =
     kind === 'external'
       ? tool.region === 'domestic'
@@ -281,7 +289,7 @@ export function MarketToolDetailModal({
           </div>
         }
         actions={
-          <div className="flex w-full items-center justify-between gap-3">
+          <div className="flex w-full flex-wrap items-center justify-between gap-3">
             {previewOnly ? (
               <span className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-100 px-2.5 py-1.5 text-[11px] font-medium text-zinc-500">
                 <i className="fa-regular fa-eye text-[10px]" />
@@ -303,7 +311,7 @@ export function MarketToolDetailModal({
                 <GuestGateLock />
               </button>
             )}
-            <div className="flex items-center justify-end gap-2">
+            <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2 whitespace-nowrap">
               {asPage ? null : (
                 <button
                   type="button"
@@ -313,17 +321,18 @@ export function MarketToolDetailModal({
                   关闭
                 </button>
               )}
-              {hasDocs ? (
+              {guideLinks.map(({ label, href }) => (
                 <a
-                  href={guideUrl}
+                  key={label}
+                  href={href}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 rounded-xl border border-black/8 px-3.5 py-2 text-[12px] font-medium text-zinc-600 transition hover:bg-black/[0.03]"
                 >
                   <i className="fa-regular fa-file-lines text-[10px]" />
-                  使用指导
+                  {label}
                 </a>
-              ) : null}
+              ))}
               {hasHome && !previewOnly ? (
                 <button
                   type="button"

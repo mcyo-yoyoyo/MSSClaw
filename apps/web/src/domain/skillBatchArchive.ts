@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 读取旧批量 ZIP 的工作簿和 Skill 文件。
+ * [OUTPUT]: 解析与生成旧格式归档。没有来源列的记录保留空来源。
+ * [POS]: 为旧版 Skill 批量包提供格式兼容。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import { skillDownloadUrl } from '@/domain/skillDownload';
 import { strFromU8, strToU8, zip } from 'fflate';
 import * as XLSX from 'xlsx';
@@ -96,7 +102,7 @@ export async function parseSkillBatch(bytes: Uint8Array): Promise<BatchSkillRow[
         version: text(row, '版本'), author: text(row, '作者') || 'Imported',
         command: command ? (command.startsWith('/') ? command : `/${command}`) : parsed.command,
         category, tags, visibility, ownerDeptIds: dept ? [dept] : [], ownerRegionId: region || null,
-        ownerRegionIds: region ? [region] : [], sourceType: 'internal', published: false, callable: false,
+        ownerRegionIds: region ? [region] : [], published: false, callable: false,
         invokes: 0, connector: text(row, '连接器'), icon: text(row, '图标') || 'fa-cube',
       };
       const contents = Object.fromEntries(Object.entries(files).filter(([p]) => p.startsWith(path)).map(([p, data]) => [p.slice(path.length), data]));

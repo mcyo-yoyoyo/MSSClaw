@@ -1,45 +1,11 @@
 /**
- * Agent 成熟度状态（《Agent Hub详情页重构修改计划 0818》§1.5 / §5）
- *
- * 与「当前登录人此刻能不能点运行」是两个维度，不可混用：
- * - lifecycleStatus：Agent 自身的建设成熟度，由运营配置，决定状态标签与主按钮；
- * - canRun：运行时判断（展示预设是否开放打样、当前角色有无执行权、依赖是否齐备），
- *   同一个 Agent 换个角色或换个部署就会变，用它驱动「建设中」标签会前后矛盾。
+ * [INPUT]: 读取 Agent 成熟度、上架状态、已挂载技能及运行权限。
+ * [OUTPUT]: 提供成熟度选项、状态解析和详情页主操作选择。
+ * [POS]: 编辑器配置成熟度，详情页据此选择使用入口。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
  */
 
 export type AgentLifecycleStatus = 'runnable' | 'building';
-
-export interface AgentLifecycleMeta {
-  id: AgentLifecycleStatus;
-  label: string;
-  /** 顶部状态标签的完整文案，含能力补充说明 */
-  badgeText: (opts: { hasDemo: boolean; hasSolutionDoc: boolean }) => string;
-  badgeClass: string;
-  dotClass: string;
-}
-
-export const AGENT_LIFECYCLE_META: Record<AgentLifecycleStatus, AgentLifecycleMeta> = {
-  runnable: {
-    id: 'runnable',
-    label: '可运行',
-    badgeText: () => '可运行 · 支持在线体验',
-    badgeClass: 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100',
-    dotClass: 'bg-emerald-500',
-  },
-  building: {
-    id: 'building',
-    label: '建设中',
-    // §5.2：建设中要同时说明当前可看什么，避免页面显得没有价值
-    badgeText: ({ hasDemo, hasSolutionDoc }) =>
-      hasDemo
-        ? '建设中 · Demo可查看'
-        : hasSolutionDoc
-          ? '建设中 · 方案包可查看'
-          : '建设中 · 敬请期待',
-    badgeClass: 'bg-amber-50 text-amber-800 ring-1 ring-amber-100',
-    dotClass: 'bg-amber-500',
-  },
-};
 
 export const AGENT_LIFECYCLE_OPTIONS: { id: AgentLifecycleStatus; label: string; hint: string }[] = [
   {

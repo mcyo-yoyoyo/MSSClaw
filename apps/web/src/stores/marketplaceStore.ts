@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 读取资产目录、工作区连接和单条保存接口。
+ * [OUTPUT]: 提供市场资产状态与带版本检查的 Skill 写入。
+ * [POS]: 为管理页和市场视图同步目录与交互状态。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import { create } from 'zustand';
 import { backfillAgentSeedMetadata } from '@/domain/prototype/agents';
 import type {
@@ -296,8 +302,8 @@ async function writeCatalogItem(
     item = writable;
   }
   const body =
-    !isNew && expectedUpdatedAt
-      ? { ...item, expectedUpdatedAt }
+    !isNew && (resource === 'skills' || expectedUpdatedAt)
+      ? { ...item, expectedUpdatedAt: expectedUpdatedAt ?? null }
       : item;
   return saveCatalogItemApi(resource, body, isNew);
 }

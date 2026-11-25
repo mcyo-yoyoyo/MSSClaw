@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 读取 Skill 种子和组织归属字典。
+ * [OUTPUT]: 提供种子归属映射和归属校准函数。
+ * [POS]: 规范化领域及区域，保留 Skill 原有来源。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
 
@@ -67,7 +73,6 @@ export function applyCanonicalSkillOwnership(skill: PrototypeSkillSeed): Prototy
     const region = own.ownerRegionId ?? null;
     return {
       ...skill,
-      sourceType: skill.sourceType ?? 'internal',
       visibility: 'org',
       ownerDeptIds: [...own.ownerDeptIds],
       ownerRegionId: region,
@@ -84,7 +89,6 @@ export function applyCanonicalSkillOwnership(skill: PrototypeSkillSeed): Prototy
   const region = skill.ownerRegionId ?? null;
   return {
     ...skill,
-    sourceType: skill.sourceType ?? 'internal',
     visibility: skill.visibility ?? 'org',
     ownerDeptIds: singleOwnerDeptIds(skill.ownerDeptIds),
     ownerRegionId: region,

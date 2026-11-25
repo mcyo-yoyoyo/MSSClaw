@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 读取 Skill 目录、运营统计与审核状态。
+ * [OUTPUT]: 导出 SkillCenterPage，提供单条维护和批量明细交换入口。
+ * [POS]: 后台 Skill 管理页。看板下方集中搜索和筛选列表。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
+import { fetchSkillCatalogApi, fetchSkillExportStatisticsApi } from '@/api/persistenceApi';
 import { SkillBatchTransfer } from './SkillBatchTransfer';
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -114,6 +121,7 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
     hydrateReviews();
   }, [hydrateBusinessCatalog, hydrateReviews]);
 
+  const [exporting, setExporting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<PrototypeSkillSeed | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -305,29 +313,26 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
           }
           actions={
             <>
-              <CenterSearchInput value={skillSearch} onChange={setSkillSearch} placeholder="搜索 Skill…" />
               <button
                 type="button"
-                onClick={() => {
+                disabled={exporting}
+                onClick={async () => {
+                  setExporting(true);
                   try {
-                    const engMap = Object.fromEntries(
-                      skills.map((s) => {
-                        const e = getEngagement(s.id);
-                        return [s.id, { likes: e.likes, dislikes: e.dislikes, downloads: e.downloads }];
-                      }),
-                    );
-                    downloadAllSkillsZip(skills, engMap);
-                    showToast(`已导出 Skill 包：${skills.length} 个 Skill`);
+                    const [catalog, statistics] = await Promise.all([fetchSkillCatalogApi(), fetchSkillExportStatisticsApi()]);
+                    await downloadAllSkillsZip(catalog, statistics);
+                    showToast(`已导出 ${catalog.length} 个 Skill 及明细表`);
                   } catch (err) {
-                    console.error(err);
-                    showToast('导出失败，请重试或检查浏览器下载权限');
+                    showToast(err instanceof Error ? err.message : '导出失败，请重试');
+                  } finally {
+                    setExporting(false);
                   }
                 }}
                 className="rounded-xl border border-black/8 px-4 py-2 text-[12px] font-medium transition hover:bg-black/[0.03]"
-                title="导出全部 Skill 包（含运营清单，可导入）"
+                title="导出 Skill 明细表和各 Skill 文件包"
               >
                 <i className="fa-solid fa-file-export mr-1 text-[10px] text-zinc-400" />
-                导出全部清单
+                {exporting ? '正在导出…' : '导出全部清单'}
               </button>
               <SkillBatchTransfer />
               <button
@@ -454,6 +459,14 @@ export function SkillCenterPage({ onInvoke }: SkillCenterPageProps) {
         </section>
 
         <OrgAssetFilterBar
+          searchInput={
+            <CenterSearchInput
+              value={skillSearch}
+              onChange={setSkillSearch}
+              placeholder="搜索 Skill…"
+              className="h-9 min-w-40 max-w-64 flex-1"
+            />
+          }
           deptFilter={skillDeptFilter}
           regionFilter={skillRegionFilter}
           businessFilter={skillBusinessFilter}

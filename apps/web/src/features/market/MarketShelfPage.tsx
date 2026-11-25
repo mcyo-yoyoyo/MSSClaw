@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 读取资产目录、可见范围、用户筛选和互动数据。
+ * [OUTPUT]: 导出 MarketShelfPage，展示各货架的卡片、统计及操作。
+ * [POS]: Skill Hub 按来源与业务场景筛选同一组可见技能。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import { useNavigationIntentStore } from '@/stores/navigationIntentStore';
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -54,6 +60,7 @@ import {
   getAssetRegionLabel,
   getDeptLabel,
   getRegionLabel,
+  type AssetSourceType,
 } from '@/domain/orgTaxonomy';
 import { openAssetDetail } from '@/domain/appRoute';
 import { assetCreatorName } from '@/domain/assetCreator';
@@ -194,6 +201,7 @@ export function MarketShelfPage({
   const [guidePreview, setGuidePreview] = useState<PlazaToolGuide | null>(null);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [externalType, setExternalType] = useState<ExternalToolTypeId | 'all'>('all');
+  const [skillSource, setSkillSource] = useState<AssetSourceType | 'all'>('all');
   /** MSS 集市二级面：Skill Hub | Agent Hub（默认 Skill Hub） */
   const [mssSurface, setMssSurface] = useState<'projects' | 'skills'>(() =>
     kind === 'projects' ? useNavigationIntentStore.getState().pendingMarketSurface ?? 'skills' : 'skills',
@@ -257,6 +265,7 @@ export function MarketShelfPage({
 
   useEffect(() => {
     setExternalType('all');
+    setSkillSource('all');
     const requestedSurface = kind === 'projects'
       ? useNavigationIntentStore.getState().consumeMarketSurface()
       : null;
@@ -599,11 +608,9 @@ export function MarketShelfPage({
       : null;
     return skills
       .filter((skill) => skill.published)
-      .filter(
-        (skill) =>
-          businessFilter === 'all' ||
-          resolveSkillBusinessScenario(skill) === businessFilter,
-      )
+      .filter((skill) => skillSource === 'all' || skill.sourceType === skillSource)
+      .filter((skill) => businessFilter === 'all' || resolveSkillBusinessScenario(skill) === businessFilter)
+      .filter((skill) => !hiddenKeys.includes(`projects:${skill.id}`))
       .filter((s) => canViewAsset(s, viewer))
       .filter((s) => skillMatchesOrgPerspectiveSelection(s, orgSelection))
       .filter((s) => {
@@ -632,7 +639,9 @@ export function MarketShelfPage({
   }, [
     kind,
     skills,
+    skillSource,
     businessFilter,
+    hiddenKeys,
     search,
     viewer,
     orgSelection,
@@ -640,32 +649,16 @@ export function MarketShelfPage({
     favoriteItems,
   ]);
 
-  const skillSceneCategories = useMemo(() => {
-    if (kind !== 'projects') return [];
-    return listVisibleBusinessScenarioCategories().map((cat) => {
-      const count = skills
-        .filter((skill) => skill.published)
-        .filter((skill) => resolveSkillBusinessScenario(skill) === cat.id)
-        .filter((s) => canViewAsset(s, viewer))
-        .filter((s) => skillMatchesOrgPerspectiveSelection(s, orgSelection)).length;
-      return { ...cat, count };
-    });
-  }, [kind, skills, viewer, orgSelection, sceneCatalog]);
-
   const skillHubStats = useMemo(() => {
     if (kind !== 'projects') return null;
-    const covered =
-      businessFilter === 'all'
-        ? skillSceneCategories.filter((s) => s.count > 0).length
-        : mssSkills.length > 0
-          ? 1
-          : 0;
+    const covered = new Set(mssSkills.map(resolveSkillBusinessScenario));
+    const categories = listVisibleBusinessScenarioCategories();
     return {
       skillCount: mssSkills.length,
-      sceneCovered: covered,
-      sceneTotal: listVisibleBusinessScenarioCategories().length,
+      sceneCovered: categories.filter((category) => covered.has(category.id)).length,
+      sceneTotal: categories.length,
     };
-  }, [kind, businessFilter, mssSkills, skillSceneCategories, sceneCatalog]);
+  }, [kind, mssSkills, sceneCatalog]);
 
   const skillCards = useMemo((): MarketShelfCardModel[] => {
     // marketplace 快照数组顺序是后端返回的 Skill 目录顺序。
@@ -713,13 +706,8 @@ export function MarketShelfPage({
         sourceOrder,
       };
     });
-    return sortByRankMode(
-      mapped.filter((c) => !hiddenKeys.includes(`${c.kind}:${c.id}`)),
-      rankMode,
-      getEngagement,
-      rankDirection,
-    );
-  }, [mssSkills, canRunSkills, getEngagement, engagementById, hiddenKeys, rankMode, rankDirection]);
+    return sortByRankMode(mapped, rankMode, getEngagement, rankDirection);
+  }, [mssSkills, canRunSkills, getEngagement, engagementById, rankMode, rankDirection]);
 
   const agentCards = useMemo((): MarketShelfCardModel[] => {
     // marketplace 快照数组顺序是后端返回的 Agent 目录顺序。
@@ -1197,11 +1185,10 @@ export function MarketShelfPage({
     );
   };
 
+  const skillSourceSelected = kind === 'projects' && mssSurface === 'skills' && skillSource !== 'all';
   const emptyHint =
-    search.trim() ||
-    !isOrgPerspectiveEmpty(orgSelection) ||
-    businessFilter !== 'all'
-      ? '当前筛选下暂无内容。可重置左侧领域/区域、切换场景分类，或调整搜索关键词。'
+    skillSourceSelected || search.trim() || !isOrgPerspectiveEmpty(orgSelection) || businessFilter !== 'all'
+      ? '当前筛选下暂无内容。请调整筛选条件或搜索关键词。'
       : '权限范围内暂无上架内容。若预期应可见，请联系运营确认可见性与上架状态。';
 
   const gridCards =
@@ -1402,32 +1389,51 @@ export function MarketShelfPage({
 
         {showMssSceneChips ? (
           <div className="mb-5 w-full px-1">
-            <div className="market-chip-rail" role="tablist" aria-label="业务场景">
-              <button
-                type="button"
-                onClick={() => setBusinessFilter('all')}
-                className={cn(
-                  'market-chip-rail__btn',
-                  businessFilter === 'all' && 'is-active',
-                )}
+            <div className={cn('market-chip-rail', mssSurface === 'skills' && 'overflow-x-auto')}>
+              {mssSurface === 'skills' && (
+                <div role="group" aria-label="Skill 来源" className="flex w-28 shrink-0 gap-1 border-r border-zinc-300 pr-1.5 md:w-36">
+                  {([['internal', '内部'], ['external', '外部']] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={skillSource === value}
+                      onClick={() => setSkillSource(current => current === value ? 'all' : value)}
+                      className={cn('market-chip-rail__btn', skillSource === value && 'is-active')}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div
+                role="group"
+                aria-label="业务场景"
+                className={cn('flex flex-1 gap-1.5', mssSurface === 'skills' ? 'min-w-max' : 'min-w-0')}
               >
-                全部
-              </button>
-              {(mssSurface === 'skills' ? skillSceneCategories : sceneCategories).map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  title={c.blurb}
-                  onClick={() => setBusinessFilter(c.id)}
-                  className={cn(
-                    'market-chip-rail__btn',
-                    businessFilter === c.id && 'is-active',
-                  )}
-                >
-                  {c.icon ? <i className={cn('fa-solid hidden text-[10px] sm:inline', c.icon)} /> : null}
-                  <span className="truncate">{c.label}</span>
-                </button>
-              ))}
+                {mssSurface !== 'skills' && (
+                  <button
+                    type="button"
+                    aria-pressed={businessFilter === 'all'}
+                    onClick={() => setBusinessFilter('all')}
+                    className={cn('market-chip-rail__btn', businessFilter === 'all' && 'is-active')}
+                  >
+                    全部
+                  </button>
+                )}
+                {sceneCategories.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    aria-pressed={businessFilter === c.id}
+                    title={c.blurb}
+                    onClick={() => setBusinessFilter(mssSurface === 'skills' && businessFilter === c.id ? 'all' : c.id)}
+                    className={cn('market-chip-rail__btn', businessFilter === c.id && 'is-active')}
+                  >
+                    {c.icon ? <i className={cn('fa-solid hidden text-[10px] sm:inline', c.icon)} /> : null}
+                    <span className="truncate">{c.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         ) : null}

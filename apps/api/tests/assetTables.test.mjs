@@ -259,3 +259,45 @@ test('PUT /tools 整份替换并标记已初始化，GET /marketplace 的 tools 
   const marketplace = await service.getMarketplace(WS);
   assert.deepEqual(marketplace.tools.map((item) => item.id), ['tool-b', 'tool-a']);
 });
+
+test('Excel 新建在全目录按展示名称查重，并发同名只新增一个草稿', async () => {
+  const service = new PersistenceService(prisma);
+  const actor = { name: '运营', role: 'capability_ops' };
+  const importRow = body => service.createSkillFromSheet(body, actor, 'member-a');
+  await service.createCatalogItem('skills', skill('skill-data-analysis', {
+    name: 'Legacy Data Analysis', visibility: 'private', publisherUserId: 'other',
+  }));
+  await assert.rejects(importRow({ name: '多源数据分析' }), /该 Skill 名称已存在/);
+  const attempts = await Promise.allSettled([
+    importRow({ name: 'Résumé', published: true, packageBlob: { id: 'forged' } }),
+    importRow({ name: ' Re\u0301sume\u0301 ' }),
+  ]);
+  assert.equal(attempts.filter(value => value.status === 'fulfilled').length, 1);
+  assert.match(attempts.find(value => value.status === 'rejected').reason.message, /该 Skill 名称已存在/);
+  const saved = attempts.find(value => value.status === 'fulfilled').value;
+  assert.equal(saved.name, 'Résumé');
+  assert.equal(saved.published, false);
+  assert.equal(saved.packageBlob, undefined);
+  assert.equal(saved.publisherUserId, 'member-a');
+  assert.equal(await prisma.skill.count(), 2);
+});
+
+test('Excel 新建草稿默认不精选，刷新市场后仍保留表格选择', async () => {
+  const service = new PersistenceService(prisma);
+  const actor = { name: '运营', role: 'capability_ops' };
+  const cases = [
+    { row: { name: '未填精选' }, featured: false },
+    { row: { name: '明确不精选', featuredInMssMarket: false }, featured: false },
+    { row: { name: '明确精选', featuredInMssMarket: true }, featured: true },
+  ];
+  for (const { row, featured } of cases) {
+    const saved = await service.createSkillFromSheet(row, actor, 'member-a');
+    assert.equal(saved.featuredInMssMarket, featured);
+  }
+  const { skills } = await service.getMarketplace(WS);
+  for (const { row, featured } of cases) {
+    const item = skills.find(skill => skill.name === row.name);
+    assert.equal(item.featuredInMssMarket, featured);
+    assert.equal((await service.getCatalogItem('skills', item.id)).featuredInMssMarket, featured);
+  }
+});

@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 读取目录、工作区与互动数据。
+ * [OUTPUT]: 提供目录读写与运营记录，按表格创建草稿并保存精选选择。
+ * [POS]: 目录控制器经此服务在数据库事务中执行单条变更。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import {
   BadRequestException,
   ConflictException,
@@ -6,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { createHash, randomUUID } from 'crypto';
+import { skillDisplayName } from '../data/skill-display-name';
 import { findWorkspace } from '../workspaces/workspace-setting';
 import { PrismaService } from '../prisma/prisma.service';
 import type { MarketplacePayload } from './marketplace-center-sync';
@@ -34,6 +41,7 @@ import {
   MARKET_SKILL_BUSINESS_SCENARIO,
   SEED_MARKET_ENGAGEMENT_STATIC_CONTENT_IDS,
 } from '../data/market-doc-seeds';
+import { patchSkillSheetMetadata } from './skill-sheet-update';
 import { portalAnalyticsDateKey } from './portal-analytics-time';
 
 export type { MarketplacePayload };
@@ -502,6 +510,43 @@ export class PersistenceService {
     const item = await this.prisma.$transaction((tx) => createAsset(tx, spec.kind, this.catalogBody(body)));
     await this.logCatalogChange(actor, spec.kind, 'create', item);
     return spec.kind === 'agent' ? this.withLinkedSkills(item) : item;
+  }
+
+  async createSkillFromSheet(body: unknown, actor: OperationActor, userId: string) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) throw new BadRequestException('缺少 Skill 明细');
+    const record = body as Record<string, unknown>;
+    const name = typeof record.name === 'string' ? record.name.trim().normalize('NFC') : '';
+    if (!name) throw new BadRequestException('缺少 Skill 名称');
+    const stamp = new Date().toISOString();
+    const metadata = Object.fromEntries(
+      ['sourceLabel', 'sourceType', 'author', 'ownerDeptIds', 'ownerRegionId', 'ownerRegionIds',
+        'businessScenarioId', 'nameEn', 'command', 'visibility', 'callable', 'featuredInMssMarket',
+        'tags', 'searchKeywords', 'usageNotes'].filter(key => key in record).map(key => [key, record[key]]),
+    );
+    const draft = {
+      desc: '', category: 'office', command: '', version: '1.0.0', author: '', connector: '',
+      callable: false, featuredInMssMarket: false, invokes: 0, icon: 'fa-cube', tags: [], visibility: 'org', ...metadata,
+      id: `skill-import-${randomUUID()}`,
+      name, nameZh: name, published: false, publisherUserId: userId, publisher: actor.name,
+      updatedBy: actor.name, createdAt: stamp, updatedAt: stamp,
+    };
+    return this.prisma.$transaction(async tx => {
+      // 新建会重排整张目录。先锁后查，确保并行导入不能同时通过同名检查。
+      await tx.$executeRaw`LOCK TABLE "skill" IN SHARE ROW EXCLUSIVE MODE`;
+      const names = await tx.skill.findMany({
+        select: { id: true, name: true, nameZh: true, nameEn: true, command: true },
+      });
+      if (names.some(entry => skillDisplayName(entry).normalize('NFC') === name)) {
+        throw new ConflictException('该 Skill 名称已存在');
+      }
+      const item = await createAsset(tx, 'skill', draft);
+      await appendOperationLogs(tx, actor, 'skill', [{ action: 'create', id: draft.id, name }]);
+      return item;
+    });
+  }
+
+  async updateSkillFromSheet(id: string, body: unknown, viewer: NonNullable<CatalogViewer>, actor: OperationActor) {
+    return this.prisma.$transaction(tx => patchSkillSheetMetadata(tx, viewer, actor, id, body));
   }
 
   async updateCatalogItem(segment: string, id: string, body: unknown, actor?: OperationActor): Promise<Record<string, unknown>> {

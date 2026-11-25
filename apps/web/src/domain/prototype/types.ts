@@ -180,7 +180,7 @@ export interface PrototypeAgentSeed {
   updatedAt?: string;
   maintainer?: string;
   /**
-   * 成熟度状态（可运行 / 建设中）：驱动顶部状态标签与右侧主按钮。
+   * 成熟度状态（可运行 / 建设中）：决定详情页的使用入口与操作指引。
    * 与运行时的 canRun 是两个维度，缺省按「已上架且挂了 Skill」推断，
    * 见 domain/agentLifecycle。
    */
@@ -218,6 +218,8 @@ export interface PrototypeAgentSeed {
 }
 
 export interface PrototypeSkillSeed extends AssetOwnershipFields {
+  /** 明细表填写的具体来源，保留平台名称等原文。 */
+  sourceLabel?: string;
   /** 配置后详情页下载优先跳转此地址；留空使用 Skill 包。 */
   downloadUrl?: string;
   id: string;

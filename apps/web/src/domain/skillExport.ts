@@ -1,15 +1,21 @@
+/**
+ * [INPUT]: 读取 Skill 信息、互动统计和归档包。
+ * [OUTPUT]: 生成独立包和批量明细，解析单项上传及历史归档。
+ * [POS]: 连接运营导出、详情下载和编辑器的包格式。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
+import { fetchPackageBlob } from '@/api/blobApi';
+import { SKILL_SHEET_COLUMNS, skillSheetMetadata } from '@/domain/skillSheetColumns';
+import { skillDisplayName } from '@/domain/skillDisplay';
 import { formatVersion } from '@/domain/formatVersion';
 import { strToU8, zipSync, unzipSync, strFromU8 } from 'fflate';
 import * as XLSX from 'xlsx';
 import type { EfficiencyCategory, PrototypeSkillSeed } from '@/domain/prototype/types';
 import { getSkillPack } from '@/domain/skills/catalog';
-import { getDeptLabel, getRegionLabel } from '@/domain/orgTaxonomy';
-import type { AssetVisibility, DeptId, RegionId } from '@/domain/orgTaxonomy';
 import {
   readPackageZipMetadata,
   type PackageArchiveInspectionOptions,
 } from '@/domain/safeZip';
-import { getSkillVisibilityLabel } from '@/domain/skillVisibility';
 
 const VALID_CATEGORIES: EfficiencyCategory[] = ['office', 'manage', 'process', 'experience'];
 
@@ -212,14 +218,24 @@ export function skillOpsAnalyticsRow(
     runnableNow: published && callable && hasBody,
     tags: skill.tags || [],
     searchKeywords: skill.searchKeywords || [],
-    sourceType: skill.sourceType || 'internal',
+    sourceType: skill.sourceType,
   };
 }
 
-/** 构建 Skill 运营清单 workbook（供导出和打包复用） */
+export interface SkillExportMetrics {
+  likes: number;
+  dislikes: number;
+  downloads: number;
+  views?: number;
+  downloads30d?: number;
+  likeUsers?: string[];
+  dislikeUsers?: string[];
+}
+
+/** 批量导入和单独导出的 Excel 都读取同一张明细工作表。 */
 function buildSkillsOpsWorkbook(
   skills: PrototypeSkillSeed[],
-  engagementById?: Record<string, { likes: number; dislikes: number; downloads: number }>,
+  engagementById?: Record<string, SkillExportMetrics>,
 ) {
   const rows = skills.map((s) =>
     skillOpsAnalyticsRow(s, engagementById?.[s.id]),
@@ -239,47 +255,37 @@ function buildSkillsOpsWorkbook(
   const departmentVisibleCount = (byVisibility.org || 0) + (byVisibility.private || 0);
   const topInvoked = [...rows].sort((a, b) => b.invokeCount - a.invokeCount).slice(0, 10);
 
-  const detailSheet =
-    rows.length > 0
-      ? rows.map((r) => {
-          const vis = (r.visibility || 'org') as AssetVisibility;
-          return {
-            Skill名称: r.nameZh,
-            SkillID: r.id,
-            中文描述: r.descZh,
-            英文描述: r.descEn,
-            创建者: r.author,
-            创建时间: r.createdAt || '—',
-            更新者: r.updatedBy || '—',
-            最近更新日期: r.updatedAt || '—',
-            历史版本更新记录: r.version ? `当前 ${formatVersion(r.version)}` : '—',
-            领域信息: (r.ownerDeptIds as DeptId[]).map(getDeptLabel).join('、') || '',
-            区域信息: r.ownerRegionId ? getRegionLabel(r.ownerRegionId as RegionId) : '',
-            业务场景: r.businessScenarioId ?? '',
-            页面访问量: '—',
-            Skill下载总量: r.downloads,
-            近30天下载总量: '—',
-            点赞量: r.likes,
-            点踩量: r.dislikes,
-            点踩用户名工号: '—',
-            调用总次数预留: '—',
-            Token消耗总量预留: '—',
-            Token消耗均量预留: '—',
-            近30天调用量预留: '—',
-            英文名称: r.nameEn,
-            调用指令: r.command,
-            可见范围: getSkillVisibilityLabel(vis),
-            已上架可调用: r.publishedExecutable ? '是' : '否',
-            精选SkillHub推荐: r.featuredInDoTask ? '是' : '否',
-            演示调用次数: r.invokeCount,
-            具备执行正文: r.hasExecutableBody ? '是' : '否',
-            使用须知摘要: (r.usageNotes || '').slice(0, 80),
-            案例条数: r.caseCount,
-            运营标签: (r.tags || []).join('、'),
-            搜索关键词: (r.searchKeywords || []).join('、'),
-          };
-        })
-      : [{ 说明: '当前无 Skill 数据' }];
+  const detailSheet = skills.map((skill) => {
+    const metrics = engagementById?.[skill.id];
+    const versions = (skill.versions ?? []).map(version =>
+      [formatVersion(version.version), version.publishedAt, version.notes].filter(Boolean).join(' · '));
+    const detail: Partial<Record<typeof SKILL_SHEET_COLUMNS[number], string | number>> = {
+      ...skillSheetMetadata(skill),
+      SkillID: skill.id,
+      创建时间: skill.createdAt,
+      更新者: skill.updatedBy,
+      更新时间: skill.updatedAt,
+      最近更新日期: skill.updatedAt,
+      历史版本更新记录: versions.length ? versions.join('\n') : skill.version && formatVersion(skill.version),
+      具备执行正文: skill.instructions?.trim() ? '是' : '否',
+      案例条数: skill.cases?.length ?? 0,
+      演示调用次数: skill.invokes,
+      页面访问量: metrics?.views,
+      Skill下载总量: metrics?.downloads,
+      近30天下载总量: metrics?.downloads30d,
+      点赞量: metrics?.likes,
+      点赞用户名工号: metrics?.likeUsers?.join('、'),
+      点踩量: metrics?.dislikes,
+      点踩用户名工号: metrics?.dislikeUsers?.join('、'),
+    };
+    return SKILL_SHEET_COLUMNS.map(column => {
+      const value = detail[column] ?? '';
+      if (typeof value === 'string' && value.length > 32767) {
+        throw new Error(`${skillDisplayName(skill)}的「${column}」超出 Excel 单元格长度限制`);
+      }
+      return value;
+    });
+  });
 
   const summarySheet = [
     { 指标: '导出时间', 值: new Date().toISOString() },
@@ -306,65 +312,82 @@ function buildSkillsOpsWorkbook(
 
   const wb = XLSX.utils.book_new();
   const wsSummary = XLSX.utils.json_to_sheet(summarySheet);
-  const wsDetail = XLSX.utils.json_to_sheet(detailSheet);
+  const wsDetail = XLSX.utils.aoa_to_sheet([[...SKILL_SHEET_COLUMNS], ...detailSheet]);
   const wsTop = XLSX.utils.json_to_sheet(topSheet);
-  const detailKeys = Object.keys(detailSheet[0] ?? {});
-  wsDetail['!cols'] = detailKeys.map((k) => ({
+  wsDetail['!cols'] = SKILL_SHEET_COLUMNS.map((k) => ({
     wch: Math.min(28, Math.max(12, String(k).length + 4)),
   }));
-  XLSX.utils.book_append_sheet(wb, wsSummary, '汇总');
   XLSX.utils.book_append_sheet(wb, wsDetail, '技能明细');
+  XLSX.utils.book_append_sheet(wb, wsSummary, '汇总');
   XLSX.utils.book_append_sheet(wb, wsTop, '调用Top10');
   return wb;
 }
 
 /**
  * 导出全部 Skill 运营清单（Excel .xlsx）。
- * MVP 字段对齐需求；调用总量/Token 列预留为「—」（暂无模型计量）。
+ * 预留列与尚未采集的指标留空。
  */
 export function downloadAllSkillsFile(
   skills: PrototypeSkillSeed[],
-  engagementById?: Record<string, { likes: number; dislikes: number; downloads: number }>,
+  engagementById?: Record<string, SkillExportMetrics>,
 ) {
   const wb = buildSkillsOpsWorkbook(skills, engagementById);
   const stamp = new Date().toISOString().slice(0, 10);
   XLSX.writeFile(wb, `mssclaw-skills-ops-${stamp}.xlsx`);
 }
 
-/**
- * 导出全部 Skill 为可导入的 ZIP 包，内含运营清单 Excel + 各 Skill 独立包 + 总清单 manifest。
- */
-export function downloadAllSkillsZip(
+/** 文件名仅替换操作系统保留字符。名称相同时用外层目录区分，包名保留原样。 */
+function skillPackageFileName(skill: PrototypeSkillSeed): string {
+  const base = skillDisplayName(skill).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+    .replace(/[. ]+$/, '') || 'Skill';
+  const reserved = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(base);
+  return `${reserved ? '_' : ''}${base}.zip`;
+}
+
+/** 保留上传包的原始字节。纯文本 Skill 沿用标准包生成流程。 */
+export async function buildSkillsExportArchive(
   skills: PrototypeSkillSeed[],
-  engagementById?: Record<string, { likes: number; dislikes: number; downloads: number }>,
+  engagementById?: Record<string, SkillExportMetrics>,
 ) {
-  const stamp = new Date().toISOString().slice(0, 10);
   const zipped: Record<string, Uint8Array> = {};
-
-  /* 1. 运营清单 Excel */
   const wb = buildSkillsOpsWorkbook(skills, engagementById);
-  const xlsxBuf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
-  zipped[`mssclaw-skills-ops-${stamp}.xlsx`] = new Uint8Array(xlsxBuf);
+  zipped['Skill明细表.xlsx'] = new Uint8Array(XLSX.write(wb, { bookType: 'xlsx', type: 'array' }));
 
-  /* 2. 各 Skill 独立包 */
-  for (const skill of skills) {
-    const files = buildPackageFiles(skill);
-    for (const [path, content] of Object.entries(files)) {
-      zipped[`skills/${path}`] = strToU8(content);
+  const paths = new Set<string>();
+  for (const [index, skill] of skills.entries()) {
+    const name = skillPackageFileName(skill);
+    const canonicalName = name.normalize('NFC').toLowerCase();
+    const path = paths.has(canonicalName) ? `skills/${index + 1}/${name}` : `skills/${name}`;
+    paths.add(canonicalName);
+    if (skill.packageBlob) {
+      try {
+        const response = await fetchPackageBlob(skill.packageBlob.url);
+        zipped[path] = new Uint8Array(await response.arrayBuffer());
+      } catch {
+        throw new Error(`无法读取「${skillDisplayName(skill)}」的文件包，请重试`);
+      }
+    } else {
+      const files = Object.entries(buildPackageFiles(skill)).map(([key, text]) => [key, strToU8(text)] as const);
+      zipped[path] = zipSync(Object.fromEntries(files), { level: 6 });
     }
   }
-
-  /* 3. 总清单 manifest */
   const bulkManifest = {
-    manifestVersion: '2.1',
-    format: 'mssclaw-skills-bulk-export',
+    manifestVersion: '3.0',
+    format: 'mssclaw-skills-detail-export',
     exportedAt: new Date().toISOString(),
     skillCount: skills.length,
     skills: skills.map((s) => skillManifest(s)),
   };
   zipped['manifest.json'] = strToU8(JSON.stringify(bulkManifest, null, 2));
+  return zipSync(zipped, { level: 0 });
+}
 
-  const bytes = zipSync(zipped, { level: 6 });
+export async function downloadAllSkillsZip(
+  skills: PrototypeSkillSeed[],
+  engagementById?: Record<string, SkillExportMetrics>,
+) {
+  const bytes = await buildSkillsExportArchive(skills, engagementById);
+  const stamp = new Date().toISOString().slice(0, 10);
   downloadBinary(`mssclaw-skills-export-${stamp}.zip`, bytes, 'application/zip');
 }
 

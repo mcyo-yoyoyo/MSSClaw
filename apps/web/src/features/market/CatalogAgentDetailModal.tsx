@@ -1,9 +1,10 @@
 /**
  * [INPUT]: Agent 目录、生命周期与执行包。
  * [OUTPUT]: CatalogAgentDetailModal；展示适配流程并提供访客下载。
- * [POS]: Agent 详情视图，侧栏不展示当前状态。
+ * [POS]: 使用集市详情标签栏切换 Agent 内容，按成熟度提供使用入口。
  * [PROTOCOL]: Update this header on change, then check AGENTS.md
  */
+import { MarketDetailTabs, type MarketDetailTab } from './MarketDetailTabs';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { GuestGateLock } from '@/components/auth/GuestGateLock';
@@ -26,7 +27,6 @@ import {
   resolveAgentCapabilityTypes,
 } from '@/domain/agentHubFilters';
 import {
-  AGENT_LIFECYCLE_META,
   resolveAgentLifecycle,
   resolveAgentPrimaryAction,
 } from '@/domain/agentLifecycle';
@@ -51,18 +51,18 @@ import { useMarketFavoriteStore } from '@/stores/marketFavoriteStore';
 import { useMarketplaceStore } from '@/stores/marketplaceStore';
 
 /**
- * 核心业务 Tab 保持普通员工的理解路径，版本与评论作为补充信息放在末尾。
+ * 核心业务 Tab 保持普通员工的理解路径，版本与评价作为补充信息放在末尾。
  */
 type DetailTab = 'overview' | 'preview' | 'fit' | 'howto' | 'cases' | 'versions' | 'comments';
 
-const DETAIL_TABS: Array<{ id: DetailTab; label: string; icon: string }> = [
-  { id: 'overview', label: '概览', icon: 'fa-compass' },
-  { id: 'preview', label: '效果预览', icon: 'fa-wand-magic-sparkles' },
-  { id: 'fit', label: '适用判断', icon: 'fa-bullseye' },
-  { id: 'howto', label: '怎么使用', icon: 'fa-route' },
-  { id: 'cases', label: '案例与方案包', icon: 'fa-briefcase' },
-  { id: 'versions', label: '版本', icon: 'fa-code-branch' },
-  { id: 'comments', label: '评论', icon: 'fa-comment-dots' },
+const DETAIL_TABS: MarketDetailTab<DetailTab>[] = [
+  { id: 'overview', label: '概览' },
+  { id: 'preview', label: '效果预览' },
+  { id: 'fit', label: '适用判断' },
+  { id: 'howto', label: '怎么使用' },
+  { id: 'cases', label: '案例与方案包' },
+  { id: 'versions', label: '版本' },
+  { id: 'comments', label: '评价', badge: '即将开放' },
 ];
 
 function nonEmpty(items?: Array<string | null | undefined>): string[] {
@@ -370,7 +370,6 @@ export function CatalogAgentDetailModal({
   const primaryId = agent.primarySkillId || agent.skillIds?.[0];
 
   const lifecycle = resolveAgentLifecycle(agent);
-  const lifecycleMeta = AGENT_LIFECYCLE_META[lifecycle];
   const hasDemo = Boolean(agent.demoUrl?.trim());
   const hasSolutionDoc = Boolean(agent.solutionDocUrl?.trim());
   const primaryAction = resolveAgentPrimaryAction({
@@ -439,7 +438,7 @@ export function CatalogAgentDetailModal({
 
   /**
    * §6.7 决策 A：没有内容的 Tab 直接不出现，而不是进去看到一片兜底文案。
-   * 概览 / 怎么使用 / 案例与方案包 / 版本 / 评论恒在；预览和适用判断按内容显示。
+   * 概览 / 怎么使用 / 案例与方案包 / 版本 / 评价恒在；预览和适用判断按内容显示。
    */
   const hasPreview = Boolean(
     processSteps.length ||
@@ -559,18 +558,6 @@ export function CatalogAgentDetailModal({
                     >
                       {scopeLabel}
                     </span>
-                    {lifecycle !== 'building' && (
-                      <span
-                        className={cn(
-                          'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold',
-                          lifecycleMeta.badgeClass,
-                        )}
-                        title="Agent 当前成熟度：决定主操作入口"
-                      >
-                        <span className={cn('h-1.5 w-1.5 rounded-full', lifecycleMeta.dotClass)} />
-                        {lifecycleMeta.badgeText({ hasDemo, hasSolutionDoc })}
-                      </span>
-                    )}
                     <span className="rounded-md bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-800">
                       {version}
                     </span>
@@ -630,25 +617,13 @@ export function CatalogAgentDetailModal({
     >
       <div className="grid min-h-full grid-cols-1 md:grid-cols-[minmax(0,1fr)_248px]">
         <main className="min-w-0 md:border-r md:border-zinc-100">
-          <nav className="sticky top-0 z-20 flex gap-1 overflow-x-auto border-b border-zinc-100 bg-white/95 px-4 pt-2 backdrop-blur md:px-5" aria-label="Agent 详情导航">
-            {visibleTabs.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setTab(item.id)}
-                className={cn(
-                  'inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-[11px] font-semibold transition',
-                  activeTab === item.id
-                    ? 'border-zinc-900 text-zinc-900'
-                    : 'border-transparent text-zinc-400 hover:text-zinc-700',
-                )}
-                aria-current={activeTab === item.id ? 'page' : undefined}
-              >
-                <i className={cn('fa-solid text-[10px]', item.icon)} />
-                {item.label}
-              </button>
-            ))}
-          </nav>
+          <MarketDetailTabs
+            label="Agent 详情导航"
+            tabs={visibleTabs}
+            activeTab={activeTab}
+            onSelect={setTab}
+            className="sticky top-0 z-20 bg-white/95 backdrop-blur"
+          />
 
           <div className="min-h-[520px] bg-zinc-50/40 px-4 py-4 md:px-5 md:py-5">
             {activeTab === 'overview' ? (
@@ -1071,7 +1046,7 @@ export function CatalogAgentDetailModal({
                 <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-zinc-100 text-zinc-400">
                   <i className="fa-solid fa-comment-dots text-[18px]" />
                 </span>
-                <p className="text-[14px] font-semibold text-zinc-800">评论功能即将开放</p>
+                <p className="text-[14px] font-semibold text-zinc-800">评价功能即将开放</p>
                 <p className="mt-1.5 max-w-sm text-[12px] leading-relaxed text-zinc-500">
                   当前暂不提供评分与留言；上线后可在此查看使用反馈。
                 </p>

@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 读取职能、区域、业务场景、可见范围及页面提供的搜索框。
+ * [OUTPUT]: 导出 OrgAssetFilterBar 和 OwnershipFormFields。
+ * [POS]: 供资产列表筛选和编辑归属；专用表单可独立选择来源。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import type { ReactNode, SelectHTMLAttributes } from 'react';
 import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -36,12 +42,14 @@ interface OrgAssetFilterBarProps {
   onScenarioFilterChange?: (v: ScenarioScopeFilter) => void;
   /** 是否展示「范围」行，默认不展示 */
   showScope?: boolean;
-  /** 默认折叠为摘要，点击展开双轴筛选 */
+  /** 显示可收起筛选项的摘要按钮。 */
   collapsible?: boolean;
+  /** 搜索框与筛选摘要同排，收起筛选项时仍可用。 */
+  searchInput?: ReactNode;
   extra?: ReactNode;
 }
 
-/** 能力沉淀统一筛选：默认折叠摘要；业务场景对齐 MSS 业务用户视角 */
+/** 能力沉淀统一筛选，业务场景对齐 MSS 业务用户视角。 */
 export function OrgAssetFilterBar({
   deptFilter,
   regionFilter,
@@ -58,6 +66,7 @@ export function OrgAssetFilterBar({
   onScenarioFilterChange,
   showScope = false,
   collapsible = true,
+  searchInput,
   extra,
 }: OrgAssetFilterBarProps) {
   // 默认展开：筛选是运营看板的主要操作，收起态需要多点一次才能看到可选项
@@ -253,29 +262,28 @@ export function OrgAssetFilterBar({
     </div>
   );
 
-  if (!collapsible) {
-    return <div className="mb-4">{filters}</div>;
-  }
-
   return (
-    <div className="mb-4">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex max-w-full items-center gap-2 rounded-xl border border-zinc-200/80 bg-white px-3 py-1.5 text-left text-[12px] font-medium text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50"
-      >
-        <i className="fa-solid fa-sliders text-[10px] text-zinc-400" />
-        <span className="truncate">
-          筛选 · <span className="text-zinc-500">{summary}</span>
-        </span>
-        <i
-          className={cn(
-            'fa-solid text-[9px] text-zinc-400',
-            open ? 'fa-chevron-up' : 'fa-chevron-down',
+    <div className="mb-4 space-y-2">
+      {(collapsible || searchInput) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {collapsible && (
+            <button
+              type="button"
+              aria-expanded={open}
+              onClick={() => setOpen((v) => !v)}
+              className="inline-flex max-w-full items-center gap-2 rounded-xl border border-zinc-200/80 bg-white px-3 py-1.5 text-left text-[12px] font-medium text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50"
+            >
+              <i className="fa-solid fa-sliders text-[10px] text-zinc-400" />
+              <span className="truncate">
+                筛选 · <span className="text-zinc-500">{summary}</span>
+              </span>
+              <i className={cn('fa-solid text-[9px] text-zinc-400', open ? 'fa-chevron-up' : 'fa-chevron-down')} />
+            </button>
           )}
-        />
-      </button>
-      {open ? <div className="mt-2">{filters}</div> : null}
+          {searchInput}
+        </div>
+      )}
+      {(!collapsible || open) && filters}
     </div>
   );
 }
@@ -334,7 +342,7 @@ export function OwnershipFormFields({
 }: {
   ownerDeptIds: DeptIdLike[];
   ownerRegionId: string | null;
-  sourceType: 'internal' | 'external';
+  sourceType?: 'internal' | 'external';
   visibility?: 'public' | 'org' | 'private';
   homepageUrl?: string;
   /** 非外部来源也需要访问链接时打开（如内部办公推荐，前台场景卡要跳转） */
@@ -363,6 +371,7 @@ export function OwnershipFormFields({
     homepageUrl?: string;
   }) => void;
 }) {
+  const showSource = !lockSource && sourceType !== undefined;
   const toggleDept = (id: string) => {
     if (singleDept) {
       onChange({ ownerDeptIds: ownerDeptIds[0] === id ? [] : [id] });
@@ -417,8 +426,8 @@ export function OwnershipFormFields({
           ))}
         </OwnershipSelect>
       </div>
-      <div className={cn('grid gap-2', lockSource ? 'grid-cols-1' : 'grid-cols-2')}>
-        {!lockSource ? (
+      <div className={cn('grid gap-2', showSource ? 'grid-cols-2' : 'grid-cols-1')}>
+        {showSource ? (
           <label className="text-[11px] text-zinc-600">
             来源
             <OwnershipSelect

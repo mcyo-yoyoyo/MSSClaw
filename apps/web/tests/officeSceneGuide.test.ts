@@ -7,13 +7,17 @@ let mod: typeof import('../src/domain/internalOfficeScenes.ts');
 before(async () => { vite = await createServer({ configFile: './vite.react.config.ts', server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' }); mod = await vite.ssrLoadModule('/src/domain/internalOfficeScenes.ts') as typeof mod; });
 after(async () => { await vite.close(); });
 const entry = { id: 'scene-a', label: 'A', english: '', description: '', icon: 'fa-cube', visible: true, toolIds: ['tool-a'], toolBlurbs: {}, guideUrl: 'https://guide.example/a' };
-test('scene guidance overrides tool docs only for its bound tool and visible scene', () => {
+test('从可见且仍绑定当前工具的来源场景读取指导链接', () => {
   const entries = [entry, { ...entry, id: 'scene-b', guideUrl: 'https://guide.example/b' }];
-  assert.equal(mod.resolveOfficeGuideUrl('tool-a', 'https://tool.example/docs', 'scene-a', entries), entry.guideUrl);
-  assert.equal(mod.resolveOfficeGuideUrl('tool-a', 'https://tool.example/docs', 'scene-b', entries), entries[1].guideUrl);
-  for (const sceneId of [undefined, 'missing']) assert.equal(mod.resolveOfficeGuideUrl('tool-a', 'https://tool.example/docs', sceneId, entries), 'https://tool.example/docs');
-  assert.equal(mod.resolveOfficeGuideUrl('other-tool', 'https://tool.example/docs', 'scene-a', entries), 'https://tool.example/docs');
-  for (const patch of [{ guideUrl: '' }, { visible: false }, { guideUrl: 'javascript:alert(1)' }]) assert.equal(mod.resolveOfficeGuideUrl('tool-a', 'https://tool.example/docs', 'scene-a', [{ ...entry, ...patch }]), 'https://tool.example/docs');
+  assert.equal(mod.resolveOfficeSceneGuideUrl('tool-a', 'scene-a', entries), entry.guideUrl);
+  assert.equal(mod.resolveOfficeSceneGuideUrl('tool-a', 'scene-b', entries), entries[1].guideUrl);
+  for (const sceneId of [undefined, 'missing']) {
+    assert.equal(mod.resolveOfficeSceneGuideUrl('tool-a', sceneId, entries), '');
+  }
+  assert.equal(mod.resolveOfficeSceneGuideUrl('other-tool', 'scene-a', entries), '');
+  for (const patch of [{ guideUrl: ' ' }, { visible: false }, { guideUrl: 'invalid' }]) {
+    assert.equal(mod.resolveOfficeSceneGuideUrl('tool-a', 'scene-a', [{ ...entry, ...patch }]), '');
+  }
 });
 test('guidance accepts internal HTTP(S) and rejects executable URLs or credentials', () => {
   for (const value of ['', 'https://intranet/guide', ' http://10.0.0.1/help ']) assert.equal(mod.isValidOfficeGuideUrl(value), true);

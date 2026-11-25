@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 读取资产目录、当前成员和服务端审批文档。
+ * [OUTPUT]: 提供审批历史、提报、审批流转和关注状态。
+ * [POS]: 单条 Skill 编辑在审批写入成功后打开审批详情。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import { create } from 'zustand';
 import type {
   AssetApprovalKind,
@@ -52,7 +58,7 @@ interface AssetApprovalState {
     packageSize?: number;
     unpublishMode?: AssetApprovalRequest['unpublishMode'];
     unpublishVersions?: string[];
-  }) => void;
+  }, confirmRecordId?: string) => void | Promise<void>;
   /** 从历史恢复待办到弹窗 */
   resumePending: (recordId: string) => void;
   advance: () => void;
@@ -71,22 +77,23 @@ function userBucket() {
   return userId;
 }
 
-function persistDoc(items: AssetApprovalRecord[], watchedByUserId: Record<string, ApprovalWatchItem[]>) {
-  if (!canUsePlatformDocsApi()) return;
-  void scheduleSavePlatformDoc('asset-approvals', {
+function persistDoc(items: AssetApprovalRecord[], watchedByUserId: Record<string, ApprovalWatchItem[]>, delay?: number) {
+  if (!canUsePlatformDocsApi()) return Promise.resolve();
+  return scheduleSavePlatformDoc('asset-approvals', {
     items: items.slice(0, 200),
     watchedByUserId,
-  } satisfies ApprovalsDoc);
+  } satisfies ApprovalsDoc, delay);
 }
 
 function persistFromState(
   items: AssetApprovalRecord[],
   watched: ApprovalWatchItem[],
   prevWatchedMap?: Record<string, ApprovalWatchItem[]>,
+  delay?: number,
 ) {
   const map = { ...(prevWatchedMap ?? {}) };
   map[userBucket()] = watched.slice(0, 80);
-  persistDoc(items, map);
+  return persistDoc(items, map, delay);
 }
 
 async function applyApproval(kind: AssetApprovalKind, assetId: string, req: AssetApprovalRequest) {
@@ -267,7 +274,7 @@ export const useAssetApprovalStore = create<AssetApprovalState>((set, get) => ({
     })();
   },
 
-  openApproval: (input) => {
+  openApproval: (input, confirmRecordId) => {
     const submitterUserId = userBucket();
     const now = Date.now();
     const req: AssetApprovalRequest = {
@@ -289,13 +296,35 @@ export const useAssetApprovalStore = create<AssetApprovalState>((set, get) => ({
       unpublishMode: input.unpublishMode,
       unpublishVersions: input.unpublishVersions,
     };
-    const recordId = newId();
+    const recordId = confirmRecordId ?? newId();
     const record: AssetApprovalRecord = {
       ...req,
       id: recordId,
       status: 'pending',
       updatedAt: now,
     };
+    if (confirmRecordId) {
+      if (!canUsePlatformDocsApi()) throw new Error('审批服务未连接');
+      const existing = get().history.find((item) =>
+        item.status === 'pending' && item.kind === req.kind && item.assetId === req.assetId &&
+        item.submitterUserId === submitterUserId &&
+        req.reasons?.every((reason) => item.reasons?.includes(reason)),
+      );
+      const pending = existing ?? record;
+      const history = [pending, ...get().history.filter((item) => item.id !== pending.id)];
+      // 同一页面的审批写入共享防抖队列，后续快照也要包含这次提报。
+      set({ history });
+      return persistFromState(history, get().watched, lastWatchedMap, 0).then(
+        () => {
+          set((state) => ({ history: state.history.slice(0, 200) }));
+          get().resumePending(pending.id);
+        },
+        (error: unknown) => {
+          if (!existing) set((state) => ({ history: state.history.filter((item) => item.id !== pending.id) }));
+          throw error;
+        },
+      );
+    }
     const history = [record, ...get().history].slice(0, 200);
     persistFromState(history, get().watched, lastWatchedMap);
     set({ current: req, currentRecordId: recordId, history });

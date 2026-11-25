@@ -1,10 +1,17 @@
-import { Body, Controller, Delete, ForbiddenException, Get, Headers, Param, Post, Put, UnauthorizedException } from '@nestjs/common';
+/**
+ * [INPUT]: 成员会话、菜单权限及目录持久层。
+ * [OUTPUT]: 提供目录读写与 Skill 明细导出统计接口。
+ * [POS]: 在读取实名投票前验证 Skill 配置权限。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
+import { Body, Controller, Delete, ForbiddenException, Get, Header, Headers, Param, Patch, Post, Put, UnauthorizedException } from '@nestjs/common';
 import { bearerToken } from '../auth/bearer-token';
 import { PrismaService } from '../prisma/prisma.service';
 import { catalogResource, PersistenceService, type CatalogViewer } from './persistence.service';
 import { PlatformDocsService } from './platform-docs.service';
 import { operationActorFrom } from './operation-log';
 import { canAccessMenu } from './rbac-store';
+import { readSkillExportStatistics } from './skill-export-statistics';
 
 /**
  * 目录单条接口。列表只返回这一类资产；新建、修改、删除只动地址指向的那一条。
@@ -35,8 +42,39 @@ export class CatalogController {
     @Headers('authorization') authorization?: string,
     @Headers('x-session-token') xSessionToken?: string,
   ) {
-    const user = await this.requireWriter(resource, authorization, xSessionToken);
+    const user = await this.requireMenu(resource, true, authorization, xSessionToken);
     return this.persistence.createCatalogItem(resource, body, operationActorFrom(user));
+  }
+
+  @Post('skills/import')
+  async createSkillFromSheet(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    const user = await this.requireMenu('skills', true, authorization, xSessionToken);
+    return this.persistence.createSkillFromSheet(body, operationActorFrom(user), user.id);
+  }
+
+  @Patch('skills/:id/metadata')
+  async updateSkillSheet(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    const user = await this.requireMenu('skills', true, authorization, xSessionToken);
+    return this.persistence.updateSkillFromSheet(id, body, user, operationActorFrom(user));
+  }
+
+  @Get('skills/export/statistics')
+  @Header('Cache-Control', 'private, no-store')
+  async skillExportStatistics(
+    @Headers('authorization') authorization?: string,
+    @Headers('x-session-token') xSessionToken?: string,
+  ) {
+    const viewer = await this.requireMenu('skills', false, authorization, xSessionToken);
+    return readSkillExportStatistics(this.prisma, viewer);
   }
 
   @Get(':resource/:id')
@@ -57,7 +95,7 @@ export class CatalogController {
     @Headers('authorization') authorization?: string,
     @Headers('x-session-token') xSessionToken?: string,
   ) {
-    const user = await this.requireWriter(resource, authorization, xSessionToken);
+    const user = await this.requireMenu(resource, true, authorization, xSessionToken);
     return this.persistence.updateCatalogItem(resource, id, body, operationActorFrom(user));
   }
 
@@ -68,7 +106,7 @@ export class CatalogController {
     @Headers('authorization') authorization?: string,
     @Headers('x-session-token') xSessionToken?: string,
   ) {
-    const user = await this.requireWriter(resource, authorization, xSessionToken);
+    const user = await this.requireMenu(resource, true, authorization, xSessionToken);
     return this.persistence.deleteCatalogItem(resource, id, operationActorFrom(user));
   }
 
@@ -81,11 +119,11 @@ export class CatalogController {
     return session.user;
   }
 
-  private async requireWriter(resource: string, authorization?: string, xSessionToken?: string) {
+  private async requireMenu(resource: string, edit: boolean, authorization?: string, xSessionToken?: string) {
     const { writeMenu } = catalogResource(resource);
     const user = await this.viewer(authorization, xSessionToken);
     if (!user) throw new UnauthorizedException('unauthorized');
-    if (!(await canAccessMenu(this.prisma, user.platformRole, writeMenu, true))) {
+    if (!(await canAccessMenu(this.prisma, user.platformRole, writeMenu, edit))) {
       throw new ForbiddenException(`menu_forbidden:${writeMenu}`);
     }
     return user;

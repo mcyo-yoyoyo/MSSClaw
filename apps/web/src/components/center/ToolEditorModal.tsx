@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 从 marketplaceStore 读取工具，从分类目录读取可选分类。
+ * [OUTPUT]: 导出 ToolEditorModal，保存工具资料和帮助文档地址。
+ * [POS]: 后台工具编辑入口，上架申请交给 assetApprovalStore。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { getLobeIconCDN } from '@lobehub/icons/es/features/getLobeIconCDN/index.js';
 import { toc, type IconToc } from '@lobehub/icons/es/toc.js';
@@ -719,7 +725,7 @@ export function ToolEditorModal({ target, onClose }: ToolEditorModalProps) {
               </FormField>
             ) : null}
             <div className={cn('grid gap-3', isExternalShelf && 'sm:grid-cols-2')}>
-              <FormField label="帮助文档 URL" hint="对应工具详情页“使用指导”按钮">
+              <FormField label="帮助文档 URL" hint="填写后，工具详情页显示「工具使用指导」。">
                 <FormInput
                   value={form.docsUrl ?? ''}
                   onChange={(e) => setForm({ ...form, docsUrl: e.target.value })}

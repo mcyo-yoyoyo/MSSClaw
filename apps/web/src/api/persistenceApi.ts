@@ -1,9 +1,17 @@
+/**
+ * [INPUT]: 读取 HTTP 客户端配置、会话凭据与业务数据类型。
+ * [OUTPUT]: 提供目录、内容与工作区数据的读写接口。
+ * [POS]: 前端持久化 API 客户端，供状态库与后台导入导出使用。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import type { ChatConfig } from '@/domain/chat';
 import type { MarketplaceSnapshot } from '@/domain/persistence/storage';
 import type { PortalContentItem } from '@/domain/prototype/portalContent';
 import type { PrototypeAgentSeed, PrototypeSkillSeed, PrototypeToolSeed } from '@/domain/prototype/types';
 import type { StationAnnouncement } from '@/domain/stationAnnouncementSeeds';
 import { apiUrl, apiAuthHeaders } from '@/api/client';
+
+import type { SkillSheetPatch } from '@/domain/skillSheetImport';
 
 export class PortalConflictError extends Error {
   revision?: number;
@@ -64,6 +72,24 @@ export async function fetchHomeShowcase(): Promise<HomeShowcasePayload> {
   return (await res.json()) as HomeShowcasePayload;
 }
 
+/** 读取当前用户的完整可见 Skill 目录，返回原始字段供导入逐条比对。 */
+export async function fetchSkillCatalogApi(): Promise<PrototypeSkillSeed[]> {
+  const res = await fetch(apiUrl('/api/v1/catalog/skills'), { headers: apiAuthHeaders(), cache: 'no-store' });
+  if (!res.ok) throw new Error(`读取 Skill 目录失败（HTTP ${res.status}）`);
+  const payload = await res.json();
+  if (!Array.isArray(payload?.skills)) throw new Error('Skill 目录响应缺少明细');
+  return payload.skills;
+}
+
+export async function createSkillFromSheetApi(skill: PrototypeSkillSeed): Promise<PrototypeSkillSeed> {
+  const res = await fetch(apiUrl('/api/v1/catalog/skills/import'), {
+    method: 'POST', headers: jsonHeaders(), body: JSON.stringify(skill),
+  });
+  if (res.status === 409) throw new Error('该 Skill 名称已存在');
+  if (!res.ok) throw new Error(`Skill 明细新增失败（HTTP ${res.status}）`);
+  return res.json();
+}
+
 export async function fetchMarketplaceApi(): Promise<Partial<MarketplaceSnapshot> | null> {
   const res = await fetch(apiUrl(`/api/v1/marketplace`), {
     headers: apiAuthHeaders(),
@@ -109,11 +135,45 @@ export async function fetchToolsApi(): Promise<Partial<ToolCatalogPayload> | nul
   return typeof payload === 'object' ? (payload as Partial<ToolCatalogPayload>) : null;
 }
 
+export interface SkillExportStatistics {
+  views: number;
+  likes: number;
+  dislikes: number;
+  downloads: number;
+  downloads30d: number;
+  likeUsers: string[];
+  dislikeUsers: string[];
+}
+
+/** 获取本人可维护范围内 Skill 的互动统计及当前投票人。 */
+export async function fetchSkillExportStatisticsApi(): Promise<Record<string, SkillExportStatistics>> {
+  const res = await fetch(apiUrl('/api/v1/catalog/skills/export/statistics'), {
+    headers: apiAuthHeaders(),
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`Skill 导出统计读取失败（HTTP ${res.status}）`);
+  return res.json();
+}
+
 export class CatalogConflictError extends Error {
   constructor() {
     super('catalog_conflict');
     this.name = 'CatalogConflictError';
   }
+}
+
+/** 仅发送 Excel 中改变的字段。时间戳为空时也参与冲突检查。 */
+export async function saveSkillSheetUpdate(
+  id: string, patch: SkillSheetPatch, expectedUpdatedAt?: string | null,
+): Promise<PrototypeSkillSeed> {
+  const res = await fetch(apiUrl(`/api/v1/catalog/skills/${encodeURIComponent(id)}/metadata`), {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ patch, expectedUpdatedAt: expectedUpdatedAt ?? null }),
+  });
+  if (res.status === 409) throw new CatalogConflictError();
+  if (!res.ok) throw new Error(`Skill 明细更新失败（HTTP ${res.status}）`);
+  return res.json();
 }
 
 /** 目录单条写入。新建 POST，修改 PUT。expectedUpdatedAt 只在更新时带上。 */

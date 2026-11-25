@@ -8,6 +8,7 @@ import { PlatformDocsService } from '../dist/persistence/platform-docs.service.j
 import { CatalogController } from '../dist/persistence/catalog.controller.js';
 import { AdminController } from '../dist/persistence/admin.controller.js';
 import { ensureSuperAdmin } from '../dist/persistence/rbac-store.js';
+import { portalAnalyticsDateKey, shiftPortalAnalyticsDateKey } from '../dist/persistence/portal-analytics-time.js';
 import { createTestDatabase } from './helpers/pgTestDatabase.mjs';
 
 process.env.JWT_SECRET = 'test-jwt-secret';
@@ -210,5 +211,39 @@ test('目录接口：按登录人过滤、超管不过滤、带了无效令牌 4
   assert.equal(await reason(catalog.remove('kb-docs', 'x', userAuth)), '403:menu_forbidden:kb');
   const created = await catalog.create('skills', skill('new', { ownerRegionIds: ['europe'] }), adminAuth);
   assert.deepEqual(created.ownerRegionIds, ['europe']);
+  await new AdminController(prisma).setRoleMenus('business_user', { menuIds: menus });
+});
+
+test('Skill 明细：来源持久化、只读菜单授权、实名投票与三十日下载', async () => {
+  await saveSkills([skill('apac'), skill('hidden', { visibility: 'private' })]);
+  await ensureSuperAdmin(prisma, { email: 'admin@huawei.com', password: 'admin654321' });
+  await new AdminController(prisma).createUser({
+    name: 'U', email: 'u@huawei.com', roleId: 'business_user', regionId: 'apac', domainIds: ['mkt'], password: 'user-pass',
+  });
+  const docs = new PlatformDocsService(prisma, { recordDailyLogin: async () => {} });
+  const userAuth = `Bearer ${(await docs.login({ email: 'u@huawei.com', password: 'user-pass' })).token}`;
+  const adminAuth = `Bearer ${(await docs.login({ email: 'admin@huawei.com', password: 'admin654321' })).token}`;
+  const catalog = new CatalogController(new PersistenceService(prisma), docs, prisma);
+  const menus = (await prisma.roleMenu.findMany({ where: { roleId: 'business_user' } })).map((m) => m.menuId);
+  assert.equal(await reason(catalog.skillExportStatistics()), '401:unauthorized');
+  assert.equal(await reason(catalog.skillExportStatistics(userAuth)), '403:menu_forbidden:skills');
+  await new AdminController(prisma).setRoleMenus('business_user', { menuIds: [...menus, 'skills'], editMenuIds: menus });
+  const member = await prisma.member.findUniqueOrThrow({ where: { email: 'u@huawei.com' } });
+  await prisma.marketUserVote.create({ data: { userId: member.id, contentId: 'apac', vote: 'like' } });
+  await prisma.marketEngagement.create({ data: { contentId: 'apac', views: 14, downloads: 7, likes: 1 } });
+  const today = portalAnalyticsDateKey();
+  await prisma.marketEngagementEvent.createMany({ data: [
+    { contentId: 'apac', assetType: 'skill', action: 'download', dateKey: today },
+    { contentId: 'apac', assetType: 'skill', action: 'request:download', dateKey: shiftPortalAnalyticsDateKey(today, -29) },
+    { contentId: 'apac', assetType: 'skill', action: 'download', dateKey: shiftPortalAnalyticsDateKey(today, -30) },
+  ] });
+  const stats = await catalog.skillExportStatistics(userAuth);
+  assert.deepEqual(Object.keys(stats).sort(), ['apac']);
+  assert.deepEqual(stats.apac, { views: 14, likes: 1, dislikes: 0, downloads: 7, downloads30d: 2, likeUsers: ['U'], dislikeUsers: [] });
+
+  const created = await catalog.create('skills', skill('sheet', { sourceLabel: '创建者提供' }), adminAuth);
+  assert.equal(created.sourceLabel, '创建者提供');
+  await catalog.update('skills', created.id, { ...created, sourceLabel: '外部平台（GitHub）' }, adminAuth);
+  assert.equal((await catalog.getOne('skills', created.id, adminAuth)).sourceLabel, '外部平台（GitHub）');
   await new AdminController(prisma).setRoleMenus('business_user', { menuIds: menus });
 });

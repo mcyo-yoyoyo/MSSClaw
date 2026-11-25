@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 读取浏览器地址、会话状态和当前视图。
+ * [OUTPUT]: 导出 useAppRouting 和 navigateToAppView。
+ * [POS]: 同步视图与地址，在详情页保留资产和来源场景。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import { useEffect, useRef } from 'react';
 import type { AppView } from '@/domain/appView';
 import { buildAppRoute, DETAIL_VIEW, parseAppRoute, writeAppRouteToLocation } from '@/domain/appRoute';
@@ -51,7 +57,7 @@ export function useAppRouting() {
 
     const current = parseAppRoute(window.location.hash);
     const chat = appView === 'task' ? current.chat : undefined;
-    const detail = appView === DETAIL_VIEW ? { type: current.type, id: current.id } : {};
+    const detail = appView === DETAIL_VIEW && current.view === DETAIL_VIEW ? current : {};
     const news = appView === 'ai-brief' && current.view === appView ? { news: current.news, newsUrl: current.newsUrl } : {};
     writeAppRouteToLocation({ view: appView, chat, ...detail, ...news, ...(appView === 'messages' && current.view === appView ? { announcement: current.announcement, source: current.source } : {}) }, appView === current.view);
   }, [appView, sessionBootstrapped, shellReady]);

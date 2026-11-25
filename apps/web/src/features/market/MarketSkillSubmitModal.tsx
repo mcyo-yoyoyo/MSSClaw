@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 读当前成员、可选 Skill 来源和技能包解析结果。
+ * [OUTPUT]: 导出 MarketSkillSubmitModal 供用户提报 Skill。
+ * [POS]: 在 Skill Hub 创建待审批草稿并保留来源选择。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import { useEffect, useRef, useState } from 'react';
 import { CenterModal } from '@/components/center/CenterShell';
 import {
@@ -6,6 +12,7 @@ import {
   FormSelect,
   FormTextarea,
   ModalActions,
+  SkillSourceField,
 } from '@/components/center/CenterFormFields';
 import { OwnershipFormFields } from '@/components/center/OrgAssetFilters';
 import {
@@ -13,7 +20,7 @@ import {
   type BusinessScenarioId,
 } from '@/domain/businessScenarios';
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
-import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
+import type { AssetSourceType, DeptId, RegionId } from '@/domain/orgTaxonomy';
 import {
   normalizeSkillVisibility,
   SKILL_VISIBILITY_OPTIONS,
@@ -79,6 +86,7 @@ export function MarketSkillSubmitModal({
   const [command, setCommand] = useState('');
   const [instructions, setInstructions] = useState('');
   const [businessId, setBusinessId] = useState<BusinessScenarioId | ''>('');
+  const [sourceType, setSourceType] = useState<AssetSourceType>();
   const [ownerDeptIds, setOwnerDeptIds] = useState<DeptId[]>([]);
   const [ownerRegionId, setOwnerRegionId] = useState<RegionId | null>(null);
   const [visibility, setVisibility] = useState<SkillVisibility>('org');
@@ -97,6 +105,7 @@ export function MarketSkillSubmitModal({
     setCommand('');
     setInstructions('');
     setBusinessId(businessFilter === 'all' ? '' : businessFilter);
+    setSourceType(undefined);
     // 归属职能 / 区域不再按登录人预填：提报的技能未必属于本人所在职能，
     // 预填会被当成已确认的选择而直接提交
     setOwnerDeptIds([]);
@@ -261,7 +270,7 @@ export function MarketSkillSubmitModal({
         instructions: instructions.trim() || undefined,
         planSteps: parsedExtra?.planSteps ?? [],
         packageBlob,
-        sourceType: 'internal',
+        sourceType,
         visibility,
         ownerDeptIds: ownerDeptIds.slice(0, 1),
         ownerRegionId,
@@ -443,6 +452,7 @@ export function MarketSkillSubmitModal({
             </span>
           </label>
         </div>
+        <SkillSourceField value={sourceType} onChange={setSourceType} />
         <OwnershipFormFields
           deptLabel="应用领域"
           regionLabel="应用区域"
@@ -450,7 +460,6 @@ export function MarketSkillSubmitModal({
           singleDeptHint={visibility === 'org' ? '单选 · 部门可见时必选' : '单选 · 用于资产归属'}
           ownerDeptIds={ownerDeptIds}
           ownerRegionId={ownerRegionId}
-          sourceType="internal"
           visibility={visibility}
           visibilityOptions={SKILL_VISIBILITY_OPTIONS}
           onChange={(patch) => {

@@ -1,4 +1,11 @@
+/**
+ * [INPUT]: 读取表单字段值、变更回调和资产来源类型。
+ * [OUTPUT]: 提供编辑控件、Skill 来源选择及弹窗操作按钮。
+ * [POS]: 后台编辑与前台提报共用同一套 Skill 来源值。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import type { ReactNode } from 'react';
+import type { AssetSourceType } from '@/domain/orgTaxonomy';
 import { cn } from '@/lib/utils';
 
 const fieldClass =
@@ -32,6 +39,28 @@ export function FormTextarea({ className, ...props }: React.TextareaHTMLAttribut
 
 export function FormSelect({ className, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return <select className={cn(fieldClass, className)} {...props} />;
+}
+
+export function SkillSourceField({ value, onChange }: {
+  value?: AssetSourceType;
+  onChange: (value: AssetSourceType | undefined) => void;
+}) {
+  return (
+    <FormField label="Skill 来源" hint="内部表示公司自产，外部表示从公司外引入。未选择的 Skill 只在「全部」中展示。">
+      <FormSelect
+        aria-label="Skill 来源"
+        value={value ?? ''}
+        onChange={(event) => {
+          const selected = event.target.value;
+          onChange(selected === 'internal' || selected === 'external' ? selected : undefined);
+        }}
+      >
+        <option value="">未选择</option>
+        <option value="internal">内部</option>
+        <option value="external">外部</option>
+      </FormSelect>
+    </FormField>
+  );
 }
 
 export const EFFICIENCY_OPTIONS = [

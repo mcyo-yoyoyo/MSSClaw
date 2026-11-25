@@ -1,6 +1,8 @@
 /**
- * 内部办公推荐场景模型。
- * 场景字典由数据库文档提供，工具信息由 marketplace 数据库快照提供。
+ * [INPUT]: 使用办公场景配置、工具目录快照和工具 Logo。
+ * [OUTPUT]: 提供办公场景模型、工具绑定和场景指导链接解析。
+ * [POS]: 为内部办公货架和工具详情关联场景与已上架工具。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
  */
 
 import { resolveToolLogoUrl } from '@/domain/toolLogo';
@@ -48,7 +50,7 @@ export interface InternalOfficeScene {
 
 /** 运营可持久化的场景字典条目 */
 export interface InternalOfficeSceneCatalogEntry {
-  /** 场景专属使用指导，未填写时使用工具 docsUrl。 */
+  /** 从此场景进入绑定工具详情时展示的场景使用指导。 */
   guideUrl?: string;
   id: InternalOfficeSceneId;
   label: string;
@@ -179,8 +181,12 @@ export function isValidOfficeGuideUrl(value: string): boolean {
   } catch { return false; }
 }
 
-export function resolveOfficeGuideUrl(toolId: string, docsUrl: string | undefined, sceneId: string | undefined, entries: InternalOfficeSceneCatalogEntry[]): string {
-  const scene = sceneId ? entries.find(entry => entry.id === sceneId && entry.visible && entry.toolIds.includes(toolId)) : undefined;
+export function resolveOfficeSceneGuideUrl(
+  toolId: string,
+  sceneId: string | undefined,
+  entries: InternalOfficeSceneCatalogEntry[],
+): string {
+  const scene = entries.find(entry => entry.id === sceneId && entry.visible && entry.toolIds.includes(toolId));
   const guide = scene?.guideUrl?.trim();
-  return guide && isValidOfficeGuideUrl(guide) ? guide : docsUrl?.trim() || '';
+  return guide && isValidOfficeGuideUrl(guide) ? guide : '';
 }

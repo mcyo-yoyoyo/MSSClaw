@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: Prisma 资产表、Skill 版本及可见范围。
+ * [OUTPUT]: 资产目录读写与组织范围查询。
+ * [POS]: 目录接口和快照接口共用数据库映射。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -66,7 +72,7 @@ const SPECS: Record<AssetKind, AssetSpec> = {
       searchKeywords: 'json', instructions: 'string', planSteps: 'json', usageNotes: 'string', packageBlob: 'json',
       traceEvaluation: 'json', updatedBy: 'string', createdAt: 'string', updatedAt: 'string',
     },
-    detailKeys: ['cases', 'caseAttachments', 'envInfo', 'securityScan', 'hubTags'],
+    detailKeys: ['cases', 'caseAttachments', 'envInfo', 'securityScan', 'hubTags', 'sourceLabel'],
   },
   agent: {
     model: 'agent',
@@ -144,6 +150,9 @@ function toColumns(kind: AssetKind, raw: unknown, specials: readonly string[]): 
       if (!typeMatches(type, value)) invalid(kind, id, `${key}_must_be_${type}`);
       data[SOURCE_TIME[key] ?? key] = key === 'id' ? id : value;
     } else if (spec.detailKeys?.includes(key)) {
+      if (key === 'sourceLabel' && value !== null && typeof value !== 'string') {
+        invalid(kind, id, 'sourceLabel_must_be_string');
+      }
       if (value !== null) detail[key] = value;
     } else if (specials.includes(key)) {
       special[key] = value;
@@ -549,12 +558,17 @@ export async function updateAsset(db: Db, kind: AssetKind, id: string, raw: unkn
   if (expected !== undefined && typeof stored === 'string' && stored !== '' && stored !== expected) {
     throw new ConflictException('catalog_conflict');
   }
+  const checkSkillRevision = kind === 'skill' && (expected !== undefined || record.expectedUpdatedAt === null);
+  const where = checkSkillRevision ? { id, sourceUpdatedAt: expected ?? null } : { id };
   const { expectedUpdatedAt: _expectedUpdatedAt, ...body } = record;
   const prepared = prepareOne(kind, body, current.position as number, new Set());
   let row: JsonRecord;
   try {
-    row = await model.update({ where: { id }, data: prepared.data });
+    row = await model.update({ where, data: prepared.data });
   } catch (error) {
+    if (checkSkillRevision && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      throw new ConflictException('catalog_conflict');
+    }
     rethrowDuplicate(error);
   }
   await writeChildren(db, kind, row, prepared);

@@ -1,9 +1,10 @@
 /**
  * [INPUT]: 读取 Skill 目录、版本归档与互动状态。
  * [OUTPUT]: 导出 MarketSkillDetailModal，提供详情和访客下载。
- * [POS]: 市场 Skill 详情入口，按所选版本下载对应安装包。
+ * [POS]: 使用集市详情标签栏切换 Skill 内容，按版本下载对应安装包。
  * [PROTOCOL]: Update this header on change, then check AGENTS.md
  */
+import { MarketDetailTabs, type MarketDetailTab } from './MarketDetailTabs';
 import { formatVersion } from '@/domain/formatVersion';
 import { skillDownloadUrl } from '@/domain/skillDownload';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -430,10 +431,10 @@ export function MarketSkillDetailModal({
     }
   };
 
-  const tabs: { id: DetailTab; label: string; badge?: string }[] = [
+  const tabs: MarketDetailTab<DetailTab>[] = [
     { id: 'overview', label: '概览' },
     { id: 'files', label: '文件' },
-    { id: 'versions' as const, label: '版本' },
+    { id: 'versions', label: '版本' },
     {
       id: 'reviews',
       label: '评价',
@@ -607,29 +608,8 @@ export function MarketSkillDetailModal({
       }
     >
       <div className="grid min-h-[480px] md:grid-cols-[minmax(0,1.85fr)_minmax(220px,0.7fr)]">
-        <div className="flex min-h-0 flex-col border-zinc-100 md:border-r">
-          <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-zinc-100 px-4 pt-3 md:px-5">
-            {tabs.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTab(t.id)}
-                className={cn(
-                  'inline-flex shrink-0 items-center gap-1.5 rounded-t-lg px-3.5 py-2 text-[12px] font-semibold transition',
-                  tab === t.id
-                    ? 'bg-white text-zinc-900 shadow-[inset_0_-2px_0_0_#18181b]'
-                    : 'text-zinc-400 hover:text-zinc-700',
-                )}
-              >
-                {t.label}
-                {t.badge ? (
-                  <span className="rounded bg-zinc-100 px-1 py-px text-[9px] font-medium text-zinc-400">
-                    {t.badge}
-                  </span>
-                ) : null}
-              </button>
-            ))}
-          </div>
+        <div className="flex min-h-0 min-w-0 flex-col border-zinc-100 md:border-r">
+          <MarketDetailTabs label="Skill 详情导航" tabs={tabs} activeTab={tab} onSelect={setTab} />
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-5 md:py-5">
             {tab === 'overview' ? (

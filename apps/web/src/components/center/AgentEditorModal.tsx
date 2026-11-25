@@ -1682,7 +1682,7 @@ export function AgentEditorModal({ target, onClose, onLoginReplay }: AgentEditor
         </details>
         <FormField
           label="成熟度状态"
-          hint="决定详情页顶部状态标签与主按钮；「可运行」为立即体验，「建设中」为查看 Demo"
+          hint="决定详情页的使用入口：可运行时显示「立即体验」，建设中时优先显示「查看 Demo」。"
         >
           <FormSelect
             value={resolveAgentLifecycle(form)}

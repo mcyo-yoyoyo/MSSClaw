@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 读取 Skill 目录、归档包和审批状态。
+ * [OUTPUT]: 导出 SkillEditorModal 供单个 Skill 编辑与提报。
+ * [POS]: 维护 Skill 来源、文件包和版本。保存后确认审批写入。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import { archiveSkillVersion } from '@/domain/skillVersionArchive';
 import { skillDownloadUrl } from '@/domain/skillDownload';
 import { useEffect, useRef, useState } from 'react';
@@ -8,6 +14,7 @@ import {
   FormInput,
   FormSelect,
   FormTextarea,
+  SkillSourceField,
 } from '@/components/center/CenterFormFields';
 import type { PrototypeSkillSeed } from '@/domain/prototype/types';
 import type { DeptId, RegionId } from '@/domain/orgTaxonomy';
@@ -97,10 +104,11 @@ function readSkillIconFile(file: File): Promise<string> {
 
 type EditorTarget = string | 'new' | null;
 type WizardStep = 0 | 1 | 2 | 3;
+type SavedSkillApproval = { recordId: string; assetId: string; assetName: string; reasons: AssetApprovalReason[] };
 
 function emptySkill(): PrototypeSkillSeed {
   const name = getCurrentUserName() || 'Mcyo';
-  const stamp = new Date().toISOString().slice(0, 10);
+  const stamp = new Date().toISOString();
   return {
     id: '',
     name: '',
@@ -139,7 +147,6 @@ function emptySkill(): PrototypeSkillSeed {
     createdAt: stamp,
     updatedAt: stamp,
     updatedBy: name,
-    sourceType: 'internal',
     visibility: 'org',
     ownerDeptIds: getCurrentDeptIds().slice(0, 1),
     ownerRegionId: getCurrentRegionId(),
@@ -180,11 +187,13 @@ function normalizeSkillForm(skill: PrototypeSkillSeed): PrototypeSkillSeed {
     updatedAt: skill.updatedAt,
     updatedBy: skill.updatedBy,
     ownerDeptIds: Array.isArray(skill.ownerDeptIds)
-      ? skill.ownerDeptIds.slice(0, 1)
+      ? skill.ownerDeptIds
       : getCurrentDeptIds().slice(0, 1),
     // 显式 null 表示“不限区域”；仅在单值字段缺失时兼容历史多区域数据。
     ownerRegionId,
-    ownerRegionIds: ownerRegionId ? [ownerRegionId] : [],
+    ownerRegionIds: ownerRegionId
+      ? (skill.ownerRegionIds?.[0] === ownerRegionId ? skill.ownerRegionIds : [ownerRegionId])
+      : [],
     visibility: normalizeSkillVisibility(skill.visibility, 'public'),
     published: Boolean(skill.published),
     callable: typeof skill.callable === 'boolean' ? skill.callable : Boolean(skill.published),
@@ -215,6 +224,10 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   const caseUploadGenerationRef = useRef(0);
   const caseAttachmentUploadsRef = useRef(new Map<string, UploadedWorkspaceBlob>());
   const [uploadingPackage, setUploadingPackage] = useState(false);
+  const savingRef = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const [pendingApproval, setPendingApproval] = useState<SavedSkillApproval | null>(null);
+  const [approvalError, setApprovalError] = useState('');
   const [step, setStep] = useState<WizardStep>(0);
   const [packName, setPackName] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
@@ -237,6 +250,8 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   );
 
   useEffect(() => {
+    setPendingApproval(null);
+    setApprovalError('');
     caseUploadGenerationRef.current += 1;
     for (const uploaded of caseAttachmentUploadsRef.current.values()) {
       void deleteUploadedWorkspaceBlob(uploaded).catch(() => undefined);
@@ -255,7 +270,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   }, [target]);
 
   useEffect(() => {
-    if (!target) return;
+    if (!target || savingRef.current || pendingApproval) return;
     tagRequestRef.current += 1;
     setRecognizingTags(false);
     setShowSecondaryTags(false);
@@ -272,7 +287,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     setStep(1);
     setPackName(null);
     setShowAdvanced(false);
-  }, [target, skills]);
+  }, [target, skills, pendingApproval]);
 
   if (!target) return null;
 
@@ -413,6 +428,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
   };
 
   const handleClose = () => {
+    if (savingRef.current) return;
     caseUploadGenerationRef.current += 1;
     for (const uploaded of caseAttachmentUploadsRef.current.values()) {
       void deleteUploadedWorkspaceBlob(uploaded).catch(() => undefined);
@@ -472,7 +488,25 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     if (step < 3) setStep((step + 1) as WizardStep);
   };
 
-  const handleSave = async () => {
+  const submitSavedApproval = async (approval: SavedSkillApproval) => {
+    setApprovalError('');
+    try {
+      const { recordId, assetId, assetName, reasons } = approval;
+      await useAssetApprovalStore.getState().openApproval({ kind: 'skill', assetId, assetName, reasons }, recordId);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : '请检查网络连接';
+      setApprovalError(`Skill 已保存，审批提交未确认（${detail}）。请重试审批。`);
+      return;
+    }
+    onClose();
+    showToast(
+      (approval.reasons.includes('publish_executable')
+        ? '技能已提交发布审批，终审通过后前台展示'
+        : '技能变更已提交审批，审批期间保持现有上架状态') + shareSyncSaveHint(),
+    );
+  };
+
+  const saveDraft = async () => {
     if (form.downloadUrl?.trim() && !skillDownloadUrl(form.downloadUrl)) {
       showToast('下载链接请填写有效的 HTTP/HTTPS 地址（最多 2048 字符）');
       return;
@@ -537,11 +571,10 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       if (gate.message) showToast(gate.message);
     }
 
-    const needsApproval = reasons.length > 0;
     const userName = getCurrentUserName() || 'Mcyo';
     const userId = getCurrentUserId();
     const id = isNew ? `skill-${Date.now()}` : (target as string);
-    const stamp = new Date().toISOString().slice(0, 10);
+    const stamp = new Date().toISOString();
 
     const visibility: SkillVisibility = normalizeSkillVisibility(form.visibility, 'org');
 
@@ -553,7 +586,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     };
     const hasEnv = Object.values(envInfo).some(Boolean);
 
-    let draft = syncSkillZhPrimary({
+    const draft = syncSkillZhPrimary({
       ...form,
       id,
       nameZh,
@@ -586,13 +619,14 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       icon: prev?.icon ?? form.icon ?? 'fa-cube',
       iconUrl: form.iconUrl?.trim() || undefined,
       accentColor: form.accentColor || DEFAULT_SKILL_ACCENT,
-      sourceType: 'internal',
+      // 更改或清空分类时，一并清除旧的明细表来源说明。
+      sourceLabel: prev && prev.sourceType !== form.sourceType ? undefined : form.sourceLabel,
       visibility,
-      ownerDeptIds: ((form.ownerDeptIds ?? []).slice(0, 1) as DeptId[]),
+      ownerDeptIds: form.ownerDeptIds ?? [],
       ownerRegionId: (form.ownerRegionId ?? null) as RegionId | null,
       // 与历史多区域字段保持同一口径；选择“不限区域”时必须清空旧值。
-      ownerRegionIds: form.ownerRegionId ? [form.ownerRegionId] : [],
-      homepageUrl: undefined,
+      ownerRegionIds: form.ownerRegionId ? (form.ownerRegionIds ?? [form.ownerRegionId]) : [],
+      homepageUrl: form.homepageUrl?.trim() || undefined,
       downloadUrl: form.downloadUrl?.trim() || undefined,
       // 新建/未上架 Skill 在终审通过前不可调用；已上架 Skill 编辑时保持上架。
       published: Boolean(prev?.published),
@@ -605,18 +639,13 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
       updatedBy: userName,
     });
 
-    draft = {
-      ...draft,
-      searchKeywords: draft.hubTags ? skillHubSearchTerms(draft.hubTags) : (draft.searchKeywords ?? []),
-    };
-
     try {
       draft.versions = archiveSkillVersion(prev ?? undefined, draft);
     } catch (error) {
       showToast(error instanceof Error ? error.message : '版本归档失败');
       return;
     }
-    const saved = await saveSkillNow(draft, isNew, prev?.updatedAt);
+    const saved = await saveSkillNow(draft, isNew, form.updatedAt);
     if (!saved.synced) {
       showToast(`保存失败：${saved.detail || '请检查后端连接'}`);
       return;
@@ -631,22 +660,27 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
     });
     temporaryPackageBlobs.finish(form.packageBlob);
     caseAttachmentUploadsRef.current.clear();
-    onClose();
 
-    if (needsApproval) {
-      useAssetApprovalStore.getState().openApproval({
-        kind: 'skill',
-        assetId: id,
-        assetName: skillDisplayName(draft),
-        reasons,
-      });
-      showToast(
-        (reasons.includes('publish_executable')
-          ? '技能已提交发布审批，终审通过后前台展示'
-          : '技能变更已提交审批，审批期间保持现有上架状态') + shareSyncSaveHint(),
-      );
+    if (reasons.length) {
+      const approval = { recordId: `apr_${id}_${stamp}`, assetId: id, assetName: skillDisplayName(draft), reasons };
+      setPendingApproval(approval);
+      await submitSavedApproval(approval);
     } else {
+      onClose();
       showToast('技能已保存，保持已发布状态' + shareSyncSaveHint());
+    }
+  };
+
+  const handleSave = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      if (pendingApproval) await submitSavedApproval(pendingApproval);
+      else await saveDraft();
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   };
 
@@ -675,6 +709,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
             <button
               type="button"
               onClick={handleClose}
+              disabled={saving}
               className="rounded-xl border border-zinc-200 px-3 py-1.5 text-[13px] text-zinc-600 hover:bg-zinc-50"
             >
               取消
@@ -683,6 +718,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
               <button
                 type="button"
                 onClick={() => setStep((step - 1) as WizardStep)}
+                disabled={saving || !!pendingApproval}
                 className="rounded-xl border border-zinc-200 px-3 py-1.5 text-[13px] text-zinc-700 hover:bg-zinc-50"
               >
                 上一步
@@ -706,16 +742,18 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
               <button
                 type="button"
                 onClick={handleSave}
+                disabled={saving}
                 className="rounded-xl bg-claw-600 px-3 py-1.5 text-[13px] font-medium text-white hover:bg-claw-700"
               >
-                {form.published ? '保存' : '提交审批'}
+                {saving ? '正在保存…' : pendingApproval ? '重试审批' : form.published ? '保存' : '提交审批'}
               </button>
             )}
           </div>
         </div>
       }
     >
-      <div className="space-y-4 p-4 text-left sm:p-6">
+      <fieldset disabled={saving || !!pendingApproval} className="min-w-0 space-y-4 p-4 text-left sm:p-6">
+        {approvalError && <p role="alert" className="text-sm text-red-700">{approvalError}</p>}
         {/* step tabs */}
         <div className="flex flex-wrap gap-1.5">
           {STEPS.filter((s) => (isNew ? true : s.id !== 0)).map((s) => (
@@ -852,6 +890,10 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                 />
               </FormField>
             </div>
+            <SkillSourceField
+              value={form.sourceType}
+              onChange={(sourceType) => setForm({ ...form, sourceType })}
+            />
             <FormField label="中文描述（默认展示）">
               <FormTextarea
                 rows={2}
@@ -874,7 +916,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                   onChange={(e) => setForm({ ...form, command: e.target.value })}
                 />
               </FormField>
-              <FormField label="版本号" hint="重新上传包时填写新版本号，旧包将保留在详情页的版本列表中。">
+              <FormField label="版本号">
                 <FormInput
                   value={form.version}
                   onChange={(e) => setForm({ ...form, version: e.target.value })}
@@ -1286,6 +1328,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
                     setForm({
                       ...form,
                       ownerRegionId: (e.target.value || null) as RegionId | null,
+                      ownerRegionIds: e.target.value ? [e.target.value] : [],
                     })
                   }
                 >
@@ -1429,7 +1472,7 @@ export function SkillEditorModal({ target, onClose }: SkillEditorModalProps) {
             </div>
           </div>
         ) : null}
-      </div>
+      </fieldset>
     </CenterModal>
   );
 }

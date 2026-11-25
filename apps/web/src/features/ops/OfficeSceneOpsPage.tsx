@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 从场景目录读取办公场景，从 marketplaceStore 读取可绑定工具。
+ * [OUTPUT]: 导出 OfficeSceneOpsPage，保存场景资料、指导链接和工具绑定。
+ * [POS]: 后台配置办公场景的入口，使用场景目录持久化修改。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import { isValidOfficeGuideUrl } from '@/domain/internalOfficeScenes';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ToolLogo } from '@/components/brand/ToolLogo';
@@ -633,7 +639,7 @@ export function OfficeSceneOpsPage({
                 <label className="mb-3 block text-[11px] text-zinc-600">
                   场景使用指导
                   <input type="url" placeholder="https://…" maxLength={2048} disabled={editorUnavailable} readOnly={readOnly} value={draft.guideUrl} onChange={event => patchDraft({ guideUrl: event.target.value })} className="mt-1 w-full rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[12px] outline-none focus:border-zinc-400" />
-                  <span className="mt-1 block text-zinc-400">填写后优先打开此地址；留空使用工具的使用指导链接。</span>
+                  <span className="mt-1 block text-zinc-400">填写后，从此场景进入工具详情时显示「场景使用指导」。</span>
                 </label>
 
                 <ToolBindingEditor

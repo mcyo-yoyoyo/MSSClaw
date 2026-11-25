@@ -1,89 +1,136 @@
+/**
+ * [INPUT]: 读取 Excel 明细、当前 Skill 目录和逐条保存接口。
+ * [OUTPUT]: 导出 SkillBatchTransfer，预览新增和字段差异并保存。
+ * [POS]: 后台 Skill 管理页的明细表导入入口。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import { useRef, useState } from 'react';
 import { CenterModal } from '@/components/center/CenterShell';
-import type { PrototypeSkillSeed } from '@/domain/prototype/types';
-import { BATCH_MAX_BYTES, parseSkillBatch, zipFiles, type BatchSkillRow } from '@/domain/skillBatchArchive';
-import { uploadWorkspaceOpsPackage } from '@/api/blobApi';
-import { useMarketplaceStore } from '@/stores/marketplaceStore';
+import { CatalogConflictError, createSkillFromSheetApi, fetchSkillCatalogApi, saveSkillSheetUpdate } from '@/api/persistenceApi';
+import { parseSkillSheet, planSkillSheetRow, skillSheetUpdatePatch, type SkillSheetRow } from '@/domain/skillSheetImport';
+import { skillSheetMetadata } from '@/domain/skillSheetColumns';
+import { PACKAGE_UPLOAD_MAX_BYTES, PACKAGE_UPLOAD_MAX_LABEL } from '@/domain/packageUpload';
 import { getVisibleHomeDepts, getVisibleHomeRegions } from '@/domain/rolePerspective';
-import { getCurrentPlatformRole, getCurrentOrgAffiliation, isSystemAdmin, getCurrentUserName } from '@/domain/currentUser';
+import { getCurrentPlatformRole, getCurrentOrgAffiliation, isSystemAdmin } from '@/domain/currentUser';
+import { useMarketplaceStore } from '@/stores/marketplaceStore';
+
+type Preview = { row: SkillSheetRow; plan: ReturnType<typeof planSkillSheetRow> };
+const actionLabel = { create: '新增草稿', update: '更新', unchanged: '无变化', invalid: '无法导入' } as const;
+const buttonClass = 'rounded-xl border border-zinc-200 px-3 py-2 text-xs font-medium disabled:opacity-40';
 
 export function SkillBatchTransfer() {
   const picker = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
-  const [rows, setRows] = useState<BatchSkillRow[]>([]);
-  const [overwrite, setOverwrite] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [previewRows, setPreviewRows] = useState<Preview[]>([]);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
-  const [results, setResults] = useState<Record<number, string>>({});
-  const skills = useMarketplaceStore(s => s.skills);
-  const buttonClass = 'rounded-xl border border-zinc-200 px-3 py-2 text-xs font-medium disabled:opacity-40';
+  const [results, setResults] = useState<Record<number, { ok: boolean; label: string }>>({});
+  const busy = Boolean(progress);
+  const pending = previewRows.filter(({ row, plan }) =>
+    (plan.action === 'create' || plan.action === 'update') && !results[row.row]?.ok);
 
   async function preview(file: File) {
-    setOpen(true); setBusy(true); setRows([]); setResults({}); setError(''); setOverwrite(false);
-    setProgress('正在检查 ZIP 和 Excel…');
+    setOpen(true);
+    setPreviewRows([]);
+    setResults({});
+    setError('');
+    setProgress('正在比对 Excel 与现有 Skill…');
     try {
-      if (file.size > BATCH_MAX_BYTES) throw new Error('批量包不能超过 200 MiB');
-      setRows(await parseSkillBatch(new Uint8Array(await file.arrayBuffer())));
-    } catch (e) { setError(e instanceof Error ? e.message : '解析失败'); }
-    finally { setBusy(false); setProgress(''); }
+      if (file.size > PACKAGE_UPLOAD_MAX_BYTES) throw new Error(`Excel 文件超过 ${PACKAGE_UPLOAD_MAX_LABEL}`);
+      const rows = await parseSkillSheet(new Uint8Array(await file.arrayBuffer()));
+      const skills = await fetchSkillCatalogApi();
+      setPreviewRows(rows.map(row => ({ row, plan: planSkillSheetRow(row, skills) })));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '读取 Excel 失败');
+    } finally {
+      setProgress('');
+    }
   }
 
   async function importRows() {
-    setBusy(true); setError('');
-    for (const row of rows) {
-      if (!row.skill || !row.files || row.error || results[row.row] === '成功') continue;
-      const existing = useMarketplaceStore.getState().skills.find(s => s.id === row.id);
-      if (existing && !overwrite) {
-        setResults(prev => ({ ...prev, [row.row]: '已跳过' })); continue;
-      }
-      setProgress(`正在导入第 ${row.row - 1}/${rows.length} 项：${row.name}`);
+    for (const { row, plan } of pending) {
+      if (!plan.skill) continue;
+      setProgress(`正在保存第 ${row.row} 行：${row.name}`);
       try {
+        const skill = plan.skill;
         const role = getCurrentPlatformRole();
-        const org = getCurrentOrgAffiliation();
         if (!isSystemAdmin(role)) {
+          const org = getCurrentOrgAffiliation();
           const depts = getVisibleHomeDepts(org, role);
           const regions = getVisibleHomeRegions(org, role);
-          if (row.skill.ownerDeptIds?.some(id => !depts.includes(id))) throw new Error('仅可导入本人组织应用领域的 Skill');
-          if (row.skill.ownerRegionId && !regions.includes(row.skill.ownerRegionId)) throw new Error('仅可导入本人组织应用区域的 Skill');
+          for (const item of [plan.existing, skill]) {
+            if (!item) continue;
+            if (item.ownerDeptIds?.some(id => !depts.includes(id))) throw new Error('应用领域超出当前组织范围');
+            if (item.ownerRegionIds?.some(id => !regions.includes(id)) || (item.ownerRegionId && !regions.includes(item.ownerRegionId))) {
+              throw new Error('应用区域超出当前组织范围');
+            }
+          }
         }
-        const bytes = await zipFiles(row.files);
-        const uploaded = await uploadWorkspaceOpsPackage(new File([new Uint8Array(bytes)], `${row.id}.zip`, { type: 'application/zip' }));
-        const stamp = new Date().toISOString();
-        const skill: PrototypeSkillSeed = {
-          ...existing, ...row.skill, packageBlob: { ...uploaded, uploadedAt: stamp },
-          published: existing?.published ?? false, callable: existing?.callable ?? false,
-          invokes: existing?.invokes ?? 0, createdAt: existing?.createdAt || stamp,
-          updatedAt: stamp, updatedBy: getCurrentUserName(),
-        };
-        const saved = await useMarketplaceStore.getState().saveSkillNow(skill, !existing, existing?.updatedAt);
-        // Keep uploaded blobs on uncertain HTTP failures: the server may have committed the write.
-        if (!saved.synced) throw new Error(saved.detail || '未连接后端，未保存');
-        setResults(prev => ({ ...prev, [row.row]: '成功' }));
+        const item = plan.action === 'create'
+          ? await createSkillFromSheetApi(skill)
+          : await saveSkillSheetUpdate(skill.id, skillSheetUpdatePatch(plan), plan.existing?.updatedAt);
+        useMarketplaceStore.setState(state => ({
+          skills: state.skills.some(entry => entry.id === item.id)
+            ? state.skills.map(entry => entry.id === item.id ? item : entry)
+            : [item, ...state.skills],
+        }));
+        setResults(prev => ({ ...prev, [row.row]: { ok: true, label: plan.action === 'create' ? '已新增' : '已更新' } }));
       } catch (e) {
-        setResults(prev => ({ ...prev, [row.row]: `失败：${e instanceof Error ? e.message : '导入失败'}` }));
+        const label = e instanceof CatalogConflictError ? '目录已变化，请重新选择 Excel 比对'
+          : e instanceof Error ? e.message : '保存失败';
+        setResults(prev => ({ ...prev, [row.row]: { ok: false, label: `失败：${label}` } }));
       }
     }
-    setBusy(false); setProgress('');
+    setProgress('');
   }
-  const succeeded = Object.values(results).filter(v => v === '成功').length;
-  const skipped = Object.values(results).filter(v => v === '已跳过').length;
-  const failed = Object.values(results).filter(v => v.startsWith('失败')).length;
+
   return <>
-    <input ref={picker} hidden type="file" accept=".zip" onChange={e => {
-      const file = e.target.files?.[0]; e.target.value = ''; if (file) void preview(file);
+    <input ref={picker} hidden type="file" accept=".xls,.xlsx" onChange={e => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (file) void preview(file);
     }} />
     <button type="button" className={buttonClass} disabled={busy} onClick={() => picker.current?.click()}>批量导入</button>
-    {!open && (progress || error) ? <span role="status" className="text-xs text-zinc-600">{error || progress}</span> : null}
-    <CenterModal open={open} title="批量导入 Skill" size="xl" onClose={() => { if (!busy) { setOpen(false); setRows([]); setError(''); } }} actions={<>
-      <button className={buttonClass} disabled={busy} onClick={() => { setOpen(false); setRows([]); setError(''); }}>关闭</button>
-      <button className={buttonClass} disabled={busy || !rows.some(r => r.skill && results[r.row] !== '成功')} onClick={() => void importRows()}>确认导入 / 重试未成功项</button>
+    <CenterModal open={open} title="批量导入 Skill" size="xl" onClose={() => { if (!busy) setOpen(false); }} actions={<>
+      <button className={buttonClass} disabled={busy} onClick={() => setOpen(false)}>关闭</button>
+      <button className={buttonClass} disabled={busy || !pending.length} onClick={() => void importRows()}>
+        {Object.values(results).some(r => !r.ok) ? '重试失败项' : '确认导入'}
+      </button>
     </>}>
-      <p className="text-sm text-zinc-600">ZIP 包含 skills/ 和 skills.xlsx。每批最多 100 个、200 MiB，解压后最多 512 MiB。新条目保存为草稿，更新保留发布状态。处理期间请勿关闭或刷新页面。</p>
-      <label className="my-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={overwrite} disabled={busy} onChange={e => setOverwrite(e.target.checked)} />覆盖已有相同 Skill ID（默认跳过）</label>
-      {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : null}
-      <p role="status" className="my-2 text-sm">{progress || `共 ${rows.length} 项，校验失败 ${rows.filter(r => r.error).length} 项；成功 ${succeeded}，跳过 ${skipped}，导入失败 ${failed}`}</p>
-      <div className="max-h-96 overflow-auto"><table className="w-full text-left text-xs"><thead><tr><th className="p-2">Excel 行</th><th>Skill / ID</th><th>版本 / 应用领域 / 应用区域</th><th>处理方式与结果</th></tr></thead><tbody>{rows.map(row => <tr key={row.row} className="border-t border-zinc-100"><td className="p-2">{row.row}</td><td className="p-2">{row.name}<br /><span className="text-zinc-400">{row.id}</span></td><td className="p-2">{row.skill ? `${row.skill.version} / ${row.skill.ownerDeptIds?.[0] || "未设置"} / ${row.skill.ownerRegionId || "不限"}` : "—"}</td><td className="p-2">{row.error || results[row.row] || (skills.some(s => s.id === row.id) ? (overwrite ? '覆盖更新' : '同 ID，将跳过') : '新增草稿')}</td></tr>)}</tbody></table></div>
+      <div className="p-5">
+        <p className="text-sm text-zinc-600">按 Skill 名称比对。新名称保存为草稿，同名只更新有差异的字段，空白单元格保留原值。文件包请在单个 Skill 中维护。</p>
+        {error && <p role="alert" className="my-2 text-sm text-red-600">{error}</p>}
+        <p role="status" className="my-2 text-sm">{progress || (previewRows.length
+          ? `共 ${previewRows.length} 行，待保存 ${pending.length} 行，已保存 ${Object.values(results).filter(r => r.ok).length} 行` : '')}</p>
+        {previewRows.length > 0 && <div className="max-h-96 overflow-auto"><table className="w-full text-left text-xs">
+          <thead><tr><th className="p-2">Excel 行</th><th>Skill 名称</th><th>处理结果</th><th>变更字段或原因</th></tr></thead>
+          <tbody>{previewRows.map(({ row, plan }) => (
+            <tr key={row.row} className="border-t border-zinc-100 align-top">
+              <td className="p-2">{row.row}</td><td className="p-2">{row.name}</td>
+              <td className="p-2">{results[row.row]?.label || actionLabel[plan.action]}</td>
+              <td className="p-2">
+                {plan.action === 'update' && plan.skill && plan.existing ? (
+                  <FieldChanges before={skillSheetMetadata(plan.existing)} after={skillSheetMetadata(plan.skill)} fields={plan.changes} />
+                ) : plan.error || plan.changes.join('、')}
+              </td>
+            </tr>
+          ))}</tbody>
+        </table></div>}
+      </div>
     </CenterModal>
   </>;
+}
+
+function FieldChanges({ before, after, fields }: {
+  before: Record<string, string>; after: Record<string, string>; fields: string[];
+}) {
+  return <details>
+    <summary className="cursor-pointer">{fields.join('、')}</summary>
+    <dl className="mt-2 space-y-1">
+      {fields.map(field => <div key={field}>
+        <dt className="font-medium">{field}</dt>
+        <dd className="whitespace-pre-wrap break-words">{before[field] || '（空）'} → {after[field] || '（空）'}</dd>
+      </div>)}
+    </dl>
+  </details>;
 }
