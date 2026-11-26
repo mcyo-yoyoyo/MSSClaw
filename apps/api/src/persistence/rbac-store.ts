@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 读取 Prisma 角色、菜单、组织字典、成员及凭据。
+ * [OUTPUT]: 为组织后台提供成员维护、角色授权和组织字典操作。
+ * [POS]: 角色删除由成员外键保护，角色菜单随角色级联删除。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
@@ -160,10 +166,16 @@ export async function updateRole(db: Db, id: string, body: unknown) {
 }
 
 export async function deleteRole(db: Db, id: string): Promise<void> {
-  const role = await db.role.findUnique({ where: { id } });
-  if (!role) throw new NotFoundException('role_not_found');
-  if (await db.member.count({ where: { roleId: id } })) throw new ConflictException('role_in_use');
-  await db.role.delete({ where: { id } });
+  try {
+    const deleted = await db.role.deleteMany({ where: { id } });
+    if (!deleted.count) throw new NotFoundException('role_not_found');
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003' && error.meta?.constraint === 'member_role_id_fkey') {
+      throw new ConflictException('role_in_use');
+    }
+    throw error;
+  }
 }
 
 function idList(value: unknown, field: string): string[] {

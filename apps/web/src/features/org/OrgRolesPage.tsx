@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 从 orgAdminApi 读取角色、关联成员数和菜单授权。
+ * [OUTPUT]: 导出 OrgRolesPage，提供角色配置与删除入口。
+ * [POS]: 组织权限的角色页，按菜单编辑权和成员数控制列表操作。
+ * [PROTOCOL]: Update this header on change, then check AGENTS.md
+ */
 import { useEffect, useMemo, useState } from 'react';
 import { CenterModal, CenterPageHeader } from '@/components/center/CenterShell';
 import { FormField, FormInput, FormTextarea, ModalActions } from '@/components/center/CenterFormFields';
@@ -29,6 +35,7 @@ export function OrgRolesPage() {
   const [grants, setGrants] = useState<Grants>({ view: new Set(), edit: new Set() });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [creating, setCreating] = useState<{ copyFrom: OrgRole | null } | null>(null);
 
   const selected = roles.find((r) => r.id === selectedId) ?? null;
@@ -125,15 +132,26 @@ export function OrgRolesPage() {
     }
   };
 
-  const remove = async () => {
-    if (!selected || !window.confirm(`删除角色「${selected.name}」？`)) return;
+  const remove = async (role: OrgRole) => {
+    if (!editable || role.memberCount !== 0 || deletingId || saving) return;
+    if (!window.confirm(`确认删除角色「${role.name}」？`)) return;
+    setDeletingId(role.id);
     try {
-      await orgAdminApi.deleteRole(selected.id);
-      notify('角色已删除');
-      setSelectedId(null);
-      await reload('');
+      await orgAdminApi.deleteRole(role.id);
+      const remaining = roles.filter((item) => item.id !== role.id);
+      setRoles(remaining);
+      if (selectedId === role.id) select(remaining.find((item) => item.id !== SUPER_ADMIN) ?? remaining[0] ?? null);
+      notify(`已删除角色「${role.name}」`);
     } catch (e) {
       notify(errorText(e));
+      // 角色可能刚被分配给成员，刷新人数并保留正在编辑的权限。
+      try {
+        setRoles(await orgAdminApi.listRoles());
+      } catch (refreshError) {
+        setError(errorText(refreshError));
+      }
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -144,7 +162,7 @@ export function OrgRolesPage() {
         subtitle="角色决定成员能看到哪些菜单、能否新增修改删除。每个成员只有一个角色，新成员默认是「普通用户」。"
         actions={
           editable ? (
-            <button type="button" className={btn.primary} onClick={() => setCreating({ copyFrom: null })}>
+            <button type="button" className={btn.primary} disabled={!!deletingId} onClick={() => setCreating({ copyFrom: null })}>
               <i className="fa-solid fa-plus mr-1.5" />
               新建角色
             </button>
@@ -157,23 +175,40 @@ export function OrgRolesPage() {
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
         <aside className="space-y-1">
           {roles.map((role) => (
-            <button
+            <div
               key={role.id}
-              type="button"
-              onClick={() => select(role)}
               className={cn(
-                'flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition',
+                'flex w-full items-center rounded-xl border pr-2 transition',
                 role.id === selectedId ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-white hover:border-zinc-300',
               )}
             >
-              <span className="min-w-0">
-                <span className="block truncate text-[13px] font-semibold">{role.name}</span>
-                <span className={cn('block truncate text-[11px]', role.id === selectedId ? 'text-zinc-300' : 'text-zinc-400')}>
-                  {role.id === SUPER_ADMIN ? '全部菜单' : `${role.menuIds.length} 个菜单`} · {role.memberCount} 人
+              <button
+                type="button"
+                disabled={!!deletingId}
+                onClick={() => select(role)}
+                className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-[13px] font-semibold">{role.name}</span>
+                  <span className={cn('block truncate text-[11px]', role.id === selectedId ? 'text-zinc-300' : 'text-zinc-400')}>
+                    {role.id === SUPER_ADMIN ? '全部菜单' : `${role.menuIds.length} 个菜单`} · {role.memberCount} 人
+                  </span>
                 </span>
-              </span>
-              {role.id === DEFAULT_ROLE ? <Pill tone="green">默认</Pill> : role.isSystem ? <Pill>内置</Pill> : null}
-            </button>
+                {role.id === DEFAULT_ROLE ? <Pill tone="green">默认</Pill> : role.isSystem ? <Pill>内置</Pill> : null}
+              </button>
+              {editable && (
+                <button
+                  type="button"
+                  aria-label={`删除角色「${role.name}」`}
+                  title={role.memberCount ? `已关联 ${role.memberCount} 名成员，请先调整成员角色` : `删除角色「${role.name}」`}
+                  disabled={role.memberCount !== 0 || !!deletingId || saving}
+                  onClick={() => void remove(role)}
+                  className={cn(btn.danger, 'shrink-0 rounded-md px-2 py-1.5 disabled:cursor-not-allowed', role.id === selectedId && 'text-rose-300 hover:text-rose-200')}
+                >
+                  {deletingId === role.id ? '删除中…' : '删除'}
+                </button>
+              )}
+            </div>
           ))}
         </aside>
 
@@ -192,21 +227,14 @@ export function OrgRolesPage() {
                   {isSuper ? ' · 超级管理员拥有全部菜单，不能修改' : hasAdmin ? ' · 有管理后台菜单，顶栏会显示「管理后台」' : ' · 没有管理后台菜单'}
                 </p>
               </div>
-              {editable ? (
+              {editable && !isSuper ? (
                 <div className="flex shrink-0 items-center gap-2">
-                  {isSuper ? null : (
-                    <button type="button" className={btn.secondary} onClick={() => setCreating({ copyFrom: selected })}>
-                      复制
-                    </button>
-                  )}
-                  <button type="button" className={btn.secondary} onClick={() => void remove()}>
-                    删除
+                  <button type="button" className={btn.secondary} disabled={!!deletingId} onClick={() => setCreating({ copyFrom: selected })}>
+                    复制
                   </button>
-                  {isSuper ? null : (
-                    <button type="button" className={btn.primary} disabled={!dirty || saving} onClick={() => void save()}>
-                      {saving ? '保存中…' : '保存'}
-                    </button>
-                  )}
+                  <button type="button" className={btn.primary} disabled={!dirty || saving || !!deletingId} onClick={() => void save()}>
+                    {saving ? '保存中…' : '保存'}
+                  </button>
                 </div>
               ) : null}
             </div>

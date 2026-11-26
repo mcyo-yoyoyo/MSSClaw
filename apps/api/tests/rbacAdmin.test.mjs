@@ -235,10 +235,13 @@ test('角色：内置和自定义角色都能删，有成员的角色不能删�
 
   const member = await admin().createUser({ name: 'E', email: 'e@huawei.com', roleId: 'auditor' });
   assert.equal(await reason(admin().deleteRole('auditor')), '409:role_in_use');
+  await admin().updateUser(member.id, { status: 'suspended' }, superAdmin);
+  assert.equal(await reason(admin().deleteRole('auditor')), '409:role_in_use');
   await prisma.role.update({ where: { id: 'auditor' }, data: { isSystem: true } });
   await admin().deleteUser(member.id, superAdmin);
   await admin().deleteRole('auditor');
   assert.equal((await admin().roles()).roles.some((r) => r.id === 'auditor'), false);
+  assert.equal(await reason(admin().deleteRole('auditor')), '404:role_not_found');
 });
 
 test('字典：新增区域、停用后公开接口不再返回，被成员引用时不能删', async () => {
