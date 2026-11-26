@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675">
+  <rect width="1200" height="675" fill="#17271f"/>
+  <rect x="42" y="42" width="1116" height="591" rx="10" fill="#20372b" stroke="#55725f"/>
+  <circle cx="1058" cy="112" r="28" fill="#d6a45e"/>
+  <text x="72" y="104" fill="#b8c5ba" font-family="Arial, Microsoft YaHei, sans-serif" font-size="24">OPENAI CUSTOMER STORY</text>
+  <text x="72" y="214" fill="#ffffff" font-family="Georgia, Songti SC, Microsoft YaHei, serif" font-size="52" font-weight="700"><tspan x="72" dy="0">Replit 如何用 GPT-5.</tspan><tspan x="72" dy="64">6 Luna 扩大软件创作的可及性</tspan></text>
+  <line x1="72" y1="528" x2="1128" y2="528" stroke="#55725f"/>
+  <text x="72" y="588" fill="#dce5dd" font-family="Arial, Microsoft YaHei, sans-serif" font-size="28">Replit</text>
+  <text x="1128" y="588" fill="#9fb0a2" text-anchor="end" font-family="Arial, Microsoft YaHei, sans-serif" font-size="22">AI CASEBOOK</text>
+</svg>

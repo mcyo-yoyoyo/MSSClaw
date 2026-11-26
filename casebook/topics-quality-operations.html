@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>质量与运营 - AI Casebook</title>
+  <style>
+    :root {
+      --bg: #eef0ec;
+      --ink: #20251f;
+      --muted: #7d887c;
+      --line: #dde1d9;
+      --panel: #ffffff;
+      --dark: #17271f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    .shell { max-width: 1680px; margin: 0 auto; padding: 32px 32px 56px; }
+    header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: start;
+      gap: 24px;
+      margin-bottom: 34px;
+    }
+    h1 {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", "Songti SC", "Noto Serif CJK SC", serif;
+      font-size: clamp(40px, 5vw, 72px);
+      line-height: .95;
+      letter-spacing: 0;
+    }
+    .subtitle { margin-top: 12px; color: var(--muted); font-size: 15px; }
+    .navline { display: flex; align-items: center; gap: 18px; color: var(--muted); font-size: 14px; white-space: nowrap; padding-top: 26px; }
+    .tabs { display: inline-flex; gap: 4px; padding: 4px; background: rgba(255,255,255,.72); border-radius: 999px; box-shadow: 0 12px 34px rgba(18,27,22,.08); }
+    .tabs a, .tabs span { padding: 9px 18px; border-radius: 999px; color: var(--muted); text-decoration: none; }
+    .tabs .active { background: var(--ink); color: #fff; }
+    .count { letter-spacing: .12em; font-size: 12px; text-transform: uppercase; }
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px; }
+    .case {
+      overflow: hidden;
+      min-height: 640px;
+      background: var(--panel);
+      border: 1px solid rgba(32,37,31,.08);
+      border-radius: 8px;
+      box-shadow: 0 18px 42px rgba(24,34,28,.08);
+    }
+    .cover {
+      display: block;
+      height: 238px;
+      background: #050806;
+      text-decoration: none;
+    }
+    .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .cover-fallback {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      background: radial-gradient(circle at 30% 20%, #315342, #17271f 58%, #0b100d);
+      color: #eef0ec;
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+    }
+    .cover-fallback strong { font-size: 28px; }
+    .cover-fallback span { color: #aeb9ae; font-size: 12px; letter-spacing: .14em; }
+    .card-body { padding: 20px 22px 24px; }
+    .eyebrow { display: flex; justify-content: space-between; gap: 16px; color: #9a9f98; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+    h2 { margin: 16px 0 12px; font-family: Georgia, "Times New Roman", "Songti SC", "Noto Serif CJK SC", serif; font-size: 22px; line-height: 1.18; letter-spacing: 0; }
+    h2 a { color: var(--ink); text-decoration: none; }
+    h2 a:hover { text-decoration: underline; text-underline-offset: 4px; }
+    p { margin: 0; line-height: 1.72; }
+    .summary {
+      color: #687066;
+      font-size: 14px;
+      display: block;
+      overflow: visible;
+    }
+    .tags { display: flex; flex-wrap: wrap; gap: 7px; margin: 16px 0; }
+    .tags span { border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px; color: #5d675b; font-size: 12px; background: #f8f9f6; }
+    .tags .product-tag { border-color: #b9c9bd; color: #264b35; background: #edf4ee; font-weight: 700; }
+    .tags .mss-primary-tag { border-color: #263c2e; color: #fff; background: #263c2e; font-weight: 700; }
+    .tags .mss-related-tag { border-color: #9aa99d; color: #405447; background: #f2f5f2; font-weight: 700; }
+    .fact { margin-top: 12px; }
+    .fact strong,
+    .insight strong { display: block; margin-bottom: 5px; font-size: 13px; }
+    .fact p,
+    .insight p {
+      height: 66px;
+      color: #596258;
+      font-size: 13px;
+      line-height: 22px;
+      display: -webkit-box;
+      overflow: hidden;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+    }
+    .insight { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
+    .metrics { display: flex; justify-content: space-between; gap: 14px; margin-top: 18px; color: #7d887c; font-size: 12px; }
+    .metrics span:first-child { color: var(--ink); font-weight: 700; }
+    .topic-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: stretch; }
+    .topic-card {
+      min-height: 590px;
+      display: flex;
+      flex-direction: column;
+      padding: 28px;
+      background: #fff;
+      border: 1px solid rgba(32,37,31,.08);
+      border-radius: 8px;
+      box-shadow: 0 18px 42px rgba(24,34,28,.08);
+      color: var(--ink);
+      text-decoration: none;
+      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+    .topic-card:hover { transform: translateY(-3px); border-color: rgba(32,55,38,.22); box-shadow: 0 22px 48px rgba(24,34,28,.12); }
+    .topic-card:hover .topic-link { text-decoration: underline; text-underline-offset: 4px; }
+    .topic-card-head { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; }
+    .topic-card .kicker { color: #9a9f98; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
+    .topic-card h2 { margin: 8px 0 0; font-size: 32px; }
+    .topic-card > p { min-height: 48px; margin: 18px 0 0; color: #687066; font-size: 14px; line-height: 1.7; }
+    .topic-count { flex: 0 0 auto; padding: 7px 10px; border: 1px solid #d9ded7; border-radius: 999px; color: #667064; background: #f7f8f5; font-size: 11px; white-space: nowrap; }
+    .topic-insights { margin-top: 22px; border-top: 1px solid var(--line); }
+    .topic-insight-section { display: grid; grid-template-columns: 112px 1fr; gap: 18px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+    .topic-insight-section h3 { margin: 0; font-size: 13px; line-height: 1.6; }
+    .topic-insight-section:nth-child(1) h3 { color: #a16b29; }
+    .topic-insight-section:nth-child(2) h3 { color: #315d43; }
+    .topic-insight-section:nth-child(3) h3 { color: #536171; }
+    .topic-insight-section ul { margin: 0; padding-left: 18px; color: #596258; font-size: 13px; line-height: 1.7; }
+    .topic-insight-section li + li { margin-top: 5px; }
+    .topic-card .topic-meta { display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: end; margin-top: auto; padding-top: 20px; color: #7d887c; font-size: 12px; }
+    .topic-meta-case { min-width: 0; line-height: 1.6; }
+    .topic-link { color: var(--ink); font-weight: 700; white-space: nowrap; }
+    .topic-link::after { content: " →"; }
+    .topic-layout { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.6fr); gap: 28px; align-items: start; }
+    .topic-panel {
+      position: sticky;
+      top: 24px;
+      padding: 26px;
+      background: #fff;
+      border: 1px solid rgba(32,37,31,.08);
+      border-radius: 8px;
+      box-shadow: 0 18px 42px rgba(24,34,28,.08);
+    }
+    .topic-panel h2 { font-size: 34px; margin-top: 0; }
+    .section-block { border-top: 1px solid var(--line); padding-top: 18px; margin-top: 20px; }
+    .section-block h3 { margin: 0 0 10px; font-size: 14px; }
+    .section-block ul { margin: 0; padding-left: 20px; color: #596258; line-height: 1.75; font-size: 14px; }
+    .topic-cases { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+    .empty { padding: 28px; background: #fff; border: 1px solid rgba(32,37,31,.08); border-radius: 8px; color: #687066; }
+    .detail-layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(320px, .8fr); gap: 28px; align-items: start; }
+    .detail-main,
+    .detail-side {
+      background: #fff;
+      border: 1px solid rgba(32,37,31,.08);
+      border-radius: 8px;
+      box-shadow: 0 18px 42px rgba(24,34,28,.08);
+    }
+    .detail-main { overflow: hidden; }
+    .detail-cover { height: 360px; background: #050806; }
+    .detail-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .detail-content { padding: 30px; }
+    .detail-content h2 { font-size: 34px; margin-top: 0; }
+    .detail-section { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 22px; }
+    .detail-section h3 { margin: 0 0 10px; font-size: 15px; }
+    .detail-section p { color: #596258; font-size: 15px; }
+    .source-box {
+      max-height: 420px;
+      overflow: auto;
+      padding: 18px;
+      background: #f8f9f6;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: #596258;
+      font-size: 13px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+    }
+    .detail-side { position: sticky; top: 24px; padding: 24px; }
+    .source-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      margin-top: 18px;
+      padding: 12px 16px;
+      border-radius: 999px;
+      background: var(--ink);
+      color: #fff;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .reader-page { background: #415536; }
+    .reader-shell { max-width: 1160px; margin: 0 auto; padding: 48px 24px 72px; }
+    .reader-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; color: rgba(255,255,255,.72); }
+    .reader-top a { color: rgba(255,255,255,.86); text-decoration: none; }
+    .reader-card { overflow: hidden; background: #fff; border-radius: 12px; box-shadow: 0 28px 80px rgba(19,28,18,.28); }
+    .reader-cover { height: 430px; background: #050806; }
+    .reader-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .reader-content { max-width: 820px; margin: 0 auto; padding: 42px 42px 52px; }
+    .reader-meta { color: #9a9f98; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
+    .reader-content h1 {
+      margin: 18px 0 22px;
+      font-family: Georgia, "Times New Roman", "Songti SC", "Noto Serif CJK SC", serif;
+      font-size: clamp(34px, 4vw, 54px);
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+    .core-label { margin-top: 28px; color: #9a6c2f; font-weight: 700; font-size: 14px; }
+    .core-summary { margin-top: 12px; color: #3c423a; font-size: 17px; line-height: 1.95; }
+    .case-analysis { border-top: 1px solid var(--line); margin-top: 28px; padding-top: 24px; }
+    .case-analysis h2 { margin: 0 0 10px; font-size: 22px; }
+    .case-analysis p { color: #4f584d; font-size: 16px; line-height: 1.9; }
+    .dimension-analysis { margin-top: 44px; border-top: 3px solid var(--ink); }
+    .dimension-heading { padding: 28px 0 8px; }
+    .dimension-heading .core-label { margin-top: 0; }
+    .dimension-heading h2 { margin: 8px 0 0; font-size: 30px; }
+    .dimension-section { display: grid; grid-template-columns: 72px 1fr; gap: 24px; padding: 34px 0; border-top: 1px solid var(--line); }
+    .dimension-number { font-family: Georgia, "Times New Roman", serif; color: #a46d2a; font-size: 24px; font-weight: 700; }
+    .dimension-section h2 { margin: 0 0 22px; font-size: 25px; }
+    .dimension-fields { margin: 0; }
+    .dimension-fields > div { display: grid; grid-template-columns: 132px 1fr; gap: 20px; padding: 14px 0; border-top: 1px solid #edf0ea; }
+    .dimension-fields dt { color: #7a8378; font-size: 13px; font-weight: 700; }
+    .dimension-fields dd { margin: 0; color: #454d43; font-size: 15px; line-height: 1.85; }
+    .dimension-fields ol,
+    .dimension-fields ul { margin: 0; padding-left: 20px; }
+    .dimension-fields li { margin: 0 0 8px; }
+    .dimension-fields li:last-child { margin-bottom: 0; }
+    .dimension-fields .evidence-note dd { color: #776f65; }
+    .case-v2 { margin-top: 36px; }
+    .case-v2-section { padding: 38px 0; border-top: 1px solid var(--line); }
+    .case-v2-section:first-child { border-top: 3px solid var(--ink); }
+    .case-v2-kicker { color: #9a6c2f; font-size: 13px; font-weight: 700; }
+    .case-v2-section > h2 { margin: 8px 0 14px; font-size: 30px; }
+    .case-v2-lead { margin: 0; color: #3c423a; font-size: 18px; line-height: 1.9; }
+    .metric-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 28px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .metric-strip > div { min-width: 0; padding: 20px 18px; border-left: 1px solid var(--line); }
+    .metric-strip > div:first-child { border-left: 0; }
+    .metric-strip strong { display: block; color: var(--ink); font-family: Georgia, "Times New Roman", serif; font-size: 24px; line-height: 1.2; }
+    .metric-strip span { display: block; margin-top: 8px; color: #70786e; font-size: 12px; line-height: 1.55; }
+    .fact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 34px; margin-top: 28px; }
+    .fact-grid h3, .case-v2-subhead { margin: 0 0 10px; font-size: 18px; }
+    .fact-grid p { margin: 0; color: #4f584d; font-size: 15px; line-height: 1.85; }
+    .case-v2-subhead { margin-top: 30px; }
+    .case-matrix { margin-top: 12px; border-top: 1px solid var(--ink); }
+    .case-matrix-row { display: grid; grid-template-columns: 1.05fr 1.3fr 1.4fr 1.1fr; border-bottom: 1px solid var(--line); }
+    .case-matrix-row > div { min-width: 0; padding: 14px 12px; color: #4b5349; font-size: 13px; line-height: 1.65; }
+    .case-matrix-row.header > div { color: #737b71; font-size: 12px; font-weight: 700; }
+    .case-matrix-row strong { color: var(--ink); }
+    .case-timeline { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); margin-top: 14px; border-top: 1px solid var(--line); }
+    .case-timeline > div { min-width: 0; padding: 16px 12px 0 0; }
+    .case-timeline span { color: #9a6c2f; font-family: Georgia, "Times New Roman", serif; font-weight: 700; }
+    .case-timeline p { margin: 8px 0 0; color: #555d52; font-size: 13px; line-height: 1.6; }
+    .value-table { margin: 12px 0 0; border-top: 1px solid var(--ink); }
+    .value-table-row { display: grid; grid-template-columns: 110px 1.15fr 1fr; border-bottom: 1px solid var(--line); }
+    .value-table-row > div { min-width: 0; padding: 13px 12px; color: #4b5349; font-size: 13px; line-height: 1.65; }
+    .value-table-row.header > div { color: #737b71; font-size: 12px; font-weight: 700; }
+    .value-table-row strong { color: var(--ink); }
+    .scene-list { margin-top: 12px; border-top: 1px solid var(--ink); }
+    .scene-item { display: grid; grid-template-columns: 1.1fr 92px 1.7fr 1.3fr; border-bottom: 1px solid var(--line); }
+    .scene-item > div { min-width: 0; padding: 14px 12px; color: #4b5349; font-size: 13px; line-height: 1.65; }
+    .scene-item.header > div { color: #737b71; font-size: 12px; font-weight: 700; }
+    .scene-level { color: #9a6c2f; font-weight: 700; }
+    .mss-table .case-matrix-row { grid-template-columns: 1.15fr 1.2fr 1.5fr .85fr; }
+    .source-note { padding: 18px 0 0; color: #777f75; font-size: 13px; line-height: 1.75; }
+    .source-access { display: grid; grid-template-columns: 1fr 176px; gap: 32px; align-items: end; margin-top: 38px; padding: 30px 0; border-top: 3px solid var(--ink); border-bottom: 1px solid var(--line); }
+    .source-access h2 { margin: 8px 0 10px; font-size: 25px; }
+    .source-access p { margin: 0 0 8px; color: #747c72; font-size: 13px; }
+    .source-access a { color: var(--ink); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+    .source-access img { width: 176px; height: 176px; display: block; background: #fff; }
+    .outline-list { margin: 34px 0 0; padding: 0; list-style: none; counter-reset: outline; }
+    .outline-list li {
+      counter-increment: outline;
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 18px;
+      padding: 22px 0;
+      border-top: 1px solid var(--line);
+      color: #3f463d;
+      font-size: 16px;
+      line-height: 1.9;
+    }
+    .outline-list li::before {
+      content: counter(outline) ".";
+      font-family: Georgia, "Times New Roman", serif;
+      font-weight: 700;
+      color: var(--ink);
+    }
+    .digest-list { margin-top: 30px; }
+    .digest-item { display: grid; grid-template-columns: 44px 1fr; gap: 18px; padding: 24px 0; border-top: 1px solid var(--line); }
+    .digest-number { font-family: Georgia, "Times New Roman", serif; font-weight: 700; color: var(--ink); font-size: 18px; }
+    .digest-item h2 { margin: 0 0 10px; font-size: 24px; }
+    .digest-item p { color: #4f584d; font-size: 16px; line-height: 1.9; }
+    .reader-section { border-top: 1px solid var(--line); margin-top: 34px; padding-top: 24px; }
+    .reader-section h2 { margin: 0 0 12px; font-size: 24px; }
+    .reader-section p { color: #4f584d; font-size: 16px; line-height: 1.9; }
+    .reader-links { display: flex; flex-wrap: wrap; gap: 12px; border-top: 1px solid var(--line); margin-top: 36px; padding-top: 28px; }
+    .reader-links a, .reader-links button { padding: 12px 18px; border-radius: 999px; text-decoration: none; font: inherit; font-size: 14px; cursor: pointer; }
+    .reader-links .primary { background: var(--ink); color: #fff; }
+    .reader-links .secondary { background: #f4f5f2; color: var(--ink); border: 1px solid var(--line); }
+    .reader-links .pdf-action { background: #a46d2a; color: #fff; border: 1px solid #a46d2a; }
+    .reader-foot { margin-top: 22px; color: rgba(255,255,255,.5); font-size: 12px; text-align: right; }
+    @media (max-width: 1200px) {
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .topic-layout, .detail-layout { grid-template-columns: 1fr; }
+      .topic-panel, .detail-side { position: static; }
+    }
+    @media (max-width: 720px) {
+      .shell { padding: 24px 16px 40px; }
+      header { grid-template-columns: 1fr; }
+      .navline { padding-top: 0; flex-wrap: wrap; }
+      .grid, .topic-grid, .topic-cases { grid-template-columns: 1fr; }
+      .topic-card { min-height: auto; padding: 22px; }
+      .topic-card-head { gap: 14px; }
+      .topic-card h2 { font-size: 28px; }
+      .topic-insight-section { grid-template-columns: 1fr; gap: 8px; }
+      .topic-card .topic-meta { grid-template-columns: 1fr; gap: 8px; }
+      .case { min-height: auto; }
+      .reader-shell { padding: 24px 14px 44px; }
+      .reader-cover { height: 240px; }
+      .reader-content { padding: 28px 22px 34px; }
+      .dimension-section { grid-template-columns: 1fr; gap: 10px; }
+      .dimension-fields > div { grid-template-columns: 1fr; gap: 6px; }
+      .metric-strip { grid-template-columns: 1fr 1fr; }
+      .metric-strip > div:nth-child(3) { border-left: 0; border-top: 1px solid var(--line); }
+      .metric-strip > div:nth-child(4) { border-top: 1px solid var(--line); }
+      .fact-grid { grid-template-columns: 1fr; gap: 24px; }
+      .case-matrix-row, .value-table-row, .scene-item, .mss-table .case-matrix-row { grid-template-columns: 1fr; padding: 12px 0; }
+      .case-matrix-row.header, .value-table-row.header, .scene-item.header { display: none; }
+      .case-matrix-row > div, .value-table-row > div, .scene-item > div { padding: 4px 0; }
+      .case-timeline { grid-template-columns: 1fr 1fr; }
+      .source-access { grid-template-columns: 1fr; align-items: start; }
+      .outline-list li { grid-template-columns: 32px 1fr; gap: 12px; }
+      .digest-item { grid-template-columns: 32px 1fr; gap: 12px; }
+    }
+    @media print {
+      @page { size: A4; margin: 14mm 13mm 16mm; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      body.reader-page { background: #fff; }
+      .reader-shell { max-width: none; margin: 0; padding: 0; }
+      .reader-top, .reader-cover, .reader-links, .reader-foot { display: none !important; }
+      .reader-card { overflow: visible; border-radius: 0; box-shadow: none; }
+      .reader-content { max-width: none; margin: 0; padding: 0; }
+      .reader-meta { font-size: 8.5pt; }
+      .reader-content h1 { margin: 8mm 0 4mm; font-size: 25pt; line-height: 1.18; }
+      .subtitle { font-size: 9pt; }
+      .tags { margin-top: 4mm; }
+      .tags span { font-size: 7.5pt; }
+      .case-v2 { margin-top: 7mm; }
+      .case-v2-section { padding: 6mm 0; }
+      .case-v2-section > h2, .dimension-heading h2 { font-size: 18pt; }
+      .case-v2-lead { font-size: 11pt; line-height: 1.75; }
+      .metric-strip, .fact-grid, .case-matrix, .scene-list, .case-timeline, .source-access { break-inside: avoid; }
+      .metric-strip strong { font-size: 16pt; }
+      .case-matrix-row, .value-table-row, .scene-item, .dimension-fields > div { break-inside: avoid; }
+      .dimension-analysis { margin-top: 8mm; }
+      .dimension-heading { padding: 7mm 0 2mm; }
+      .dimension-section { grid-template-columns: 14mm 1fr; gap: 5mm; padding: 6mm 0; }
+      .dimension-number { font-size: 16pt; }
+      .dimension-section h2 { font-size: 16pt; }
+      .dimension-fields > div { grid-template-columns: 29mm 1fr; gap: 5mm; padding: 2.3mm 0; }
+      .dimension-fields dt, .case-matrix-row.header > div, .scene-item.header > div { font-size: 8pt; }
+      .dimension-fields dd, .case-matrix-row > div, .scene-item > div { font-size: 8.6pt; line-height: 1.5; }
+      .case-matrix-row > div, .scene-item > div { padding: 2mm; }
+      .source-access { grid-template-columns: 1fr 42mm; gap: 12mm; align-content: center; min-height: 240mm; margin: 0; padding: 0; break-before: page; }
+      .source-access h2 { margin: 3mm 0 2mm; font-size: 20pt; }
+      .source-access p { margin-bottom: 2mm; }
+      .source-access img { width: 42mm; height: 42mm; }
+      .source-access a { font-size: 7.5pt; }
+      a { color: inherit; }
+    }
+    </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div>
+        <h1>质量与运营</h1>
+        <div class="subtitle">聚合质量、合规、QA、财务、供应链、内部运营、研发工程与产品交付案例。</div>
+      </div>
+      
+      <nav class="navline" aria-label="功能模块">
+        <span>功能</span>
+        <span class="tabs"><a class="" href="index.html">开天眼</a><a class="active" href="topics.html">做借鉴</a><span title="待开发">找差距</span></span>
+        <span class="count">3 CASES</span>
+      </nav>
+    
+    </header>
+    <main class="topic-layout">
+      <aside class="topic-panel">
+        <div class="subtitle">做借鉴</div>
+        <h2>质量与运营</h2>
+        <p>聚合质量、合规、QA、财务、供应链、内部运营、研发工程与产品交付案例。</p>
+        <div class="section-block">
+          <h3>趋势判断</h3>
+          <ul><li>AI 从辅助分析走向跨系统执行和持续监控。</li><li>工程、质量和运营开始共用可审计的 Agent 工作流。</li></ul>
+        </div>
+        <div class="section-block">
+          <h3>可借鉴模式</h3>
+          <ul><li>业务数据 + 分析 Agent + 人工审批</li><li>代码或流程系统 + 自动执行 + 质量验证</li></ul>
+        </div>
+        <div class="section-block">
+          <h3>内部试点建议</h3>
+          <ul><li>选择高频、可验证的运营流程做端到端自动化。</li><li>以质量、周期和人工介入率作为共同指标。</li></ul>
+        </div>
+      </aside>
+      <section class="topic-cases">
+            <article class="case">
+              <a class="cover" href="cases/claude-l-or-al-l-or-al-advances-conversational-analytics-with-claude.html"><img src="assets/covers/claude-l-or-al-l-or-al-advances-conversational-analytics-with-claude.svg?v=3" alt="L&#x27;Oréal 案例封面" /></a>
+              <div class="card-body">
+                <div class="eyebrow"><span>CLAUDE</span><span>最新收录</span></div>
+                <h2><a href="cases/claude-l-or-al-l-or-al-advances-conversational-analytics-with-claude.html">欧莱雅利用 Claude 推进对话式数据分析</a></h2>
+                <p class="summary">欧莱雅作为全球最大美妆公司，在内部 AI 平台部署 Claude 作为多智能体编排器，将自然语言问题转化为数据洞察和可视化。员工无需为每个临时问题构建自定义仪表盘，可直接用自然语言查询数据。该方案在对话式分析应用中达到 99.9% 准确率，相比此前生成式 AI 方法的 90% 大幅提升。平台月活用户达 44,000 人，日活 15,000 人，每月产生 250 万条消息。Claude 通过协调语义 API、数据检索、计算、产品主数据和地理主数据等 15+ 专用智能体，确保高精度和可靠性，推动欧莱雅向 Beauty Tech 领导者迈进。</p>
+                <div class="tags"><span class="mss-primary-tag">主领域 · 质量与运营</span><span class="mss-related-tag">关联 · GTM</span><span class="product-tag">产品：Claude Platform</span><span>零售/电商</span> <span>美妆消费品</span> <span>数据分析</span> <span>运营提效</span> <span>提效</span></div>
+                <div class="fact">
+                  <strong>AI 怎么落地</strong>
+                  <p>欧莱雅在内部 AI 平台中部署 Claude 作为核心编排器，接入其 Beauty Tech Data Platform，并管理用户身份和访问控制。当员工用自然语言提问时，Claude 首先解析问题意图，然后动态路由到多个专用智能体：语义 API 智能体负责理解查询语义，数据检索系统从数据平台获取相关数据，计算智能体处理数学运算，产品主数据智能体和地理主数据智能体分别提供产品和地理维度信息。Claude 协调这些智能体的工作，并将结果综合为清晰的答案和配套数据可视化。系统通过将特定类型查询路由到专用智能体来降低幻觉风险，例如计算任务交给计算器智能体，产品维度查询交给产品主数据智能体。人工审核环节体现在系统设计中对准确性的持续跟踪和缓解措施，以及通过 LLM 作为评判者的自动评估来验证模型性能。该架构支持 15+ 专用智能体，覆盖对话式分析、软件开发生命周期等场景，其中 Claude Code 在 30-50 名开发者中早期测试。</p>
+                </div>
+                <div class="fact">
+                  <strong>带来什么价值</strong>
+                  <p>效率提升：员工无需为每个临时问题构建自定义仪表盘，可直接用自然语言查询数据，大幅缩短获取洞察的时间。准确性提升：对话式分析应用准确率从 90% 提升至 99.9%，增强了员工对 AI 能力的信任，促进大规模采用。成本节约：通过自动化重复性任务，员工可专注于更高价值工作，间接降低人力成本。收入增长：原文提到加速上市时间、获得市场份额和加快配方研究，但未提供具体数字。体验提升：员工数据查询体验从依赖技术团队构建仪表盘转变为自助式自然语言交互，显著改善用户体验。</p>
+                </div>
+                <div class="insight">
+                  <strong>可借鉴点</strong>
+                  <p>欧莱雅的实践表明，对于复杂分析任务，采用多智能体编排架构比单一模型更有效。中国企业可借鉴：1) 将自然语言查询分解为语义理解、数据检索、计算、主数据等专用智能体，由核心模型编排，可显著提升准确率（从 90% 到 99.9%）。2) 通过路由特定查询到专用智能体来降低幻觉风险，例如计算任务交给计算器智能体，产品维度查询交给产品主数据智能体。3) 在内部 AI 平台中集成身份和访问控制，确保数据安全。4) 采用 LLM 作为评判者的自动评估机制，持续验证模型性能，为模型选型提供依据。5) 从对话式分析切入，逐步扩展到软件开发生命周期，实现渐进式 AI 采用。</p>
+                </div>
+                <div class="metrics"><span>借鉴价值 100</span><span>对话式分析准确率 90%→99.9%, 月活用户 44,000 人, 日活用户 15,000 人</span></div>
+              </div>
+            </article>
+            
+            <article class="case">
+              <a class="cover" href="cases/claude-advantage-solutions-advantage-solutions-claude-case-study-claude-by-anthropic.html"><img src="assets/covers/claude-advantage-solutions-advantage-solutions-claude-case-study-claude-by-anthropic.jpg" alt="Advantage Solutions 案例封面" /></a>
+              <div class="card-body">
+                <div class="eyebrow"><span>CLAUDE</span><span>最新收录</span></div>
+                <h2><a href="cases/claude-advantage-solutions-advantage-solutions-claude-case-study-claude-by-anthropic.html">Advantage Solutions 借助 Claude Enterprise 每年重定向 7 万+ 工时，从合规检查转向培训与门店现场</a></h2>
+                <p class="summary">Advantage Solutions 是一家北美零售服务商，连接 4000 家 CPG 品牌与零售商，拥有 6 万名一线员工。2026 年初，公司与 AI 转型公司 Tenex 合作开展企业 AI 诊断，随后选择 Claude 作为核心平台。通过 150 人高管主导试点，Advantage 在劳动力运营、财务和企业沟通中部署 Claude Enterprise，将活动经理的纸质合规检查自动化，预计每年释放 7 万小时用于培训和门店现场；财务预测验证从每周 10 小时压缩至 30 分钟以内；零售陈列路线模型已用于客户提案。公司已培训 150 多名高管，建立 CEO 支持的治理委员会，并涌现 50 多个业务单元冠军，计划在 2026 年底前扩展至数千名用户。</p>
+                <div class="tags"><span class="mss-primary-tag">主领域 · 质量与运营</span><span class="mss-related-tag">关联 · 零售</span><span class="mss-related-tag">关联 · GTM</span><span class="mss-related-tag">关联 · 服务</span><span class="product-tag">产品：Partner:</span><span>零售/电商</span> <span>零售服务</span> <span>运营提效</span> <span>数据分析</span> <span>提效</span></div>
+                <div class="fact">
+                  <strong>AI 怎么落地</strong>
+                  <p>Advantage Solutions 在多个业务场景中接入 Claude。在劳动力运营方面，活动经理原本每班次需用纸质清单和高亮笔检查产品演示车的供应与合规项，耗时 20-30 分钟。公司使用 Claude Code 构建工具，让经理拍摄推车照片，系统在几分钟内完成合规验证。该工具预计每年释放超过 7 万小时。在财务方面，财务规划与分析总监 Ash Gupta 将每周预测验证的幻灯片、评论和验证工作自动化，从 10 小时压缩至 30 分钟以内。在零售陈列方面，一名超级用户使用 Claude Code 构建动态门店路线模型，现已用于客户提案。此外，Claude Cowork 被用于公司沟通和 CEO 办公室的日常工作执行，如文件提取、综合和工作流创建。触发方式包括手动上传照片、运行自动化工作流和直接使用 Claude 界面。人工审核体现在高管对 AI 输出的最终把关，以及治理委员会对用例的审查。</p>
+                </div>
+                <div class="fact">
+                  <strong>带来什么价值</strong>
+                  <p>效率提升：活动经理合规检查从 20-30 分钟缩短至几分钟，预计每年释放 70,000+ 小时；财务预测验证从每周 10 小时压缩至 30 分钟以内。成本节约：释放的工时重新分配到培训和门店现场，减少冗余手动任务。收入影响：零售陈列路线模型已用于客户提案，可能增强客户获取和留存，但原文未披露具体收入数字。体验提升：一线员工获得更多培训时间，新员工上岗时间缩短，客户沟通质量提高。</p>
+                </div>
+                <div class="insight">
+                  <strong>可借鉴点</strong>
+                  <p>Advantage Solutions 的案例表明，大型企业应首先进行 AI 诊断，识别高价值用例并建立治理结构。高管层率先接受培训，形成自上而下的 AI 文化，再通过业务单元冠军推广。选择企业级平台（如 Claude）确保可扩展性和可靠性。从具体痛点切入（如合规检查、财务验证），快速展示量化收益，再扩展到其他职能。建立 CEO 支持的治理委员会，定期审查用例组合，确保战略对齐。培养超级用户，鼓励自下而上的创新，并将原型转化为可部署解决方案。</p>
+                </div>
+                <div class="metrics"><span>借鉴价值 86</span><span>预计每年释放 70,000+ 劳动小时, 财务预测验证从每周 10 小时压缩至 30 分钟以内, 试点从 150 人扩展到数千名用户</span></div>
+              </div>
+            </article>
+            
+            <article class="case">
+              <a class="cover" href="cases/claude-shopify-how-shopify-uses-anthropic-s-claude-on-google-cloud-to-supercharge-sidekick.html"><img src="assets/covers/claude-shopify-how-shopify-uses-anthropic-s-claude-on-google-cloud-to-supercharge-sidekick.jpg" alt="Shopify 案例封面" /></a>
+              <div class="card-body">
+                <div class="eyebrow"><span>CLAUDE</span><span>最新收录</span></div>
+                <h2><a href="cases/claude-shopify-how-shopify-uses-anthropic-s-claude-on-google-cloud-to-supercharge-sidekick.html">Shopify 如何利用 Google Cloud 上的 Anthropic Claude 强化 Sidekick</a></h2>
+                <p class="summary">Shopify 为服务数百万商家，推出 AI 商务助手 Sidekick。Sidekick 基于 Anthropic Claude 模型（现用 Claude Sonnet 4.5）并部署在 Google Cloud 上，通过自然语言对话为商家提供个性化支持。它能将自然语言转化为复杂的 ShopifyQL 分析查询，指导新商家从店铺搭建到首次销售，并执行多步骤推理。Claude 的先进推理能力与 Google Cloud 基础设施结合，确保 24/7 可用性和亚秒级响应。结果：复杂数据分析从需要技术培训变为自然对话即可完成，新创业者实现首次销售的时间从数周缩短至数天。此外，Shopify 内部使用 Claude Code 构建工具，效率大幅提升。</p>
+                <div class="tags"><span class="mss-primary-tag">主领域 · 电商</span><span class="mss-related-tag">关联 · GTM</span><span class="mss-related-tag">关联 · 质量与运营</span><span>零售/电商</span> <span>企业SaaS</span> <span>电商</span> <span>数据分析</span> <span>提效</span></div>
+                <div class="fact">
+                  <strong>AI 怎么落地</strong>
+                  <p>Sidekick 是 Shopify 的 AI 商务助手，集成在商家仪表盘中。它接入 Shopify 平台数据，包括产品信息、分析数据、业务上下文和 ShopifyQL 查询语言。工作流程：商家用自然语言提问，Sidekick 调用 Claude Sonnet 4.5 进行推理，将问题转化为 ShopifyQL 查询，并可能执行多个工具调用（并行或顺序）以获取相关数据，然后综合生成回答。触发方式为商家在对话界面主动提问。模型分工：Claude 负责自然语言理解、推理和查询生成；Shopify 内部系统执行查询并返回数据。人工审核：对于分析查询，系统自动执行，但商家可查看结果并进一步追问；对于指导性建议，Sidekick 提供内容，商家自行决策。此外，Shopify 内部使用 Claude Code 构建工具，员工（包括非开发者）可通过自然语言描述快速生成应用，无需人工编码审核。</p>
+                </div>
+                <div class="fact">
+                  <strong>带来什么价值</strong>
+                  <p>效率提升：复杂数据分析从需要学习 ShopifyQL 变为自然语言对话，节省商家时间；内部工具构建从数天缩短至数分钟。成本降低：原文未提供具体成本数字，但通过自动化分析和支持，减少了对人工专家的依赖。收入增长：新创业者实现首次销售的时间从数周缩短至数天，可能加速收入产生。体验提升：商家获得 24/7 个性化支持，感觉像“联合创始人”或“生命线”，帮助小企业“脱颖而出”。</p>
+                </div>
+                <div class="insight">
+                  <strong>可借鉴点</strong>
+                  <p>中国零售或跨国企业可借鉴：1. 将复杂查询语言抽象为自然语言界面，降低数据使用门槛，让非技术用户也能进行深度分析。2. 采用“模型+云基础设施”组合，确保 AI 助手的高可用性和低延迟，这对实时对话体验至关重要。3. 内部推广 AI 编码工具（如 Claude Code），让非开发人员也能构建工具，加速内部创新。4. 将 AI 助手定位为“联合创始人”而非简单客服，提供端到端业务指导，增强用户粘性。</p>
+                </div>
+                <div class="metrics"><span>借鉴价值 100</span><span>新创业者首次销售时间从数周缩短至数天, 内部工具构建时间从数天缩短至数分钟, Sidekick 保持 24/7 可用性</span></div>
+              </div>
+            </article>
+            </section>
+    </main>
+  </div>
+</body>
+</html>
